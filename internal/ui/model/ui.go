@@ -899,21 +899,24 @@ func (m *UI) setSessionMessages(msgs []message.Message) tea.Cmd {
 		m.lastUserMessageTime = msgPtrs[0].CreatedAt
 	}
 
+	// Get showThinking from config (default to true if not set)
+	showThinking := m.com.Config().Options.TUI.ShowThinking == nil || (m.com.Config().Options.TUI.ShowThinking != nil && *m.com.Config().Options.TUI.ShowThinking)
+
 	// Add messages to chat with linked tool results
 	items := make([]chat.MessageItem, 0, len(msgs)*2)
 	for _, msg := range msgPtrs {
 		switch msg.Role {
 		case message.User:
 			m.lastUserMessageTime = msg.CreatedAt
-			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, toolResultMap)...)
+			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, toolResultMap, showThinking)...)
 		case message.Assistant:
-			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, toolResultMap)...)
+			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, toolResultMap, showThinking)...)
 			if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn {
 				infoItem := chat.NewAssistantInfoItem(m.com.Styles, msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
 				items = append(items, infoItem)
 			}
 		default:
-			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, toolResultMap)...)
+			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, toolResultMap, showThinking)...)
 		}
 	}
 
@@ -971,8 +974,9 @@ func (m *UI) loadNestedToolCalls(items []chat.MessageItem) {
 
 		// Extract nested tool items.
 		var nestedTools []chat.ToolMessageItem
+		showThinking := m.com.Config().Options.TUI.ShowThinking == nil || (m.com.Config().Options.TUI.ShowThinking != nil && *m.com.Config().Options.TUI.ShowThinking)
 		for _, nestedMsg := range nestedMsgPtrs {
-			nestedItems := chat.ExtractMessageItems(m.com.Styles, nestedMsg, nestedToolResultMap)
+			nestedItems := chat.ExtractMessageItems(m.com.Styles, nestedMsg, nestedToolResultMap, showThinking)
 			for _, nestedItem := range nestedItems {
 				if nestedToolItem, ok := nestedItem.(chat.ToolMessageItem); ok {
 					// Mark nested tools as simple (compact) rendering.
@@ -1007,10 +1011,12 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 		return nil
 	}
 
+	showThinking := m.com.Config().Options.TUI.ShowThinking == nil || (m.com.Config().Options.TUI.ShowThinking != nil && *m.com.Config().Options.TUI.ShowThinking)
+
 	switch msg.Role {
 	case message.User:
 		m.lastUserMessageTime = msg.CreatedAt
-		items := chat.ExtractMessageItems(m.com.Styles, &msg, nil)
+		items := chat.ExtractMessageItems(m.com.Styles, &msg, nil, showThinking)
 		for _, item := range items {
 			if animatable, ok := item.(chat.Animatable); ok {
 				if cmd := animatable.StartAnimation(); cmd != nil {
@@ -1023,7 +1029,7 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	case message.Assistant:
-		items := chat.ExtractMessageItems(m.com.Styles, &msg, nil)
+		items := chat.ExtractMessageItems(m.com.Styles, &msg, nil, showThinking)
 		for _, item := range items {
 			if animatable, ok := item.(chat.Animatable); ok {
 				if cmd := animatable.StartAnimation(); cmd != nil {

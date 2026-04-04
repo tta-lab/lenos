@@ -193,13 +193,11 @@ type LSPConfig struct {
 }
 
 type TUIOptions struct {
-	CompactMode bool   `json:"compact_mode,omitempty" jsonschema:"description=Enable compact mode for the TUI interface,default=false"`
-	DiffMode    string `json:"diff_mode,omitempty" jsonschema:"description=Diff mode for the TUI interface,enum=unified,enum=split"`
-	// Here we can add themes later or any TUI related options
-	//
-
-	Completions Completions `json:"completions,omitzero" jsonschema:"description=Completions UI options"`
-	Transparent *bool       `json:"transparent,omitempty" jsonschema:"description=Enable transparent background for the TUI interface,default=false"`
+	CompactMode  bool        `json:"compact_mode,omitempty" jsonschema:"description=Enable compact mode for the TUI interface,default=false"`
+	DiffMode     string      `json:"diff_mode,omitempty" jsonschema:"description=Diff mode for the TUI interface,enum=unified,enum=split"`
+	ShowThinking *bool       `json:"show_thinking,omitempty" jsonschema:"description=Show thinking/reasoning content in the TUI,default=true"`
+	Completions  Completions `json:"completions,omitzero" jsonschema:"description=Completions UI options"`
+	Transparent  *bool       `json:"transparent,omitempty" jsonschema:"description=Enable transparent background for the TUI interface,default=false"`
 }
 
 // Completions defines options for the completions UI.

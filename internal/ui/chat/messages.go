@@ -262,7 +262,7 @@ func cappedMessageWidth(availableWidth int) int {
 //
 // For assistant messages with tool calls, pass a toolResults map to link results.
 // Use BuildToolResultMap to create this map from all messages in a session.
-func ExtractMessageItems(sty *styles.Styles, msg *message.Message, toolResults map[string]message.ToolResult) []MessageItem {
+func ExtractMessageItems(sty *styles.Styles, msg *message.Message, toolResults map[string]message.ToolResult, showThinking bool) []MessageItem {
 	switch msg.Role {
 	case message.User:
 		r := attachments.NewRenderer(
@@ -275,7 +275,7 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, toolResults m
 	case message.Assistant:
 		var items []MessageItem
 		if ShouldRenderAssistantMessage(msg) {
-			items = append(items, NewAssistantMessageItem(sty, msg))
+			items = append(items, NewAssistantMessageItem(sty, msg, showThinking))
 		}
 		for _, tc := range msg.ToolCalls() {
 			var result *message.ToolResult
