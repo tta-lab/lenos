@@ -506,52 +506,45 @@ func (s *Styles) DialogHelpStyles() help.Styles {
 func DefaultStyles() Styles {
 	var (
 		primary   = lipgloss.Color("#c4734f")
-		secondary = lipgloss.Color("#6b2d3e")
+		secondary = lipgloss.Color("#d4a574")
 		tertiary  = lipgloss.Color("#b8973e")
-		// accent    = lipgloss.Color("#c4a34f")
 
 		// Backgrounds
 		bgBase        = lipgloss.Color("#1a1016")
-		bgBaseLighter = lipgloss.Color("#241a1f")
-		bgSubtle      = lipgloss.Color("#3a2e28")
-		bgOverlay     = lipgloss.Color("#4a3e38")
+		bgBaseLighter = lipgloss.Color("#2d2329")
+		bgSubtle      = lipgloss.Color("#3d3338")
+		bgOverlay     = lipgloss.Color("#4d4348")
 
-		// Foregrounds
-		fgBase      = lipgloss.Color("#e8dcc8")
-		fgMuted     = lipgloss.Color("#8a7e6e")
-		fgHalfMuted = lipgloss.Color("#a89d8a")
-		fgSubtle    = lipgloss.Color("#a89d8a")
-		// fgSelected  = lipgloss.Color("#e8dcc8")
+		// Foregrounds - high contrast for readability
+		fgBase      = lipgloss.Color("#f0ebe4")
+		fgMuted     = lipgloss.Color("#a89d94")
+		fgHalfMuted = lipgloss.Color("#c4bab0")
+		fgSubtle    = lipgloss.Color("#9a9188")
 
 		// Borders
-		border      = lipgloss.Color("#3a2e28")
+		border      = lipgloss.Color("#4d4348")
 		borderFocus = lipgloss.Color("#c4734f")
 
 		// Status
-		error   = lipgloss.Color("#c44f4f")
-		warning = lipgloss.Color("#c4a34f")
-		info    = lipgloss.Color("#7e8ea8")
+		error   = lipgloss.Color("#e06c75")
+		warning = lipgloss.Color("#e5c07b")
+		info    = lipgloss.Color("#61afef")
 
 		// Colors
-		white = lipgloss.Color("#e8dcc8")
+		white = lipgloss.Color("#f0ebe4")
 
-		blueLight = lipgloss.Color("#7e8ea8")
-		blue      = lipgloss.Color("#7e8ea8")
-		blueDark  = lipgloss.Color("#5a4a5e")
+		blueLight = lipgloss.Color("#61afef")
+		blue      = lipgloss.Color("#61afef")
+		blueDark  = lipgloss.Color("#4a7ab8")
 
-		// yellow = lipgloss.Color("#b8973e")
-		yellow = lipgloss.Color("#b8973e")
-		// citron = lipgloss.Color("#b8973e")
+		yellow = lipgloss.Color("#e5c07b")
 
-		greenLight = lipgloss.Color("#b8973e")
-		green      = lipgloss.Color("#7ea57e")
-		greenDark  = lipgloss.Color("#6b8a5e")
-		// greenLight = lipgloss.Color("#b8973e")
+		greenLight = lipgloss.Color("#98c379")
+		green      = lipgloss.Color("#98c379")
+		greenDark  = lipgloss.Color("#6a9955")
 
-		red     = lipgloss.Color("#c44f4f")
-		redDark = lipgloss.Color("#c44f4f")
-		// redLight = lipgloss.Color("#b8735e")
-		// cherry   = lipgloss.Color("#c4647a")
+		red     = lipgloss.Color("#e06c75")
+		redDark = lipgloss.Color("#be5046")
 	)
 
 	normalBorder := lipgloss.NormalBorder()
@@ -1256,12 +1249,14 @@ func DefaultStyles() Styles {
 	}
 
 	s.Chat.Message.NoContent = lipgloss.NewStyle().Foreground(fgBase)
-	s.Chat.Message.UserBlurred = s.Chat.Message.NoContent.PaddingLeft(1).BorderLeft(true).
+	// User messages - terracotta accent
+	s.Chat.Message.UserBlurred = lipgloss.NewStyle().Foreground(secondary).PaddingLeft(1).BorderLeft(true).
 		BorderForeground(primary).BorderStyle(normalBorder)
-	s.Chat.Message.UserFocused = s.Chat.Message.NoContent.PaddingLeft(1).BorderLeft(true).
+	s.Chat.Message.UserFocused = lipgloss.NewStyle().Foreground(secondary).PaddingLeft(1).BorderLeft(true).
 		BorderForeground(primary).BorderStyle(messageFocussedBorder)
-	s.Chat.Message.AssistantBlurred = s.Chat.Message.NoContent.PaddingLeft(2)
-	s.Chat.Message.AssistantFocused = s.Chat.Message.NoContent.PaddingLeft(1).BorderLeft(true).
+	// Assistant messages - green accent
+	s.Chat.Message.AssistantBlurred = lipgloss.NewStyle().Foreground(fgBase).PaddingLeft(2)
+	s.Chat.Message.AssistantFocused = lipgloss.NewStyle().Foreground(green).PaddingLeft(1).BorderLeft(true).
 		BorderForeground(greenDark).BorderStyle(messageFocussedBorder)
 	s.Chat.Message.Thinking = lipgloss.NewStyle().MaxHeight(10)
 	s.Chat.Message.ErrorTag = lipgloss.NewStyle().Padding(0, 1).
