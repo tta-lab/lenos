@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/fsext"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/fsext"
 )
 
 // regexCache provides thread-safe caching of compiled regex patterns

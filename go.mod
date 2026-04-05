@@ -1,4 +1,4 @@
-module github.com/charmbracelet/crush
+module github.com/tta-lab/lenos
 
 go 1.26.1
 

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 const projectsFileName = "projects.json"

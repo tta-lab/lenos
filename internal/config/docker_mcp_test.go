@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/env"
+	"github.com/tta-lab/lenos/internal/env"
 	"github.com/stretchr/testify/require"
 )
 

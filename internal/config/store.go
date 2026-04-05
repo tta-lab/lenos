@@ -10,10 +10,10 @@ import (
 	"slices"
 
 	"charm.land/catwalk/pkg/catwalk"
-	hyperp "github.com/charmbracelet/crush/internal/agent/hyper"
-	"github.com/charmbracelet/crush/internal/oauth"
-	"github.com/charmbracelet/crush/internal/oauth/copilot"
-	"github.com/charmbracelet/crush/internal/oauth/hyper"
+	hyperp "github.com/tta-lab/lenos/internal/agent/hyper"
+	"github.com/tta-lab/lenos/internal/oauth"
+	"github.com/tta-lab/lenos/internal/oauth/copilot"
+	"github.com/tta-lab/lenos/internal/oauth/hyper"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )

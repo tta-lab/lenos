@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/agent/hyper"
-	"github.com/charmbracelet/crush/internal/event"
-	"github.com/charmbracelet/crush/internal/oauth"
+	"github.com/tta-lab/lenos/internal/agent/hyper"
+	"github.com/tta-lab/lenos/internal/event"
+	"github.com/tta-lab/lenos/internal/oauth"
 )
 
 // DeviceAuthResponse contains the response from the device authorization endpoint.
