@@ -104,6 +104,7 @@ func (p *Prompt) Build(ctx context.Context, provider, model string, store *confi
 func processFile(filePath string) *ContextFile {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
+		slog.Warn("Failed to read context file", "path", filePath, "error", err)
 		return nil
 	}
 	return &ContextFile{
@@ -120,12 +121,14 @@ func processContextPath(p string, store *config.ConfigStore) []ContextFile {
 	}
 	info, err := os.Stat(fullPath)
 	if err != nil {
+		slog.Warn("Failed to stat context path", "path", fullPath, "error", err)
 		return contexts
 	}
 	if info.IsDir() {
-		filepath.WalkDir(fullPath, func(path string, d os.DirEntry, err error) error {
+		err := filepath.WalkDir(fullPath, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
-				return err
+				slog.Warn("Failed to walk context directory", "path", path, "error", err)
+				return nil
 			}
 			if !d.IsDir() {
 				if result := processFile(path); result != nil {
@@ -134,6 +137,9 @@ func processContextPath(p string, store *config.ConfigStore) []ContextFile {
 			}
 			return nil
 		})
+		if err != nil {
+			slog.Warn("Failed to walk context directory", "path", fullPath, "error", err)
+		}
 	} else {
 		result := processFile(fullPath)
 		if result != nil {

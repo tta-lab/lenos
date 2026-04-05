@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -210,7 +211,7 @@ func TestRunSubAgent(t *testing.T) {
 		// runSubAgent returns (errorResponse, nil) when agent.Run fails — not a Go error.
 		require.NoError(t, err)
 		assert.True(t, resp.IsError)
-		assert.Equal(t, "error generating response", resp.Content)
+		assert.True(t, strings.HasPrefix(resp.Content, "error generating response"))
 	})
 
 	t.Run("session setup callback is invoked", func(t *testing.T) {
