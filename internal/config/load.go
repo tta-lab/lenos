@@ -115,15 +115,15 @@ func mustMarshalConfig(cfg *Config) []byte {
 	return data
 }
 
-func PushPopCrushEnv() func() {
+func PushPopLenosEnv() func() {
 	var found []string
 	for _, ev := range os.Environ() {
-		if strings.HasPrefix(ev, "CRUSH_") {
+		if strings.HasPrefix(ev, "LENOS_") {
 			pair := strings.SplitN(ev, "=", 2)
 			if len(pair) != 2 {
 				continue
 			}
-			found = append(found, strings.TrimPrefix(pair[0], "CRUSH_"))
+			found = append(found, strings.TrimPrefix(pair[0], "LENOS_"))
 		}
 	}
 	backups := make(map[string]string)
@@ -132,7 +132,7 @@ func PushPopCrushEnv() func() {
 	}
 
 	for _, ev := range found {
-		os.Setenv(ev, os.Getenv("CRUSH_"+ev))
+		os.Setenv(ev, os.Getenv("LENOS_"+ev))
 	}
 
 	restore := func() {
@@ -145,7 +145,7 @@ func PushPopCrushEnv() func() {
 
 func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver VariableResolver, knownProviders []catwalk.Provider) error {
 	knownProviderNames := make(map[string]bool)
-	restore := PushPopCrushEnv()
+	restore := PushPopLenosEnv()
 	defer restore()
 
 	// When disable_default_providers is enabled, skip all default/embedded
@@ -410,11 +410,11 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	// Project specific skills dirs.
 	c.Options.SkillsPaths = append(c.Options.SkillsPaths, ProjectSkillsDir(workingDir)...)
 
-	if str, ok := os.LookupEnv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
+	if str, ok := os.LookupEnv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
 		c.Options.DisableProviderAutoUpdate, _ = strconv.ParseBool(str)
 	}
 
-	if str, ok := os.LookupEnv("CRUSH_DISABLE_DEFAULT_PROVIDERS"); ok {
+	if str, ok := os.LookupEnv("LENOS_DISABLE_DEFAULT_PROVIDERS"); ok {
 		c.Options.DisableDefaultProviders, _ = strconv.ParseBool(str)
 	}
 
@@ -736,8 +736,8 @@ func hasAWSCredentials(env env.Env) bool {
 
 // GlobalConfig returns the global configuration file path for the application.
 func GlobalConfig() string {
-	if crushGlobal := os.Getenv("LENOS_GLOBAL_CONFIG"); crushGlobal != "" {
-		return filepath.Join(crushGlobal, "config.json")
+	if lenosGlobal := os.Getenv("LENOS_GLOBAL_CONFIG"); lenosGlobal != "" {
+		return filepath.Join(lenosGlobal, "config.json")
 	}
 	return filepath.Join(home.Config(), appName, "config.json")
 }
@@ -745,8 +745,8 @@ func GlobalConfig() string {
 // GlobalCacheDir returns the path to the global cache directory for the
 // application.
 func GlobalCacheDir() string {
-	if crushCache := os.Getenv("LENOS_CACHE_DIR"); crushCache != "" {
-		return crushCache
+	if lenosCache := os.Getenv("LENOS_CACHE_DIR"); lenosCache != "" {
+		return lenosCache
 	}
 	if xdgCacheHome := os.Getenv("XDG_CACHE_HOME"); xdgCacheHome != "" {
 		return filepath.Join(xdgCacheHome, appName)
@@ -764,8 +764,8 @@ func GlobalCacheDir() string {
 // GlobalConfigData returns the path to the main data directory for the application.
 // this config is used when the app overrides configurations instead of updating the global config.
 func GlobalConfigData() string {
-	if crushData := os.Getenv("LENOS_GLOBAL_DATA"); crushData != "" {
-		return filepath.Join(crushData, "config.json")
+	if lenosData := os.Getenv("LENOS_GLOBAL_DATA"); lenosData != "" {
+		return filepath.Join(lenosData, "config.json")
 	}
 	if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
 		return filepath.Join(xdgDataHome, appName, "config.json")
@@ -813,8 +813,8 @@ func isInsideWorktree() bool {
 // Skills in these directories are auto-discovered and their files can be read
 // without permission prompts.
 func GlobalSkillsDirs() []string {
-	if crushSkills := os.Getenv("CRUSH_SKILLS_DIR"); crushSkills != "" {
-		return []string{crushSkills}
+	if lenosSkills := os.Getenv("LENOS_SKILLS_DIR"); lenosSkills != "" {
+		return []string{lenosSkills}
 	}
 
 	paths := []string{
@@ -822,7 +822,7 @@ func GlobalSkillsDirs() []string {
 		filepath.Join(home.Config(), "agents", "skills"),
 	}
 
-	// On Windows, also load from app data on top of `$HOME/.config/crush`.
+	// On Windows, also load from app data on top of `$HOME/.config/lenos`.
 	// This is here mostly for backwards compatibility.
 	if runtime.GOOS == "windows" {
 		appData := cmp.Or(
@@ -839,12 +839,12 @@ func GlobalSkillsDirs() []string {
 	return paths
 }
 
-// ProjectSkillsDir returns the default project directories for which Crush
+// ProjectSkillsDir returns the default project directories for which Lenos
 // will look for skills.
 func ProjectSkillsDir(workingDir string) []string {
 	return []string{
 		filepath.Join(workingDir, ".agents/skills"),
-		filepath.Join(workingDir, ".crush/skills"),
+		filepath.Join(workingDir, ".lenos/skills"),
 		filepath.Join(workingDir, ".claude/skills"),
 		filepath.Join(workingDir, ".cursor/skills"),
 	}

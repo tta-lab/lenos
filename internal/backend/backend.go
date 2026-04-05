@@ -34,7 +34,7 @@ var (
 // shutdown (e.g. when the last workspace is removed).
 type ShutdownFunc func()
 
-// Backend provides transport-agnostic business logic for the Crush
+// Backend provides transport-agnostic business logic for the Lenos
 // server. It manages workspaces and delegates to [app.App] services.
 type Backend struct {
 	workspaces *csync.Map[string, *Workspace]

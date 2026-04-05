@@ -13,31 +13,31 @@ func TestConfigStore_ConfigPath_GlobalAlwaysWorks(t *testing.T) {
 	t.Parallel()
 
 	store := &ConfigStore{
-		globalDataPath: "/some/global/crush.json",
+		globalDataPath: "/some/global/config.json",
 	}
 
 	path, err := store.configPath(ScopeGlobal)
 	require.NoError(t, err)
-	require.Equal(t, "/some/global/crush.json", path)
+	require.Equal(t, "/some/global/config.json", path)
 }
 
 func TestConfigStore_ConfigPath_WorkspaceReturnsPath(t *testing.T) {
 	t.Parallel()
 
 	store := &ConfigStore{
-		workspacePath: "/some/workspace/.crush/crush.json",
+		workspacePath: "/some/workspace/.crush/config.json",
 	}
 
 	path, err := store.configPath(ScopeWorkspace)
 	require.NoError(t, err)
-	require.Equal(t, "/some/workspace/.crush/crush.json", path)
+	require.Equal(t, "/some/workspace/.crush/config.json", path)
 }
 
 func TestConfigStore_ConfigPath_WorkspaceErrorsWhenEmpty(t *testing.T) {
 	t.Parallel()
 
 	store := &ConfigStore{
-		globalDataPath: "/some/global/crush.json",
+		globalDataPath: "/some/global/config.json",
 		workspacePath:  "",
 	}
 
@@ -64,7 +64,7 @@ func TestConfigStore_SetConfigField_GlobalScopeAlwaysWorks(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	globalPath := filepath.Join(dir, "crush.json")
+	globalPath := filepath.Join(dir, "config.json")
 	store := &ConfigStore{
 		config:         &Config{},
 		globalDataPath: globalPath,
@@ -134,7 +134,7 @@ func TestConfigStore_RuntimeOverrides_MutableViaPointer(t *testing.T) {
 
 func TestGlobalWorkspaceDir(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("CRUSH_GLOBAL_DATA", dir)
+	t.Setenv("LENOS_GLOBAL_DATA", dir)
 
 	wsDir := GlobalWorkspaceDir()
 	globalData := GlobalConfigData()

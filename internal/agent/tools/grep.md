@@ -31,7 +31,7 @@ When literal_text=false (supports standard regex):
 
 <ignore_support>
 - Respects .gitignore patterns to skip ignored files/directories
-- Respects .crushignore patterns for additional ignore rules
+- Respects .lenosignore patterns for additional ignore rules
 - Both ignore files auto-detected in search root directory
 </ignore_support>
 

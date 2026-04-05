@@ -14,13 +14,13 @@ import (
 var projectsCmd = &cobra.Command{
 	Use:   "projects",
 	Short: "List project directories",
-	Long:  "List directories where Crush project data is known to exist",
+	Long:  "List directories where Lenos project data is known to exist",
 	Example: `
 # List all projects in a table
-crush projects
+lenos projects
 
 # Output projects data as JSON
-crush projects --json
+lenos projects --json
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonOutput, _ := cmd.Flags().GetBool("json")

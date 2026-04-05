@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/tta-lab/lenos/internal/config"
-	crushlog "github.com/tta-lab/lenos/internal/log"
+	lenoslog "github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/server"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
@@ -26,7 +26,7 @@ func init() {
 
 var serverCmd = &cobra.Command{
 	Use:   "server",
-	Short: "Start the Crush server",
+	Short: "Start the Lenos server",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		dataDir, err := cmd.Flags().GetString("data-dir")
 		if err != nil {
@@ -42,12 +42,12 @@ var serverCmd = &cobra.Command{
 			return fmt.Errorf("failed to load configuration: %v", err)
 		}
 
-		logFile := filepath.Join(config.GlobalCacheDir(), "server-"+safeNameRegexp.ReplaceAllString(serverHost, "_"), "crush.log")
+		logFile := filepath.Join(config.GlobalCacheDir(), "server-"+safeNameRegexp.ReplaceAllString(serverHost, "_"), "lenos.log")
 
 		if term.IsTerminal(os.Stderr.Fd()) {
-			crushlog.Setup(logFile, debug, os.Stderr)
+			lenoslog.Setup(logFile, debug, os.Stderr)
 		} else {
-			crushlog.Setup(logFile, debug)
+			lenoslog.Setup(logFile, debug)
 		}
 
 		hostURL, err := server.ParseHostURL(serverHost)
@@ -57,7 +57,7 @@ var serverCmd = &cobra.Command{
 
 		srv := server.NewServer(cfg, hostURL.Scheme, hostURL.Host)
 		srv.SetLogger(slog.Default())
-		slog.Info("Starting Crush server...", "addr", serverHost)
+		slog.Info("Starting Lenos server...", "addr", serverHost)
 
 		errch := make(chan error, 1)
 		sigch := make(chan os.Signal, 1)

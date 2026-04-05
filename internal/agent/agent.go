@@ -1,4 +1,4 @@
-// Package agent is the core orchestration layer for Crush AI agents.
+// Package agent is the core orchestration layer for Lenos AI agents.
 //
 // It provides session-based AI agent functionality for managing
 // conversations, tool execution, and message handling. It coordinates
@@ -55,7 +55,7 @@ const (
 	smallContextWindowRatio     = 0.2
 )
 
-var userAgent = fmt.Sprintf("Charm-Crush/%s (https://charm.land/crush)", version.Version)
+var userAgent = fmt.Sprintf("Charm-Lenos/%s (https://github.com/tta-lab/lenos)", version.Version)
 
 //go:embed templates/title.md
 var titlePrompt []byte
@@ -705,7 +705,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 }
 
 func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
-	if t, _ := strconv.ParseBool(os.Getenv("CRUSH_DISABLE_ANTHROPIC_CACHE")); t {
+	if t, _ := strconv.ParseBool(os.Getenv("LENOS_DISABLE_ANTHROPIC_CACHE")); t {
 		return fantasy.ProviderOptions{}
 	}
 	return fantasy.ProviderOptions{

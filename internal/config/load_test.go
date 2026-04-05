@@ -1289,7 +1289,7 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 
 func TestConfig_setDefaultsDisableDefaultProvidersEnvVar(t *testing.T) {
 	t.Run("sets option from environment variable", func(t *testing.T) {
-		t.Setenv("CRUSH_DISABLE_DEFAULT_PROVIDERS", "true")
+		t.Setenv("LENOS_DISABLE_DEFAULT_PROVIDERS", "true")
 
 		cfg := &Config{}
 		cfg.setDefaults("/tmp", "")

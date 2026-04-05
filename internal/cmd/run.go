@@ -35,28 +35,28 @@ var runCmd = &cobra.Command{
 The prompt can be provided as arguments or piped from stdin.`,
 	Example: `
 # Run a simple prompt
-crush run "Guess my 5 favorite Pokémon"
+lenos run "Guess my 5 favorite Pokémon"
 
 # Pipe input from stdin
-curl https://charm.land | crush run "Summarize this website"
+curl https://charm.land | lenos run "Summarize this website"
 
 # Read from a file
-crush run "What is this code doing?" <<< prrr.go
+lenos run "What is this code doing?" <<< prrr.go
 
 # Redirect output to a file
-crush run "Generate a hot README for this project" > MY_HOT_README.md
+lenos run "Generate a hot README for this project" > MY_HOT_README.md
 
 # Run in quiet mode (hide the spinner)
-crush run --quiet "Generate a README for this project"
+lenos run --quiet "Generate a README for this project"
 
 # Run in verbose mode (show logs)
-crush run --verbose "Generate a README for this project"
+lenos run --verbose "Generate a README for this project"
 
 # Continue a previous session
-crush run --session {session-id} "Follow up on your last response"
+lenos run --session {session-id} "Follow up on your last response"
 
 # Continue the most recent session
-crush run --continue "Follow up on your last response"
+lenos run --continue "Follow up on your last response"
 
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -111,7 +111,7 @@ crush run --continue "Follow up on your last response"
 			}
 
 			if !ws.Config.IsConfigured() {
-				return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
+				return fmt.Errorf("no providers configured - please run 'lenos' to set up a provider interactively")
 			}
 
 			if verbose {
@@ -128,7 +128,7 @@ crush run --continue "Follow up on your last response"
 		defer cleanup()
 
 		if !ws.Config().IsConfigured() {
-			return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
+			return fmt.Errorf("no providers configured - please run 'lenos' to set up a provider interactively")
 		}
 
 		if verbose {
@@ -500,7 +500,7 @@ func resolveSession(ctx context.Context, c *client.Client, wsID, continueSession
 }
 
 // resolveSessionByID resolves a session ID that may be a full UUID or a hash
-// prefix returned by crush session list.
+// prefix returned by lenos session list.
 func resolveSessionByID(ctx context.Context, c *client.Client, wsID, id string) (*proto.Session, error) {
 	if sess, err := c.GetSession(ctx, wsID, id); err == nil {
 		return sess, nil

@@ -27,7 +27,7 @@ import (
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/db"
 	"github.com/tta-lab/lenos/internal/event"
-	crushlog "github.com/tta-lab/lenos/internal/log"
+	lenoslog "github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/projects"
 	"github.com/tta-lab/lenos/internal/proto"
 	"github.com/tta-lab/lenos/internal/server"
@@ -280,7 +280,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	}
 
 	logFile := filepath.Join(cfg.Options.DataDirectory, "logs", "lenos.log")
-	crushlog.Setup(logFile, debug)
+	lenoslog.Setup(logFile, debug)
 
 	appInstance, err := app.New(ctx, conn, store)
 	if err != nil {
@@ -379,7 +379,7 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 
 	if ws.Config != nil {
 		logFile := filepath.Join(ws.Config.Options.DataDirectory, "logs", "lenos.log")
-		crushlog.Setup(logFile, debug)
+		lenoslog.Setup(logFile, debug)
 	}
 
 	cleanup := func() { _ = c.DeleteWorkspace(context.Background(), ws.ID) }

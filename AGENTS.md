@@ -20,7 +20,7 @@ internal/
   cmd/                             CLI commands (root, run, login, models, stats, sessions)
   config/
     config.go                      Config struct, context file paths, agent definitions
-    load.go                        crush.json loading and validation
+    load.go                        config.json loading and validation
     provider.go                    Provider configuration and model resolution
   agent/
     agent.go                       SessionAgent: runs LLM conversations per session
@@ -63,7 +63,7 @@ internal/
   `.md` description file in `internal/agent/tools/`.
 - **System prompts are Go templates**: `internal/agent/templates/*.md.tpl`
   with runtime data injected.
-- **Context files**: Crush reads AGENTS.md, CRUSH.md, CLAUDE.md, GEMINI.md
+- **Context files**: Crush reads AGENTS.md, LENOS.md, CLAUDE.md, GEMINI.md
   (and `.local` variants) from the working directory for project-specific
   instructions.
 - **Persistence**: SQLite + sqlc. All queries live in `internal/db/sql/`,

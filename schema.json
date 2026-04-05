@@ -274,7 +274,7 @@
             "type": "string",
             "examples": [
               ".cursorrules",
-              "CRUSH.md"
+              "LENOS.md"
             ]
           },
           "type": "array",
@@ -354,7 +354,7 @@
           "default": "AGENTS.md",
           "examples": [
             "AGENTS.md",
-            "CRUSH.md",
+            "LENOS.md",
             "CLAUDE.md",
             "docs/LLMs.md"
           ]
@@ -378,7 +378,7 @@
           "items": {
             "type": "string",
             "examples": [
-              "crush-config"
+              "lenos-config"
             ]
           },
           "type": "array",

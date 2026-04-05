@@ -225,16 +225,16 @@ Crush’s default model listing is managed in [Catwalk](https://github.com/charm
 ## Configuration
 
 > [!TIP]
-> Crush ships with a builtin `crush-config` skill for configuring itself. In
+> Crush ships with a builtin `lenos-config` skill for configuring itself. In
 > many cases you can simply ask Crush to configure itself.
 
 Crush runs great with no configuration. That said, if you do need or want to
 customize Crush, configuration can be added either local to the project itself,
 or globally, with the following priority:
 
-1. `.crush.json`
-2. `crush.json`
-3. `$HOME/.config/crush/crush.json`
+1. `.config.json`
+2. `config.json`
+3. `$HOME/.config/crush/config.json`
 
 Configuration itself is stored as a JSON object:
 
@@ -250,17 +250,17 @@ state, in one additional location:
 
 ```bash
 # Unix
-$HOME/.local/share/crush/crush.json
+$HOME/.local/share/crush/config.json
 
 # Windows
-%LOCALAPPDATA%\crush\crush.json
+%LOCALAPPDATA%\crush\config.json
 ```
 
 > [!TIP]
 > You can override the user and data config locations by setting:
 >
-> - `CRUSH_GLOBAL_CONFIG`
-> - `CRUSH_GLOBAL_DATA`
+> - `LENOS_GLOBAL_CONFIG`
+> - `LENOS_GLOBAL_DATA`
 
 ### LSPs
 
@@ -269,7 +269,7 @@ like you would. LSPs can be added manually like so:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "lsp": {
     "go": {
       "command": "gopls",
@@ -297,7 +297,7 @@ using `$(echo $VAR)` syntax.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "mcp": {
     "filesystem": {
       "type": "stdio",
@@ -336,11 +336,11 @@ using `$(echo $VAR)` syntax.
 ### Ignoring Files
 
 Crush respects `.gitignore` files by default, but you can also create a
-`.crushignore` file to specify additional files and directories that Crush
+`.lenosignore` file to specify additional files and directories that Crush
 should ignore. This is useful for excluding files that you want in version
 control but don't want Crush to consider when providing context.
 
-The `.crushignore` file uses the same syntax as `.gitignore` and can be placed
+The `.lenosignore` file uses the same syntax as `.gitignore` and can be placed
 in the root of your project or in subdirectories.
 
 ### Allowing Tools
@@ -351,7 +351,7 @@ permissions. Use this with care.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "permissions": {
     "allowed_tools": [
       "view",
@@ -375,7 +375,7 @@ completely hidden from the agent.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "options": {
     "disabled_tools": ["bash", "sourcegraph"]
   }
@@ -392,9 +392,9 @@ from the agent, including builtin skills and skills discovered from disk.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "options": {
-    "disabled_skills": ["crush-config"]
+    "disabled_skills": ["lenos-config"]
   }
 }
 ```
@@ -408,7 +408,7 @@ activate on demand.
 
 The global paths we looks for skills are:
 
-* `$CRUSH_SKILLS_DIR`
+* `$LENOS_SKILLS_DIR`
 * `$XDG_CONFIG_HOME/agents/skills` or `~/.config/agents/skills/`
 * `$XDG_CONFIG_HOME/crush/skills` or `~/.config/crush/skills/`
 * On Windows, we _also_ look at
@@ -426,7 +426,7 @@ relative paths:
 
 ```jsonc
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "options": {
     "skills_paths": [
       "~/.config/crush/skills", // Windows: "%LOCALAPPDATA%\\crush\\skills",
@@ -462,7 +462,7 @@ focused _and_ your terminal supports reporting the focus state.
 
 ```jsonc
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "options": {
     "disable_notifications": false, // default
   },
@@ -482,7 +482,7 @@ name and location with the `initialize_as` option:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "options": {
     "initialize_as": "AGENTS.md"
   }
@@ -490,7 +490,7 @@ name and location with the `initialize_as` option:
 ```
 
 This is useful if you prefer a different naming convention or want to
-place the file in a specific directory (e.g., `CRUSH.md` or
+place the file in a specific directory (e.g., `LENOS.md` or
 `docs/LLMs.md`). Crush will fill the file with project-specific context
 like build commands, code patterns, and conventions it discovered during
 initialization.
@@ -502,7 +502,7 @@ it creates. You can customize this behavior with the `attribution` option:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "options": {
     "attribution": {
       "trailer_style": "co-authored-by",
@@ -540,7 +540,7 @@ API. Don't forget to set `DEEPSEEK_API_KEY` in your environment.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "providers": {
     "deepseek": {
       "type": "openai-compat",
@@ -569,7 +569,7 @@ Custom Anthropic-compatible providers follow this format:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "providers": {
     "custom-anthropic": {
       "type": "anthropic",
@@ -618,7 +618,7 @@ To add specific models to the configuration, configure as such:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "providers": {
     "vertexai": {
       "models": [
@@ -691,7 +691,7 @@ Local models can also be configured via OpenAI-compatible API. Here are two comm
 ## Logging
 
 Sometimes you need to look at logs. Luckily, Crush logs all sorts of
-stuff. Logs are stored in `./.crush/logs/crush.log` relative to the project.
+stuff. Logs are stored in `./.crush/logs/lenos.log` relative to the project.
 
 The CLI also contains some helper commands to make perusing recent logs easier:
 
@@ -711,7 +711,7 @@ config:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "options": {
     "debug": true,
     "debug_lsp": true
@@ -734,21 +734,21 @@ air-gapped environments, this might not be want you want, and this feature can
 be disabled.
 
 To disable automatic provider updates, set `disable_provider_auto_update` into
-your `crush.json` config:
+your `config.json` config:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
+  "$schema": "https://charm.land/config.json",
   "options": {
     "disable_provider_auto_update": true
   }
 }
 ```
 
-Or set the `CRUSH_DISABLE_PROVIDER_AUTO_UPDATE` environment variable:
+Or set the `LENOS_DISABLE_PROVIDER_AUTO_UPDATE` environment variable:
 
 ```bash
-export CRUSH_DISABLE_PROVIDER_AUTO_UPDATE=1
+export LENOS_DISABLE_PROVIDER_AUTO_UPDATE=1
 ```
 
 ### Manually updating providers
@@ -787,7 +787,7 @@ You can opt out of metrics collection at any time by setting the environment
 variable by setting the following in your environment:
 
 ```bash
-export CRUSH_DISABLE_METRICS=1
+export LENOS_DISABLE_METRICS=1
 ```
 
 Or by setting the following in your config:
