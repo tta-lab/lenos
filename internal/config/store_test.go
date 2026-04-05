@@ -25,12 +25,12 @@ func TestConfigStore_ConfigPath_WorkspaceReturnsPath(t *testing.T) {
 	t.Parallel()
 
 	store := &ConfigStore{
-		workspacePath: "/some/workspace/.crush/config.json",
+		workspacePath: "/some/workspace/.lenos/config.json",
 	}
 
 	path, err := store.configPath(ScopeWorkspace)
 	require.NoError(t, err)
-	require.Equal(t, "/some/workspace/.crush/config.json", path)
+	require.Equal(t, "/some/workspace/.lenos/config.json", path)
 }
 
 func TestConfigStore_ConfigPath_WorkspaceErrorsWhenEmpty(t *testing.T) {

@@ -51,8 +51,8 @@ func TestShouldExcludeFile(t *testing.T) {
 	}
 
 	// Create .lenosignore file
-	crushignoreContent := "custom_ignored/\n"
-	if err := os.WriteFile(filepath.Join(tempDir, ".lenosignore"), []byte(crushignoreContent), 0o644); err != nil {
+	lenosignoreContent := "custom_ignored/\n"
+	if err := os.WriteFile(filepath.Join(tempDir, ".lenosignore"), []byte(lenosignoreContent), 0o644); err != nil {
 		t.Fatalf("Failed to create .lenosignore: %v", err)
 	}
 

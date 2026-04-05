@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/charmbracelet/crush/internal/config/config",
+  "$id": "https://github.com/tta-lab/lenos/internal/config/config",
   "$ref": "#/$defs/Config",
   "$defs": {
     "Attribution": {
@@ -22,7 +22,7 @@
         },
         "generated_with": {
           "type": "boolean",
-          "description": "Add Generated with Crush line to commit messages and issues and PRs",
+          "description": "Add Generated with Lenos line to commit messages and issues and PRs",
           "default": true
         }
       },
@@ -64,7 +64,7 @@
           "description": "Model configurations for different model types"
         },
         "providers": {
-          "$ref": "#/$defs/Map[string,github.com/charmbracelet/crush/internal/config.ProviderConfig]",
+          "$ref": "#/$defs/Map[string,github.com/tta-lab/lenos/internal/config.ProviderConfig]",
           "description": "AI provider configurations"
         },
         "mcp": {
@@ -262,7 +262,7 @@
       },
       "type": "object"
     },
-    "Map[string,github.com/charmbracelet/crush/internal/config.ProviderConfig]": {
+    "Map[string,github.com/tta-lab/lenos/internal/config.ProviderConfig]": {
       "properties": {},
       "additionalProperties": false,
       "type": "object"
@@ -284,7 +284,7 @@
           "items": {
             "type": "string",
             "examples": [
-              "~/.config/crush/skills",
+              "~/.config/lenos/skills",
               "./skills"
             ]
           },
@@ -313,9 +313,9 @@
         "data_directory": {
           "type": "string",
           "description": "Directory for storing application data (relative to working directory)",
-          "default": ".crush",
+          "default": ".lenos",
           "examples": [
-            ".crush"
+            ".lenos"
           ]
         },
         "disabled_tools": {
@@ -498,6 +498,11 @@
             "split"
           ],
           "description": "Diff mode for the TUI interface"
+        },
+        "show_thinking": {
+          "type": "boolean",
+          "description": "Show thinking/reasoning content in the TUI",
+          "default": true
         },
         "completions": {
           "$ref": "#/$defs/Completions",

@@ -15,7 +15,7 @@ Lenos uses JSON configuration files with the following priority (highest to lowe
 
 ```json
 {
-  "$schema": "https://charm.land/config.json",
+  "$schema": "https://github.com/tta-lab/lenos/raw/main/schema.json",
   "options": {}
 }
 ```
