@@ -197,6 +197,7 @@ func (w *ClientWorkspace) AgentModel() AgentModel {
 func (w *ClientWorkspace) AgentIsReady() bool {
 	info, err := w.client.GetAgentInfo(context.Background(), w.workspaceID())
 	if err != nil {
+		slog.Warn("Failed to get agent info", "error", err)
 		return false
 	}
 	return info.IsReady

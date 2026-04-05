@@ -407,7 +407,11 @@ func (m *UI) loadInitialSession() tea.Cmd {
 // waitAndTrigger waits for the agent to be ready and then sends the trigger message.
 func (m *UI) waitAndTrigger() tea.Cmd {
 	return func() tea.Msg {
+		deadline := time.Now().Add(5 * time.Minute)
 		for !m.com.Workspace.AgentIsReady() {
+			if time.Now().After(deadline) {
+				return nil
+			}
 			time.Sleep(100 * time.Millisecond)
 		}
 		return sendMessageMsg{Content: m.triggerMessage}

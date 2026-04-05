@@ -636,7 +636,10 @@ func resolveAgentFile(agentName string, agentPaths []string) (string, error) {
 		path := filepath.Join(dir, filename)
 		searched = append(searched, dir)
 		if _, err := os.Stat(path); err == nil {
-			absPath, _ := filepath.Abs(path)
+			absPath, err := filepath.Abs(path)
+			if err != nil {
+				return "", fmt.Errorf("resolving agent path: %w", err)
+			}
 			return absPath, nil
 		}
 	}
