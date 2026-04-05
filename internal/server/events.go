@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/charmbracelet/crush/internal/agent/notify"
-	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/internal/app"
-	"github.com/charmbracelet/crush/internal/history"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/tta-lab/lenos/internal/agent/notify"
+	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
+	"github.com/tta-lab/lenos/internal/app"
+	"github.com/tta-lab/lenos/internal/history"
+	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/permission"
+	"github.com/tta-lab/lenos/internal/proto"
+	"github.com/tta-lab/lenos/internal/pubsub"
+	"github.com/tta-lab/lenos/internal/session"
 )
 
 // wrapEvent converts a raw tea.Msg (a pubsub.Event[T] from the app

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/env"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/env"
 )
 
 func TestClient(t *testing.T) {

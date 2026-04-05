@@ -1,4 +1,4 @@
-// Package agent is the core orchestration layer for Crush AI agents.
+// Package agent is the core orchestration layer for Lenos AI agents.
 //
 // It provides session-based AI agent functionality for managing
 // conversations, tool execution, and message handling. It coordinates
@@ -31,19 +31,19 @@ import (
 	"charm.land/fantasy/providers/openrouter"
 	"charm.land/fantasy/providers/vercel"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/agent/hyper"
-	"github.com/charmbracelet/crush/internal/agent/notify"
-	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/stringext"
-	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/exp/charmtone"
+	"github.com/tta-lab/lenos/internal/agent/hyper"
+	"github.com/tta-lab/lenos/internal/agent/notify"
+	"github.com/tta-lab/lenos/internal/agent/tools"
+	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/permission"
+	"github.com/tta-lab/lenos/internal/pubsub"
+	"github.com/tta-lab/lenos/internal/session"
+	"github.com/tta-lab/lenos/internal/stringext"
+	"github.com/tta-lab/lenos/internal/version"
 )
 
 const (
@@ -55,7 +55,7 @@ const (
 	smallContextWindowRatio     = 0.2
 )
 
-var userAgent = fmt.Sprintf("Charm-Crush/%s (https://charm.land/crush)", version.Version)
+var userAgent = fmt.Sprintf("Charm-Lenos/%s (https://github.com/tta-lab/lenos)", version.Version)
 
 //go:embed templates/title.md
 var titlePrompt []byte
@@ -705,7 +705,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 }
 
 func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
-	if t, _ := strconv.ParseBool(os.Getenv("CRUSH_DISABLE_ANTHROPIC_CACHE")); t {
+	if t, _ := strconv.ParseBool(os.Getenv("LENOS_DISABLE_ANTHROPIC_CACHE")); t {
 		return fantasy.ProviderOptions{}
 	}
 	return fantasy.ProviderOptions{

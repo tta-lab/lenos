@@ -8,13 +8,13 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/ui/list"
-	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/dustin/go-humanize"
 	"github.com/rivo/uniseg"
 	"github.com/sahilm/fuzzy"
+	"github.com/tta-lab/lenos/internal/session"
+	"github.com/tta-lab/lenos/internal/ui/list"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 // ListItem represents a selectable and searchable item in a dialog list.

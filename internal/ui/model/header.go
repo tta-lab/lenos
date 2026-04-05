@@ -5,13 +5,13 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/fsext"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/ui/common"
-	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/fsext"
+	"github.com/tta-lab/lenos/internal/session"
+	"github.com/tta-lab/lenos/internal/ui/common"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 const (
@@ -39,7 +39,7 @@ func newHeader(com *common.Common) *header {
 	}
 	t := com.Styles
 	h.compactLogo = t.Header.Charm.Render("Charm™") + " " +
-		styles.ApplyBoldForegroundGrad(t, "CRUSH", t.Secondary, t.Primary) + " "
+		styles.ApplyBoldForegroundGrad(t, "LENOS", t.Secondary, t.Primary) + " "
 	return h
 }
 

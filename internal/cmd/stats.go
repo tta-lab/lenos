@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/event"
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/db"
+	"github.com/tta-lab/lenos/internal/event"
 )
 
 //go:embed stats/index.html

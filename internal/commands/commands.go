@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/home"
+	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/home"
 )
 
 var namedArgPattern = regexp.MustCompile(`\$([A-Z][A-Z0-9_]*)`)
@@ -93,11 +93,11 @@ func LoadMCPPrompts() ([]MCPPrompt, error) {
 func buildCommandSources(cfg *config.Config) []commandSource {
 	return []commandSource{
 		{
-			path:   filepath.Join(home.Config(), "crush", "commands"),
+			path:   filepath.Join(home.Config(), "lenos", "commands"),
 			prefix: userCommandPrefix,
 		},
 		{
-			path:   filepath.Join(home.Dir(), ".crush", "commands"),
+			path:   filepath.Join(home.Dir(), ".lenos", "commands"),
 			prefix: userCommandPrefix,
 		},
 		{

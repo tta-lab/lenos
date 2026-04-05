@@ -10,14 +10,14 @@ import (
 	"log/slog"
 	"runtime"
 
-	"github.com/charmbracelet/crush/internal/app"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/ui/util"
-	"github.com/charmbracelet/crush/internal/version"
 	"github.com/google/uuid"
+	"github.com/tta-lab/lenos/internal/app"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/db"
+	"github.com/tta-lab/lenos/internal/proto"
+	"github.com/tta-lab/lenos/internal/ui/util"
+	"github.com/tta-lab/lenos/internal/version"
 )
 
 // Common errors returned by backend operations.
@@ -34,7 +34,7 @@ var (
 // shutdown (e.g. when the last workspace is removed).
 type ShutdownFunc func()
 
-// Backend provides transport-agnostic business logic for the Crush
+// Backend provides transport-agnostic business logic for the Lenos
 // server. It manages workspaces and delegates to [app.App] services.
 type Backend struct {
 	workspaces *csync.Map[string, *Workspace]
@@ -97,7 +97,7 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 
 	cfg.Overrides().SkipPermissionRequests = args.YOLO
 
-	if err := createDotCrushDir(cfg.Config().Options.DataDirectory); err != nil {
+	if err := createDotLenosDir(cfg.Config().Options.DataDirectory); err != nil {
 		return nil, proto.Workspace{}, fmt.Errorf("failed to create data directory: %w", err)
 	}
 

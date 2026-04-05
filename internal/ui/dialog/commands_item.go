@@ -1,8 +1,8 @@
 package dialog
 
 import (
-	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/sahilm/fuzzy"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 // CommandItem wraps a uicmd.Command to implement the ListItem interface.

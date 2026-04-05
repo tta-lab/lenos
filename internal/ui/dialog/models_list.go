@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/ui/list"
-	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/sahilm/fuzzy"
+	"github.com/tta-lab/lenos/internal/ui/list"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 // ModelsList is a list specifically for model items and groups.

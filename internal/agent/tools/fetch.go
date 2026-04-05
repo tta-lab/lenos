@@ -13,7 +13,7 @@ import (
 	"charm.land/fantasy"
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/tta-lab/lenos/internal/permission"
 )
 
 const (
@@ -96,7 +96,7 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 				return fantasy.ToolResponse{}, fmt.Errorf("failed to create request: %w", err)
 			}
 
-			req.Header.Set("User-Agent", "crush/1.0")
+			req.Header.Set("User-Agent", "lenos/1.0")
 
 			resp, err := client.Do(req)
 			if err != nil {

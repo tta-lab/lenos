@@ -9,9 +9,9 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2/tree"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 var modelsCmd = &cobra.Command{
@@ -19,10 +19,10 @@ var modelsCmd = &cobra.Command{
 	Short: "List all available models from configured providers",
 	Long:  `List all available models from configured providers. Shows provider name and model IDs.`,
 	Example: `# List all available models
-crush models
+lenos models
 
 # Search models
-crush models gpt5`,
+lenos models gpt5`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := ResolveCwd(cmd)
@@ -39,7 +39,7 @@ crush models gpt5`,
 		}
 
 		if !cfg.Config().IsConfigured() {
-			return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
+			return fmt.Errorf("no providers configured - please run 'lenos' to set up a provider interactively")
 		}
 
 		term := strings.ToLower(strings.Join(args, " "))

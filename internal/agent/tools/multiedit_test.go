@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/history"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/history"
+	"github.com/tta-lab/lenos/internal/permission"
+	"github.com/tta-lab/lenos/internal/pubsub"
 )
 
 type mockPermissionService struct {

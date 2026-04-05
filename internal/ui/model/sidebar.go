@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/ui/common"
-	"github.com/charmbracelet/crush/internal/ui/logo"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/layout"
+	"github.com/tta-lab/lenos/internal/ui/common"
+	"github.com/tta-lab/lenos/internal/ui/logo"
 )
 
 // modelInfo renders the current model information including reasoning

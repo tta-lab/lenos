@@ -15,7 +15,7 @@ const docTemplate = `{
         },
         "license": {
             "name": "MIT",
-            "url": "https://github.com/charmbracelet/crush/blob/main/LICENSE"
+            "url": "https://github.com/tta-lab/lenos/blob/main/LICENSE"
         },
         "version": "{{.Version}}"
     },
@@ -1757,7 +1757,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_charmbracelet_crush_internal_proto.Message"
+                                "$ref": "#/definitions/github_com_tta_lab_lenos_internal_proto.Message"
                             }
                         }
                     },
@@ -2451,7 +2451,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_charmbracelet_crush_internal_proto.Message"
+                                "$ref": "#/definitions/github_com_tta_lab_lenos_internal_proto.Message"
                             }
                         }
                     },
@@ -2501,7 +2501,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_charmbracelet_crush_internal_proto.Message"
+                                "$ref": "#/definitions/github_com_tta_lab_lenos_internal_proto.Message"
                             }
                         }
                     },
@@ -2875,7 +2875,7 @@ const docTemplate = `{
         "csync.Map-string-config_ProviderConfig": {
             "type": "object"
         },
-        "github_com_charmbracelet_crush_internal_config.Config": {
+        "github_com_tta_lab_lenos_internal_config.Config": {
             "type": "object",
             "properties": {
                 "$schema": {
@@ -2895,7 +2895,7 @@ const docTemplate = `{
                     }
                 },
                 "options": {
-                    "$ref": "#/definitions/github_com_charmbracelet_crush_internal_config.Options"
+                    "$ref": "#/definitions/github_com_tta_lab_lenos_internal_config.Options"
                 },
                 "permissions": {
                     "$ref": "#/definitions/config.Permissions"
@@ -2923,7 +2923,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_charmbracelet_crush_internal_config.Options": {
+        "github_com_tta_lab_lenos_internal_config.Options": {
             "type": "object",
             "properties": {
                 "attribution": {
@@ -2986,7 +2986,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_charmbracelet_crush_internal_proto.Message": {
+        "github_com_tta_lab_lenos_internal_proto.Message": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -3515,7 +3515,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "config": {
-                    "$ref": "#/definitions/github_com_charmbracelet_crush_internal_config.Config"
+                    "$ref": "#/definitions/github_com_tta_lab_lenos_internal_config.Config"
                 },
                 "data_dir": {
                     "type": "string"
@@ -3576,8 +3576,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/v1",
 	Schemes:          []string{},
-	Title:            "Crush API",
-	Description:      "Crush is a terminal-based AI coding assistant. This API is served over a Unix socket (or Windows named pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP, and more.",
+	Title:            "Lenos API",
+	Description:      "Lenos is a terminal-based AI coding assistant. This API is served over a Unix socket (or Windows named pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP, and more.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

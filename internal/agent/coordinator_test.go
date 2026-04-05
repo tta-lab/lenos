@@ -7,9 +7,9 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 // mockSessionAgent is a minimal mock for the SessionAgent interface.

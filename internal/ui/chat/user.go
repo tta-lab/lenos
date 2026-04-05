@@ -5,10 +5,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/ui/attachments"
-	"github.com/charmbracelet/crush/internal/ui/common"
-	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/ui/attachments"
+	"github.com/tta-lab/lenos/internal/ui/common"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 // UserMessageItem represents a user message in the chat UI.

@@ -10,12 +10,12 @@ import (
 	"slices"
 
 	"charm.land/catwalk/pkg/catwalk"
-	hyperp "github.com/charmbracelet/crush/internal/agent/hyper"
-	"github.com/charmbracelet/crush/internal/oauth"
-	"github.com/charmbracelet/crush/internal/oauth/copilot"
-	"github.com/charmbracelet/crush/internal/oauth/hyper"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	hyperp "github.com/tta-lab/lenos/internal/agent/hyper"
+	"github.com/tta-lab/lenos/internal/oauth"
+	"github.com/tta-lab/lenos/internal/oauth/copilot"
+	"github.com/tta-lab/lenos/internal/oauth/hyper"
 )
 
 // RuntimeOverrides holds per-session settings that are never persisted to
@@ -32,8 +32,8 @@ type ConfigStore struct {
 	config         *Config
 	workingDir     string
 	resolver       VariableResolver
-	globalDataPath string // ~/.local/share/crush/crush.json
-	workspacePath  string // .crush/crush.json
+	globalDataPath string // ~/.local/share/lenos/config.json
+	workspacePath  string // .lenos/config.json
 	knownProviders []catwalk.Provider
 	overrides      RuntimeOverrides
 }

@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 func TestParseModelStr(t *testing.T) {

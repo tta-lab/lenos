@@ -5,9 +5,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/internal/app"
-	"github.com/charmbracelet/crush/internal/config"
+	mcptools "github.com/tta-lab/lenos/internal/agent/tools/mcp"
+	"github.com/tta-lab/lenos/internal/app"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 // SubscribeEvents returns the event channel for a workspace's app.

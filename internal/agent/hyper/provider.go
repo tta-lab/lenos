@@ -24,7 +24,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/object"
-	"github.com/charmbracelet/crush/internal/event"
+	"github.com/tta-lab/lenos/internal/event"
 )
 
 //go:generate wget -O provider.json https://hyper.charm.land/api/v1/provider
@@ -37,7 +37,7 @@ var Enabled = sync.OnceValue(func() bool {
 	b, _ := strconv.ParseBool(
 		cmp.Or(
 			os.Getenv("HYPER"),
-			os.Getenv("HYPERCRUSH"),
+			os.Getenv("HYPERLENOS"),
 			os.Getenv("HYPER_ENABLE"),
 			os.Getenv("HYPER_ENABLED"),
 		),
@@ -88,7 +88,7 @@ func New(opts ...Option) (fantasy.Provider, error) {
 		baseURL: BaseURL() + "/api/v1/fantasy",
 		name:    Name,
 		headers: map[string]string{
-			"x-crush-id": event.GetID(),
+			"x-lenos-id": event.GetID(),
 		},
 		client: &http.Client{Timeout: 0}, // stream-safe
 	}

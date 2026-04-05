@@ -1,5 +1,5 @@
 // Package mcp provides functionality for managing Model Context Protocol (MCP)
-// clients within the Crush application.
+// clients within the Lenos application.
 package mcp
 
 import (
@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/home"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/version"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/home"
+	"github.com/tta-lab/lenos/internal/permission"
+	"github.com/tta-lab/lenos/internal/pubsub"
+	"github.com/tta-lab/lenos/internal/version"
 )
 
 func parseLevel(level mcp.LoggingLevel) slog.Level {
@@ -364,9 +364,9 @@ func createSession(ctx context.Context, name string, m config.MCPConfig, resolve
 
 	client := mcp.NewClient(
 		&mcp.Implementation{
-			Name:    "crush",
+			Name:    "lenos",
 			Version: version.Version,
-			Title:   "Crush",
+			Title:   "Lenos",
 		},
 		&mcp.ClientOptions{
 			ToolListChangedHandler: func(context.Context, *mcp.ToolListChangedRequest) {

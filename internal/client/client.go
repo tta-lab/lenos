@@ -12,15 +12,15 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/server"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/proto"
+	"github.com/tta-lab/lenos/internal/server"
 )
 
 // DummyHost is used to satisfy the http.Client's requirement for a URL.
-const DummyHost = "api.crush.localhost"
+const DummyHost = "api.lenos.localhost"
 
-// Client represents an RPC client connected to a Crush server.
+// Client represents an RPC client connected to a Lenos server.
 type Client struct {
 	h       *http.Client
 	path    string

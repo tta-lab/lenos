@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/env"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/env"
 )
 
 func TestMain(m *testing.M) {
@@ -53,7 +53,7 @@ func TestConfig_setDefaults(t *testing.T) {
 	require.NotNil(t, cfg.Models)
 	require.NotNil(t, cfg.LSP)
 	require.NotNil(t, cfg.MCP)
-	require.Equal(t, filepath.Join("/tmp", ".crush"), cfg.Options.DataDirectory)
+	require.Equal(t, filepath.Join("/tmp", ".lenos"), cfg.Options.DataDirectory)
 	require.Equal(t, "AGENTS.md", cfg.Options.InitializeAs)
 	for _, path := range defaultContextPaths {
 		require.Contains(t, cfg.Options.ContextPaths, path)
@@ -1289,7 +1289,7 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 
 func TestConfig_setDefaultsDisableDefaultProvidersEnvVar(t *testing.T) {
 	t.Run("sets option from environment variable", func(t *testing.T) {
-		t.Setenv("CRUSH_DISABLE_DEFAULT_PROVIDERS", "true")
+		t.Setenv("LENOS_DISABLE_DEFAULT_PROVIDERS", "true")
 
 		cfg := &Config{}
 		cfg.setDefaults("/tmp", "")

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/stringext"
-	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/stringext"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 // GenericToolMessageItem is a message item that represents an unknown tool call.

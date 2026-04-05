@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/pubsub"
+	"github.com/tta-lab/lenos/internal/session"
 )
 
 // mockSessionService is a minimal mock of session.Service for testing resolveSession.

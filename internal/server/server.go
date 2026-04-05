@@ -11,10 +11,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/backend"
-	"github.com/charmbracelet/crush/internal/config"
-	_ "github.com/charmbracelet/crush/internal/swagger"
 	httpswagger "github.com/swaggo/http-swagger/v2"
+	"github.com/tta-lab/lenos/internal/backend"
+	"github.com/tta-lab/lenos/internal/config"
+	_ "github.com/tta-lab/lenos/internal/swagger"
 )
 
 // ErrServerClosed is returned when the server is closed.
@@ -45,10 +45,10 @@ func ParseHostURL(host string) (*url.URL, error) {
 
 // DefaultHost returns the default server host.
 func DefaultHost() string {
-	sock := "crush.sock"
+	sock := "lenos.sock"
 	usr, err := user.Current()
 	if err == nil && usr.Uid != "" {
-		sock = fmt.Sprintf("crush-%s.sock", usr.Uid)
+		sock = fmt.Sprintf("lenos-%s.sock", usr.Uid)
 	}
 	if runtime.GOOS == "windows" {
 		return fmt.Sprintf("npipe:////./pipe/%s", sock)
@@ -56,7 +56,7 @@ func DefaultHost() string {
 	return fmt.Sprintf("unix:///tmp/%s", sock)
 }
 
-// Server represents a Crush server bound to a specific address.
+// Server represents a Lenos server bound to a specific address.
 type Server struct {
 	// Addr can be a TCP address, a Unix socket path, or a Windows named pipe.
 	Addr    string

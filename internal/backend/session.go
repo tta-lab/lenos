@@ -3,9 +3,9 @@ package backend
 import (
 	"context"
 
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/proto"
+	"github.com/tta-lab/lenos/internal/session"
 )
 
 // CreateSession creates a new session in the given workspace.

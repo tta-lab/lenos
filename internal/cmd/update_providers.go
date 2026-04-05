@@ -5,9 +5,9 @@ import (
 	"log/slog"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/x/exp/charmtone"
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 var updateProvidersSource string
@@ -18,22 +18,22 @@ var updateProvidersCmd = &cobra.Command{
 	Long:  `Update provider information from a specified local path or remote URL.`,
 	Example: `
 # Update Catwalk providers remotely (default)
-crush update-providers
+lenos update-providers
 
 # Update Catwalk providers from a custom URL
-crush update-providers https://example.com/providers.json
+lenos update-providers https://example.com/providers.json
 
 # Update Catwalk providers from a local file
-crush update-providers /path/to/local-providers.json
+lenos update-providers /path/to/local-providers.json
 
 # Update Catwalk providers from embedded version
-crush update-providers embedded
+lenos update-providers embedded
 
 # Update Hyper provider information
-crush update-providers --source=hyper
+lenos update-providers --source=hyper
 
 # Update Hyper from a custom URL
-crush update-providers --source=hyper https://hyper.example.com
+lenos update-providers --source=hyper https://hyper.example.com
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// NOTE(@andreynering): We want to skip logging output do stdout here.

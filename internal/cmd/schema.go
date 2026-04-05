@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/invopop/jsonschema"
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 var schemaCmd = &cobra.Command{
 	Use:    "schema",
 	Short:  "Generate JSON schema for configuration",
-	Long:   "Generate JSON schema for the crush configuration file",
+	Long:   "Generate JSON schema for the lenos configuration file",
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reflector := new(jsonschema.Reflector)
