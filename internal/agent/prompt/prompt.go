@@ -20,11 +20,12 @@ import (
 
 // Prompt represents a template-based prompt generator.
 type Prompt struct {
-	name       string
-	template   string
-	now        func() time.Time
-	platform   string
-	workingDir string
+	name         string
+	template     string
+	now          func() time.Time
+	platform     string
+	workingDir   string
+	contextPaths []string
 }
 
 type PromptDat struct {
@@ -62,6 +63,12 @@ func WithPlatform(platform string) Option {
 func WithWorkingDir(workingDir string) Option {
 	return func(p *Prompt) {
 		p.workingDir = workingDir
+	}
+}
+
+func WithContextPaths(paths []string) Option {
+	return func(p *Prompt) {
+		p.contextPaths = paths
 	}
 }
 
@@ -156,7 +163,11 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	files := map[string][]ContextFile{}
 
 	cfg := store.Config()
-	for _, pth := range cfg.Options.ContextPaths {
+	contextPaths := cfg.Options.ContextPaths
+	if len(p.contextPaths) > 0 {
+		contextPaths = p.contextPaths
+	}
+	for _, pth := range contextPaths {
 		expanded := expandPath(pth, store)
 		pathKey := strings.ToLower(expanded)
 		if _, ok := files[pathKey]; ok {
