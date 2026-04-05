@@ -19,7 +19,7 @@ import (
 	"charm.land/fantasy"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	
+
 	"github.com/charmbracelet/x/term"
 	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/agent/notify"

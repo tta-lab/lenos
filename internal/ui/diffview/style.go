@@ -2,7 +2,6 @@ package diffview
 
 import (
 	"charm.land/lipgloss/v2"
-	
 )
 
 // LineStyle defines the styles for a given line type in the diff view.

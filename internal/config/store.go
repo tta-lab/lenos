@@ -23,9 +23,9 @@ import (
 // the lifetime of the process (or workspace).
 type RuntimeOverrides struct {
 	SkipPermissionRequests bool
-	AgentName             string
-	AgentContextFile      string
-	ExtraContextFiles     []string
+	AgentName              string
+	AgentContextFile       string
+	ExtraContextFiles      []string
 }
 
 // ConfigStore is the single entry point for all config access. It owns the

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	"charm.land/lipgloss/v2"
-	
+
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/config"
 )

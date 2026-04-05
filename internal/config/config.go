@@ -240,7 +240,7 @@ func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 type Options struct {
 	ContextPaths              []string     `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=LENOS.md"`
 	SkillsPaths               []string     `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/lenos/skills,example=./skills"`
-	AgentPaths               []string     `json:"agent_paths,omitempty" jsonschema:"description=Paths to directories containing Agent identity files (agent.md files),example=~/.config/lenos/agents,example=./.lenos/agents"`
+	AgentPaths                []string     `json:"agent_paths,omitempty" jsonschema:"description=Paths to directories containing Agent identity files (agent.md files),example=~/.config/lenos/agents,example=./.lenos/agents"`
 	TUI                       *TUIOptions  `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
 	Debug                     bool         `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
 	DebugLSP                  bool         `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`

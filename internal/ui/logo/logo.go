@@ -13,11 +13,11 @@ import (
 // Opts are the options for rendering the Lenos title art.
 type Opts struct {
 	FieldColor   color.Color // diagonal lines
-	TitleColorA color.Color // left gradient ramp point
-	TitleColorB color.Color // right gradient ramp point
-	BrandColor  color.Color // lenos text color
+	TitleColorA  color.Color // left gradient ramp point
+	TitleColorB  color.Color // right gradient ramp point
+	BrandColor   color.Color // lenos text color
 	VersionColor color.Color // Version text color
-	Width       int            // width of the rendered logo, used for truncation
+	Width        int         // width of the rendered logo, used for truncation
 }
 
 // Render renders the Lenos logo. Set the argument to true to render the narrow

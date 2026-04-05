@@ -24,7 +24,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	
+
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/app"

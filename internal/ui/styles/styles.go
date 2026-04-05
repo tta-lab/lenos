@@ -12,14 +12,14 @@ import (
 	"charm.land/glamour/v2/ansi"
 	"charm.land/lipgloss/v2"
 	"github.com/alecthomas/chroma/v2"
-	
+
 	"github.com/tta-lab/lenos/internal/ui/diffview"
 )
+
 // pointerTo returns a pointer to a string value.
 func pointerTo(s string) *string {
 	return &s
 }
-
 
 const (
 	CheckIcon   string = "✓"
@@ -167,7 +167,7 @@ type Styles struct {
 	LogoFieldColor   color.Color
 	LogoTitleColorA  color.Color
 	LogoTitleColorB  color.Color
-	LogoBrandColor  color.Color
+	LogoBrandColor   color.Color
 	LogoVersionColor color.Color
 
 	// Colors - semantic colors for tool rendering.
