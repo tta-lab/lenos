@@ -3,7 +3,6 @@ package logo
 
 import (
 	"image/color"
-	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -30,24 +29,18 @@ func Render(s *styles.Styles, version string, compact bool, o Opts) string {
 		return lipgloss.NewStyle().Foreground(c).Render(text)
 	}
 
-	// Render "lenos" with gradient.
-	lenos := fg(o.TitleColorA, "lenos")
-	lenosWidth := lipgloss.Width(lenos)
+	// Render "Lenos" with version.
+	lenosText := fg(o.BrandColor, "Lenos")
+	lenosWidth := lipgloss.Width(lenosText)
 
-	// Version row.
+	// Truncate version if needed.
 	version = ansi.Truncate(version, max(0, o.Width-lenosWidth-1), "…")
-	gap := max(0, o.Width-lenosWidth-lipgloss.Width(version)-1)
-	brandRow := fg(o.BrandColor, "lenos") + strings.Repeat(" ", gap) + fg(o.VersionColor, version)
+	versionText := fg(o.VersionColor, " "+version)
 
-	// Join the brand/version row and lenos title.
-	result := brandRow + "\n" + lenos
+	result := lenosText + versionText
 
 	if o.Width > 0 {
-		lines := strings.Split(result, "\n")
-		for i, line := range lines {
-			lines[i] = ansi.Truncate(line, o.Width, "")
-		}
-		result = strings.Join(lines, "\n")
+		result = ansi.Truncate(result, o.Width, "")
 	}
 	return result
 }
@@ -55,12 +48,7 @@ func Render(s *styles.Styles, version string, compact bool, o Opts) string {
 // SmallRender renders a smaller version of the Lenos logo, suitable for
 // smaller windows or sidebar usage.
 func SmallRender(t *styles.Styles, width int) string {
-	title := t.Base.Foreground(t.Secondary).Render("lenos")
-	title = title + " " + styles.ApplyBoldForegroundGrad(t, "", t.Secondary, t.Primary)
-	remainingWidth := width - lipgloss.Width(title) - 1
-	if remainingWidth > 0 {
-		lines := strings.Repeat("╱", remainingWidth)
-		title = title + " " + t.Base.Foreground(t.Primary).Render(lines)
-	}
+	title := t.Header.Brand.Render("Lenos")
+	title = ansi.Truncate(title, width, "")
 	return title
 }

@@ -55,7 +55,7 @@ const (
 	smallContextWindowRatio     = 0.2
 )
 
-var userAgent = fmt.Sprintf("Charm-Lenos/%s (https://github.com/tta-lab/lenos)", version.Version)
+var userAgent = fmt.Sprintf("Lenos/%s (https://github.com/tta-lab/lenos)", version.Version)
 
 //go:embed templates/title.md
 var titlePrompt []byte

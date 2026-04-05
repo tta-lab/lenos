@@ -38,8 +38,7 @@ func newHeader(com *common.Common) *header {
 		com: com,
 	}
 	t := com.Styles
-	h.compactLogo = t.Header.Brand.Render("lenos") + " " +
-		styles.ApplyBoldForegroundGrad(t, "LENOS", t.Secondary, t.Primary) + " "
+	h.compactLogo = t.Header.Brand.Render("Lenos")
 	return h
 }
 
@@ -93,9 +92,6 @@ func (h *header) drawHeader(
 		diagToDetailsSpacing
 
 	if remainingWidth > 0 {
-		b.WriteString(t.Header.Diagonals.Render(
-			strings.Repeat(headerDiag, max(minHeaderDiags, remainingWidth)),
-		))
 		b.WriteString(" ")
 	}
 
