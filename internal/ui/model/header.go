@@ -71,7 +71,7 @@ func (h *header) drawHeader(
 		brand := t.Header.Brand.Render("Lenos")
 		agentName := h.com.Workspace.AgentName()
 		if agentName != "" {
-			h.compactLogo = brand + t.HalfMuted.Render(" (" + agentName + ")")
+			h.compactLogo = brand + t.HalfMuted.Render(" ("+agentName+")")
 		} else {
 			h.compactLogo = brand
 		}
