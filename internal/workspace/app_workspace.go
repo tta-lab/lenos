@@ -385,5 +385,9 @@ func (w *AppWorkspace) Store() *config.ConfigStore {
 	return w.store
 }
 
+func (w *AppWorkspace) AgentName() string {
+	return w.store.Overrides().AgentName
+}
+
 // Compile-time check that AppWorkspace implements Workspace.
 var _ Workspace = (*AppWorkspace)(nil)

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/exp/charmtone"
+
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/config"
 )
@@ -61,8 +61,8 @@ lenos update-providers --source=hyper https://hyper.example.com
 		// NOTE(@andreynering): This style is more-or-less copied from Fang's
 		// error message, adapted for success.
 		headerStyle := lipgloss.NewStyle().
-			Foreground(charmtone.Butter).
-			Background(charmtone.Guac).
+			Foreground(lipgloss.Color("#e8dcc8")).
+			Background(lipgloss.Color("#6b8a5e")).
 			Bold(true).
 			Padding(0, 1).
 			Margin(1).

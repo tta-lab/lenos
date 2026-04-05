@@ -118,7 +118,10 @@ func NewCoordinator(
 	}
 
 	// TODO: make this dynamic when we support multiple agents
-	prompt, err := coderPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()))
+	prompt, err := coderPrompt(
+		prompt.WithWorkingDir(c.cfg.WorkingDir()),
+		prompt.WithContextPaths(agentCfg.ContextPaths),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1006,7 +1009,7 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 		NonInteractive:   true,
 	})
 	if err != nil {
-		return fantasy.NewTextErrorResponse("error generating response"), nil
+		return fantasy.NewTextErrorResponse("error generating response: " + err.Error()), nil
 	}
 
 	// Update parent session cost

@@ -156,6 +156,8 @@ type UI struct {
 	initialSessionID string
 	// continueLastSession is set to continue the most recent session on startup.
 	continueLastSession bool
+	// triggerMessage is sent as the first user message after the agent is ready.
+	triggerMessage string
 
 	lastUserMessageTime int64
 
@@ -260,7 +262,7 @@ type UI struct {
 }
 
 // New creates a new instance of the [UI] model.
-func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
+func New(com *common.Common, initialSessionID string, continueLast bool, triggerMessage string) *UI {
 	// Editor components
 	ta := textarea.New()
 	ta.SetStyles(com.Styles.TextArea)
@@ -321,6 +323,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		notifyWindowFocused: true,
 		initialSessionID:    initialSessionID,
 		continueLastSession: continueLast,
+		triggerMessage:      triggerMessage,
 	}
 
 	status := NewStatus(com, ui)
@@ -373,6 +376,10 @@ func (m *UI) Init() tea.Cmd {
 	if cmd := m.loadInitialSession(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	// send trigger message if one was provided at startup
+	if m.triggerMessage != "" {
+		cmds = append(cmds, m.waitAndTrigger())
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -394,6 +401,20 @@ func (m *UI) loadInitialSession() tea.Cmd {
 		}
 	default:
 		return nil
+	}
+}
+
+// waitAndTrigger waits for the agent to be ready and then sends the trigger message.
+func (m *UI) waitAndTrigger() tea.Cmd {
+	return func() tea.Msg {
+		deadline := time.Now().Add(5 * time.Minute)
+		for !m.com.Workspace.AgentIsReady() {
+			if time.Now().After(deadline) {
+				return nil
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		return sendMessageMsg{Content: m.triggerMessage}
 	}
 }
 
@@ -876,7 +897,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Placeholder = m.readyPlaceholder
 		}
 		if m.com.Workspace.PermissionSkipRequests() {
-			m.textarea.Placeholder = "Yolo mode!"
+			m.textarea.Placeholder = "yolo mode"
 		}
 	}
 
@@ -2688,15 +2709,15 @@ func (m *UI) setEditorPrompt(yolo bool) {
 	m.textarea.SetPromptFunc(4, m.normalPromptFunc)
 }
 
-// normalPromptFunc returns the normal editor prompt style ("  > " on first
-// line, "::: " on subsequent lines).
+// normalPromptFunc returns the normal editor prompt style ("  λ " on first
+// line, "  · " on subsequent lines).
 func (m *UI) normalPromptFunc(info textarea.PromptInfo) string {
 	t := m.com.Styles
 	if info.LineNumber == 0 {
 		if info.Focused {
-			return "  > "
+			return "  λ "
 		}
-		return "::: "
+		return "  · "
 	}
 	if info.Focused {
 		return t.EditorPromptNormalFocused.Render()
@@ -2887,19 +2908,16 @@ func mimeOf(content []byte) string {
 }
 
 var readyPlaceholders = [...]string{
-	"Ready!",
-	"Ready...",
-	"Ready?",
-	"Ready for instructions",
+	"ready",
+	"listening...",
+	"awaiting input",
+	"...",
 }
 
 var workingPlaceholders = [...]string{
-	"Working!",
-	"Working...",
-	"Brrrrr...",
-	"Prrrrrrrr...",
-	"Processing...",
-	"Thinking...",
+	"working...",
+	"thinking...",
+	"processing...",
 }
 
 // randomizePlaceholders selects random placeholder text for the textarea's
@@ -3590,7 +3608,7 @@ func renderLogo(t *styles.Styles, compact bool, width int) string {
 		FieldColor:   t.LogoFieldColor,
 		TitleColorA:  t.LogoTitleColorA,
 		TitleColorB:  t.LogoTitleColorB,
-		CharmColor:   t.LogoCharmColor,
+		BrandColor:   t.LogoBrandColor,
 		VersionColor: t.LogoVersionColor,
 		Width:        width,
 	})

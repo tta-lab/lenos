@@ -34,13 +34,9 @@ type header struct {
 
 // newHeader creates a new header model.
 func newHeader(com *common.Common) *header {
-	h := &header{
+	return &header{
 		com: com,
 	}
-	t := com.Styles
-	h.compactLogo = t.Header.Charm.Render("Charm™") + " " +
-		styles.ApplyBoldForegroundGrad(t, "LENOS", t.Secondary, t.Primary) + " "
-	return h
 }
 
 // drawHeader draws the header for the given session.
@@ -69,6 +65,18 @@ func (h *header) drawHeader(
 		return
 	}
 
+	// Build compact logo lazily so it can include the agent name.
+	if h.compactLogo == "" {
+		t := h.com.Styles
+		brand := t.Header.Brand.Render("Lenos")
+		agentName := h.com.Workspace.AgentName()
+		if agentName != "" {
+			h.compactLogo = brand + t.HalfMuted.Render(" ("+agentName+")")
+		} else {
+			h.compactLogo = brand
+		}
+	}
+
 	var b strings.Builder
 	b.WriteString(h.compactLogo)
 
@@ -93,9 +101,6 @@ func (h *header) drawHeader(
 		diagToDetailsSpacing
 
 	if remainingWidth > 0 {
-		b.WriteString(t.Header.Diagonals.Render(
-			strings.Repeat(headerDiag, max(minHeaderDiags, remainingWidth)),
-		))
 		b.WriteString(" ")
 	}
 

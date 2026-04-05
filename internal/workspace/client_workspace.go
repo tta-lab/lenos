@@ -197,6 +197,7 @@ func (w *ClientWorkspace) AgentModel() AgentModel {
 func (w *ClientWorkspace) AgentIsReady() bool {
 	info, err := w.client.GetAgentInfo(context.Background(), w.workspaceID())
 	if err != nil {
+		slog.Warn("Failed to get agent info", "error", err)
 		return false
 	}
 	return info.IsReady
@@ -395,6 +396,10 @@ func (w *ClientWorkspace) WorkingDir() string {
 
 func (w *ClientWorkspace) Resolver() config.VariableResolver {
 	return config.IdentityResolver()
+}
+
+func (w *ClientWorkspace) AgentName() string {
+	return ""
 }
 
 // -- Config mutations --

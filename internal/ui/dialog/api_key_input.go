@@ -11,8 +11,9 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/exp/charmtone"
+
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
@@ -249,7 +250,7 @@ func (m *APIKeyInput) inputView() string {
 		m.input.Blur()
 	case APIKeyInputStateError:
 		ts := t.TextInput
-		ts.Focused.Prompt = ts.Focused.Prompt.Foreground(charmtone.Cherry)
+		ts.Focused.Prompt = ts.Focused.Prompt.Foreground(lipgloss.Color("#c4647a"))
 
 		m.input.Prompt = styles.LSPErrorIcon + " "
 		m.input.SetStyles(ts)

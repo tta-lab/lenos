@@ -19,7 +19,7 @@ import (
 	"charm.land/fantasy"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
+
 	"github.com/charmbracelet/x/term"
 	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/agent/notify"
@@ -241,7 +241,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		if f, ok := output.(*os.File); ok && stdinTTY && stdoutTTY {
 			hasDarkBG = lipgloss.HasDarkBackground(os.Stdin, f)
 		}
-		defaultFG := lipgloss.LightDark(hasDarkBG)(charmtone.Pepper, t.FgBase)
+		defaultFG := lipgloss.LightDark(hasDarkBG)(lipgloss.Color("#1a1016"), t.FgBase)
 
 		spinner = format.NewSpinner(ctx, cancel, anim.Settings{
 			Size:        10,

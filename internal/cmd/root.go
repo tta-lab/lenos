@@ -24,7 +24,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
+
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/app"
@@ -54,6 +54,8 @@ func init() {
 	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	rootCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
+	rootCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
+	rootCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file to inject at startup (repeatable)")
 	rootCmd.MarkFlagsMutuallyExclusive("session", "continue")
 
 	rootCmd.AddCommand(
@@ -101,8 +103,24 @@ lenos --continue
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessionID, _ := cmd.Flags().GetString("session")
 		continueLast, _ := cmd.Flags().GetBool("continue")
+		agentName, _ := cmd.Flags().GetString("agent")
+		contextFiles, _ := cmd.Flags().GetStringArray("context-file")
+		if agentName == "" {
+			agentName = os.Getenv("LENOS_AGENT")
+		}
+		if len(contextFiles) == 0 {
+			if envVal := os.Getenv("LENOS_CONTEXT_FILE"); envVal != "" {
+				contextFiles = []string{envVal}
+			}
+		}
 
-		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd)
+		// Determine trigger message from positional args.
+		triggerMessage := ""
+		if len(args) > 0 {
+			triggerMessage = strings.Join(args, " ")
+		}
+
+		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd, agentName, contextFiles)
 		if err != nil {
 			return err
 		}
@@ -119,7 +137,7 @@ lenos --continue
 		event.AppInitialized()
 
 		com := common.DefaultCommon(ws)
-		model := ui.New(com, sessionID, continueLast)
+		model := ui.New(com, sessionID, continueLast, triggerMessage)
 
 		var env uv.Environ = os.Environ()
 		program := tea.NewProgram(
@@ -139,18 +157,8 @@ lenos --continue
 	},
 }
 
-var heartbit = lipgloss.NewStyle().Foreground(charmtone.Dolly).SetString(`
-    ▄▄▄▄▄▄▄▄    ▄▄▄▄▄▄▄▄
-  ███████████  ███████████
-████████████████████████████
-████████████████████████████
-██████████▀██████▀██████████
-██████████ ██████ ██████████
-▀▀██████▄████▄▄████▄██████▀▀
-  ████████████████████████
-    ████████████████████
-       ▀▀██████████▀▀
-           ▀▀▀▀▀▀
+var heartbit = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b2d3e")).SetString(`
+lenos
 `)
 
 // copied from cobra:
@@ -212,13 +220,13 @@ func useClientServer() bool {
 
 // setupWorkspaceWithProgressBar wraps setupWorkspace with an optional
 // terminal progress bar shown during initialization.
-func setupWorkspaceWithProgressBar(cmd *cobra.Command) (workspace.Workspace, func(), error) {
+func setupWorkspaceWithProgressBar(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
 	showProgress := supportsProgressBar()
 	if showProgress {
 		_, _ = fmt.Fprintf(os.Stderr, ansi.SetIndeterminateProgressBar)
 	}
 
-	ws, cleanup, err := setupWorkspace(cmd)
+	ws, cleanup, err := setupWorkspace(cmd, agentName, contextFiles)
 
 	if showProgress {
 		_, _ = fmt.Fprintf(os.Stderr, ansi.ResetProgressBar)
@@ -231,16 +239,16 @@ func setupWorkspaceWithProgressBar(cmd *cobra.Command) (workspace.Workspace, fun
 // LENOS_CLIENT_SERVER=1, it connects to a server process and returns a
 // ClientWorkspace. Otherwise it creates an in-process app.App and
 // returns an AppWorkspace.
-func setupWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
+func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
 	if useClientServer() {
 		return setupClientServerWorkspace(cmd)
 	}
-	return setupLocalWorkspace(cmd)
+	return setupLocalWorkspace(cmd, agentName, contextFiles)
 }
 
 // setupLocalWorkspace creates an in-process app.App and wraps it in an
 // AppWorkspace.
-func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
+func setupLocalWorkspace(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
 	yolo, _ := cmd.Flags().GetBool("yolo")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
@@ -258,6 +266,28 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 
 	cfg := store.Config()
 	store.Overrides().SkipPermissionRequests = yolo
+
+	// Resolve agent identity file if specified.
+	if agentName != "" {
+		agentContextFile, resolveErr := resolveAgentFile(agentName, cfg.Options.AgentPaths)
+		if resolveErr != nil {
+			return nil, nil, resolveErr
+		}
+		store.Overrides().AgentName = agentName
+		store.Overrides().AgentContextFile = agentContextFile
+	}
+
+	// Validate and store extra context files.
+	for _, cf := range contextFiles {
+		if _, statErr := os.Stat(cf); statErr != nil {
+			return nil, nil, fmt.Errorf("context file not found: %s: %w", cf, statErr)
+		}
+		// Store extra context files in overrides; applied in SetupAgents.
+		store.Overrides().ExtraContextFiles = append(store.Overrides().ExtraContextFiles, cf)
+	}
+
+	// Re-run SetupAgents now that overrides are set.
+	store.SetupAgents()
 
 	if err := os.MkdirAll(cfg.Options.DataDirectory, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("failed to create data directory: %q %w", cfg.Options.DataDirectory, err)
@@ -592,6 +622,28 @@ func ResolveCwd(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("failed to get current working directory: %v", err)
 	}
 	return cwd, nil
+}
+
+// resolveAgentFile searches agent_paths for an agent.md file matching the given name.
+// Returns the absolute path of the first match or an error.
+func resolveAgentFile(agentName string, agentPaths []string) (string, error) {
+	filename := agentName + ".md"
+	var searched []string
+	for _, dir := range agentPaths {
+		if dir == "" {
+			continue
+		}
+		path := filepath.Join(dir, filename)
+		searched = append(searched, dir)
+		if _, err := os.Stat(path); err == nil {
+			absPath, err := filepath.Abs(path)
+			if err != nil {
+				return "", fmt.Errorf("resolving agent path: %w", err)
+			}
+			return absPath, nil
+		}
+	}
+	return "", fmt.Errorf("agent file %q not found in agent_paths: %v", filename, searched)
 }
 
 func createDotLenosDir(dir string) error {

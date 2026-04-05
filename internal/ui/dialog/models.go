@@ -398,7 +398,7 @@ func (m *Models) setProviderItems() error {
 		}
 	}
 
-	// Move "Charm Hyper" to first position.
+	// Move "Hyper" to first position.
 	// (But still after recent models and custom providers).
 	slices.SortStableFunc(m.providers, func(a, b catwalk.Provider) int {
 		switch {

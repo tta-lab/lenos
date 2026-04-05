@@ -20,11 +20,12 @@ import (
 
 // Prompt represents a template-based prompt generator.
 type Prompt struct {
-	name       string
-	template   string
-	now        func() time.Time
-	platform   string
-	workingDir string
+	name         string
+	template     string
+	now          func() time.Time
+	platform     string
+	workingDir   string
+	contextPaths []string
 }
 
 type PromptDat struct {
@@ -65,6 +66,12 @@ func WithWorkingDir(workingDir string) Option {
 	}
 }
 
+func WithContextPaths(paths []string) Option {
+	return func(p *Prompt) {
+		p.contextPaths = paths
+	}
+}
+
 func NewPrompt(name, promptTemplate string, opts ...Option) (*Prompt, error) {
 	p := &Prompt{
 		name:     name,
@@ -97,6 +104,7 @@ func (p *Prompt) Build(ctx context.Context, provider, model string, store *confi
 func processFile(filePath string) *ContextFile {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
+		slog.Warn("Failed to read context file", "path", filePath, "error", err)
 		return nil
 	}
 	return &ContextFile{
@@ -113,12 +121,14 @@ func processContextPath(p string, store *config.ConfigStore) []ContextFile {
 	}
 	info, err := os.Stat(fullPath)
 	if err != nil {
+		slog.Warn("Failed to stat context path", "path", fullPath, "error", err)
 		return contexts
 	}
 	if info.IsDir() {
-		filepath.WalkDir(fullPath, func(path string, d os.DirEntry, err error) error {
+		err := filepath.WalkDir(fullPath, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
-				return err
+				slog.Warn("Failed to walk context directory", "path", path, "error", err)
+				return nil
 			}
 			if !d.IsDir() {
 				if result := processFile(path); result != nil {
@@ -127,6 +137,9 @@ func processContextPath(p string, store *config.ConfigStore) []ContextFile {
 			}
 			return nil
 		})
+		if err != nil {
+			slog.Warn("Failed to walk context directory", "path", fullPath, "error", err)
+		}
 	} else {
 		result := processFile(fullPath)
 		if result != nil {
@@ -156,7 +169,11 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	files := map[string][]ContextFile{}
 
 	cfg := store.Config()
-	for _, pth := range cfg.Options.ContextPaths {
+	contextPaths := cfg.Options.ContextPaths
+	if len(p.contextPaths) > 0 {
+		contextPaths = p.contextPaths
+	}
+	for _, pth := range contextPaths {
 		expanded := expandPath(pth, store)
 		pathKey := strings.ToLower(expanded)
 		if _, ok := files[pathKey]; ok {
