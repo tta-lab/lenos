@@ -398,6 +398,10 @@ func (w *ClientWorkspace) Resolver() config.VariableResolver {
 	return config.IdentityResolver()
 }
 
+func (w *ClientWorkspace) AgentName() string {
+	return ""
+}
+
 // -- Config mutations --
 
 func (w *ClientWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
