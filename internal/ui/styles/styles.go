@@ -632,11 +632,8 @@ func DefaultStyles() Styles {
 	s.Markdown = ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				// BlockPrefix: "\n",
-				// BlockSuffix: "\n",
-				Color: pointerTo("##a89d8a"),
+				Color: pointerTo("#f0ebe4"),
 			},
-			// Margin: new(uint(defaultMargin)),
 		},
 		BlockQuote: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{},
@@ -649,7 +646,7 @@ func DefaultStyles() Styles {
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockSuffix: "\n",
-				Color:       pointerTo("##7e8ea8"),
+				Color:       pointerTo("#7e8ea8"),
 				Bold:        new(true),
 			},
 		},
@@ -657,8 +654,8 @@ func DefaultStyles() Styles {
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix:          " ",
 				Suffix:          " ",
-				Color:           pointerTo("##c4a34f"),
-				BackgroundColor: pointerTo("##c4734f"),
+				Color:           pointerTo("#c4a34f"),
+				BackgroundColor: pointerTo("#c4734f"),
 				Bold:            new(true),
 			},
 		},
@@ -685,7 +682,7 @@ func DefaultStyles() Styles {
 		H6: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "###### ",
-				Color:  pointerTo("##6b8a5e"),
+				Color:  pointerTo("#6b8a5e"),
 				Bold:   new(false),
 			},
 		},
@@ -699,7 +696,7 @@ func DefaultStyles() Styles {
 			Bold: new(true),
 		},
 		HorizontalRule: ansi.StylePrimitive{
-			Color:  pointerTo("##3a2e28"),
+			Color:  pointerTo("#3a2e28"),
 			Format: "\n--------\n",
 		},
 		Item: ansi.StylePrimitive{
@@ -714,117 +711,117 @@ func DefaultStyles() Styles {
 			Unticked:       "[ ] ",
 		},
 		Link: ansi.StylePrimitive{
-			Color:     pointerTo("##7a6e5e"),
+			Color:     pointerTo("#7a6e5e"),
 			Underline: new(true),
 		},
 		LinkText: ansi.StylePrimitive{
-			Color: pointerTo("##6b8a5e"),
+			Color: pointerTo("#6b8a5e"),
 			Bold:  new(true),
 		},
 		Image: ansi.StylePrimitive{
-			Color:     pointerTo("##3a2e28"),
+			Color:     pointerTo("#3a2e28"),
 			Underline: new(true),
 		},
 		ImageText: ansi.StylePrimitive{
-			Color:  pointerTo("##8a7e6e"),
+			Color:  pointerTo("#8a7e6e"),
 			Format: "Image: {{.text}} →",
 		},
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix:          " ",
 				Suffix:          " ",
-				Color:           pointerTo("##c44f4f"),
-				BackgroundColor: pointerTo("##3a2e28"),
+				Color:           pointerTo("#c44f4f"),
+				BackgroundColor: pointerTo("#3a2e28"),
 			},
 		},
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
-					Color: pointerTo("##3a2e28"),
+					Color: pointerTo("#3a2e28"),
 				},
 				Margin: new(uint(defaultMargin)),
 			},
 			Chroma: &ansi.Chroma{
 				Text: ansi.StylePrimitive{
-					Color: pointerTo("##a89d8a"),
+					Color: pointerTo("#a89d8a"),
 				},
 				Error: ansi.StylePrimitive{
-					Color:           pointerTo("##e8dcc8"),
-					BackgroundColor: pointerTo("##c44f4f"),
+					Color:           pointerTo("#e8dcc8"),
+					BackgroundColor: pointerTo("#c44f4f"),
 				},
 				Comment: ansi.StylePrimitive{
-					Color: pointerTo("##a89d8a"),
+					Color: pointerTo("#a89d8a"),
 				},
 				CommentPreproc: ansi.StylePrimitive{
-					Color: pointerTo("##c4734f"),
+					Color: pointerTo("#c4734f"),
 				},
 				Keyword: ansi.StylePrimitive{
-					Color: pointerTo("##7e8ea8"),
+					Color: pointerTo("#7e8ea8"),
 				},
 				KeywordReserved: ansi.StylePrimitive{
-					Color: pointerTo("##6b2d3e"),
+					Color: pointerTo("#6b2d3e"),
 				},
 				KeywordNamespace: ansi.StylePrimitive{
-					Color: pointerTo("##6b2d3e"),
+					Color: pointerTo("#6b2d3e"),
 				},
 				KeywordType: ansi.StylePrimitive{
-					Color: pointerTo("##c44f4f"),
+					Color: pointerTo("#c44f4f"),
 				},
 				Operator: ansi.StylePrimitive{
-					Color: pointerTo("##b8735e"),
+					Color: pointerTo("#b8735e"),
 				},
 				Punctuation: ansi.StylePrimitive{
-					Color: pointerTo("##c4a34f"),
+					Color: pointerTo("#c4a34f"),
 				},
 				Name: ansi.StylePrimitive{
-					Color: pointerTo("##a89d8a"),
+					Color: pointerTo("#a89d8a"),
 				},
 				NameBuiltin: ansi.StylePrimitive{
-					Color: pointerTo("##3a2e28"),
+					Color: pointerTo("#3a2e28"),
 				},
 				NameTag: ansi.StylePrimitive{
-					Color: pointerTo("##8a6a7a"),
+					Color: pointerTo("#8a6a7a"),
 				},
 				NameAttribute: ansi.StylePrimitive{
-					Color: pointerTo("##7e8ea8"),
+					Color: pointerTo("#7e8ea8"),
 				},
 				NameClass: ansi.StylePrimitive{
-					Color:     pointerTo("##e8dcc8"),
+					Color:     pointerTo("#e8dcc8"),
 					Underline: new(true),
 					Bold:      new(true),
 				},
 				NameDecorator: ansi.StylePrimitive{
-					Color: pointerTo("##b8973e"),
+					Color: pointerTo("#b8973e"),
 				},
 				NameFunction: ansi.StylePrimitive{
-					Color: pointerTo("##6b8a5e"),
+					Color: pointerTo("#6b8a5e"),
 				},
 				LiteralNumber: ansi.StylePrimitive{
-					Color: pointerTo("##7ea57e"),
+					Color: pointerTo("#7ea57e"),
 				},
 				LiteralString: ansi.StylePrimitive{
-					Color: pointerTo("##a67c52"),
+					Color: pointerTo("#a67c52"),
 				},
 				LiteralStringEscape: ansi.StylePrimitive{
-					Color: pointerTo("##b8973e"),
+					Color: pointerTo("#b8973e"),
 				},
 				GenericDeleted: ansi.StylePrimitive{
-					Color: pointerTo("##c44f4f"),
+					Color: pointerTo("#c44f4f"),
 				},
 				GenericEmph: ansi.StylePrimitive{
 					Italic: new(true),
 				},
 				GenericInserted: ansi.StylePrimitive{
-					Color: pointerTo("##6b8a5e"),
+					Color: pointerTo("#6b8a5e"),
 				},
 				GenericStrong: ansi.StylePrimitive{
 					Bold: new(true),
 				},
 				GenericSubheading: ansi.StylePrimitive{
-					Color: pointerTo("##8a7e6e"),
+					Color: pointerTo("#8a7e6e"),
 				},
 				Background: ansi.StylePrimitive{
-					BackgroundColor: pointerTo("##3a2e28"),
+					BackgroundColor: pointerTo("#3a2e28"),
 				},
 			},
 		},
@@ -839,8 +836,8 @@ func DefaultStyles() Styles {
 	}
 
 	// PlainMarkdown style - muted colors on subtle background for thinking content.
-	plainBg := pointerTo("#241a1f")
-	plainFg := pointerTo("#8a7e6e")
+	plainBg := pointerTo("#1a1016")
+	plainFg := pointerTo("#f0ebe4")
 	s.PlainMarkdown = ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
