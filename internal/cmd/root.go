@@ -22,6 +22,11 @@ import (
 	fang "charm.land/fang/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/exp/charmtone"
+	"github.com/charmbracelet/x/term"
+	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/app"
 	"github.com/tta-lab/lenos/internal/client"
 	"github.com/tta-lab/lenos/internal/config"
@@ -36,11 +41,6 @@ import (
 	ui "github.com/tta-lab/lenos/internal/ui/model"
 	"github.com/tta-lab/lenos/internal/version"
 	"github.com/tta-lab/lenos/internal/workspace"
-	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
-	"github.com/charmbracelet/x/term"
-	"github.com/spf13/cobra"
 )
 
 var clientHost string

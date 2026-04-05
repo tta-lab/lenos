@@ -16,8 +16,8 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"github.com/tta-lab/lenos/internal/cmd"
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/tta-lab/lenos/internal/cmd"
 )
 
 func main() {

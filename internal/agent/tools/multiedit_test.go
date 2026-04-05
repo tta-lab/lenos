@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/permission"
 	"github.com/tta-lab/lenos/internal/pubsub"
-	"github.com/stretchr/testify/require"
 )
 
 type mockPermissionService struct {

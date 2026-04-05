@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/invopop/jsonschema"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/env"
 	"github.com/tta-lab/lenos/internal/oauth"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
-	"github.com/invopop/jsonschema"
 )
 
 const (

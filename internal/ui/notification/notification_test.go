@@ -3,8 +3,8 @@ package notification_test
 import (
 	"testing"
 
-	"github.com/tta-lab/lenos/internal/ui/notification"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/ui/notification"
 )
 
 func TestNoopBackend_Send(t *testing.T) {

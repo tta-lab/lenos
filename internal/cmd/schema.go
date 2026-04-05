@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/tta-lab/lenos/internal/config"
 	"github.com/invopop/jsonschema"
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 var schemaCmd = &cobra.Command{

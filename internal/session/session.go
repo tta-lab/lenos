@@ -8,10 +8,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/tta-lab/lenos/internal/db"
 	"github.com/tta-lab/lenos/internal/event"
 	"github.com/tta-lab/lenos/internal/pubsub"
-	"github.com/google/uuid"
 	"github.com/zeebo/xxh3"
 )
 

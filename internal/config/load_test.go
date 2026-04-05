@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/tta-lab/lenos/internal/csync"
-	"github.com/tta-lab/lenos/internal/env"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/env"
 )
 
 func TestMain(m *testing.M) {

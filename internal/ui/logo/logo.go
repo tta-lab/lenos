@@ -8,9 +8,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/MakeNowJust/heredoc"
-	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/slice"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 // letterform represents a letterform. It can be stretched horizontally by

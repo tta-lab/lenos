@@ -10,12 +10,12 @@ import (
 	"slices"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 	hyperp "github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/oauth"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
 	"github.com/tta-lab/lenos/internal/oauth/hyper"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 // RuntimeOverrides holds per-session settings that are never persisted to

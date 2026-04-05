@@ -2,10 +2,10 @@ package completions
 
 import (
 	"charm.land/lipgloss/v2"
-	"github.com/tta-lab/lenos/internal/ui/list"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/rivo/uniseg"
 	"github.com/sahilm/fuzzy"
+	"github.com/tta-lab/lenos/internal/ui/list"
 )
 
 // FileCompletionValue represents a file path completion value.

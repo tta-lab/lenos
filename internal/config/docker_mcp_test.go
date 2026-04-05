@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tta-lab/lenos/internal/env"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/env"
 )
 
 var errDockerUnavailable = errors.New("docker unavailable")

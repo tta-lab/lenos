@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tta-lab/lenos/internal/event"
 	"github.com/charmbracelet/x/term"
+	"github.com/tta-lab/lenos/internal/event"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 

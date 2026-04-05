@@ -6,9 +6,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
-	"github.com/tta-lab/lenos/internal/config"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 var dirsCmd = &cobra.Command{

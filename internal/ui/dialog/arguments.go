@@ -14,10 +14,10 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/util"
-	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // ArgumentsID is the identifier for the arguments dialog.

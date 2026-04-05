@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"runtime"
 
+	"github.com/google/uuid"
 	"github.com/tta-lab/lenos/internal/app"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
@@ -17,7 +18,6 @@ import (
 	"github.com/tta-lab/lenos/internal/proto"
 	"github.com/tta-lab/lenos/internal/ui/util"
 	"github.com/tta-lab/lenos/internal/version"
-	"github.com/google/uuid"
 )
 
 // Common errors returned by backend operations.

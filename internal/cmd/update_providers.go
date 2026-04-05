@@ -5,9 +5,9 @@ import (
 	"log/slog"
 
 	"charm.land/lipgloss/v2"
-	"github.com/tta-lab/lenos/internal/config"
 	"github.com/charmbracelet/x/exp/charmtone"
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 var updateProvidersSource string

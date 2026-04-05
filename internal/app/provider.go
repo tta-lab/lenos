@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tta-lab/lenos/internal/config"
 	xstrings "github.com/charmbracelet/x/exp/strings"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 // parseModelStr parses a model string into provider filter and model ID.

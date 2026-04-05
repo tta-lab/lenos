@@ -9,15 +9,15 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/pkg/browser"
+	"github.com/spf13/cobra"
 	hyperp "github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/client"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/oauth"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
 	"github.com/tta-lab/lenos/internal/oauth/hyper"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/pkg/browser"
-	"github.com/spf13/cobra"
 )
 
 var loginCmd = &cobra.Command{

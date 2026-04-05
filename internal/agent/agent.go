@@ -31,6 +31,7 @@ import (
 	"charm.land/fantasy/providers/openrouter"
 	"charm.land/fantasy/providers/vercel"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/exp/charmtone"
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/agent/tools"
@@ -43,7 +44,6 @@ import (
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/stringext"
 	"github.com/tta-lab/lenos/internal/version"
-	"github.com/charmbracelet/x/exp/charmtone"
 )
 
 const (

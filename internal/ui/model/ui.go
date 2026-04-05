@@ -25,6 +25,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/ultraviolet/layout"
+	"github.com/charmbracelet/ultraviolet/screen"
+	"github.com/charmbracelet/x/editor"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	agenttools "github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
@@ -50,10 +54,6 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/util"
 	"github.com/tta-lab/lenos/internal/version"
 	"github.com/tta-lab/lenos/internal/workspace"
-	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/ultraviolet/layout"
-	"github.com/charmbracelet/ultraviolet/screen"
-	"github.com/charmbracelet/x/editor"
 )
 
 // MouseScrollThreshold defines how many lines to scroll the chat when a mouse

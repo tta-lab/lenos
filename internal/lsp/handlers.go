@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/tta-lab/lenos/internal/lsp/util"
 	powernap "github.com/charmbracelet/x/powernap/pkg/lsp"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
+	"github.com/tta-lab/lenos/internal/lsp/util"
 )
 
 // HandleWorkspaceConfiguration handles workspace configuration requests

@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
-	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
+	"github.com/tta-lab/lenos/internal/lsp"
 )
 
 type ReferencesParams struct {

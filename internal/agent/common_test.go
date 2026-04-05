@@ -15,6 +15,7 @@ import (
 	"charm.land/fantasy/providers/openaicompat"
 	"charm.land/fantasy/providers/openrouter"
 	"charm.land/x/vcr"
+	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/config"
@@ -26,7 +27,6 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/permission"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/stretchr/testify/require"
 
 	_ "github.com/joho/godotenv/autoload"
 )

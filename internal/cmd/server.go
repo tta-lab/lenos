@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/x/term"
+	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/config"
 	lenoslog "github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/server"
-	"github.com/charmbracelet/x/term"
-	"github.com/spf13/cobra"
 )
 
 var serverHost string

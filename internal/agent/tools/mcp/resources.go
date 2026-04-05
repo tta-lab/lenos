@@ -6,10 +6,10 @@ import (
 	"iter"
 	"log/slog"
 
-	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/csync"
 )
 
 type Resource = mcp.Resource

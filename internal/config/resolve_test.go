@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tta-lab/lenos/internal/env"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/env"
 )
 
 // mockShell implements the Shell interface for testing

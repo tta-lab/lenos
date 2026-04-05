@@ -4,11 +4,11 @@ import (
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/workspace"
-	"github.com/stretchr/testify/require"
 )
 
 func TestCurrentModelSupportsImages(t *testing.T) {

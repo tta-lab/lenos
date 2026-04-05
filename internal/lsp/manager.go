@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/csync"
-	"github.com/tta-lab/lenos/internal/fsext"
 	powernapconfig "github.com/charmbracelet/x/powernap/pkg/config"
 	powernap "github.com/charmbracelet/x/powernap/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
+	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/fsext"
 )
 
 var unavailable = csync.NewMap[string, struct{}]()

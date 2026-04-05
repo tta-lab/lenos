@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/browser"
+	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/db"
 	"github.com/tta-lab/lenos/internal/event"
-	"github.com/pkg/browser"
-	"github.com/spf13/cobra"
 )
 
 //go:embed stats/index.html

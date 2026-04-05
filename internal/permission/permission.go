@@ -8,9 +8,9 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/pubsub"
-	"github.com/google/uuid"
 )
 
 var ErrorPermissionDenied = errors.New("user denied permission")

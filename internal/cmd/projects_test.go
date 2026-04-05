@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/tta-lab/lenos/internal/projects"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/projects"
 )
 
 func TestProjectsEmpty(t *testing.T) {
