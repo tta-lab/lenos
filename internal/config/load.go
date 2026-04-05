@@ -410,6 +410,16 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	// Project specific skills dirs.
 	c.Options.SkillsPaths = append(c.Options.SkillsPaths, ProjectSkillsDir(workingDir)...)
 
+	// Add the default agent directories if not already present.
+	for _, dir := range GlobalAgentDirs() {
+		if !slices.Contains(c.Options.AgentPaths, dir) {
+			c.Options.AgentPaths = append(c.Options.AgentPaths, dir)
+		}
+	}
+
+	// Project specific agent dirs.
+	c.Options.AgentPaths = append(c.Options.AgentPaths, ProjectAgentDirs(workingDir)...)
+
 	if str, ok := os.LookupEnv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
 		c.Options.DisableProviderAutoUpdate, _ = strconv.ParseBool(str)
 	}
@@ -847,6 +857,42 @@ func ProjectSkillsDir(workingDir string) []string {
 		filepath.Join(workingDir, ".lenos/skills"),
 		filepath.Join(workingDir, ".claude/skills"),
 		filepath.Join(workingDir, ".cursor/skills"),
+	}
+}
+
+// GlobalAgentDirs returns the default directories for Agent identity files.
+func GlobalAgentDirs() []string {
+	if lenosAgents := os.Getenv("LENOS_AGENTS_DIR"); lenosAgents != "" {
+		return []string{lenosAgents}
+	}
+
+	paths := []string{
+		filepath.Join(home.Config(), appName, "agents"),
+		filepath.Join(home.Config(), "agents"),
+	}
+
+	if runtime.GOOS == "windows" {
+		appData := cmp.Or(
+			os.Getenv("LOCALAPPDATA"),
+			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
+		)
+		paths = append(
+			paths,
+			filepath.Join(appData, appName, "agents"),
+			filepath.Join(appData, "agents", "agents"),
+		)
+	}
+
+	return paths
+}
+
+// ProjectAgentDirs returns the default project directories for which Lenos
+// will look for agent identity files.
+func ProjectAgentDirs(workingDir string) []string {
+	return []string{
+		filepath.Join(workingDir, ".agents/agents"),
+		filepath.Join(workingDir, ".lenos/agents"),
+		filepath.Join(workingDir, ".claude/agents"),
 	}
 }
 

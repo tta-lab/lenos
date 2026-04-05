@@ -23,6 +23,9 @@ import (
 // the lifetime of the process (or workspace).
 type RuntimeOverrides struct {
 	SkipPermissionRequests bool
+	AgentName             string
+	AgentContextFile      string
+	ExtraContextFiles     []string
 }
 
 // ConfigStore is the single entry point for all config access. It owns the
@@ -69,6 +72,17 @@ func (s *ConfigStore) KnownProviders() []catwalk.Provider {
 // SetupAgents configures the coder and task agents on the config.
 func (s *ConfigStore) SetupAgents() {
 	s.config.SetupAgents()
+	if coder, ok := s.config.Agents[AgentCoder]; ok {
+		paths := []string{}
+		if s.overrides.AgentContextFile != "" {
+			paths = append(paths, s.overrides.AgentContextFile)
+		}
+		paths = append(paths, s.overrides.ExtraContextFiles...)
+		if len(paths) > 0 {
+			coder.ContextPaths = append(paths, coder.ContextPaths...)
+			s.config.Agents[AgentCoder] = coder
+		}
+	}
 }
 
 // Overrides returns the runtime overrides for this store.

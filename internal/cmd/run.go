@@ -12,7 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/log/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
+	
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/client"
@@ -121,7 +121,7 @@ lenos run --continue "Follow up on your last response"
 			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, quiet || verbose, sessionID, useLast)
 		}
 
-		ws, cleanup, err := setupLocalWorkspace(cmd)
+		ws, cleanup, err := setupLocalWorkspace(cmd, "", nil)
 		if err != nil {
 			return err
 		}
@@ -192,7 +192,7 @@ func runNonInteractive(
 		if stdinTTY && stdoutTTY {
 			hasDarkBG = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
 		}
-		defaultFG := lipgloss.LightDark(hasDarkBG)(charmtone.Pepper, t.FgBase)
+		defaultFG := lipgloss.LightDark(hasDarkBG)(lipgloss.Color("#1a1016"), t.FgBase)
 
 		spinner = format.NewSpinner(ctx, cancel, anim.Settings{
 			Size:        10,

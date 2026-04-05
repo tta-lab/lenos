@@ -17,7 +17,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
+	
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/agent/tools"
@@ -163,8 +163,8 @@ func runSessionList(cmd *cobra.Command, _ []string) error {
 	w, cleanup, usingPager := sessionWriter(ctx, len(list))
 	defer cleanup()
 
-	hashStyle := lipgloss.NewStyle().Foreground(charmtone.Malibu)
-	dateStyle := lipgloss.NewStyle().Foreground(charmtone.Damson)
+	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7e8ea8"))
+	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5a4a5e"))
 
 	width := sessionOutputWidth
 	if tw, _, err := term.GetSize(os.Stdout.Fd()); err == nil && tw > 0 {
@@ -439,8 +439,8 @@ func outputSessionHuman(ctx context.Context, sess session.Session, msgs []*messa
 	}
 	contentWidth := min(width, sessionMaxContentWidth)
 
-	keyStyle := lipgloss.NewStyle().Foreground(charmtone.Damson)
-	valStyle := lipgloss.NewStyle().Foreground(charmtone.Malibu)
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5a4a5e"))
+	valStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7e8ea8"))
 
 	hash := session.HashID(sess.ID)[:12]
 	created := time.Unix(sess.CreatedAt, 0).Format("Mon Jan 2 15:04:05 2006 -0700")
