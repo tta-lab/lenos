@@ -1,15 +1,15 @@
-# Crush Development Guide
+# Lenos Development Guide
 
 ## Project Overview
 
-Crush is a terminal-based AI coding assistant built in Go by
+Lenos is a terminal-based AI coding assistant built in Go by
 [Charm](https://charm.land). It connects to LLMs and gives them tools to read,
 write, and execute code. It supports multiple providers (Anthropic, OpenAI,
 Gemini, Bedrock, Copilot, Hyper, MiniMax, Vercel, and more), integrates with
 LSPs for code intelligence, and supports extensibility via MCP servers and
 agent skills.
 
-The module path is `github.com/charmbracelet/crush`.
+The module path is `github.com/charmbracelet/lenos`.
 
 ## Architecture
 
@@ -63,7 +63,7 @@ internal/
   `.md` description file in `internal/agent/tools/`.
 - **System prompts are Go templates**: `internal/agent/templates/*.md.tpl`
   with runtime data injected.
-- **Context files**: Crush reads AGENTS.md, LENOS.md, CLAUDE.md, GEMINI.md
+- **Context files**: Lenos reads AGENTS.md, LENOS.md, CLAUDE.md, GEMINI.md
   (and `.local` variants) from the working directory for project-specific
   instructions.
 - **Persistence**: SQLite + sqlc. All queries live in `internal/db/sql/`,
