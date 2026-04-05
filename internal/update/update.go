@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	githubApiUrl = "https://api.github.com/repos/charmbracelet/crush/releases/latest"
+	githubApiUrl = "https://api.github.com/repos/tta-lab/lenos/releases/latest"
 	userAgent    = "lenos/1.0"
 )
 
