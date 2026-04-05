@@ -44,7 +44,7 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 		config:         cfg,
 		workingDir:     workingDir,
 		globalDataPath: GlobalConfigData(),
-		workspacePath:  filepath.Join(cfg.Options.DataDirectory, fmt.Sprintf("%s.json", appName)),
+		workspacePath:  filepath.Join(cfg.Options.DataDirectory, "config.json"),
 	}
 
 	if debug {
@@ -655,7 +655,7 @@ func lookupConfigs(cwd string) []string {
 		GlobalConfigData(),
 	}
 
-	configNames := []string{appName + ".json", "." + appName + ".json"}
+	configNames := []string{"config.json", ".config.json"}
 
 	foundConfigs, err := fsext.Lookup(cwd, configNames...)
 	if err != nil {
@@ -736,16 +736,16 @@ func hasAWSCredentials(env env.Env) bool {
 
 // GlobalConfig returns the global configuration file path for the application.
 func GlobalConfig() string {
-	if crushGlobal := os.Getenv("CRUSH_GLOBAL_CONFIG"); crushGlobal != "" {
-		return filepath.Join(crushGlobal, fmt.Sprintf("%s.json", appName))
+	if crushGlobal := os.Getenv("LENOS_GLOBAL_CONFIG"); crushGlobal != "" {
+		return filepath.Join(crushGlobal, "config.json")
 	}
-	return filepath.Join(home.Config(), appName, fmt.Sprintf("%s.json", appName))
+	return filepath.Join(home.Config(), appName, "config.json")
 }
 
 // GlobalCacheDir returns the path to the global cache directory for the
 // application.
 func GlobalCacheDir() string {
-	if crushCache := os.Getenv("CRUSH_CACHE_DIR"); crushCache != "" {
+	if crushCache := os.Getenv("LENOS_CACHE_DIR"); crushCache != "" {
 		return crushCache
 	}
 	if xdgCacheHome := os.Getenv("XDG_CACHE_HOME"); xdgCacheHome != "" {
@@ -764,25 +764,25 @@ func GlobalCacheDir() string {
 // GlobalConfigData returns the path to the main data directory for the application.
 // this config is used when the app overrides configurations instead of updating the global config.
 func GlobalConfigData() string {
-	if crushData := os.Getenv("CRUSH_GLOBAL_DATA"); crushData != "" {
-		return filepath.Join(crushData, fmt.Sprintf("%s.json", appName))
+	if crushData := os.Getenv("LENOS_GLOBAL_DATA"); crushData != "" {
+		return filepath.Join(crushData, "config.json")
 	}
 	if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
-		return filepath.Join(xdgDataHome, appName, fmt.Sprintf("%s.json", appName))
+		return filepath.Join(xdgDataHome, appName, "config.json")
 	}
 
 	// return the path to the main data directory
-	// for windows, it should be in `%LOCALAPPDATA%/crush/`
-	// for linux and macOS, it should be in `$HOME/.local/share/crush/`
+	// for windows, it should be in `%LOCALAPPDATA%/lenos/`
+	// for linux and macOS, it should be in `$HOME/.local/share/lenos/`
 	if runtime.GOOS == "windows" {
 		localAppData := cmp.Or(
 			os.Getenv("LOCALAPPDATA"),
 			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
 		)
-		return filepath.Join(localAppData, appName, fmt.Sprintf("%s.json", appName))
+		return filepath.Join(localAppData, appName, "config.json")
 	}
 
-	return filepath.Join(home.Dir(), ".local", "share", appName, fmt.Sprintf("%s.json", appName))
+	return filepath.Join(home.Dir(), ".local", "share", appName, "config.json")
 }
 
 // GlobalWorkspaceDir returns the path to the global server workspace

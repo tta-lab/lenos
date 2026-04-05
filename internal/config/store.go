@@ -32,8 +32,8 @@ type ConfigStore struct {
 	config         *Config
 	workingDir     string
 	resolver       VariableResolver
-	globalDataPath string // ~/.local/share/crush/crush.json
-	workspacePath  string // .crush/crush.json
+	globalDataPath string // ~/.local/share/lenos/config.json
+	workspacePath  string // .lenos/config.json
 	knownProviders []catwalk.Provider
 	overrides      RuntimeOverrides
 }

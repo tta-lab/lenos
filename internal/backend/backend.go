@@ -97,7 +97,7 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 
 	cfg.Overrides().SkipPermissionRequests = args.YOLO
 
-	if err := createDotCrushDir(cfg.Config().Options.DataDirectory); err != nil {
+	if err := createDotLenosDir(cfg.Config().Options.DataDirectory); err != nil {
 		return nil, proto.Workspace{}, fmt.Errorf("failed to create data directory: %w", err)
 	}
 

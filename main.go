@@ -1,12 +1,12 @@
-// Package main is the entry point for the Crush CLI.
+// Package main is the entry point for the Lenos CLI.
 //
-//	@title			Crush API
+//	@title			Lenos API
 //	@version		1.0
-//	@description	Crush is a terminal-based AI coding assistant. This API is served over a Unix socket (or Windows named pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP, and more.
-//	@contact.name	Charm
-//	@contact.url	https://charm.sh
-//	@license.name	MIT
-//	@license.url	https://github.com/tta-lab/lenos/blob/main/LICENSE
+//	@description	Lenos is a terminal-based AI coding assistant and interactive runtime for the ttal ecosystem. This API is served over a Unix socket (or Windows named pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP, and more.
+//	@contact.name	tta-lab
+//	@contact.url	https://github.com/tta-lab/lenos
+//	@license.name	FSL-1.1-MIT
+//	@license.url	https://github.com/tta-lab/lenos/blob/main/LICENSE.md
 //	@BasePath		/v1
 package main
 
@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	if os.Getenv("CRUSH_PROFILE") != "" {
+	if os.Getenv("LENOS_PROFILE") != "" {
 		go func() {
 			slog.Info("Serving pprof at localhost:6060")
 			if httpErr := http.ListenAndServe("localhost:6060", nil); httpErr != nil {
