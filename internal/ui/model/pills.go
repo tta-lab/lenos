@@ -2,12 +2,13 @@ package model
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/lenos/internal/ui/chat"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
@@ -35,6 +36,18 @@ const (
 	pillSectionTodos pillSection = iota
 	pillSectionQueue
 )
+
+// effectiveTodos returns the todo list to display: TW subtasks when a taskwarrior
+// job is active, otherwise the session todos.
+func (m *UI) effectiveTodos() []session.Todo {
+	if m.twJobID != "" {
+		return m.twTodos
+	}
+	if m.session != nil {
+		return m.session.Todos
+	}
+	return nil
+}
 
 // hasIncompleteTodos returns true if there are any non-completed todos.
 func hasIncompleteTodos(todos []session.Todo) bool {
@@ -112,7 +125,63 @@ func todoPill(todos []session.Todo, spinnerView string, focused, panelFocused bo
 
 // todoList renders the expanded todo list.
 func todoList(sessionTodos []session.Todo, spinnerView string, t *styles.Styles, width int) string {
-	return chat.FormatTodosList(t, sessionTodos, spinnerView, width)
+	return FormatTodosList(t, sessionTodos, spinnerView, width)
+}
+
+// FormatTodosList formats a list of todos for display.
+func FormatTodosList(sty *styles.Styles, todos []session.Todo, inProgressIcon string, width int) string {
+	if len(todos) == 0 {
+		return ""
+	}
+
+	sorted := make([]session.Todo, len(todos))
+	copy(sorted, todos)
+	sortTodos(sorted)
+
+	var lines []string
+	for _, todo := range sorted {
+		var prefix string
+		textStyle := sty.Base
+
+		switch todo.Status {
+		case session.TodoStatusCompleted:
+			prefix = sty.Tool.TodoCompletedIcon.Render(styles.TodoCompletedIcon) + " "
+		case session.TodoStatusInProgress:
+			prefix = sty.Tool.TodoInProgressIcon.Render(inProgressIcon + " ")
+		default:
+			prefix = sty.Tool.TodoPendingIcon.Render(styles.TodoPendingIcon) + " "
+		}
+
+		text := todo.Content
+		if todo.Status == session.TodoStatusInProgress && todo.ActiveForm != "" {
+			text = todo.ActiveForm
+		}
+		line := prefix + textStyle.Render(text)
+		line = ansi.Truncate(line, width, "…")
+
+		lines = append(lines, line)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// sortTodos sorts todos by status: completed, in_progress, pending.
+func sortTodos(todos []session.Todo) {
+	slices.SortStableFunc(todos, func(a, b session.Todo) int {
+		return statusOrder(a.Status) - statusOrder(b.Status)
+	})
+}
+
+// statusOrder returns the sort order for a todo status.
+func statusOrder(s session.TodoStatus) int {
+	switch s {
+	case session.TodoStatusCompleted:
+		return 0
+	case session.TodoStatusInProgress:
+		return 1
+	default:
+		return 2
+	}
 }
 
 // queueList renders the expanded queue items list.
@@ -139,13 +208,13 @@ func (m *UI) togglePillsExpanded() tea.Cmd {
 	if !m.hasSession() {
 		return nil
 	}
-	hasPills := hasIncompleteTodos(m.session.Todos) || m.promptQueue > 0
+	hasPills := hasIncompleteTodos(m.effectiveTodos()) || m.promptQueue > 0
 	if !hasPills {
 		return nil
 	}
 	m.pillsExpanded = !m.pillsExpanded
 	if m.pillsExpanded {
-		if hasIncompleteTodos(m.session.Todos) {
+		if hasIncompleteTodos(m.effectiveTodos()) {
 			m.focusedPillSection = pillSectionTodos
 		} else {
 			m.focusedPillSection = pillSectionQueue
@@ -166,7 +235,7 @@ func (m *UI) switchPillSection(dir int) tea.Cmd {
 	if !m.pillsExpanded || !m.hasSession() {
 		return nil
 	}
-	hasIncompleteTodos := hasIncompleteTodos(m.session.Todos)
+	hasIncompleteTodos := hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
 
 	if dir < 0 && m.focusedPillSection == pillSectionQueue && hasIncompleteTodos {
@@ -187,7 +256,7 @@ func (m *UI) pillsAreaHeight() int {
 	if !m.hasSession() {
 		return 0
 	}
-	hasIncomplete := hasIncompleteTodos(m.session.Todos)
+	hasIncomplete := hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
 	hasPills := hasIncomplete || hasQueue
 	if !hasPills {
@@ -197,7 +266,7 @@ func (m *UI) pillsAreaHeight() int {
 	pillsAreaHeight := pillHeightWithBorder
 	if m.pillsExpanded {
 		if m.focusedPillSection == pillSectionTodos && hasIncomplete {
-			pillsAreaHeight += len(m.session.Todos)
+			pillsAreaHeight += len(m.effectiveTodos())
 		} else if m.focusedPillSection == pillSectionQueue && hasQueue {
 			pillsAreaHeight += m.promptQueue
 		}
@@ -220,7 +289,7 @@ func (m *UI) renderPills() {
 	paddingLeft := 3
 	contentWidth := max(width-paddingLeft, 0)
 
-	hasIncomplete := hasIncompleteTodos(m.session.Todos)
+	hasIncomplete := hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
 
 	if !hasIncomplete && !hasQueue {
@@ -238,7 +307,7 @@ func (m *UI) renderPills() {
 
 	var pills []string
 	if hasIncomplete {
-		pills = append(pills, todoPill(m.session.Todos, inProgressIcon, todosFocused, m.pillsExpanded, t))
+		pills = append(pills, todoPill(m.effectiveTodos(), inProgressIcon, todosFocused, m.pillsExpanded, t))
 	}
 	if hasQueue {
 		pills = append(pills, queuePill(m.promptQueue, queueFocused, m.pillsExpanded, t))
@@ -247,7 +316,7 @@ func (m *UI) renderPills() {
 	var expandedList string
 	if m.pillsExpanded {
 		if todosFocused && hasIncomplete {
-			expandedList = todoList(m.session.Todos, inProgressIcon, t, contentWidth)
+			expandedList = todoList(m.effectiveTodos(), inProgressIcon, t, contentWidth)
 		} else if queueFocused && hasQueue {
 			if m.com.Workspace.AgentIsReady() {
 				queueItems := m.com.Workspace.AgentQueuedPromptsList(m.session.ID)

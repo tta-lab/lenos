@@ -250,6 +250,11 @@ type UI struct {
 	todoSpinner    spinner.Model
 	todoIsSpinning bool
 
+	// Taskwarrior subtask polling
+	twTodos      []session.Todo
+	twPollTicker *time.Ticker
+	twJobID      string
+
 	// mouse highlighting related state
 	lastClickTime time.Time
 
@@ -519,21 +524,29 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.session = msg.session
 		m.sessionFiles = msg.files
 		cmds = append(cmds, m.startLSPs(msg.lspFilePaths()))
+
 		msgs, err := m.com.Workspace.ListMessages(context.Background(), m.session.ID)
 		if err != nil {
 			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-		if cmd := m.setSessionMessages(msgs); cmd != nil {
+		} else if cmd := m.setSessionMessages(msgs); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		if hasInProgressTodo(m.session.Todos) {
-			// only start spinner if there is an in-progress todo
-			if m.isAgentBusy() {
-				m.todoIsSpinning = true
-				cmds = append(cmds, m.todoSpinner.Tick)
+
+		// Start taskwarrior subtask poller if TTAL_JOB_ID is set.
+		if jobID := os.Getenv("TTAL_JOB_ID"); jobID != "" {
+			if cmd := m.startTWTickPoll(jobID); cmd != nil {
+				cmds = append(cmds, cmd)
 			}
-			m.updateLayoutAndSize()
+		} else {
+			// No TW job — stop any running poller and use session todos.
+			m.stopTWPoll()
+			if hasInProgressTodo(m.effectiveTodos()) {
+				if m.isAgentBusy() {
+					m.todoIsSpinning = true
+					cmds = append(cmds, m.todoSpinner.Tick)
+				}
+				m.updateLayoutAndSize()
+			}
 		}
 		// Reload prompt history for the new session.
 		m.historyReset()
@@ -595,14 +608,25 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		if m.session != nil && msg.Payload.ID == m.session.ID {
-			prevHasInProgress := hasInProgressTodo(m.session.Todos)
+			prevHasInProgress := hasInProgressTodo(m.effectiveTodos())
 			m.session = &msg.Payload
-			if !prevHasInProgress && hasInProgressTodo(m.session.Todos) {
+			if !prevHasInProgress && hasInProgressTodo(m.effectiveTodos()) {
 				m.todoIsSpinning = true
 				cmds = append(cmds, m.todoSpinner.Tick)
 				m.updateLayoutAndSize()
 			}
 		}
+	case twPollMsg:
+		m.twTodos = msg.todos
+		prevSpinning := m.todoIsSpinning
+		if hasInProgressTodo(m.effectiveTodos()) && m.isAgentBusy() && !m.todoIsSpinning {
+			m.todoIsSpinning = true
+			cmds = append(cmds, m.todoSpinner.Tick)
+		}
+		if prevSpinning && !m.isAgentBusy() {
+			m.todoIsSpinning = false
+		}
+		m.renderPills()
 	case pubsub.Event[message.Message]:
 		// Check if this is a child session message for an agent tool.
 		if m.session == nil {
@@ -624,7 +648,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chat.RemoveMessage(msg.Payload.ID)
 		}
 		// start the spinner if there is a new message
-		if hasInProgressTodo(m.session.Todos) && m.isAgentBusy() && !m.todoIsSpinning {
+		if hasInProgressTodo(m.effectiveTodos()) && m.isAgentBusy() && !m.todoIsSpinning {
 			m.todoIsSpinning = true
 			cmds = append(cmds, m.todoSpinner.Tick)
 		}
@@ -834,7 +858,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 		}
-		if m.state == uiChat && m.hasSession() && hasInProgressTodo(m.session.Todos) && m.todoIsSpinning {
+		if m.state == uiChat && m.hasSession() && hasInProgressTodo(m.effectiveTodos()) && m.todoIsSpinning {
 			var cmd tea.Cmd
 			m.todoSpinner, cmd = m.todoSpinner.Update(msg)
 			if cmd != nil {
@@ -2219,7 +2243,7 @@ func (m *UI) ShortHelp() []key.Binding {
 				k.Chat.PageDown,
 				k.Chat.Copy,
 			)
-			if m.pillsExpanded && hasIncompleteTodos(m.session.Todos) && m.promptQueue > 0 {
+			if m.pillsExpanded && hasIncompleteTodos(m.effectiveTodos()) && m.promptQueue > 0 {
 				binds = append(binds, k.Chat.PillLeft)
 			}
 		}
@@ -2332,7 +2356,7 @@ func (m *UI) FullHelp() [][]key.Binding {
 					k.Chat.ClearHighlight,
 				},
 			)
-			if m.pillsExpanded && hasIncompleteTodos(m.session.Todos) && m.promptQueue > 0 {
+			if m.pillsExpanded && hasIncompleteTodos(m.effectiveTodos()) && m.promptQueue > 0 {
 				binds = append(binds, []key.Binding{k.Chat.PillLeft})
 			}
 		}
@@ -3118,7 +3142,7 @@ func (m *UI) openCommandsDialog() tea.Cmd {
 	if hasSession {
 		sessionID = m.session.ID
 	}
-	hasTodos := hasSession && hasIncompleteTodos(m.session.Todos)
+	hasTodos := hasSession && hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
 
 	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, m.customCommands, m.mcpPrompts)
@@ -3243,6 +3267,7 @@ func (m *UI) newSession() tea.Cmd {
 	m.session = nil
 	m.sessionFiles = nil
 	m.sessionFileReads = nil
+	m.stopTWPoll()
 	m.setState(uiLanding, uiFocusEditor)
 	m.textarea.Focus()
 	m.chat.Blur()
