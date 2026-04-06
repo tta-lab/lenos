@@ -14,6 +14,10 @@ Lenos is a bash-only interactive shell for ttal agents — multi-model, session-
 - **Charm ecosystem** — built on Charmbracelet's terminal UI libraries
 - **ttal native** — designed for the ttal agent runtime and temenos sandbox
 
+## Screenshots
+
+![Lenos coder running in ttal](docs/screenshots/Lenos-coder-ttal.png)
+
 ## Installation
 
 ```bash
