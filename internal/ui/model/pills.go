@@ -208,13 +208,13 @@ func (m *UI) togglePillsExpanded() tea.Cmd {
 	if !m.hasSession() {
 		return nil
 	}
-	hasPills := hasIncompleteTodos(m.session.Todos) || m.promptQueue > 0
+	hasPills := hasIncompleteTodos(m.effectiveTodos()) || m.promptQueue > 0
 	if !hasPills {
 		return nil
 	}
 	m.pillsExpanded = !m.pillsExpanded
 	if m.pillsExpanded {
-		if hasIncompleteTodos(m.session.Todos) {
+		if hasIncompleteTodos(m.effectiveTodos()) {
 			m.focusedPillSection = pillSectionTodos
 		} else {
 			m.focusedPillSection = pillSectionQueue
@@ -235,7 +235,7 @@ func (m *UI) switchPillSection(dir int) tea.Cmd {
 	if !m.pillsExpanded || !m.hasSession() {
 		return nil
 	}
-	hasIncompleteTodos := hasIncompleteTodos(m.session.Todos)
+	hasIncompleteTodos := hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
 
 	if dir < 0 && m.focusedPillSection == pillSectionQueue && hasIncompleteTodos {
@@ -256,7 +256,7 @@ func (m *UI) pillsAreaHeight() int {
 	if !m.hasSession() {
 		return 0
 	}
-	hasIncomplete := hasIncompleteTodos(m.session.Todos)
+	hasIncomplete := hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
 	hasPills := hasIncomplete || hasQueue
 	if !hasPills {
@@ -266,7 +266,7 @@ func (m *UI) pillsAreaHeight() int {
 	pillsAreaHeight := pillHeightWithBorder
 	if m.pillsExpanded {
 		if m.focusedPillSection == pillSectionTodos && hasIncomplete {
-			pillsAreaHeight += len(m.session.Todos)
+			pillsAreaHeight += len(m.effectiveTodos())
 		} else if m.focusedPillSection == pillSectionQueue && hasQueue {
 			pillsAreaHeight += m.promptQueue
 		}
@@ -289,7 +289,7 @@ func (m *UI) renderPills() {
 	paddingLeft := 3
 	contentWidth := max(width-paddingLeft, 0)
 
-	hasIncomplete := hasIncompleteTodos(m.session.Todos)
+	hasIncomplete := hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
 
 	if !hasIncomplete && !hasQueue {
@@ -307,7 +307,7 @@ func (m *UI) renderPills() {
 
 	var pills []string
 	if hasIncomplete {
-		pills = append(pills, todoPill(m.session.Todos, inProgressIcon, todosFocused, m.pillsExpanded, t))
+		pills = append(pills, todoPill(m.effectiveTodos(), inProgressIcon, todosFocused, m.pillsExpanded, t))
 	}
 	if hasQueue {
 		pills = append(pills, queuePill(m.promptQueue, queueFocused, m.pillsExpanded, t))
@@ -316,7 +316,7 @@ func (m *UI) renderPills() {
 	var expandedList string
 	if m.pillsExpanded {
 		if todosFocused && hasIncomplete {
-			expandedList = todoList(m.session.Todos, inProgressIcon, t, contentWidth)
+			expandedList = todoList(m.effectiveTodos(), inProgressIcon, t, contentWidth)
 		} else if queueFocused && hasQueue {
 			if m.com.Workspace.AgentIsReady() {
 				queueItems := m.com.Workspace.AgentQueuedPromptsList(m.session.ID)

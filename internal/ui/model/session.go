@@ -254,12 +254,20 @@ func (m *UI) startLSPs(paths []string) tea.Cmd {
 	}
 }
 
+// stopTWPoll stops the taskwarrior subtask poller and clears its state.
+func (m *UI) stopTWPoll() {
+	if m.twPollTicker != nil {
+		m.twPollTicker.Stop()
+		m.twPollTicker = nil
+	}
+	m.twJobID = ""
+	m.twTodos = nil
+}
+
 // startTWTickPoll starts a 500ms ticker that polls taskwarrior subtasks
 // and sends twPollMsg when the results change.
 func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
-	if m.twPollTicker != nil {
-		m.twPollTicker.Stop()
-	}
+	m.stopTWPoll()
 	m.twPollTicker = time.NewTicker(500 * time.Millisecond)
 	m.twJobID = jobID
 

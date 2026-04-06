@@ -538,7 +538,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 		} else {
-			// No TW job — use session todos.
+			// No TW job — stop any running poller and use session todos.
+			m.stopTWPoll()
 			if hasInProgressTodo(m.effectiveTodos()) {
 				if m.isAgentBusy() {
 					m.todoIsSpinning = true
@@ -3266,6 +3267,7 @@ func (m *UI) newSession() tea.Cmd {
 	m.session = nil
 	m.sessionFiles = nil
 	m.sessionFileReads = nil
+	m.stopTWPoll()
 	m.setState(uiLanding, uiFocusEditor)
 	m.textarea.Focus()
 	m.chat.Blur()

@@ -3,6 +3,8 @@ package taskwarrior
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 
@@ -19,9 +21,10 @@ type twTask struct {
 // maps the results to []session.Todo.
 func PollSubtasks(ctx context.Context, jobID string) ([]session.Todo, error) {
 	cmd := exec.CommandContext(ctx, "task", "parent_id:"+jobID, "status.not:deleted", "export")
-	out, err := cmd.Output()
+	cmd.Stderr = nil // let exec capture stderr for us
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("task export failed: %w", err)
 	}
 
 	var todos []session.Todo
@@ -33,6 +36,7 @@ func PollSubtasks(ctx context.Context, jobID string) ([]session.Todo, error) {
 		}
 		var task twTask
 		if err := json.Unmarshal([]byte(line), &task); err != nil {
+			slog.Warn("skipping malformed task JSON", "line", line, "err", err)
 			continue
 		}
 
