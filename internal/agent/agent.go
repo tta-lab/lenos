@@ -1089,7 +1089,7 @@ func buildSummaryPrompt(ctx context.Context, jobID string) string {
 	}
 	todos, err := taskwarrior.PollSubtasks(ctx, jobID)
 	if err != nil {
-		slog.Warn("Failed to poll TW subtasks for summary", "err", err)
+		slog.Warn("Failed to poll TW subtasks for summary", "jobID", jobID, "err", err)
 		return formatSummaryPrompt(nil)
 	}
 	return formatSummaryPrompt(todos)
