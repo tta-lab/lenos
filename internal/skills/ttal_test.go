@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,6 @@ func TestParseTTALSkills(t *testing.T) {
 func TestDiscoverTTAL_NoTTAL(t *testing.T) {
 	// When ttal is not in PATH, DiscoverTTAL should return nil gracefully.
 	t.Setenv("PATH", t.TempDir())
-	skills := DiscoverTTAL()
+	skills := DiscoverTTAL(context.Background())
 	require.Nil(t, skills)
 }

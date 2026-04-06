@@ -83,7 +83,7 @@ func NewViewTool(
 
 			// Handle ttal-backed skill files (ttal: prefix).
 			if strings.HasPrefix(params.FilePath, skills.TTALPrefix) {
-				return readTTALSkill(params)
+				return readTTALSkill(ctx, params)
 			}
 
 			// Handle relative paths
@@ -441,10 +441,10 @@ func readBuiltinFile(params ViewParams) (fantasy.ToolResponse, error) {
 }
 
 // readTTALSkill reads a skill from the ttal registry via CLI.
-func readTTALSkill(params ViewParams) (fantasy.ToolResponse, error) {
+func readTTALSkill(ctx context.Context, params ViewParams) (fantasy.ToolResponse, error) {
 	name := strings.TrimPrefix(params.FilePath, skills.TTALPrefix)
 
-	out, err := exec.Command("ttal", "skill", "get", name, "--json").Output()
+	out, err := exec.CommandContext(ctx, "ttal", "skill", "get", name, "--json").Output()
 	if err != nil {
 		return fantasy.NewTextErrorResponse(fmt.Sprintf("ttal skill not found: %s", name)), nil
 	}

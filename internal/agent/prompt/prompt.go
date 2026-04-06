@@ -209,7 +209,7 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	}
 
 	// Discover ttal-registered skills (highest priority — overrides both builtins and user skills).
-	allSkills = append(allSkills, skills.DiscoverTTAL()...)
+	allSkills = append(allSkills, skills.DiscoverTTAL(ctx)...)
 
 	// Deduplicate: user skills override builtins with the same name.
 	allSkills = skills.Deduplicate(allSkills)

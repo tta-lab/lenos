@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os/exec"
@@ -19,8 +20,8 @@ type ttalSkillEntry struct {
 
 // DiscoverTTAL finds skills registered in the ttal skill registry.
 // Returns nil (no error) if the ttal binary is not available.
-func DiscoverTTAL() []*Skill {
-	out, err := exec.Command("ttal", "skill", "list", "--all", "--json").Output()
+func DiscoverTTAL(ctx context.Context) []*Skill {
+	out, err := exec.CommandContext(ctx, "ttal", "skill", "list", "--all", "--json").Output()
 	if err != nil {
 		slog.Debug("ttal skill discovery unavailable", "error", err)
 		return nil
