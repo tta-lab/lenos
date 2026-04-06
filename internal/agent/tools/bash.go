@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
-	"html/template"
 	"fmt"
+	"html/template"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -32,9 +32,9 @@ type BashResponseMetadata struct {
 }
 
 const (
-	BashToolName   = "bash"
+	BashToolName    = "bash"
 	MaxOutputLength = 30000
-	BashNoOutput   = "no output"
+	BashNoOutput    = "no output"
 )
 
 //go:embed bash.tpl
@@ -47,16 +47,16 @@ var bashDescriptionTpl = template.Must(
 
 type bashDescriptionData struct {
 	MaxOutputLength int
-	Attribution    config.Attribution
-	ModelName      string
+	Attribution     config.Attribution
+	ModelName       string
 }
 
 func bashDescription(attribution *config.Attribution, modelName string) string {
 	var out bytes.Buffer
 	if err := bashDescriptionTpl.Execute(&out, bashDescriptionData{
 		MaxOutputLength: MaxOutputLength,
-		Attribution:    *attribution,
-		ModelName:      modelName,
+		Attribution:     *attribution,
+		ModelName:       modelName,
 	}); err != nil {
 		// this should never happen.
 		panic("failed to execute bash description template: " + err.Error())

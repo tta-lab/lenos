@@ -38,6 +38,9 @@ Thumbs.db
 /bin/
 /dist/
 
+# Binary
+/lenos
+
 # Local environment variables
 .env
 .env.local

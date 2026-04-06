@@ -29,7 +29,7 @@ func GetMCPTools(cfg *config.ConfigStore, wd string) []*Tool {
 type Tool struct {
 	mcpName         string
 	tool            *mcp.Tool
-	cfg              *config.ConfigStore
+	cfg             *config.ConfigStore
 	workingDir      string
 	providerOptions fantasy.ProviderOptions
 }
