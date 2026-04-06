@@ -473,6 +473,7 @@ func allToolNames() []string {
 		"grep",
 		"ls",
 		"sourcegraph",
+		"todos",
 		"view",
 		"write",
 		"list_mcp_resources",
