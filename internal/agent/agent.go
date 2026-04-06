@@ -43,6 +43,7 @@ import (
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/stringext"
+	"github.com/tta-lab/lenos/internal/taskwarrior"
 	"github.com/tta-lab/lenos/internal/version"
 )
 
@@ -619,7 +620,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return err
 	}
 
-	summaryPromptText := buildSummaryPrompt(currentSession.Todos)
+	summaryPromptText := buildSummaryPrompt(ctx, os.Getenv("TTAL_JOB_ID"))
 
 	resp, err := agent.Stream(genCtx, fantasy.AgentStreamCall{
 		Prompt:          summaryPromptText,
@@ -1065,8 +1066,9 @@ func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Mes
 	return convertedMessages
 }
 
-// buildSummaryPrompt constructs the prompt text for session summarization.
-func buildSummaryPrompt(todos []session.Todo) string {
+// formatSummaryPrompt formats the session summarization prompt from a todo list.
+// Kept separate so benchmarks can test formatting without requiring a context.
+func formatSummaryPrompt(todos []session.Todo) string {
 	var sb strings.Builder
 	sb.WriteString("Provide a detailed summary of our conversation above.")
 	if len(todos) > 0 {
@@ -1078,4 +1080,17 @@ func buildSummaryPrompt(todos []session.Todo) string {
 		sb.WriteString("Instruct the resuming assistant to use `task <uuid> done` to mark completed subtasks.")
 	}
 	return sb.String()
+}
+
+// buildSummaryPrompt fetches subtasks from taskwarrior and builds the summarization prompt.
+func buildSummaryPrompt(ctx context.Context, jobID string) string {
+	if jobID == "" {
+		return formatSummaryPrompt(nil)
+	}
+	todos, err := taskwarrior.PollSubtasks(ctx, jobID)
+	if err != nil {
+		slog.Warn("Failed to poll TW subtasks for summary", "err", err)
+		return formatSummaryPrompt(nil)
+	}
+	return formatSummaryPrompt(todos)
 }
