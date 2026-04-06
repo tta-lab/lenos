@@ -32,8 +32,7 @@ const toolBodyLeftPaddingTotal = 2
 type ToolStatus int
 
 const (
-	ToolStatusAwaitingPermission ToolStatus = iota
-	ToolStatusRunning
+	ToolStatusRunning ToolStatus = iota
 	ToolStatusSuccess
 	ToolStatusError
 	ToolStatusCanceled
@@ -445,8 +444,6 @@ func toolEarlyStateContent(sty *styles.Styles, opts *ToolRenderOpts, width int) 
 		msg = toolErrorContent(sty, opts.Result, width)
 	case ToolStatusCanceled:
 		msg = sty.Tool.StateCancelled.Render("Canceled.")
-	case ToolStatusAwaitingPermission:
-		msg = sty.Tool.StateWaiting.Render("Requesting permission...")
 	case ToolStatusRunning:
 		msg = sty.Tool.StateWaiting.Render("Waiting for tool response...")
 	default:

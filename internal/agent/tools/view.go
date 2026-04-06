@@ -86,7 +86,7 @@ func NewViewTool(
 
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for accessing files outside working directory")
+				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for file tracking")
 			}
 
 			// Check if file exists
