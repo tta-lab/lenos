@@ -2,12 +2,13 @@ package model
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/lenos/internal/ui/chat"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
@@ -35,6 +36,18 @@ const (
 	pillSectionTodos pillSection = iota
 	pillSectionQueue
 )
+
+// effectiveTodos returns the todo list to display: TW subtasks when a taskwarrior
+// job is active, otherwise the session todos.
+func (m *UI) effectiveTodos() []session.Todo {
+	if m.twJobID != "" {
+		return m.twTodos
+	}
+	if m.session != nil {
+		return m.session.Todos
+	}
+	return nil
+}
 
 // hasIncompleteTodos returns true if there are any non-completed todos.
 func hasIncompleteTodos(todos []session.Todo) bool {
@@ -112,7 +125,63 @@ func todoPill(todos []session.Todo, spinnerView string, focused, panelFocused bo
 
 // todoList renders the expanded todo list.
 func todoList(sessionTodos []session.Todo, spinnerView string, t *styles.Styles, width int) string {
-	return chat.FormatTodosList(t, sessionTodos, spinnerView, width)
+	return FormatTodosList(t, sessionTodos, spinnerView, width)
+}
+
+// FormatTodosList formats a list of todos for display.
+func FormatTodosList(sty *styles.Styles, todos []session.Todo, inProgressIcon string, width int) string {
+	if len(todos) == 0 {
+		return ""
+	}
+
+	sorted := make([]session.Todo, len(todos))
+	copy(sorted, todos)
+	sortTodos(sorted)
+
+	var lines []string
+	for _, todo := range sorted {
+		var prefix string
+		textStyle := sty.Base
+
+		switch todo.Status {
+		case session.TodoStatusCompleted:
+			prefix = sty.Tool.TodoCompletedIcon.Render(styles.TodoCompletedIcon) + " "
+		case session.TodoStatusInProgress:
+			prefix = sty.Tool.TodoInProgressIcon.Render(inProgressIcon + " ")
+		default:
+			prefix = sty.Tool.TodoPendingIcon.Render(styles.TodoPendingIcon) + " "
+		}
+
+		text := todo.Content
+		if todo.Status == session.TodoStatusInProgress && todo.ActiveForm != "" {
+			text = todo.ActiveForm
+		}
+		line := prefix + textStyle.Render(text)
+		line = ansi.Truncate(line, width, "…")
+
+		lines = append(lines, line)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// sortTodos sorts todos by status: completed, in_progress, pending.
+func sortTodos(todos []session.Todo) {
+	slices.SortStableFunc(todos, func(a, b session.Todo) int {
+		return statusOrder(a.Status) - statusOrder(b.Status)
+	})
+}
+
+// statusOrder returns the sort order for a todo status.
+func statusOrder(s session.TodoStatus) int {
+	switch s {
+	case session.TodoStatusCompleted:
+		return 0
+	case session.TodoStatusInProgress:
+		return 1
+	default:
+		return 2
+	}
 }
 
 // queueList renders the expanded queue items list.

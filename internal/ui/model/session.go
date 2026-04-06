@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -15,10 +16,16 @@ import (
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/session"
+	"github.com/tta-lab/lenos/internal/taskwarrior"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/ui/util"
 )
+
+// twPollMsg is sent by the taskwarrior subtask poller with updated todos.
+type twPollMsg struct {
+	todos []session.Todo
+}
 
 // loadSessionMsg is a message indicating that a session and its files have
 // been loaded.
@@ -244,5 +251,33 @@ func (m *UI) startLSPs(paths []string) tea.Cmd {
 			m.com.Workspace.LSPStart(ctx, path)
 		}
 		return nil
+	}
+}
+
+// startTWTickPoll starts a 500ms ticker that polls taskwarrior subtasks
+// and sends twPollMsg when the results change.
+func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
+	if m.twPollTicker != nil {
+		m.twPollTicker.Stop()
+	}
+	m.twPollTicker = time.NewTicker(500 * time.Millisecond)
+	m.twJobID = jobID
+
+	// Initial poll.
+	todos, err := taskwarrior.PollSubtasks(context.Background(), jobID)
+	if err != nil {
+		slog.Warn("Failed to poll TW subtasks", "err", err)
+	} else {
+		m.twTodos = todos
+	}
+
+	return func() tea.Msg {
+		<-m.twPollTicker.C
+		todos, err := taskwarrior.PollSubtasks(context.Background(), jobID)
+		if err != nil {
+			slog.Warn("TW poll failed", "err", err)
+			return twPollMsg{todos: nil}
+		}
+		return twPollMsg{todos: todos}
 	}
 }

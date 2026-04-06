@@ -38,6 +38,7 @@ type PromptDat struct {
 	Date          string
 	GitStatus     string
 	ContextFiles  []ContextFile
+	JobID         string
 	AvailSkillXML string
 }
 
@@ -227,6 +228,7 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		Platform:      platform,
 		Date:          p.now().Format("1/2/2006"),
 		AvailSkillXML: availSkillXML,
+		JobID:         os.Getenv("TTAL_JOB_ID"),
 	}
 	if isGit {
 		var err error

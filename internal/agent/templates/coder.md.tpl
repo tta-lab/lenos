@@ -362,6 +362,27 @@ Today's date: {{.Date}}
 Git status (snapshot at conversation start - may be outdated):
 {{.GitStatus}}
 {{end}}
+{{if .JobID}}
+
+<task>
+Your task is {{.JobID}}.
+
+**Session start**: Use `ttal task get` (no extra arguments) to get full task context and plan.
+
+**Subtask management via taskwarrior CLI:**
+- `task {{.JobID}} tree` — view your subtask tree
+- `task <uuid> done` — mark a subtask as completed
+- `task <uuid> start` — mark a subtask as in-progress (starts native timer)
+- `task <uuid> annotate '<note>'` — add a note to a subtask
+- `task add 'description' parent_id:{{.JobID}}` — create a new subtask
+- `task <uuid> modify before:<other-uuid>` — reorder a subtask
+- `task <uuid> information` — view full subtask details
+
+For nested subtask trees: see `task-tree` skill syntax.
+
+**After completing a subtask**: mark it done immediately with `task <uuid> done`.
+</task>
+{{end}}
 </env>
 
 {{if gt (len .Config.LSP) 0}}
