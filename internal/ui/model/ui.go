@@ -38,7 +38,7 @@ import (
 	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/home"
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/permission"
+
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/ui/anim"
@@ -676,18 +676,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case mcp.EventResourcesListChanged:
 			return m, handleMCPResourcesEvent(m.com.Workspace, msg.Payload.Name)
 		}
-	case pubsub.Event[permission.PermissionRequest]:
-		if cmd := m.openPermissionsDialog(msg.Payload); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		if cmd := m.sendNotification(notification.Notification{
-			Title:   "Lenos is waiting...",
-			Message: fmt.Sprintf("Permission required to execute \"%s\"", msg.Payload.ToolName),
-		}); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-	case pubsub.Event[permission.PermissionNotification]:
-		m.handlePermissionNotification(msg.Payload)
 	case cancelTimerExpiredMsg:
 		m.isCanceling = false
 	case tea.TerminalVersionMsg:
@@ -919,9 +907,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Placeholder = m.workingPlaceholder
 		} else {
 			m.textarea.Placeholder = m.readyPlaceholder
-		}
-		if m.com.Workspace.PermissionSkipRequests() {
-			m.textarea.Placeholder = "yolo mode"
 		}
 	}
 
@@ -1341,11 +1326,6 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 
 	// Command dialog messages.
-	case dialog.ActionToggleYoloMode:
-		yolo := !m.com.Workspace.PermissionSkipRequests()
-		m.com.Workspace.PermissionSetSkipRequests(yolo)
-		m.setEditorPrompt(yolo)
-		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleNotifications:
 		cfg := m.com.Config()
 		if cfg != nil && cfg.Options != nil {
@@ -1556,16 +1536,6 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
 		})
 		m.dialog.CloseDialog(dialog.ReasoningID)
-	case dialog.ActionPermissionResponse:
-		m.dialog.CloseDialog(dialog.PermissionsID)
-		switch msg.Action {
-		case dialog.PermissionAllow:
-			m.com.Workspace.PermissionGrant(msg.Permission)
-		case dialog.PermissionAllowForSession:
-			m.com.Workspace.PermissionGrantPersistent(msg.Permission)
-		case dialog.PermissionDeny:
-			m.com.Workspace.PermissionDeny(msg.Permission)
-		}
 
 	case dialog.ActionFilePickerSelected:
 		cmds = append(cmds, tea.Sequence(
@@ -3006,8 +2976,7 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 		err := m.com.Workspace.AgentRun(context.Background(), sessionID, content, attachments...)
 		if err != nil {
 			isCancelErr := errors.Is(err, context.Canceled)
-			isPermissionErr := errors.Is(err, permission.ErrorPermissionDenied)
-			if isCancelErr || isPermissionErr {
+			if isCancelErr {
 				return nil
 			}
 			return util.InfoMsg{
@@ -3208,38 +3177,6 @@ func (m *UI) openFilesDialog() tea.Cmd {
 	m.dialog.OpenDialog(filePicker)
 
 	return cmd
-}
-
-// openPermissionsDialog opens the permissions dialog for a permission request.
-func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
-	// Close any existing permissions dialog first.
-	m.dialog.CloseDialog(dialog.PermissionsID)
-
-	// Get diff mode from config.
-	var opts []dialog.PermissionsOption
-	if diffMode := m.com.Config().Options.TUI.DiffMode; diffMode != "" {
-		opts = append(opts, dialog.WithDiffMode(diffMode == "split"))
-	}
-
-	permDialog := dialog.NewPermissions(m.com, perm, opts...)
-	m.dialog.OpenDialog(permDialog)
-	return nil
-}
-
-// handlePermissionNotification updates tool items when permission state changes.
-func (m *UI) handlePermissionNotification(notification permission.PermissionNotification) {
-	toolItem := m.chat.MessageItem(notification.ToolCallID)
-	if toolItem == nil {
-		return
-	}
-
-	if permItem, ok := toolItem.(chat.ToolMessageItem); ok {
-		if notification.Granted {
-			permItem.SetStatus(chat.ToolStatusRunning)
-		} else {
-			permItem.SetStatus(chat.ToolStatusAwaitingPermission)
-		}
-	}
 }
 
 // handleAgentNotification translates domain agent events into desktop

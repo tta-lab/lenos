@@ -32,8 +32,7 @@ const toolBodyLeftPaddingTotal = 2
 type ToolStatus int
 
 const (
-	ToolStatusAwaitingPermission ToolStatus = iota
-	ToolStatusRunning
+	ToolStatusRunning ToolStatus = iota
 	ToolStatusSuccess
 	ToolStatusError
 	ToolStatusCanceled
@@ -214,10 +213,6 @@ func NewToolMessageItem(
 	switch toolCall.Name {
 	case tools.BashToolName:
 		item = NewBashToolMessageItem(sty, toolCall, result, canceled)
-	case tools.JobOutputToolName:
-		item = NewJobOutputToolMessageItem(sty, toolCall, result, canceled)
-	case tools.JobKillToolName:
-		item = NewJobKillToolMessageItem(sty, toolCall, result, canceled)
 	case tools.ViewToolName:
 		item = NewViewToolMessageItem(sty, toolCall, result, canceled)
 	case tools.WriteToolName:
@@ -449,8 +444,6 @@ func toolEarlyStateContent(sty *styles.Styles, opts *ToolRenderOpts, width int) 
 		msg = toolErrorContent(sty, opts.Result, width)
 	case ToolStatusCanceled:
 		msg = sty.Tool.StateCancelled.Render("Canceled.")
-	case ToolStatusAwaitingPermission:
-		msg = sty.Tool.StateWaiting.Render("Requesting permission...")
 	case ToolStatusRunning:
 		msg = sty.Tool.StateWaiting.Render("Waiting for tool response...")
 	default:
@@ -1371,10 +1364,6 @@ func prettifyToolName(name string) string {
 		return "Agent"
 	case tools.BashToolName:
 		return "Bash"
-	case tools.JobOutputToolName:
-		return "Job: Output"
-	case tools.JobKillToolName:
-		return "Job: Kill"
 	case tools.DownloadToolName:
 		return "Download"
 	case tools.EditToolName:

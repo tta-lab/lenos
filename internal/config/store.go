@@ -22,7 +22,6 @@ import (
 // disk. They are applied on top of the loaded Config and survive only for
 // the lifetime of the process (or workspace).
 type RuntimeOverrides struct {
-	SkipPermissionRequests bool
 	// AgentName is display-only — used for UI header, not agent selection.
 	AgentName         string
 	AgentContextFile  string

@@ -95,8 +95,6 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 		return nil, proto.Workspace{}, fmt.Errorf("failed to initialize config: %w", err)
 	}
 
-	cfg.Overrides().SkipPermissionRequests = args.YOLO
-
 	if err := createDotLenosDir(cfg.Config().Options.DataDirectory); err != nil {
 		return nil, proto.Workspace{}, fmt.Errorf("failed to create data directory: %w", err)
 	}
@@ -137,7 +135,6 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 		Path:    args.Path,
 		DataDir: cfg.Config().Options.DataDirectory,
 		Debug:   cfg.Config().Options.Debug,
-		YOLO:    cfg.Overrides().SkipPermissionRequests,
 		Config:  cfg.Config(),
 		Env:     args.Env,
 	}
@@ -196,7 +193,6 @@ func workspaceToProto(ws *Workspace) proto.Workspace {
 	return proto.Workspace{
 		ID:      ws.ID,
 		Path:    ws.Path,
-		YOLO:    ws.Cfg.Overrides().SkipPermissionRequests,
 		DataDir: cfg.Options.DataDirectory,
 		Debug:   cfg.Options.Debug,
 		Config:  cfg,

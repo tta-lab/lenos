@@ -12,7 +12,7 @@ import (
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
-	"github.com/tta-lab/lenos/internal/permission"
+
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/util"
@@ -50,7 +50,6 @@ type (
 	ActionToggleThinking              struct{}
 	ActionTogglePills                 struct{}
 	ActionExternalEditor              struct{}
-	ActionToggleYoloMode              struct{}
 	ActionToggleNotifications         struct{}
 	ActionToggleTransparentBackground struct{}
 	ActionInitializeProject           struct{}
@@ -61,10 +60,6 @@ type (
 	// has been selected.
 	ActionSelectReasoningEffort struct {
 		Effort string
-	}
-	ActionPermissionResponse struct {
-		Permission permission.PermissionRequest
-		Action     PermissionAction
 	}
 	// ActionRunCustomCommand is a message to run a custom command.
 	ActionRunCustomCommand struct {

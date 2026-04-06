@@ -16,11 +16,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 
-	"github.com/charmbracelet/x/exp/slice"
 	"mvdan.cc/sh/moreinterp/coreutils"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
@@ -46,16 +44,12 @@ type noopLogger struct{}
 
 func (noopLogger) InfoPersist(msg string, keysAndValues ...any) {}
 
-// BlockFunc is a function that determines if a command should be blocked
-type BlockFunc func(args []string) bool
-
 // Shell provides cross-platform shell execution with optional state persistence
 type Shell struct {
-	env        []string
-	cwd        string
-	mu         sync.Mutex
-	logger     Logger
-	blockFuncs []BlockFunc
+	env    []string
+	cwd    string
+	mu     sync.Mutex
+	logger Logger
 }
 
 // Options for creating a new shell
@@ -63,7 +57,6 @@ type Options struct {
 	WorkingDir string
 	Env        []string
 	Logger     Logger
-	BlockFuncs []BlockFunc
 }
 
 // NewShell creates a new shell instance with the given options
@@ -96,10 +89,9 @@ func NewShell(opts *Options) *Shell {
 	}
 
 	return &Shell{
-		cwd:        cwd,
-		env:        env,
-		logger:     logger,
-		blockFuncs: opts.BlockFuncs,
+		cwd:    cwd,
+		env:    env,
+		logger: logger,
 	}
 }
 
@@ -166,84 +158,6 @@ func (s *Shell) SetEnv(key, value string) {
 	s.env = append(s.env, keyPrefix+value)
 }
 
-// SetBlockFuncs sets the command block functions for the shell
-func (s *Shell) SetBlockFuncs(blockFuncs []BlockFunc) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.blockFuncs = blockFuncs
-}
-
-// CommandsBlocker creates a BlockFunc that blocks exact command matches
-func CommandsBlocker(cmds []string) BlockFunc {
-	bannedSet := make(map[string]struct{})
-	for _, cmd := range cmds {
-		bannedSet[cmd] = struct{}{}
-	}
-
-	return func(args []string) bool {
-		if len(args) == 0 {
-			return false
-		}
-		_, ok := bannedSet[args[0]]
-		return ok
-	}
-}
-
-// ArgumentsBlocker creates a BlockFunc that blocks specific subcommand
-func ArgumentsBlocker(cmd string, args []string, flags []string) BlockFunc {
-	return func(parts []string) bool {
-		if len(parts) == 0 || parts[0] != cmd {
-			return false
-		}
-
-		argParts, flagParts := splitArgsFlags(parts[1:])
-		if len(argParts) < len(args) || len(flagParts) < len(flags) {
-			return false
-		}
-
-		argsMatch := slices.Equal(argParts[:len(args)], args)
-		flagsMatch := slice.IsSubset(flags, flagParts)
-
-		return argsMatch && flagsMatch
-	}
-}
-
-func splitArgsFlags(parts []string) (args []string, flags []string) {
-	args = make([]string, 0, len(parts))
-	flags = make([]string, 0, len(parts))
-	for _, part := range parts {
-		if strings.HasPrefix(part, "-") {
-			// Extract flag name before '=' if present
-			flag := part
-			if before, _, ok := strings.Cut(part, "="); ok {
-				flag = before
-			}
-			flags = append(flags, flag)
-		} else {
-			args = append(args, part)
-		}
-	}
-	return args, flags
-}
-
-func (s *Shell) blockHandler() func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
-	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
-		return func(ctx context.Context, args []string) error {
-			if len(args) == 0 {
-				return next(ctx, args)
-			}
-
-			for _, blockFunc := range s.blockFuncs {
-				if blockFunc(args) {
-					return fmt.Errorf("command is not allowed for security reasons: %q", args[0])
-				}
-			}
-
-			return next(ctx, args)
-		}
-	}
-}
-
 // newInterp creates a new interpreter with the current shell state
 func (s *Shell) newInterp(stdout, stderr io.Writer) (*interp.Runner, error) {
 	return interp.New(
@@ -306,9 +220,7 @@ func (s *Shell) execStream(ctx context.Context, command string, stdout, stderr i
 }
 
 func (s *Shell) execHandlers() []func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
-	handlers := []func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc{
-		s.blockHandler(),
-	}
+	handlers := []func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc{}
 	if useGoCoreUtils {
 		handlers = append(handlers, coreutils.ExecHandler)
 	}

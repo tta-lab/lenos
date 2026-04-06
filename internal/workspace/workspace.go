@@ -16,7 +16,7 @@ import (
 	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
-	"github.com/tta-lab/lenos/internal/permission"
+
 	"github.com/tta-lab/lenos/internal/session"
 )
 
@@ -87,13 +87,6 @@ type Workspace interface {
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel
-
-	// Permissions
-	PermissionGrant(perm permission.PermissionRequest)
-	PermissionGrantPersistent(perm permission.PermissionRequest)
-	PermissionDeny(perm permission.PermissionRequest)
-	PermissionSkipRequests() bool
-	PermissionSetSkipRequests(skip bool)
 
 	// FileTracker
 	FileTrackerRecordRead(ctx context.Context, sessionID, path string)

@@ -25,7 +25,6 @@ import (
 	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/permission"
 	"github.com/tta-lab/lenos/internal/session"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -36,7 +35,6 @@ type fakeEnv struct {
 	workingDir  string
 	sessions    session.Service
 	messages    message.Service
-	permissions permission.Service
 	history     history.Service
 	filetracker *filetracker.Service
 	lspClients  *csync.Map[string, *lsp.Client]
@@ -116,8 +114,6 @@ func testEnv(t *testing.T) fakeEnv {
 	q := db.New(conn)
 	sessions := session.NewService(q, conn)
 	messages := message.NewService(q)
-
-	permissions := permission.NewPermissionService(workingDir, true, []string{})
 	history := history.NewService(q, conn)
 	filetrackerService := filetracker.NewService(q)
 	lspClients := csync.NewMap[string, *lsp.Client]()
@@ -131,7 +127,6 @@ func testEnv(t *testing.T) fakeEnv {
 		workingDir,
 		sessions,
 		messages,
-		permissions,
 		history,
 		&filetrackerService,
 		lspClients,
@@ -157,7 +152,6 @@ func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPro
 		LargeModel:   largeModel,
 		SmallModel:   smallModel,
 		SystemPrompt: systemPrompt,
-		IsYolo:       true,
 		Sessions:     env.sessions,
 		Messages:     env.messages,
 		Tools:        tools,
@@ -208,17 +202,17 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	}
 
 	allTools := []fantasy.AgentTool{
-		tools.NewBashTool(env.permissions, env.workingDir, cfg.Config().Options.Attribution, modelName),
-		tools.NewDownloadTool(env.permissions, env.workingDir, r.GetDefaultClient()),
-		tools.NewEditTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),
-		tools.NewMultiEditTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),
-		tools.NewFetchTool(env.permissions, env.workingDir, r.GetDefaultClient()),
+		tools.NewBashTool(env.workingDir, cfg.Config().Options.Attribution, modelName),
+		tools.NewDownloadTool(env.workingDir, r.GetDefaultClient()),
+		tools.NewEditTool(nil, env.history, *env.filetracker, env.workingDir),
+		tools.NewMultiEditTool(nil, env.history, *env.filetracker, env.workingDir),
+		tools.NewFetchTool(env.workingDir, r.GetDefaultClient()),
 		tools.NewGlobTool(env.workingDir),
 		tools.NewGrepTool(env.workingDir, cfg.Config().Tools.Grep),
-		tools.NewLsTool(env.permissions, env.workingDir, cfg.Config().Tools.Ls),
+		tools.NewLsTool(env.workingDir, cfg.Config().Tools.Ls),
 		tools.NewSourcegraphTool(r.GetDefaultClient()),
-		tools.NewViewTool(nil, env.permissions, *env.filetracker, env.workingDir),
-		tools.NewWriteTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),
+		tools.NewViewTool(nil, *env.filetracker, env.workingDir),
+		tools.NewWriteTool(nil, env.history, *env.filetracker, env.workingDir),
 	}
 
 	return testSessionAgent(env, large, small, systemPrompt, allTools...), nil

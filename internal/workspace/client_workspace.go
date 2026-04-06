@@ -19,7 +19,7 @@ import (
 	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
-	"github.com/tta-lab/lenos/internal/permission"
+
 	"github.com/tta-lab/lenos/internal/proto"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
@@ -241,68 +241,6 @@ func (w *ClientWorkspace) GetDefaultSmallModel(providerID string) config.Selecte
 		return config.SelectedModel{}
 	}
 	return *model
-}
-
-// -- Permissions --
-
-func (w *ClientWorkspace) PermissionGrant(perm permission.PermissionRequest) {
-	_ = w.client.GrantPermission(context.Background(), w.workspaceID(), proto.PermissionGrant{
-		Permission: proto.PermissionRequest{
-			ID:          perm.ID,
-			SessionID:   perm.SessionID,
-			ToolCallID:  perm.ToolCallID,
-			ToolName:    perm.ToolName,
-			Description: perm.Description,
-			Action:      perm.Action,
-			Path:        perm.Path,
-			Params:      perm.Params,
-		},
-		Action: proto.PermissionAllowForSession,
-	})
-}
-
-func (w *ClientWorkspace) PermissionGrantPersistent(perm permission.PermissionRequest) {
-	_ = w.client.GrantPermission(context.Background(), w.workspaceID(), proto.PermissionGrant{
-		Permission: proto.PermissionRequest{
-			ID:          perm.ID,
-			SessionID:   perm.SessionID,
-			ToolCallID:  perm.ToolCallID,
-			ToolName:    perm.ToolName,
-			Description: perm.Description,
-			Action:      perm.Action,
-			Path:        perm.Path,
-			Params:      perm.Params,
-		},
-		Action: proto.PermissionAllow,
-	})
-}
-
-func (w *ClientWorkspace) PermissionDeny(perm permission.PermissionRequest) {
-	_ = w.client.GrantPermission(context.Background(), w.workspaceID(), proto.PermissionGrant{
-		Permission: proto.PermissionRequest{
-			ID:          perm.ID,
-			SessionID:   perm.SessionID,
-			ToolCallID:  perm.ToolCallID,
-			ToolName:    perm.ToolName,
-			Description: perm.Description,
-			Action:      perm.Action,
-			Path:        perm.Path,
-			Params:      perm.Params,
-		},
-		Action: proto.PermissionDeny,
-	})
-}
-
-func (w *ClientWorkspace) PermissionSkipRequests() bool {
-	skip, err := w.client.GetPermissionsSkipRequests(context.Background(), w.workspaceID())
-	if err != nil {
-		return false
-	}
-	return skip
-}
-
-func (w *ClientWorkspace) PermissionSetSkipRequests(skip bool) {
-	_ = w.client.SetPermissionsSkipRequests(context.Background(), w.workspaceID(), skip)
 }
 
 // -- FileTracker --
@@ -596,29 +534,6 @@ func translateEvent(ev any) tea.Msg {
 					Prompts:   e.Payload.PromptCount,
 					Resources: e.Payload.ResourceCount,
 				},
-			},
-		}
-	case pubsub.Event[proto.PermissionRequest]:
-		return pubsub.Event[permission.PermissionRequest]{
-			Type: e.Type,
-			Payload: permission.PermissionRequest{
-				ID:          e.Payload.ID,
-				SessionID:   e.Payload.SessionID,
-				ToolCallID:  e.Payload.ToolCallID,
-				ToolName:    e.Payload.ToolName,
-				Description: e.Payload.Description,
-				Action:      e.Payload.Action,
-				Path:        e.Payload.Path,
-				Params:      e.Payload.Params,
-			},
-		}
-	case pubsub.Event[proto.PermissionNotification]:
-		return pubsub.Event[permission.PermissionNotification]{
-			Type: e.Type,
-			Payload: permission.PermissionNotification{
-				ToolCallID: e.Payload.ToolCallID,
-				Granted:    e.Payload.Granted,
-				Denied:     e.Payload.Denied,
 			},
 		}
 	case pubsub.Event[proto.Message]:

@@ -14,7 +14,6 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/tta-lab/lenos/internal/filepathext"
-	"github.com/tta-lab/lenos/internal/permission"
 )
 
 type DownloadParams struct {
@@ -23,18 +22,12 @@ type DownloadParams struct {
 	Timeout  int    `json:"timeout,omitempty" description:"Optional timeout in seconds (max 600)"`
 }
 
-type DownloadPermissionsParams struct {
-	URL      string `json:"url"`
-	FilePath string `json:"file_path"`
-	Timeout  int    `json:"timeout,omitempty"`
-}
-
 const DownloadToolName = "download"
 
 //go:embed download.md
 var downloadDescription []byte
 
-func NewDownloadTool(permissions permission.Service, workingDir string, client *http.Client) fantasy.AgentTool {
+func NewDownloadTool(workingDir string, client *http.Client) fantasy.AgentTool {
 	if client == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.MaxIdleConns = 100
@@ -65,28 +58,6 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 			filePath := filepathext.SmartJoin(workingDir, params.FilePath)
 			relPath, _ := filepath.Rel(workingDir, filePath)
 			relPath = filepath.ToSlash(cmp.Or(relPath, filePath))
-
-			sessionID := GetSessionFromContext(ctx)
-			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for downloading files")
-			}
-
-			p, err := permissions.Request(ctx,
-				permission.CreatePermissionRequest{
-					SessionID:   sessionID,
-					Path:        filePath,
-					ToolName:    DownloadToolName,
-					Action:      "download",
-					Description: fmt.Sprintf("Download file from URL: %s to %s", params.URL, filePath),
-					Params:      DownloadPermissionsParams(params),
-				},
-			)
-			if err != nil {
-				return fantasy.ToolResponse{}, err
-			}
-			if !p {
-				return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
-			}
 
 			// Handle timeout with context
 			requestCtx := ctx

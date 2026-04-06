@@ -33,7 +33,6 @@ import (
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/permission"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/shell"
@@ -54,7 +53,6 @@ type App struct {
 	Sessions    session.Service
 	Messages    message.Service
 	History     history.Service
-	Permissions permission.Service
 	FileTracker filetracker.Service
 
 	AgentCoordinator agent.Coordinator
@@ -81,17 +79,11 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore) (*App, er
 	messages := message.NewService(q)
 	files := history.NewService(q, conn)
 	cfg := store.Config()
-	skipPermissionsRequests := store.Overrides().SkipPermissionRequests
-	var allowedTools []string
-	if cfg.Permissions != nil && cfg.Permissions.AllowedTools != nil {
-		allowedTools = cfg.Permissions.AllowedTools
-	}
 
 	app := &App{
 		Sessions:    sessions,
 		Messages:    messages,
 		History:     files,
-		Permissions: permission.NewPermissionService(store.WorkingDir(), skipPermissionsRequests, allowedTools),
 		FileTracker: filetracker.NewService(q),
 		LSPManager:  lsp.NewManager(store),
 
@@ -110,7 +102,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore) (*App, er
 	// Check for updates in the background.
 	go app.checkForUpdates(ctx)
 
-	go mcp.Initialize(ctx, app.Permissions, store)
+	go mcp.Initialize(ctx, store)
 
 	// cleanup database upon app shutdown
 	app.cleanupFuncs = append(
@@ -285,7 +277,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 
 	// Automatically approve all permission requests for this non-interactive
 	// session.
-	app.Permissions.AutoApproveSession(sess.ID)
+	_ = sess.ID // sess.ID available if permission system is re-enabled
 
 	type response struct {
 		result *fantasy.AgentResult
@@ -475,8 +467,6 @@ func (app *App) setupEvents() {
 	app.eventsCtx = ctx
 	setupSubscriber(ctx, app.serviceEventsWG, "sessions", app.Sessions.Subscribe, app.events)
 	setupSubscriber(ctx, app.serviceEventsWG, "messages", app.Messages.Subscribe, app.events)
-	setupSubscriber(ctx, app.serviceEventsWG, "permissions", app.Permissions.Subscribe, app.events)
-	setupSubscriber(ctx, app.serviceEventsWG, "permissions-notifications", app.Permissions.SubscribeNotifications, app.events)
 	setupSubscriber(ctx, app.serviceEventsWG, "history", app.History.Subscribe, app.events)
 	setupSubscriber(ctx, app.serviceEventsWG, "agent-notifications", app.agentNotifications.Subscribe, app.events)
 	setupSubscriber(ctx, app.serviceEventsWG, "mcp", mcp.SubscribeEvents, app.events)
@@ -547,7 +537,6 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		app.config,
 		app.Sessions,
 		app.Messages,
-		app.Permissions,
 		app.History,
 		app.FileTracker,
 		app.LSPManager,
