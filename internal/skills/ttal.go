@@ -33,6 +33,7 @@ func DiscoverTTAL(ctx context.Context) []*Skill {
 func parseTTALSkills(data []byte) []*Skill {
 	var entries []ttalSkillEntry
 	if err := json.Unmarshal(data, &entries); err != nil {
+		slog.Warn("Failed to parse ttal skill list output", "error", err, "output_preview", string(data)[:min(200, len(data))])
 		return nil
 	}
 	skills := make([]*Skill, 0, len(entries))

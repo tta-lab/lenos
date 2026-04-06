@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -446,6 +447,7 @@ func readTTALSkill(ctx context.Context, params ViewParams) (fantasy.ToolResponse
 
 	out, err := exec.CommandContext(ctx, "ttal", "skill", "get", name, "--json").Output()
 	if err != nil {
+		slog.Debug("Failed to fetch ttal skill", "skill", name, "error", err)
 		return fantasy.NewTextErrorResponse(fmt.Sprintf("ttal skill not found: %s", name)), nil
 	}
 
