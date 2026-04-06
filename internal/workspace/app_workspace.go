@@ -16,7 +16,7 @@ import (
 	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
-	"github.com/tta-lab/lenos/internal/permission"
+
 	"github.com/tta-lab/lenos/internal/session"
 )
 
@@ -163,28 +163,6 @@ func (w *AppWorkspace) InitCoderAgent(ctx context.Context) error {
 
 func (w *AppWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
 	return w.app.GetDefaultSmallModel(providerID)
-}
-
-// -- Permissions --
-
-func (w *AppWorkspace) PermissionGrant(perm permission.PermissionRequest) {
-	w.app.Permissions.Grant(perm)
-}
-
-func (w *AppWorkspace) PermissionGrantPersistent(perm permission.PermissionRequest) {
-	w.app.Permissions.GrantPersistent(perm)
-}
-
-func (w *AppWorkspace) PermissionDeny(perm permission.PermissionRequest) {
-	w.app.Permissions.Deny(perm)
-}
-
-func (w *AppWorkspace) PermissionSkipRequests() bool {
-	return w.app.Permissions.SkipRequests()
-}
-
-func (w *AppWorkspace) PermissionSetSkipRequests(skip bool) {
-	w.app.Permissions.SetSkipRequests(skip)
 }
 
 // -- FileTracker --

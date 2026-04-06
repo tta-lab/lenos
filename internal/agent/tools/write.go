@@ -14,11 +14,9 @@ import (
 	"github.com/tta-lab/lenos/internal/diff"
 	"github.com/tta-lab/lenos/internal/filepathext"
 	"github.com/tta-lab/lenos/internal/filetracker"
-	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/history"
 
 	"github.com/tta-lab/lenos/internal/lsp"
-	"github.com/tta-lab/lenos/internal/permission"
 )
 
 //go:embed write.md
@@ -27,12 +25,6 @@ var writeDescription []byte
 type WriteParams struct {
 	FilePath string `json:"file_path" description:"The path to the file to write"`
 	Content  string `json:"content" description:"The content to write to the file"`
-}
-
-type WritePermissionsParams struct {
-	FilePath   string `json:"file_path"`
-	OldContent string `json:"old_content,omitempty"`
-	NewContent string `json:"new_content,omitempty"`
 }
 
 type WriteResponseMetadata struct {
@@ -45,7 +37,6 @@ const WriteToolName = "write"
 
 func NewWriteTool(
 	lspManager *lsp.Manager,
-	permissions permission.Service,
 	files history.Service,
 	filetracker filetracker.Service,
 	workingDir string,
@@ -108,28 +99,6 @@ func NewWriteTool(
 				params.Content,
 				strings.TrimPrefix(filePath, workingDir),
 			)
-
-			p, err := permissions.Request(ctx,
-				permission.CreatePermissionRequest{
-					SessionID:   sessionID,
-					Path:        fsext.PathOrPrefix(filePath, workingDir),
-					ToolCallID:  call.ID,
-					ToolName:    WriteToolName,
-					Action:      "write",
-					Description: fmt.Sprintf("Create file %s", filePath),
-					Params: WritePermissionsParams{
-						FilePath:   filePath,
-						OldContent: oldContent,
-						NewContent: params.Content,
-					},
-				},
-			)
-			if err != nil {
-				return fantasy.ToolResponse{}, err
-			}
-			if !p {
-				return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
-			}
 
 			err = os.WriteFile(filePath, []byte(params.Content), 0o644)
 			if err != nil {

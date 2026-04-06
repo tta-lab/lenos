@@ -8,35 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/history"
-	"github.com/tta-lab/lenos/internal/permission"
 	"github.com/tta-lab/lenos/internal/pubsub"
 )
-
-type mockPermissionService struct {
-	*pubsub.Broker[permission.PermissionRequest]
-}
-
-func (m *mockPermissionService) Request(ctx context.Context, req permission.CreatePermissionRequest) (bool, error) {
-	return true, nil
-}
-
-func (m *mockPermissionService) Grant(req permission.PermissionRequest) {}
-
-func (m *mockPermissionService) Deny(req permission.PermissionRequest) {}
-
-func (m *mockPermissionService) GrantPersistent(req permission.PermissionRequest) {}
-
-func (m *mockPermissionService) AutoApproveSession(sessionID string) {}
-
-func (m *mockPermissionService) SetSkipRequests(skip bool) {}
-
-func (m *mockPermissionService) SkipRequests() bool {
-	return false
-}
-
-func (m *mockPermissionService) SubscribeNotifications(ctx context.Context) <-chan pubsub.Event[permission.PermissionNotification] {
-	return make(<-chan pubsub.Event[permission.PermissionNotification])
-}
 
 type mockHistoryService struct {
 	*pubsub.Broker[history.File]

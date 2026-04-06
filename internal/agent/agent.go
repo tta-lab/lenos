@@ -40,7 +40,6 @@ import (
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/permission"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/stringext"
@@ -108,7 +107,6 @@ type sessionAgent struct {
 	sessions             session.Service
 	messages             message.Service
 	disableAutoSummarize bool
-	isYolo               bool
 	notify               pubsub.Publisher[notify.Notification]
 
 	messageQueue   *csync.Map[string, []SessionAgentCall]
@@ -122,7 +120,6 @@ type SessionAgentOptions struct {
 	SystemPrompt         string
 	IsSubAgent           bool
 	DisableAutoSummarize bool
-	IsYolo               bool
 	Sessions             session.Service
 	Messages             message.Service
 	Tools                []fantasy.AgentTool
@@ -142,7 +139,6 @@ func NewSessionAgent(
 		messages:             opts.Messages,
 		disableAutoSummarize: opts.DisableAutoSummarize,
 		tools:                csync.NewSliceFrom(opts.Tools),
-		isYolo:               opts.IsYolo,
 		notify:               opts.Notify,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
@@ -444,7 +440,6 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 
 	if err != nil {
 		isCancelErr := errors.Is(err, context.Canceled)
-		isPermissionErr := errors.Is(err, permission.ErrorPermissionDenied)
 		if currentAssistant == nil {
 			return result, err
 		}
@@ -487,8 +482,6 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			content := "There was an error while executing the tool"
 			if isCancelErr {
 				content = "Error: user cancelled assistant tool calling"
-			} else if isPermissionErr {
-				content = "User denied permission"
 			}
 			toolResult := message.ToolResult{
 				ToolCallID: tc.ID,
@@ -512,8 +505,6 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 		linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6b8a5e")).Underline(true)
 		if isCancelErr {
 			currentAssistant.AddFinish(message.FinishReasonCanceled, "User canceled request", "")
-		} else if isPermissionErr {
-			currentAssistant.AddFinish(message.FinishReasonPermissionDenied, "User denied permission", "")
 		} else if errors.Is(err, hyper.ErrNoCredits) {
 			url := hyper.BaseURL()
 			link := linkStyle.Hyperlink(url, "id=hyper").Render(url)

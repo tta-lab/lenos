@@ -248,7 +248,6 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string)
 // AppWorkspace.
 func setupLocalWorkspace(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
-	yolo, _ := cmd.Flags().GetBool("yolo")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	ctx := cmd.Context()
 
@@ -263,7 +262,6 @@ func setupLocalWorkspace(cmd *cobra.Command, agentName string, contextFiles []st
 	}
 
 	cfg := store.Config()
-	store.Overrides().SkipPermissionRequests = yolo
 
 	// Resolve agent identity file if specified.
 	if agentName != "" {
@@ -354,7 +352,6 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 	}
 
 	debug, _ := cmd.Flags().GetBool("debug")
-	yolo, _ := cmd.Flags().GetBool("yolo")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	ctx := cmd.Context()
 
@@ -372,7 +369,6 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 		Path:    cwd,
 		DataDir: dataDir,
 		Debug:   debug,
-		YOLO:    yolo,
 		Version: version.Version,
 		Env:     os.Environ(),
 	}

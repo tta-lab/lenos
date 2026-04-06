@@ -20,7 +20,6 @@ import (
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/home"
-	"github.com/tta-lab/lenos/internal/permission"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/version"
 )
@@ -163,7 +162,7 @@ func Close(ctx context.Context) error {
 }
 
 // Initialize initializes MCP clients based on the provided configuration.
-func Initialize(ctx context.Context, permissions permission.Service, cfg *config.ConfigStore) {
+func Initialize(ctx context.Context, cfg *config.ConfigStore) {
 	slog.Info("Initializing MCP clients")
 	var wg sync.WaitGroup
 	// Initialize states for all configured MCPs

@@ -13,7 +13,6 @@ import (
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/agent/tools"
-	"github.com/tta-lab/lenos/internal/permission"
 )
 
 //go:embed templates/agentic_fetch.md
@@ -70,32 +69,6 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 			validationResult, err := validateAgenticFetchParams(ctx, params)
 			if err != nil {
 				return fantasy.NewTextErrorResponse(err.Error()), nil
-			}
-
-			// Determine description based on mode.
-			var description string
-			if params.URL != "" {
-				description = fmt.Sprintf("Fetch and analyze content from URL: %s", params.URL)
-			} else {
-				description = "Search the web and analyze results"
-			}
-
-			p, err := c.permissions.Request(ctx,
-				permission.CreatePermissionRequest{
-					SessionID:   validationResult.SessionID,
-					Path:        c.cfg.WorkingDir(),
-					ToolCallID:  call.ID,
-					ToolName:    tools.AgenticFetchToolName,
-					Action:      "fetch",
-					Description: description,
-					Params:      tools.AgenticFetchPermissionsParams(params),
-				},
-			)
-			if err != nil {
-				return fantasy.ToolResponse{}, err
-			}
-			if !p {
-				return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 			}
 
 			tmpDir, err := os.MkdirTemp(c.cfg.Config().Options.DataDirectory, "lenos-fetch-*")
@@ -169,7 +142,7 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				tools.NewGlobTool(tmpDir),
 				tools.NewGrepTool(tmpDir, c.cfg.Config().Tools.Grep),
 				tools.NewSourcegraphTool(client),
-				tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, tmpDir),
+				tools.NewViewTool(c.lspManager, c.filetracker, tmpDir),
 			}
 
 			agent := NewSessionAgent(SessionAgentOptions{
@@ -178,7 +151,6 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				SystemPromptPrefix:   smallProviderCfg.SystemPromptPrefix,
 				SystemPrompt:         systemPrompt,
 				DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
-				IsYolo:               c.permissions.SkipRequests(),
 				Sessions:             c.sessions,
 				Messages:             c.messages,
 				Tools:                fetchTools,
@@ -191,9 +163,6 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				ToolCallID:     call.ID,
 				Prompt:         fullPrompt,
 				SessionTitle:   "Fetch Analysis",
-				SessionSetup: func(sessionID string) {
-					c.permissions.AutoApproveSession(sessionID)
-				},
 			})
 		}), nil
 }
