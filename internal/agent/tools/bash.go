@@ -86,8 +86,6 @@ func NewBashTool(workingDir string, attribution *config.Attribution, modelName s
 
 			stdout, stderr, execErr := sh.Exec(ctx, params.Command)
 
-			elapsed := time.Since(startTime)
-
 			stdout = formatOutput(stdout, stderr, execErr)
 
 			metadata := BashResponseMetadata{
@@ -102,7 +100,6 @@ func NewBashTool(workingDir string, attribution *config.Attribution, modelName s
 				return fantasy.WithResponseMetadata(fantasy.NewTextResponse(BashNoOutput), metadata), nil
 			}
 
-			_ = elapsed // silence unused variable warning
 			stdout += fmt.Sprintf("\n\n<cwd>%s</cwd>", normalizeWorkingDir(execWorkingDir))
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(stdout), metadata), nil
 		})

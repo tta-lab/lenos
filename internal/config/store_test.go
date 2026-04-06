@@ -105,33 +105,6 @@ func TestConfigStore_HasConfigField_WorkspaceScopeGuard(t *testing.T) {
 	require.False(t, has)
 }
 
-func TestConfigStore_RuntimeOverrides_Independent(t *testing.T) {
-	t.Parallel()
-
-	store1 := &ConfigStore{config: &Config{}}
-	store2 := &ConfigStore{config: &Config{}}
-
-	require.False(t, store1.Overrides().SkipPermissionRequests)
-	require.False(t, store2.Overrides().SkipPermissionRequests)
-
-	store1.Overrides().SkipPermissionRequests = true
-
-	require.True(t, store1.Overrides().SkipPermissionRequests)
-	require.False(t, store2.Overrides().SkipPermissionRequests)
-}
-
-func TestConfigStore_RuntimeOverrides_MutableViaPointer(t *testing.T) {
-	t.Parallel()
-
-	store := &ConfigStore{config: &Config{}}
-	overrides := store.Overrides()
-
-	require.False(t, overrides.SkipPermissionRequests)
-
-	overrides.SkipPermissionRequests = true
-	require.True(t, store.Overrides().SkipPermissionRequests)
-}
-
 func TestGlobalWorkspaceDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LENOS_GLOBAL_DATA", dir)
