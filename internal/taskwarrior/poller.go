@@ -21,7 +21,6 @@ type twTask struct {
 // maps the results to []session.Todo.
 func PollSubtasks(ctx context.Context, jobID string) ([]session.Todo, error) {
 	cmd := exec.CommandContext(ctx, "task", "parent_id:"+jobID, "status.not:deleted", "export")
-	cmd.Stderr = nil // let exec capture stderr for us
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("task export failed: %w", err)
