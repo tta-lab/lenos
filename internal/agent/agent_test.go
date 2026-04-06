@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -632,25 +633,31 @@ func makeTestTodos(n int) []session.Todo {
 	return todos
 }
 
-func BenchmarkBuildSummaryPrompt(b *testing.B) {
-	cases := []struct {
-		name     string
-		numTodos int
-	}{
-		{"0todos", 0},
-		{"5todos", 5},
-		{"10todos", 10},
-		{"50todos", 50},
-	}
+func TestBuildSummaryPrompt(t *testing.T) {
+	t.Parallel()
 
-	for _, tc := range cases {
-		todos := makeTestTodos(tc.numTodos)
+	t.Run("empty jobID returns base prompt without todos section", func(t *testing.T) {
+		t.Parallel()
+		result := buildSummaryPrompt(context.Background(), "")
+		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
+		require.NotContains(t, result, "Current Todo List")
+	})
 
-		b.Run(tc.name, func(b *testing.B) {
-			b.ReportAllocs()
-			for range b.N {
-				_ = buildSummaryPrompt(todos)
-			}
-		})
-	}
+	t.Run("cancelled context returns base prompt", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		result := buildSummaryPrompt(ctx, "fake-nonexistent-job-id")
+		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
+		require.NotContains(t, result, "Current Todo List")
+	})
+
+	t.Run("successful poll with real jobID returns prompt", func(t *testing.T) {
+		t.Parallel()
+		// Use a UUID unlikely to have subtasks in a fresh test environment.
+		// task will return empty output, so todos section won't appear but
+		// the base prompt will.
+		result := buildSummaryPrompt(context.Background(), "00000000-0000-0000-0000-000000000000")
+		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
+	})
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/workspace"
 )
@@ -92,4 +93,31 @@ type testWorkspace struct {
 
 func (w *testWorkspace) Config() *config.Config {
 	return w.cfg
+}
+
+func TestEffectiveTodos(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns nil when no TW job is active", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithConfig(t, nil)
+		ui.twJobID = ""
+		ui.twTodos = nil
+		ui.session = nil
+		require.Nil(t, ui.effectiveTodos())
+	})
+
+	t.Run("returns TW subtasks when TW job is active", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithConfig(t, nil)
+		ui.twJobID = "abc123"
+		ui.twTodos = []session.Todo{
+			{Content: "step one", Status: session.TodoStatusCompleted},
+			{Content: "step two", Status: session.TodoStatusPending},
+		}
+		got := ui.effectiveTodos()
+		require.Len(t, got, 2)
+		require.Equal(t, session.TodoStatusCompleted, got[0].Status)
+		require.Equal(t, "step one", got[0].Content)
+	})
 }

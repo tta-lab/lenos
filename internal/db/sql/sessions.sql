@@ -47,8 +47,7 @@ SET
     prompt_tokens = ?,
     completion_tokens = ?,
     summary_message_id = ?,
-    cost = ?,
-    todos = ?
+    cost = ?
 WHERE id = ?
 RETURNING *;
 

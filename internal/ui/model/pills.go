@@ -37,14 +37,10 @@ const (
 	pillSectionQueue
 )
 
-// effectiveTodos returns the todo list to display: TW subtasks when a taskwarrior
-// job is active, otherwise the session todos.
+// effectiveTodos returns todos to display: TW subtasks when a TW job is active, otherwise nil.
 func (m *UI) effectiveTodos() []session.Todo {
 	if m.twJobID != "" {
 		return m.twTodos
-	}
-	if m.session != nil {
-		return m.session.Todos
 	}
 	return nil
 }

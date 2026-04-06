@@ -381,6 +381,10 @@ Your task is {{.JobID}}.
 For nested subtask trees: see `task-tree` skill syntax.
 
 **After completing a subtask**: mark it done immediately with `task <uuid> done`.
+
+**⚠️ CRITICAL: NEVER mark the parent/root task ({{.JobID}}) as done.** Only the orchestrator closes root tasks. You only complete individual subtasks as you finish them.
+
+**Deleting subtasks:** `task <uuid> delete` — use when a subtask is no longer needed.
 </task>
 {{end}}
 </env>
