@@ -5,10 +5,13 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -77,6 +80,11 @@ func NewViewTool(
 			// Handle builtin skill files (lenos: prefix).
 			if strings.HasPrefix(params.FilePath, skills.BuiltinPrefix) {
 				return readBuiltinFile(params)
+			}
+
+			// Handle ttal-backed skill files (ttal: prefix).
+			if strings.HasPrefix(params.FilePath, skills.TTALPrefix) {
+				return readTTALSkill(ctx, params)
 			}
 
 			// Handle relative paths
@@ -425,6 +433,62 @@ func readBuiltinFile(params ViewParams) (fantasy.ToolResponse, error) {
 		meta.ResourceType = ViewResourceSkill
 		meta.ResourceName = skill.Name
 		meta.ResourceDescription = skill.Description
+	}
+
+	return fantasy.WithResponseMetadata(
+		fantasy.NewTextResponse(output),
+		meta,
+	), nil
+}
+
+// readTTALSkill reads a skill from the ttal registry via CLI.
+func readTTALSkill(ctx context.Context, params ViewParams) (fantasy.ToolResponse, error) {
+	name := strings.TrimPrefix(params.FilePath, skills.TTALPrefix)
+
+	out, err := exec.CommandContext(ctx, "ttal", "skill", "get", name, "--json").Output()
+	if err != nil {
+		slog.Debug("Failed to fetch ttal skill", "skill", name, "error", err)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("ttal skill not found: %s", name)), nil
+	}
+
+	var result struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Content     string `json:"content"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to parse ttal skill: %v", err)), nil
+	}
+
+	content := result.Content
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 1000000 // No limit for skill files
+	}
+
+	lines := strings.Split(content, "\n")
+	offset := min(params.Offset, len(lines))
+	lines = lines[offset:]
+
+	hasMore := len(lines) > limit
+	if hasMore {
+		lines = lines[:limit]
+	}
+
+	output := "<file>\n"
+	output += addLineNumbers(strings.Join(lines, "\n"), offset+1)
+	if hasMore {
+		output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)",
+			offset+len(lines))
+	}
+	output += "\n</file>\n"
+
+	meta := ViewResponseMetadata{
+		FilePath:            params.FilePath,
+		Content:             strings.Join(lines, "\n"),
+		ResourceType:        ViewResourceSkill,
+		ResourceName:        result.Name,
+		ResourceDescription: result.Description,
 	}
 
 	return fantasy.WithResponseMetadata(

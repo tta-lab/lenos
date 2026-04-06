@@ -33,7 +33,6 @@ import (
 	"github.com/tta-lab/lenos/internal/db"
 	"github.com/tta-lab/lenos/internal/event"
 	lenoslog "github.com/tta-lab/lenos/internal/log"
-	"github.com/tta-lab/lenos/internal/projects"
 	"github.com/tta-lab/lenos/internal/proto"
 	"github.com/tta-lab/lenos/internal/server"
 	"github.com/tta-lab/lenos/internal/session"
@@ -61,7 +60,6 @@ func init() {
 	rootCmd.AddCommand(
 		runCmd,
 		dirsCmd,
-		projectsCmd,
 		updateProvidersCmd,
 		logsCmd,
 		schemaCmd,
@@ -298,10 +296,6 @@ func setupLocalWorkspace(cmd *cobra.Command, agentName string, contextFiles []st
 		if err := os.WriteFile(gitIgnorePath, []byte("*\n"), 0o644); err != nil {
 			return nil, nil, fmt.Errorf("failed to create .gitignore file: %q %w", gitIgnorePath, err)
 		}
-	}
-
-	if err := projects.Register(cwd, cfg.Options.DataDirectory); err != nil {
-		slog.Warn("Failed to register project", "error", err)
 	}
 
 	conn, err := db.Connect(ctx, cfg.Options.DataDirectory)
