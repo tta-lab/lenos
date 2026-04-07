@@ -666,9 +666,11 @@ func TestGenerateTitle(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("task CLI not available on windows")
 	}
+	if _, err := os.LookupEnv("TTAL_JOB_ID"); !err {
+		t.Setenv("TTAL_JOB_ID", "25620b89")
+	}
 
 	t.Run("uses task description as session title", func(t *testing.T) {
-		t.Parallel()
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)

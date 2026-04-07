@@ -49,6 +49,7 @@ func TestParseSubtasks(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			todos, err := parseSubtasks([]byte(tc.input))
 			if tc.wantErr {
 				require.Error(t, err)
@@ -83,6 +84,7 @@ func TestParseSubtasks_StatusMapping(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			todos, err := parseSubtasks([]byte(tc.input))
 			require.NoError(t, err)
 			require.Len(t, todos, 1)
