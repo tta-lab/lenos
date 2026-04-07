@@ -1,6 +1,10 @@
 package taskwarrior
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -80,6 +84,8 @@ func TestParseSubtasks_StatusMapping(t *testing.T) {
 		{"pending", `[{ "description": "Do it", "status": "pending" }]`, session.TodoStatusPending},
 		{"completed", `[{ "description": "Done", "status": "completed" }]`, session.TodoStatusCompleted},
 		{"in_progress_via_start_field", `[{ "description": "Busy", "status": "pending", "start": "20260407" }]`, session.TodoStatusInProgress},
+		{"unknown_deleted_passes_through", `[{ "description": "Gone", "status": "deleted" }]`, session.TodoStatus("deleted")},
+		{"unknown_waiting_passes_through", `[{ "description": "Waiting", "status": "waiting" }]`, session.TodoStatus("waiting")},
 	}
 
 	for _, tc := range tests {
@@ -91,4 +97,24 @@ func TestParseSubtasks_StatusMapping(t *testing.T) {
 			require.Equal(t, tc.wantStatus, todos[0].Status)
 		})
 	}
+}
+
+func TestPollSubtasks_ExecFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("task CLI not available on windows")
+	}
+
+	t.Parallel()
+
+	tmp := t.TempDir()
+	oldPath := os.Getenv("PATH")
+	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+	os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
+
+	fakeTask := filepath.Join(tmp, "task")
+	require.NoError(t, os.WriteFile(fakeTask, []byte("#!/bin/sh\nexit 1"), 0o755))
+
+	_, err := PollSubtasks(context.Background(), "fake-job-id")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "task export failed")
 }

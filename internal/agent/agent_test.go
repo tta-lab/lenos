@@ -729,4 +729,27 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		require.NoError(t, err)
 		assert.Equal(t, DefaultSessionName, updated.Title)
 	})
+
+	t.Run("description over 100 chars is truncated", func(t *testing.T) {
+		env := testEnv(t)
+		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
+		require.NoError(t, err)
+
+		tmp := t.TempDir()
+		oldPath := os.Getenv("PATH")
+		t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+		os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
+
+		longDesc := strings.Repeat("x", 150)
+		fakeTask := filepath.Join(tmp, "task")
+		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf("#!/bin/sh\nprintf '[{\"description\":\"%s\",\"status\":\"pending\"}]' \"$@\"", longDesc)), 0o755))
+
+		a := &sessionAgent{sessions: env.sessions}
+		a.generateTitle(t.Context(), sess.ID, "")
+
+		updated, err := env.sessions.Get(t.Context(), sess.ID)
+		require.NoError(t, err)
+		assert.Len(t, updated.Title, 100)
+		assert.Equal(t, longDesc[:100], updated.Title)
+	})
 }
