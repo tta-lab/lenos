@@ -784,20 +784,25 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, user
 		slog.Warn("TTAL_JOB_ID not set; using default session name")
 		title = DefaultSessionName
 	} else {
-		cmd := exec.CommandContext(ctx, "task", jobID, "export")
+		cmd := exec.CommandContext(ctx, "task",
+			"rc.verbose=nothing", "rc.hooks=off", "rc.confirmation=no", "rc.json.array=on",
+			jobID, "export")
 		out, err := cmd.Output()
 		if err != nil {
 			slog.Warn("Failed to export task for title", "err", err)
 			title = DefaultSessionName
 		} else {
-			var task struct {
+			var tasks []struct {
 				Description string `json:"description"`
 			}
-			if err := json.Unmarshal(out, &task); err != nil {
+			if err := json.Unmarshal(out, &tasks); err != nil {
 				slog.Warn("Failed to parse task export JSON", "err", err)
 				title = DefaultSessionName
+			} else if len(tasks) == 0 {
+				slog.Warn("Task export returned empty array", "jobID", jobID)
+				title = DefaultSessionName
 			} else {
-				title = strings.TrimSpace(task.Description)
+				title = strings.TrimSpace(tasks[0].Description)
 				if len(title) > 100 {
 					title = title[:100]
 				}

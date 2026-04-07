@@ -209,6 +209,13 @@ tasks:
       - internal/swagger/swagger.json
       - internal/swagger/swagger.yaml
 
+  smoke:tw:
+    desc: Smoke test for taskwarrior integration
+    cmds:
+      - go test ./internal/taskwarrior/...
+    sources:
+      - internal/taskwarrior/*.go
+
   sqlc:
     desc: Generate code using SQLC
     cmds:

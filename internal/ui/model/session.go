@@ -264,6 +264,28 @@ func (m *UI) stopTWPoll() {
 	m.twTodos = nil
 }
 
+// waitNextTWTick returns a command that waits for the next ticker tick and
+// emits a twPollMsg. Guards against a nil ticker (stopped poller).
+func (m *UI) waitNextTWTick() tea.Cmd {
+	if m.twPollTicker == nil || m.twJobID == "" {
+		return nil
+	}
+	ticker := m.twPollTicker
+	jobID := m.twJobID
+	return func() tea.Msg {
+		_, ok := <-ticker.C
+		if !ok {
+			return twPollMsg{todos: nil}
+		}
+		todos, err := taskwarrior.PollSubtasks(context.Background(), jobID)
+		if err != nil {
+			slog.Warn("TW poll failed", "err", err, "jobID", jobID)
+			return twPollMsg{todos: nil}
+		}
+		return twPollMsg{todos: todos}
+	}
+}
+
 // startTWTickPoll starts a 500ms ticker that polls taskwarrior subtasks
 // and sends twPollMsg when the results change.
 func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
@@ -271,7 +293,7 @@ func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
 	m.twPollTicker = time.NewTicker(500 * time.Millisecond)
 	m.twJobID = jobID
 
-	// Initial poll.
+	// Initial synchronous poll to populate the UI immediately.
 	todos, err := taskwarrior.PollSubtasks(context.Background(), jobID)
 	if err != nil {
 		slog.Warn("Failed to poll TW subtasks", "err", err)
@@ -279,13 +301,6 @@ func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
 		m.twTodos = todos
 	}
 
-	return func() tea.Msg {
-		<-m.twPollTicker.C
-		todos, err := taskwarrior.PollSubtasks(context.Background(), jobID)
-		if err != nil {
-			slog.Warn("TW poll failed", "err", err)
-			return twPollMsg{todos: nil}
-		}
-		return twPollMsg{todos: todos}
-	}
+	// Return the first scheduled tick via the shared helper.
+	return m.waitNextTWTick()
 }

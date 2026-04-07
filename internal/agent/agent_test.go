@@ -661,3 +661,70 @@ func TestBuildSummaryPrompt(t *testing.T) {
 		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
 	})
 }
+
+func TestGenerateTitle(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("task CLI not available on windows")
+	}
+
+	t.Run("uses task description as session title", func(t *testing.T) {
+		t.Parallel()
+		env := testEnv(t)
+		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
+		require.NoError(t, err)
+
+		// Create a fake "task" binary that outputs a JSON array.
+		tmp := t.TempDir()
+		oldPath := os.Getenv("PATH")
+		t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+		os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
+
+		fakeTask := filepath.Join(tmp, "task")
+		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf(`#!/bin/sh
+printf '[{"description":"%s","status":"pending"}]' "$@"
+`, "Fix the authentication bug")), 0o755))
+
+		a := &sessionAgent{sessions: env.sessions}
+		a.generateTitle(t.Context(), sess.ID, "fix auth bug")
+
+		updated, err := env.sessions.Get(t.Context(), sess.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "Fix the authentication bug", updated.Title)
+	})
+
+	t.Run("empty array falls back to default", func(t *testing.T) {
+		env := testEnv(t)
+		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
+		require.NoError(t, err)
+
+		tmp := t.TempDir()
+		oldPath := os.Getenv("PATH")
+		t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+		os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
+
+		fakeTask := filepath.Join(tmp, "task")
+		require.NoError(t, os.WriteFile(fakeTask, []byte("#!/bin/sh\nprintf '[]' \"$@\""), 0o755))
+
+		a := &sessionAgent{sessions: env.sessions}
+		a.generateTitle(t.Context(), sess.ID, "")
+
+		updated, err := env.sessions.Get(t.Context(), sess.ID)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultSessionName, updated.Title)
+	})
+
+	t.Run("no TTAL_JOB_ID uses default", func(t *testing.T) {
+		env := testEnv(t)
+		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
+		require.NoError(t, err)
+
+		t.Setenv("TTAL_JOB_ID", "")
+
+		a := &sessionAgent{sessions: env.sessions}
+		a.generateTitle(t.Context(), sess.ID, "")
+
+		updated, err := env.sessions.Get(t.Context(), sess.ID)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultSessionName, updated.Title)
+	})
+}

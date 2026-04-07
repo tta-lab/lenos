@@ -2,6 +2,7 @@ package model
 
 import (
 	"testing"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/stretchr/testify/require"
@@ -119,5 +120,41 @@ func TestEffectiveTodos(t *testing.T) {
 		require.Len(t, got, 2)
 		require.Equal(t, session.TodoStatusCompleted, got[0].Status)
 		require.Equal(t, "step one", got[0].Content)
+	})
+}
+
+func TestTWTickReArm(t *testing.T) {
+	t.Parallel()
+
+	t.Run("twPollMsg re-arms the ticker and returns a non-nil command", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithConfig(t, nil)
+		ui.twPollTicker = time.NewTicker(time.Hour)
+		ui.twJobID = "abc123"
+		ui.twTodos = nil
+		ui.session = nil
+
+		_, cmds := ui.Update(twPollMsg{todos: nil})
+		require.NotNil(t, cmds, "Update should return a re-arm command after twPollMsg")
+	})
+
+	t.Run("waitNextTWTick returns nil when ticker is nil", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithConfig(t, nil)
+		ui.twPollTicker = nil
+		ui.twJobID = "abc123"
+
+		cmd := ui.waitNextTWTick()
+		require.Nil(t, cmd)
+	})
+
+	t.Run("waitNextTWTick returns nil when jobID is empty", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithConfig(t, nil)
+		ui.twPollTicker = time.NewTicker(time.Hour)
+		ui.twJobID = ""
+
+		cmd := ui.waitNextTWTick()
+		require.Nil(t, cmd)
 	})
 }
