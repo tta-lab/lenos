@@ -627,6 +627,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.todoIsSpinning = false
 		}
 		m.renderPills()
+		cmds = append(cmds, m.waitNextTWTick())
 	case pubsub.Event[message.Message]:
 		// Check if this is a child session message for an agent tool.
 		if m.session == nil {
