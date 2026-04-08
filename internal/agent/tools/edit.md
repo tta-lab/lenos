@@ -7,11 +7,15 @@ Edits files by replacing text, creating new files, or deleting content. For movi
 </prerequisites>
 
 <parameters>
-1. file_path: Absolute path to file (required)
+1. file_path: Path to file — relative to working directory or absolute inside it (required)
 2. old_string: Text to replace (must match exactly including whitespace/indentation)
 3. new_string: Replacement text
 4. replace_all: Replace all occurrences (default false)
 </parameters>
+
+<limitations>
+- Paths must be inside the session's working directory. Operations that escape the working directory are rejected.
+</limitations>
 
 <special_cases>
 
