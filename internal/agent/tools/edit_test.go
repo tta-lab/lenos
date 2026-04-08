@@ -2,27 +2,49 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"charm.land/fantasy"
 	"github.com/stretchr/testify/require"
 )
 
-func runEditTool(t *testing.T, tool fantasy.AgentTool, ctx context.Context, params EditParams) fantasy.ToolResponse {
-	t.Helper()
-	input, err := json.Marshal(params)
-	require.NoError(t, err)
-	call := fantasy.ToolCall{
-		ID:    "test-edit-call",
-		Name:  EditToolName,
-		Input: string(input),
-	}
-	resp, err := tool.Run(ctx, call)
-	require.NoError(t, err)
-	return resp
+func TestEditTool_ContainedJoin_AcceptsInScopePaths(t *testing.T) {
+	t.Parallel()
+	workingDir := workingDirForTest(t.TempDir())
+	ft := &testFiletracker{}
+
+	// Pre-create a file to edit.
+	testFile := filepath.Join(workingDir, "existing.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("hello world"), 0o644))
+	ft.MarkAsRead("test-session", testFile)
+
+	tool := NewEditTool(nil, &testHistory{}, ft, workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+
+	// Relative path to existing file.
+	resp := runTool(t, tool, ctx, EditToolName, EditParams{
+		FilePath:  "existing.txt",
+		OldString: "world",
+		NewString: "lenos",
+	})
+	require.False(t, resp.IsError, "relative path should be accepted: %s", resp.Content)
+	require.Equal(t, "hello lenos", mustReadFile(t, testFile))
+
+	// Relative path in subdirectory.
+	subDir := filepath.Join(workingDir, "sub")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+	subFile := filepath.Join(subDir, "file.txt")
+	require.NoError(t, os.WriteFile(subFile, []byte("old content"), 0o644))
+	ft.MarkAsRead("test-session", subFile)
+
+	resp = runTool(t, tool, ctx, EditToolName, EditParams{
+		FilePath:  "sub/file.txt",
+		OldString: "old",
+		NewString: "new",
+	})
+	require.False(t, resp.IsError, "subdirectory path should be accepted: %s", resp.Content)
+	require.Equal(t, "new content", mustReadFile(t, subFile))
 }
 
 func TestEditTool_ContainedJoin_RejectsOutOfScopePaths(t *testing.T) {
@@ -32,32 +54,15 @@ func TestEditTool_ContainedJoin_RejectsOutOfScopePaths(t *testing.T) {
 	tool := NewEditTool(nil, nil, nil, workingDir)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 
-	// Absolute path outside working directory.
-	resp := runEditTool(t, tool, ctx, EditParams{
-		FilePath:  "/etc/passwd",
-		OldString: "root",
-		NewString: "hacker",
-	})
-	require.True(t, resp.IsError, "absolute path outside CWD should be rejected")
-	require.Contains(t, resp.Content, "escapes working directory")
-
-	// Relative path escaping via parent directory.
-	resp = runEditTool(t, tool, ctx, EditParams{
-		FilePath:  "../other/foo.txt",
-		OldString: "old",
-		NewString: "new",
-	})
-	require.True(t, resp.IsError, "path with .. should be rejected")
-	require.Contains(t, resp.Content, "escapes working directory")
-
-	// Deeply nested escape.
-	resp = runEditTool(t, tool, ctx, EditParams{
-		FilePath:  "sub/../../etc/passwd",
-		OldString: "old",
-		NewString: "new",
-	})
-	require.True(t, resp.IsError, "deeply nested escape should be rejected")
-	require.Contains(t, resp.Content, "escapes working directory")
+	for _, tc := range escapeCases {
+		resp := runTool(t, tool, ctx, EditToolName, EditParams{
+			FilePath:  tc.path,
+			OldString: "old",
+			NewString: "new",
+		})
+		require.True(t, resp.IsError, "%s should be rejected", tc.description)
+		require.Contains(t, resp.Content, "escapes working directory")
+	}
 }
 
 func TestEditTool_ContainedJoin_RejectionFiresBeforeFilesystemAccess(t *testing.T) {
@@ -71,8 +76,7 @@ func TestEditTool_ContainedJoin_RejectionFiresBeforeFilesystemAccess(t *testing.
 	tool := NewEditTool(nil, nil, nil, workingDir)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 
-	// Attempt to escape to a sibling directory.
-	resp := runEditTool(t, tool, ctx, EditParams{
+	resp := runTool(t, tool, ctx, EditToolName, EditParams{
 		FilePath:  "../" + filepath.Base(outsidePath),
 		OldString: "secret",
 		NewString: "XXX",
@@ -84,4 +88,27 @@ func TestEditTool_ContainedJoin_RejectionFiresBeforeFilesystemAccess(t *testing.
 	content, err := os.ReadFile(outsidePath)
 	require.NoError(t, err)
 	require.Equal(t, "secret content", string(content), "file outside workingDir should not have been modified")
+}
+
+func TestEditTool_ContainedJoin_AcceptsAbsolutePathInsideWorkingDir(t *testing.T) {
+	t.Parallel()
+	workingDir := workingDirForTest(t.TempDir())
+	ft := &testFiletracker{}
+
+	// Pre-create a file.
+	testFile := filepath.Join(workingDir, "absolute_inside.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("old content"), 0o644))
+	ft.MarkAsRead("test-session", testFile)
+
+	tool := NewEditTool(nil, &testHistory{}, ft, workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+
+	absInside := filepath.Join(workingDir, "absolute_inside.txt")
+	resp := runTool(t, tool, ctx, EditToolName, EditParams{
+		FilePath:  absInside,
+		OldString: "old",
+		NewString: "new",
+	})
+	require.False(t, resp.IsError, "absolute path inside workingDir should be accepted: %s", resp.Content)
+	require.Equal(t, "new content", mustReadFile(t, absInside))
 }

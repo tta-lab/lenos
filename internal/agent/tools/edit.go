@@ -73,7 +73,6 @@ func NewEditTool(
 			params.FilePath = filePath
 
 			var response fantasy.ToolResponse
-			err = nil
 
 			editCtx := editContext{ctx, files, filetracker, workingDir}
 
