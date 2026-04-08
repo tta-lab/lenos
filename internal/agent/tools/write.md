@@ -16,6 +16,7 @@ Creates or updates files in filesystem for saving/modifying text content.
 <limitations>
 - Read file before writing to avoid conflicts
 - Cannot append (rewrites entire file)
+- Paths must be inside the session's working directory. Writes that escape the working directory (e.g. via `../` or absolute paths outside it) are rejected.
 </limitations>
 
 <cross_platform>

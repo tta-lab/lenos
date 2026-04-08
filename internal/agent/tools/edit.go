@@ -65,10 +65,14 @@ func NewEditTool(
 				return fantasy.NewTextErrorResponse("file_path is required"), nil
 			}
 
-			params.FilePath = filepathext.SmartJoin(workingDir, params.FilePath)
+			filePath, err := filepathext.ContainedJoin(workingDir, params.FilePath)
+			if err != nil {
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+
+			params.FilePath = filePath
 
 			var response fantasy.ToolResponse
-			var err error
 
 			editCtx := editContext{ctx, files, filetracker, workingDir}
 
