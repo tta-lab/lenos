@@ -1142,7 +1142,7 @@ func DefaultStyles() Styles {
 	s.Tool.ErrorTag = base.Padding(0, 1).Background(red).Foreground(white)
 	s.Tool.ErrorMessage = base.Foreground(fgHalfMuted)
 
-	// Diff and multi-edit styles
+	// Diff styles
 	s.Tool.DiffTruncation = s.Muted.Background(bgBaseLighter).PaddingLeft(2)
 	s.Tool.NoteTag = base.Padding(0, 1).Background(info).Foreground(white)
 	s.Tool.NoteMessage = base.Foreground(fgHalfMuted)

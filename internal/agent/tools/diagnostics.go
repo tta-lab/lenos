@@ -86,7 +86,7 @@ func waitForLSPDiagnostics(
 }
 
 // notifyLSPs notifies LSP servers that a file has changed and waits for
-// updated diagnostics. Use this after edit/multiedit operations.
+// updated diagnostics. Use this after edit operations.
 func notifyLSPs(
 	ctx context.Context,
 	manager *lsp.Manager,

@@ -167,7 +167,7 @@ func newBaseToolMessageItem(
 	canceled bool,
 ) *baseToolMessageItem {
 	// we only do full width for diffs (as far as I know)
-	hasCappedWidth := toolCall.Name != tools.EditToolName && toolCall.Name != tools.MultiEditToolName
+	hasCappedWidth := toolCall.Name != tools.EditToolName
 
 	status := ToolStatusRunning
 	if canceled {
@@ -219,8 +219,6 @@ func NewToolMessageItem(
 		item = NewWriteToolMessageItem(sty, toolCall, result, canceled)
 	case tools.EditToolName:
 		item = NewEditToolMessageItem(sty, toolCall, result, canceled)
-	case tools.MultiEditToolName:
-		item = NewMultiEditToolMessageItem(sty, toolCall, result, canceled)
 	case tools.GlobToolName:
 		item = NewGlobToolMessageItem(sty, toolCall, result, canceled)
 	case tools.GrepToolName:
@@ -722,47 +720,6 @@ func formatNonZero(value int) string {
 	return fmt.Sprintf("%d", value)
 }
 
-// toolOutputMultiEditDiffContent renders a diff with optional failed edits note.
-func toolOutputMultiEditDiffContent(sty *styles.Styles, file string, meta tools.MultiEditResponseMetadata, totalEdits, width int, expanded bool) string {
-	bodyWidth := width - toolBodyLeftPaddingTotal
-
-	formatter := common.DiffFormatter(sty).
-		Before(file, meta.OldContent).
-		After(file, meta.NewContent).
-		Width(bodyWidth)
-
-	// Use split view for wide terminals.
-	if width > maxTextWidth {
-		formatter = formatter.Split()
-	}
-
-	formatted := formatter.String()
-	lines := strings.Split(formatted, "\n")
-
-	// Truncate if needed.
-	maxLines := responseContextHeight
-	if expanded {
-		maxLines = len(lines)
-	}
-
-	if len(lines) > maxLines && !expanded {
-		truncMsg := sty.Tool.DiffTruncation.
-			Width(bodyWidth).
-			Render(fmt.Sprintf(assistantMessageTruncateFormat, len(lines)-maxLines))
-		formatted = truncMsg + "\n" + strings.Join(lines[:maxLines], "\n")
-	}
-
-	// Add failed edits note if any exist.
-	if len(meta.EditsFailed) > 0 {
-		noteTag := sty.Tool.NoteTag.Render("Note")
-		noteMsg := fmt.Sprintf("%d of %d edits succeeded", meta.EditsApplied, totalEdits)
-		note := fmt.Sprintf("%s %s", noteTag, sty.Tool.NoteMessage.Render(noteMsg))
-		formatted = formatted + "\n\n" + note
-	}
-
-	return sty.Tool.Body.Render(formatted)
-}
-
 // roundedEnumerator creates a tree enumerator with rounded corners.
 func roundedEnumerator(lPadding, width int) tree.Enumerator {
 	if width == 0 {
@@ -884,14 +841,6 @@ func (t *baseToolMessageItem) formatParametersForCopy() string {
 		var params tools.EditParams
 		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
 			return fmt.Sprintf("**File:** %s", fsext.PrettyPath(params.FilePath))
-		}
-	case tools.MultiEditToolName:
-		var params tools.MultiEditParams
-		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
-			var parts []string
-			parts = append(parts, fmt.Sprintf("**File:** %s", fsext.PrettyPath(params.FilePath)))
-			parts = append(parts, fmt.Sprintf("**Edits:** %d", len(params.Edits)))
-			return strings.Join(parts, "\n")
 		}
 	case tools.WriteToolName:
 		var params tools.WriteParams
@@ -1032,8 +981,6 @@ func (t *baseToolMessageItem) formatResultForCopy() string {
 		return t.formatViewResultForCopy()
 	case tools.EditToolName:
 		return t.formatEditResultForCopy()
-	case tools.MultiEditToolName:
-		return t.formatMultiEditResultForCopy()
 	case tools.WriteToolName:
 		return t.formatWriteResultForCopy()
 	case tools.FetchToolName:
@@ -1157,40 +1104,6 @@ func (t *baseToolMessageItem) formatEditResultForCopy() string {
 
 	var result strings.Builder
 
-	if meta.OldContent != "" || meta.NewContent != "" {
-		fileName := params.FilePath
-		if fileName != "" {
-			fileName = fsext.PrettyPath(fileName)
-		}
-		diffContent, additions, removals := diff.GenerateDiff(meta.OldContent, meta.NewContent, fileName)
-
-		fmt.Fprintf(&result, "Changes: +%d -%d\n", additions, removals)
-		result.WriteString("```diff\n")
-		result.WriteString(diffContent)
-		result.WriteString("\n```")
-	}
-
-	return result.String()
-}
-
-// formatMultiEditResultForCopy formats multi-edit tool results for clipboard.
-func (t *baseToolMessageItem) formatMultiEditResultForCopy() string {
-	if t.result == nil || t.result.Metadata == "" {
-		if t.result != nil {
-			return t.result.Content
-		}
-		return ""
-	}
-
-	var meta tools.MultiEditResponseMetadata
-	if json.Unmarshal([]byte(t.result.Metadata), &meta) != nil {
-		return t.result.Content
-	}
-
-	var params tools.MultiEditParams
-	json.Unmarshal([]byte(t.toolCall.Input), &params)
-
-	var result strings.Builder
 	if meta.OldContent != "" || meta.NewContent != "" {
 		fileName := params.FilePath
 		if fileName != "" {
@@ -1368,8 +1281,6 @@ func prettifyToolName(name string) string {
 		return "Download"
 	case tools.EditToolName:
 		return "Edit"
-	case tools.MultiEditToolName:
-		return "Multi-Edit"
 	case tools.FetchToolName:
 		return "Fetch"
 	case tools.AgenticFetchToolName:
