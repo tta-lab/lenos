@@ -414,50 +414,6 @@ func TestCoderAgent(t *testing.T) {
 
 				require.True(t, foundLS, "Expected to find an ls operation")
 			})
-			t.Run("multiedit tool", func(t *testing.T) {
-				agent, env := setupAgent(t, pair)
-
-				session, err := env.sessions.Create(t.Context(), "New Session")
-				require.NoError(t, err)
-
-				res, err := agent.Run(t.Context(), SessionAgentCall{
-					Prompt:          "use multiedit to change 'Hello, World!' to 'Hello, Crush!' and add a comment '// Greeting' above the fmt.Println line in main.go",
-					SessionID:       session.ID,
-					MaxOutputTokens: 10000,
-				})
-				require.NoError(t, err)
-				assert.NotNil(t, res)
-
-				msgs, err := env.messages.List(t.Context(), session.ID)
-				require.NoError(t, err)
-
-				foundMultiEdit := false
-				var multiEditTCID string
-
-				for _, msg := range msgs {
-					if msg.Role == message.Assistant {
-						for _, tc := range msg.ToolCalls() {
-							if tc.Name == tools.MultiEditToolName {
-								multiEditTCID = tc.ID
-							}
-						}
-					}
-					if msg.Role == message.Tool {
-						for _, tr := range msg.ToolResults() {
-							if tr.ToolCallID == multiEditTCID {
-								foundMultiEdit = true
-							}
-						}
-					}
-				}
-
-				require.True(t, foundMultiEdit, "Expected to find a multiedit operation")
-
-				mainGoPath := filepath.Join(env.workingDir, "main.go")
-				content, err := os.ReadFile(mainGoPath)
-				require.NoError(t, err)
-				require.Contains(t, string(content), "Hello, Crush!", "Expected file to contain 'Hello, Crush!'")
-			})
 			t.Run("sourcegraph tool", func(t *testing.T) {
 				agent, env := setupAgent(t, pair)
 

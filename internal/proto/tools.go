@@ -158,37 +158,6 @@ type LSResponseMetadata struct {
 	Truncated     bool `json:"truncated"`
 }
 
-const MultiEditToolName = "multiedit"
-
-// MultiEditOperation represents a single edit operation in a multi-edit.
-type MultiEditOperation struct {
-	OldString  string `json:"old_string"`
-	NewString  string `json:"new_string"`
-	ReplaceAll bool   `json:"replace_all,omitempty"`
-}
-
-// MultiEditParams represents the parameters for the multi-edit tool.
-type MultiEditParams struct {
-	FilePath string               `json:"file_path"`
-	Edits    []MultiEditOperation `json:"edits"`
-}
-
-// MultiEditPermissionsParams represents the permission parameters for the multi-edit tool.
-type MultiEditPermissionsParams struct {
-	FilePath   string `json:"file_path"`
-	OldContent string `json:"old_content,omitempty"`
-	NewContent string `json:"new_content,omitempty"`
-}
-
-// MultiEditResponseMetadata represents the metadata for a multi-edit tool response.
-type MultiEditResponseMetadata struct {
-	Additions    int    `json:"additions"`
-	Removals     int    `json:"removals"`
-	OldContent   string `json:"old_content,omitempty"`
-	NewContent   string `json:"new_content,omitempty"`
-	EditsApplied int    `json:"edits_applied"`
-}
-
 const SourcegraphToolName = "sourcegraph"
 
 // SourcegraphParams represents the parameters for the sourcegraph tool.

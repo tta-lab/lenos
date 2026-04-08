@@ -463,7 +463,6 @@ func allToolNames() []string {
 		"bash",
 		"download",
 		"edit",
-		"multiedit",
 		"lsp_diagnostics",
 		"lsp_references",
 		"lsp_restart",
