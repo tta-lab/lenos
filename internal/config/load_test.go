@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/env"
@@ -454,64 +453,6 @@ func TestConfig_IsConfigured(t *testing.T) {
 
 		require.False(t, cfg.IsConfigured())
 	})
-}
-
-func TestConfig_setupAgentsWithNoDisabledTools(t *testing.T) {
-	cfg := &Config{
-		Options: &Options{
-			DisabledTools: []string{},
-		},
-	}
-
-	cfg.SetupAgents()
-	coderAgent, ok := cfg.Agents[AgentCoder]
-	require.True(t, ok)
-	assert.Equal(t, allToolNames(), coderAgent.AllowedTools)
-
-	taskAgent, ok := cfg.Agents[AgentTask]
-	require.True(t, ok)
-	assert.Equal(t, []string{"sourcegraph"}, taskAgent.AllowedTools)
-}
-
-func TestConfig_setupAgentsWithDisabledTools(t *testing.T) {
-	cfg := &Config{
-		Options: &Options{
-			DisabledTools: []string{
-				"edit",
-				"download",
-				"grep",
-			},
-		},
-	}
-
-	cfg.SetupAgents()
-	coderAgent, ok := cfg.Agents[AgentCoder]
-	require.True(t, ok)
-
-	assert.Equal(t, []string{"bash", "sourcegraph", "write"}, coderAgent.AllowedTools)
-
-	taskAgent, ok := cfg.Agents[AgentTask]
-	require.True(t, ok)
-	assert.Equal(t, []string{"sourcegraph"}, taskAgent.AllowedTools)
-}
-
-func TestConfig_setupAgentsWithEveryReadOnlyToolDisabled(t *testing.T) {
-	cfg := &Config{
-		Options: &Options{
-			DisabledTools: []string{
-				"sourcegraph",
-			},
-		},
-	}
-
-	cfg.SetupAgents()
-	coderAgent, ok := cfg.Agents[AgentCoder]
-	require.True(t, ok)
-	assert.Equal(t, []string{"bash", "write"}, coderAgent.AllowedTools)
-
-	taskAgent, ok := cfg.Agents[AgentTask]
-	require.True(t, ok)
-	assert.Len(t, taskAgent.AllowedTools, 0)
 }
 
 func TestConfig_configureProvidersWithDisabledProvider(t *testing.T) {

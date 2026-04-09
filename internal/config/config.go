@@ -60,7 +60,6 @@ const (
 
 const (
 	AgentCoder string = "coder"
-	AgentTask  string = "task"
 )
 
 type SelectedModel struct {
@@ -364,12 +363,6 @@ func resolveAllowedTools(allTools []string, disabledTools []string) []string {
 	return filterSlice(allTools, disabledTools, false)
 }
 
-func resolveReadOnlyTools(tools []string) []string {
-	readOnlyTools := []string{"glob", "grep", "ls", "sourcegraph", "view"}
-	// filter to only include tools that are in allowedtools (include mode)
-	return filterSlice(tools, readOnlyTools, true)
-}
-
 func filterSlice(data []string, mask []string, include bool) []string {
 	var filtered []string
 	for _, s := range data {
@@ -393,15 +386,6 @@ func (c *Config) SetupAgents() {
 			Model:        SelectedModelTypeLarge,
 			ContextPaths: c.Options.ContextPaths,
 			AllowedTools: allowedTools,
-		},
-
-		AgentTask: {
-			ID:           AgentTask,
-			Name:         "Task",
-			Description:  "An agent that helps with searching for context and finding implementation details.",
-			Model:        SelectedModelTypeLarge,
-			ContextPaths: c.Options.ContextPaths,
-			AllowedTools: resolveReadOnlyTools(allowedTools),
 		},
 	}
 	c.Agents = agents
