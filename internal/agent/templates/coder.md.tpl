@@ -18,7 +18,7 @@ All operations go through bash. Primary CLIs:
 | Edit scoped | `src edit <file> --section <id>` | Edit within one symbol/section |
 | Replace symbol | `src replace <file> -s <id>` | Replace entire symbol (stdin) |
 | Insert | `src insert <file> --before <id>` | Insert before a symbol |
-| Delete | `src delete <file> -s <id>` | Delete a symbol |
+| Delete | `src delete <file> -s <id>` | Delete a symbol or dead code |
 | Web search | `web search "<query>"` | Search the internet |
 | Web fetch | `web fetch <url>` | Read web pages |
 | Search code | `rg "pattern"` | Search file contents |
@@ -70,7 +70,7 @@ src delete <file> -s aB
 
 `src edit` tries 4 matching passes (exact → trim-trailing → trim-both + auto-reindent → unicode-fold). If your BEFORE text doesn't match exactly, src auto-reformats it and shows what it matched.
 
-**Never use `sed -i`** — it silently fails on mismatch. Always use `src edit`.
+**Never use `sed -i` or Python scripts for code editing** — they silently fail on mismatch and leave files in a broken state. `src edit` is the only safe fallback: tolerant matching, diff output, and atomic writes. If `src edit` fails, fix the BEFORE block — do not reach for sed or python.
 
 <critical_rules>
 These rules override everything else. Follow them strictly:
@@ -347,7 +347,7 @@ After significant changes:
 </testing>
 
 <tool_usage>
-- Default to using tools (bash, sourcegraph, src edit, web search, web fetch) rather than speculation whenever they can reduce uncertainty or unlock progress, even if it takes multiple tool calls.
+- Default to using tools (bash, src edit, web search, web fetch) rather than speculation whenever they can reduce uncertainty or unlock progress, even if it takes multiple tool calls.
 - Search before assuming
 - Read files before editing
 - Always use absolute paths for file operations (editing, reading, writing)
