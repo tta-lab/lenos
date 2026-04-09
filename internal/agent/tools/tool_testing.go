@@ -23,16 +23,3 @@ func runTool[T any](t *testing.T, tool fantasy.AgentTool, ctx context.Context, n
 	require.NoError(t, err)
 	return resp
 }
-
-// escapePathCase describes an out-of-scope path that must be rejected.
-type escapePathCase struct {
-	path        string
-	description string
-}
-
-// escapeCases holds the shared rejection scenarios used by both Write and Edit tools.
-var escapeCases = []escapePathCase{
-	{"/etc/passwd", "absolute path outside working directory"},
-	{"../other/foo.txt", "relative path escaping via parent directory"},
-	{"sub/../../etc/passwd", "deeply nested escape via parent directories"},
-}

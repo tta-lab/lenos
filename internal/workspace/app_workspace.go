@@ -262,8 +262,10 @@ func (w *AppWorkspace) ListModifiedFiles(ctx context.Context) ([]string, error) 
 		if line == "" {
 			continue
 		}
-		// porcelain format: XY filename
-		// X=index, Y=worktree status
+		// porcelain format: XY filename (2-char status + space + path)
+		if len(line) < 3 {
+			continue
+		}
 		filename := strings.TrimSpace(line[2:])
 		if filename != "" {
 			files = append(files, filename)
