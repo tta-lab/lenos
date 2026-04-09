@@ -9,21 +9,79 @@ Run `ttal skill list` once at the start of a session to see available shell-out 
 | Tool | Command | When to use |
 |------|---------|-------------|
 | Read file | `src <file>` | Browse file structure, read symbols |
-| Edit text | `src edit <file>` | Text replacement — tolerant 4-pass matching |
-| Edit scoped | `src edit <file> --section <id>` | Edit within one symbol/section only |
-| Replace symbol | `src replace <file> -s <id>` | Replace entire symbol (no text matching) |
-| Insert/delete | `src insert/delete` | Before/after a symbol |
+| Read symbol | `src <file> -s <id>` | Read a specific symbol by ID |
+| Edit text | `src edit <file>` | Raw text replacement via heredoc |
+| Edit scoped | `src edit <file> --section <id>` | Edit within one symbol/section |
+| Replace symbol | `src replace <file> -s <id>` | Replace entire symbol (stdin) |
+| Insert | `src insert <file> --before <id>` | Insert before a symbol |
+| Delete | `src delete <file> -s <id>` | Delete a symbol |
 | Shell search | `rg "pattern"` via bash | Search code content |
 | Shell commands | `bash` | `ls`, `tree`, `find`, `fd`, `go build`, `go test`, etc. |
-| Web search | `web search "<query>"` | Internet search |
+| Web search | `web search "<query>"` | Search the internet |
 | Web fetch | `web fetch <url>` | Read web pages |
-| Write file | `src edit` | Text replacement — tolerant 4-pass matching |
 
-**`src edit` workflow:** `src <file>` → find the symbol ID → `src edit <file> --section <id>` to scope the edit. For multi-symbol changes or global edits, use `src edit <file>` with `===BEFORE===`/`===AFTER===` blocks.
+### src Workflow
 
-`src edit` is **tolerant**: it matches in 4 passes (exact → trim-trailing → trim-both + auto-reindent → unicode-fold). You usually do not need exact whitespace. If it cannot match, it shows the closest region and tells you which pass failed. Use `--section <id>` to disambiguate when the same text appears in multiple places.
+**Step 1 — Scan:** `src <file>` shows a symbol tree with 2-char IDs:
 
-**Never use `sed -i`** for editing — it silently fails on mismatch. Always use `src edit`.
+```
+┌─ [aB] func main
+│  └─ [cD] var config
+└─ [eF] func run
+```
+
+**Step 2 — Read:** `src <file> -s aB` prints the full symbol source.
+
+**Step 3 — Edit:** Choose the right tool:
+
+```bash
+# Global text replacement (any file, any text):
+src edit <file> <<'EDIT'
+===BEFORE===
+old text
+===AFTER===
+new text
+EDIT
+
+# Scoped to one symbol — no disambiguation needed:
+src edit <file> --section aB <<'EOF'
+===BEFORE===
+<symbol content>
+===AFTER===
+<new content>
+EOF
+
+# Replace entire symbol by ID (stdin):
+echo "func newImpl() {}" | src replace <file> -s aB
+
+# Insert before/after a symbol:
+echo "// new" | src insert <file> --after aB
+
+# Delete a symbol:
+src delete <file> -s aB
+```
+
+### src edit is Tolerant
+
+`src edit` tries 4 matching passes (exact → trim-trailing → trim-both + auto-reindent → unicode-fold). If your BEFORE text doesn't match exactly, src auto-reformats it and shows what it matched.
+
+**Never use `sed -i`** — it silently fails on mismatch. Always use `src edit`.
+
+### Markdown Files
+
+Markdown uses heading-based sections instead of symbol IDs:
+
+```bash
+src README.md                 # shows heading tree with IDs
+src README.md -s 3K           # read section by heading ID
+src edit README.md --section 3K <<'EDIT'
+===BEFORE===
+old heading content
+===AFTER===
+new heading content
+EDIT
+src delete README.md -s 3K   # delete a section
+```
 
 <critical_rules>
 These rules override everything else. Follow them strictly:
