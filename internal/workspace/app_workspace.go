@@ -3,13 +3,11 @@ package workspace
 import (
 	"context"
 	"errors"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/app"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
 
@@ -159,26 +157,6 @@ func (w *AppWorkspace) InitCoderAgent(ctx context.Context) error {
 
 func (w *AppWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
 	return w.app.GetDefaultSmallModel(providerID)
-}
-
-// -- FileTracker --
-
-func (w *AppWorkspace) FileTrackerRecordRead(ctx context.Context, sessionID, path string) {
-	w.app.FileTracker.RecordRead(ctx, sessionID, path)
-}
-
-func (w *AppWorkspace) FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time {
-	return w.app.FileTracker.LastReadTime(ctx, sessionID, path)
-}
-
-func (w *AppWorkspace) FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
-	return w.app.FileTracker.ListReadFiles(ctx, sessionID)
-}
-
-// -- History --
-
-func (w *AppWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
-	return w.app.History.ListBySession(ctx, sessionID)
 }
 
 // -- Config (read-only) --

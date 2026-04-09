@@ -20,8 +20,6 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/db"
-	"github.com/tta-lab/lenos/internal/filetracker"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/session"
 
@@ -30,11 +28,9 @@ import (
 
 // fakeEnv is an environment for testing.
 type fakeEnv struct {
-	workingDir  string
-	sessions    session.Service
-	messages    message.Service
-	history     history.Service
-	filetracker *filetracker.Service
+	workingDir string
+	sessions   session.Service
+	messages   message.Service
 }
 
 type builderFunc func(t *testing.T, r *vcr.Recorder) (fantasy.LanguageModel, error)
@@ -111,8 +107,6 @@ func testEnv(t *testing.T) fakeEnv {
 	q := db.New(conn)
 	sessions := session.NewService(q, conn)
 	messages := message.NewService(q)
-	history := history.NewService(q, conn)
-	filetrackerService := filetracker.NewService(q)
 
 	t.Cleanup(func() {
 		conn.Close()
@@ -123,8 +117,6 @@ func testEnv(t *testing.T) fakeEnv {
 		workingDir,
 		sessions,
 		messages,
-		history,
-		&filetrackerService,
 	}
 }
 
@@ -198,7 +190,6 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	allTools := []fantasy.AgentTool{
 		tools.NewBashTool(env.workingDir, cfg.Config().Options.Attribution, modelName),
 		tools.NewSourcegraphTool(r.GetDefaultClient()),
-		tools.NewWriteTool(env.history, *env.filetracker, env.workingDir),
 	}
 
 	return testSessionAgent(env, large, small, systemPrompt, allTools...), nil

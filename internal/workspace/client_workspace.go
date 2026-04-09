@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/tta-lab/lenos/internal/agent/notify"
@@ -238,34 +237,6 @@ func (w *ClientWorkspace) GetDefaultSmallModel(providerID string) config.Selecte
 		return config.SelectedModel{}
 	}
 	return *model
-}
-
-// -- FileTracker --
-
-func (w *ClientWorkspace) FileTrackerRecordRead(ctx context.Context, sessionID, path string) {
-	_ = w.client.FileTrackerRecordRead(ctx, w.workspaceID(), sessionID, path)
-}
-
-func (w *ClientWorkspace) FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time {
-	t, err := w.client.FileTrackerLastReadTime(ctx, w.workspaceID(), sessionID, path)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
-}
-
-func (w *ClientWorkspace) FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
-	return w.client.FileTrackerListReadFiles(ctx, w.workspaceID(), sessionID)
-}
-
-// -- History --
-
-func (w *ClientWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
-	files, err := w.client.ListSessionHistoryFiles(ctx, w.workspaceID(), sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return protoToFiles(files), nil
 }
 
 // -- Config (read-only) --

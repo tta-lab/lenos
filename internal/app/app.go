@@ -26,9 +26,7 @@ import (
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/db"
 	"github.com/tta-lab/lenos/internal/event"
-	"github.com/tta-lab/lenos/internal/filetracker"
 	"github.com/tta-lab/lenos/internal/format"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
@@ -48,11 +46,8 @@ type UpdateAvailableMsg struct {
 }
 
 type App struct {
-	Sessions    session.Service
-	Messages    message.Service
-	History     history.Service
-	FileTracker filetracker.Service
-
+	Sessions         session.Service
+	Messages         message.Service
 	AgentCoordinator agent.Coordinator
 
 	config *config.ConfigStore
@@ -73,14 +68,11 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore) (*App, er
 	q := db.New(conn)
 	sessions := session.NewService(q, conn)
 	messages := message.NewService(q)
-	files := history.NewService(q, conn)
 	cfg := store.Config()
 
 	app := &App{
-		Sessions:    sessions,
-		Messages:    messages,
-		History:     files,
-		FileTracker: filetracker.NewService(q),
+		Sessions: sessions,
+		Messages: messages,
 
 		globalCtx: ctx,
 
@@ -443,7 +435,6 @@ func (app *App) setupEvents() {
 	app.eventsCtx = ctx
 	setupSubscriber(ctx, app.serviceEventsWG, "sessions", app.Sessions.Subscribe, app.events)
 	setupSubscriber(ctx, app.serviceEventsWG, "messages", app.Messages.Subscribe, app.events)
-	setupSubscriber(ctx, app.serviceEventsWG, "history", app.History.Subscribe, app.events)
 	setupSubscriber(ctx, app.serviceEventsWG, "agent-notifications", app.agentNotifications.Subscribe, app.events)
 
 	cleanupFunc := func(context.Context) error {
@@ -512,8 +503,6 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		app.config,
 		app.Sessions,
 		app.Messages,
-		app.History,
-		app.FileTracker,
 		app.agentNotifications,
 	)
 	if err != nil {

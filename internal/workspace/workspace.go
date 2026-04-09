@@ -6,12 +6,10 @@ package workspace
 
 import (
 	"context"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
 
@@ -57,14 +55,6 @@ type Workspace interface {
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel
-
-	// FileTracker
-	FileTrackerRecordRead(ctx context.Context, sessionID, path string)
-	FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time
-	FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error)
-
-	// History
-	ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error)
 
 	// Config (read-only data)
 	Config() *config.Config

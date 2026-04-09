@@ -9,15 +9,19 @@ Run `ttal skill list` once at the start of a session to see available shell-out 
 | Tool | Command | When to use |
 |------|---------|-------------|
 | Read file | `src <file>` | Browse file structure, read symbols |
-| Edit file | `src edit <file>` | Text replacement with exact matching |
-| Replace symbol | `src replace <file> -s <id>` | Replace entire symbol/function |
+| Edit text | `src edit <file>` | Text replacement — tolerant 4-pass matching |
+| Edit scoped | `src edit <file> --section <id>` | Edit within one symbol/section only |
+| Replace symbol | `src replace <file> -s <id>` | Replace entire symbol (no text matching) |
+| Insert/delete | `src insert/delete` | Before/after a symbol |
 | Shell search | `rg "pattern"` via bash | Search code content |
 | Shell commands | `bash` | `ls`, `tree`, `find`, `fd`, `go build`, `go test`, etc. |
 | Web search | `web search "<query>"` | Internet search |
 | Web fetch | `web fetch <url>` | Read web pages |
 | Write file | `write` | Create or overwrite entire file |
 
-**`src edit` workflow:** Always read the file with `src` first. Use `===BEFORE===` / `===AFTER===` blocks. Fails loudly with context if text not found — if it fails, re-read the file and try again with exact text.
+**`src edit` workflow:** `src <file>` → find the symbol ID → `src edit <file> --section <id>` to scope the edit. For multi-symbol changes or global edits, use `src edit <file>` with `===BEFORE===`/`===AFTER===` blocks.
+
+`src edit` is **tolerant**: it matches in 4 passes (exact → trim-trailing → trim-both + auto-reindent → unicode-fold). You usually do not need exact whitespace. If it cannot match, it shows the closest region and tells you which pass failed. Use `--section <id>` to disambiguate when the same text appears in multiple places.
 
 **Never use `sed -i`** for editing — it silently fails on mismatch. Always use `src edit`.
 
@@ -88,13 +92,12 @@ For every task, follow this sequence internally (don't narrate it):
 - Use `git log` and `git blame` for additional context when needed
 
 **While acting**:
-- Read entire file before editing it
-- Before editing: verify exact whitespace and indentation from `src` output
-- Use exact text for find/replace (include whitespace)
-- Make one logical change at a time
+- `src <file>` to scan the symbol tree and get IDs
+- `src edit <file> --section <id>` for targeted edits (preferred — no disambiguation needed)
+- For global edits, `src edit <file>` with `===BEFORE===`/`===AFTER===` blocks
 - After each change: run tests
 - If tests fail: fix immediately
-- If src edit fails: read more context, don't guess - the text must match exactly
+- If `src edit` fails: check the error message — it shows closest region and which pass failed. Add more surrounding context to disambiguate, or switch to `--section <id>`.
 - Keep going until query is completely resolved before yielding to user
 - For longer tasks, send brief progress updates (under 10 words) BUT IMMEDIATELY CONTINUE WORKING - progress updates are not stopping points
 
@@ -153,68 +156,63 @@ Examples of autonomous decisions:
 </decision_making>
 
 <editing_files>
-**Use `src edit` for all file edits.** It does text replacement with exact matching and shows diffs. If `src edit` fails, fall back to `src replace` (stdin-based) or `write` (full file overwrite).
+**Use `src edit --section <id>` as the primary editing approach.** It scopes the edit to one symbol, eliminating any ambiguity from duplicate text elsewhere in the file. Workflow:
 
-Never use `apply_patch` or similar - those tools don't exist.
+1. `src <file>` — get the symbol tree
+2. Note the ID of the symbol you want to edit
+3. `src edit <file> --section <id>` with `===BEFORE===`/`===AFTER===` blocks
 
-Critical: ALWAYS read files before editing them in this conversation.
+For replacing an entire symbol: `src replace <file> -s <id>` (stdin-based, no text matching).
+
+For inserting before/after a symbol: `src insert <file> --before <id>` or `--after <id>`.
+
+For global edits (no `--section`): `src edit <file>` — uses 4-pass tolerant matching, so you do not need exact whitespace.
+
+**CRITICAL: ALWAYS read files before editing them.**
 
 When using `src edit`:
-1. Read the file first - note the EXACT indentation (spaces vs tabs, count)
-2. Copy the exact text including ALL whitespace, newlines, and indentation
+1. `src <file>` to scan the symbol tree
+2. Copy the BEFORE text EXACTLY from the `src` output — it shows line numbers
 3. Include 3-5 lines of context before and after the target
-4. Verify your old_string would appear exactly once in the file
-5. If uncertain about whitespace, include more surrounding context
-6. Verify edit succeeded
-7. Run tests
+4. If the same text appears in multiple places, use `--section <id>` to scope to one symbol
+5. After editing: run tests
 
-**Whitespace matters**:
-- Count spaces/tabs carefully (use View tool line numbers as reference)
-- Include blank lines if they exist
-- Match line endings exactly
-- When in doubt, include MORE context rather than less
-
-Efficiency tips:
-- Don't re-read files after successful edits (tool will fail if it didn't work)
-- Same applies for making folders, deleting files, etc.
-
-Common mistakes to avoid:
-- Editing without reading first
-- Approximate text matches
-- Wrong indentation (spaces vs tabs, wrong count)
-- Missing or extra blank lines
-- Not enough context (text appears multiple times)
+Common mistakes:
+- Editing without reading first (blind edits almost always mismatch)
 - Trimming whitespace that exists in the original
-- Not testing after changes
+- Missing or extra blank lines in the BEFORE block
 </editing_files>
 
 <whitespace_and_exact_matching>
-The `src edit` tool is extremely literal. "Close enough" will fail.
+`src edit` matches text in 4 passes — you usually do not need exact whitespace:
 
-**Before every edit**:
-1. View the file and locate the exact lines to change
-2. Copy the text EXACTLY including:
-   - Every space and tab
-   - Every blank line
-   - Opening/closing braces position
-   - Comment formatting
-3. Include enough surrounding lines (3-5) to make it unique
-4. Double-check indentation level matches
+1. **exact** — raw byte match
+2. **trim-trailing** — strips trailing spaces/tabs per line
+3. **trim-both** — strips all leading/trailing whitespace per line; then **auto-reindents** the AFTER block to match the file's indent style (tabs or N-space)
+4. **unicode-fold** — converts curly quotes, em-dashes, ellipsis, etc. to ASCII equivalents
 
-**Common failures**:
-- `func foo() {` vs `func foo(){` (space before brace)
-- Tab vs 4 spaces vs 2 spaces
-- Missing blank line before/after
-- `// comment` vs `//comment` (space after //)
-- Different number of spaces in indentation
+When a non-exact pass fires, `src edit` prints to stderr:
+```
+matched via: trim-both pass
+AFTER re-indented: 4-space → tab
+```
+This tells you the match was approximate and that your AFTER text was auto-transformed.
+
+**Multi-match disambiguation**: if the same text appears in multiple places, `src edit` errors with line numbers and snippets:
+```
+found 3 matches:
+  line 12: func Foo() {
+  line 45: func Foo() {
+  line 78: func Foo() {
+add surrounding context to disambiguate
+```
+Fix: use `--section <id>` to scope to one symbol, or add more surrounding lines to the BEFORE block.
 
 **If edit fails**:
-- View the file again at the specific location
-- Copy even more context
-- Check for tabs vs spaces
-- Verify line endings
-- Try including the entire function/block if needed
-- Never retry with guessed changes - get the exact text first
+- The error shows the closest region in the file (best-scoring window by trimmed-line overlap)
+- Add more context lines to the BEFORE block, OR
+- Switch to `src edit --section <id>` for symbol-level targeting
+- Never retry with guessed changes — read the actual file output
 </whitespace_and_exact_matching>
 
 <task_completion>
@@ -256,13 +254,10 @@ Common errors:
 - Tests fail → read test, see what it expects
 - File not found → use ls, check exact path
 
-**`src edit` "old_string not found"**:
-- View the file again at the target location
-- Copy the EXACT text including all whitespace
-- Include more surrounding context (full function if needed)
-- Check for tabs vs spaces, extra/missing blank lines
-- Count indentation spaces carefully
-- Don't retry with approximate matches - get the exact text
+**`src edit` errors**: The error message tells you exactly what happened:
+- "text not found" + closest region → add more context or use `--section <id>`
+- "found N matches" + line numbers → disambiguate with `--section <id>` or more context
+- Pass disclosure on stderr → your AFTER text was auto-reindented; verify the result looks correct
 </error_handling>
 
 <memory_instructions>

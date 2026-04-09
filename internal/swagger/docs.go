@@ -10,12 +10,12 @@ const docTemplate = `{
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
         "contact": {
-            "name": "Lenos",
+            "name": "tta-lab",
             "url": "https://github.com/tta-lab/lenos"
         },
         "license": {
-            "name": "MIT",
-            "url": "https://github.com/tta-lab/lenos/blob/main/LICENSE"
+            "name": "FSL-1.1-MIT",
+            "url": "https://github.com/tta-lab/lenos/blob/main/LICENSE.md"
         },
         "version": "{{.Version}}"
     },
@@ -239,13 +239,6 @@ const docTemplate = `{
         },
         "/workspaces/{id}/agent": {
             "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "agent"
-                ],
-                "summary": "Get agent info",
                 "parameters": [
                     {
                         "type": "string",
@@ -1242,497 +1235,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/workspaces/{id}/lsps": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "lsp"
-                ],
-                "summary": "List LSP clients",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "$ref": "#/definitions/proto.LSPClientInfo"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/lsps/start": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "lsp"
-                ],
-                "summary": "Start LSP server",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "LSP start request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proto.LSPStartRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/lsps/stop": {
-            "post": {
-                "tags": [
-                    "lsp"
-                ],
-                "summary": "Stop all LSP servers",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/lsps/{lsp}/diagnostics": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "lsp"
-                ],
-                "summary": "Get LSP diagnostics",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "LSP client name",
-                        "name": "lsp",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/mcp/get-prompt": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "mcp"
-                ],
-                "summary": "Get MCP prompt",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "MCP get prompt request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proto.MCPGetPromptRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/proto.MCPGetPromptResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/mcp/read-resource": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "mcp"
-                ],
-                "summary": "Read MCP resource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "MCP read resource request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proto.MCPReadResourceRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/mcp/refresh-prompts": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "mcp"
-                ],
-                "summary": "Refresh MCP prompts",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "MCP name request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proto.MCPNameRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/mcp/refresh-resources": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "mcp"
-                ],
-                "summary": "Refresh MCP resources",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "MCP name request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proto.MCPNameRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/mcp/refresh-tools": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "mcp"
-                ],
-                "summary": "Refresh MCP tools",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "MCP name request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proto.MCPNameRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/mcp/states": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "mcp"
-                ],
-                "summary": "Get MCP client states",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "$ref": "#/definitions/proto.MCPClientInfo"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
         "/workspaces/{id}/messages/user": {
             "get": {
                 "produces": [
@@ -1757,150 +1259,8 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_tta_lab_lenos_internal_proto.Message"
+                                "$ref": "#/definitions/github_com_tta-lab_lenos_internal_proto.Message"
                             }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/permissions/grant": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "permissions"
-                ],
-                "summary": "Grant permission",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Permission grant",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proto.PermissionGrant"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{id}/permissions/skip": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "permissions"
-                ],
-                "summary": "Get skip permissions status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/proto.PermissionSkipRequest"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "permissions"
-                ],
-                "summary": "Set skip permissions",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Permission skip request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proto.PermissionSkipRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
                         }
                     },
                     "404": {
@@ -2074,45 +1434,7 @@ const docTemplate = `{
         },
         "/workspaces/{id}/sessions": {
             "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "List sessions",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Workspace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/proto.Session"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/proto.Error"
-                        }
-                    }
-                }
+                "responses": {}
             },
             "post": {
                 "consumes": [
@@ -2451,7 +1773,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_tta_lab_lenos_internal_proto.Message"
+                                "$ref": "#/definitions/github_com_tta-lab_lenos_internal_proto.Message"
                             }
                         }
                     },
@@ -2501,7 +1823,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_tta_lab_lenos_internal_proto.Message"
+                                "$ref": "#/definitions/github_com_tta-lab_lenos_internal_proto.Message"
                             }
                         }
                     },
@@ -2618,122 +1940,6 @@ const docTemplate = `{
                 }
             }
         },
-        "config.LSPConfig": {
-            "type": "object",
-            "properties": {
-                "args": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "command": {
-                    "type": "string"
-                },
-                "disabled": {
-                    "type": "boolean"
-                },
-                "env": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "filetypes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "init_options": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "options": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "root_markers": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "timeout": {
-                    "type": "integer"
-                }
-            }
-        },
-        "config.LSPs": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/definitions/config.LSPConfig"
-            }
-        },
-        "config.MCPConfig": {
-            "type": "object",
-            "properties": {
-                "args": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "command": {
-                    "type": "string"
-                },
-                "disabled": {
-                    "type": "boolean"
-                },
-                "disabled_tools": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "env": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "headers": {
-                    "description": "TODO: maybe make it possible to get the value from the env",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "timeout": {
-                    "type": "integer"
-                },
-                "type": {
-                    "$ref": "#/definitions/config.MCPType"
-                },
-                "url": {
-                    "type": "string"
-                }
-            }
-        },
-        "config.MCPType": {
-            "type": "string",
-            "enum": [
-                "stdio",
-                "sse",
-                "http"
-            ],
-            "x-enum-varnames": [
-                "MCPStdio",
-                "MCPSSE",
-                "MCPHttp"
-            ]
-        },
-        "config.MCPs": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/definitions/config.MCPConfig"
-            }
-        },
         "config.Permissions": {
             "type": "object",
             "properties": {
@@ -2744,17 +1950,6 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "config.Scope": {
-            "type": "integer",
-            "enum": [
-                0,
-                1
-            ],
-            "x-enum-varnames": [
-                "ScopeGlobal",
-                "ScopeWorkspace"
-            ]
         },
         "config.SelectedModel": {
             "type": "object",
@@ -2824,6 +2019,9 @@ const docTemplate = `{
                 "diff_mode": {
                     "type": "string"
                 },
+                "show_thinking": {
+                    "type": "boolean"
+                },
                 "transparent": {
                     "type": "boolean"
                 }
@@ -2875,17 +2073,11 @@ const docTemplate = `{
         "csync.Map-string-config_ProviderConfig": {
             "type": "object"
         },
-        "github_com_tta_lab_lenos_internal_config.Config": {
+        "github_com_tta-lab_lenos_internal_config.Config": {
             "type": "object",
             "properties": {
                 "$schema": {
                     "type": "string"
-                },
-                "lsp": {
-                    "$ref": "#/definitions/config.LSPs"
-                },
-                "mcp": {
-                    "$ref": "#/definitions/config.MCPs"
                 },
                 "models": {
                     "description": "We currently only support large/small as values here.",
@@ -2895,7 +2087,7 @@ const docTemplate = `{
                     }
                 },
                 "options": {
-                    "$ref": "#/definitions/github_com_tta_lab_lenos_internal_config.Options"
+                    "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Options"
                 },
                 "permissions": {
                     "$ref": "#/definitions/config.Permissions"
@@ -2923,14 +2115,17 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_tta_lab_lenos_internal_config.Options": {
+        "github_com_tta-lab_lenos_internal_config.Options": {
             "type": "object",
             "properties": {
+                "agent_paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "attribution": {
                     "$ref": "#/definitions/config.Attribution"
-                },
-                "auto_lsp": {
-                    "type": "boolean"
                 },
                 "context_paths": {
                     "type": "array",
@@ -2943,9 +2138,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "debug": {
-                    "type": "boolean"
-                },
-                "debug_lsp": {
                     "type": "boolean"
                 },
                 "disable_auto_summarize": {
@@ -2962,6 +2154,12 @@ const docTemplate = `{
                 },
                 "disable_provider_auto_update": {
                     "type": "boolean"
+                },
+                "disabled_skills": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "disabled_tools": {
                     "type": "array",
@@ -2986,7 +2184,18 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_tta_lab_lenos_internal_proto.Message": {
+        "github_com_tta-lab_lenos_internal_config.Scope": {
+            "type": "integer",
+            "enum": [
+                0,
+                1
+            ],
+            "x-enum-varnames": [
+                "ScopeGlobal",
+                "ScopeWorkspace"
+            ]
+        },
+        "github_com_tta-lab_lenos_internal_proto.Message": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -3015,25 +2224,6 @@ const docTemplate = `{
                     "type": "integer"
                 }
             }
-        },
-        "lsp.ServerState": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5
-            ],
-            "x-enum-varnames": [
-                "StateUnstarted",
-                "StateStarting",
-                "StateReady",
-                "StateError",
-                "StateStopped",
-                "StateDisabled"
-            ]
         },
         "proto.AgentInfo": {
             "type": "object",
@@ -3134,7 +2324,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "scope": {
-                    "$ref": "#/definitions/config.Scope"
+                    "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Scope"
                 }
             }
         },
@@ -3148,7 +2338,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/config.SelectedModelType"
                 },
                 "scope": {
-                    "$ref": "#/definitions/config.Scope"
+                    "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Scope"
                 }
             }
         },
@@ -3160,7 +2350,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "scope": {
-                    "$ref": "#/definitions/config.Scope"
+                    "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Scope"
                 }
             }
         },
@@ -3171,7 +2361,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "scope": {
-                    "$ref": "#/definitions/config.Scope"
+                    "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Scope"
                 }
             }
         },
@@ -3182,7 +2372,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "scope": {
-                    "$ref": "#/definitions/config.Scope"
+                    "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Scope"
                 }
             }
         },
@@ -3193,7 +2383,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "scope": {
-                    "$ref": "#/definitions/config.Scope"
+                    "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Scope"
                 },
                 "value": {}
             }
@@ -3252,115 +2442,6 @@ const docTemplate = `{
                 "token": {}
             }
         },
-        "proto.LSPClientInfo": {
-            "type": "object",
-            "properties": {
-                "connected_at": {
-                    "type": "string"
-                },
-                "diagnostic_count": {
-                    "type": "integer"
-                },
-                "error": {},
-                "name": {
-                    "type": "string"
-                },
-                "state": {
-                    "$ref": "#/definitions/lsp.ServerState"
-                }
-            }
-        },
-        "proto.LSPStartRequest": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string"
-                }
-            }
-        },
-        "proto.MCPClientInfo": {
-            "type": "object",
-            "properties": {
-                "connected_at": {
-                    "type": "string"
-                },
-                "error": {},
-                "name": {
-                    "type": "string"
-                },
-                "prompt_count": {
-                    "type": "integer"
-                },
-                "resource_count": {
-                    "type": "integer"
-                },
-                "state": {
-                    "$ref": "#/definitions/proto.MCPState"
-                },
-                "tool_count": {
-                    "type": "integer"
-                }
-            }
-        },
-        "proto.MCPGetPromptRequest": {
-            "type": "object",
-            "properties": {
-                "args": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "client_id": {
-                    "type": "string"
-                },
-                "prompt_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "proto.MCPGetPromptResponse": {
-            "type": "object",
-            "properties": {
-                "prompt": {
-                    "type": "string"
-                }
-            }
-        },
-        "proto.MCPNameRequest": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "proto.MCPReadResourceRequest": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "uri": {
-                    "type": "string"
-                }
-            }
-        },
-        "proto.MCPState": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2,
-                3
-            ],
-            "x-enum-varnames": [
-                "MCPStateDisabled",
-                "MCPStateStarting",
-                "MCPStateConnected",
-                "MCPStateError"
-            ]
-        },
         "proto.MessageRole": {
             "type": "string",
             "enum": [
@@ -3375,65 +2456,6 @@ const docTemplate = `{
                 "System",
                 "Tool"
             ]
-        },
-        "proto.PermissionAction": {
-            "type": "string",
-            "enum": [
-                "allow",
-                "allow_session",
-                "deny"
-            ],
-            "x-enum-varnames": [
-                "PermissionAllow",
-                "PermissionAllowForSession",
-                "PermissionDeny"
-            ]
-        },
-        "proto.PermissionGrant": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "$ref": "#/definitions/proto.PermissionAction"
-                },
-                "permission": {
-                    "$ref": "#/definitions/proto.PermissionRequest"
-                }
-            }
-        },
-        "proto.PermissionRequest": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "params": {},
-                "path": {
-                    "type": "string"
-                },
-                "session_id": {
-                    "type": "string"
-                },
-                "tool_call_id": {
-                    "type": "string"
-                },
-                "tool_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "proto.PermissionSkipRequest": {
-            "type": "object",
-            "properties": {
-                "skip": {
-                    "type": "boolean"
-                }
-            }
         },
         "proto.ProjectInitPromptResponse": {
             "type": "object",
@@ -3515,7 +2537,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "config": {
-                    "$ref": "#/definitions/github_com_tta_lab_lenos_internal_config.Config"
+                    "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Config"
                 },
                 "data_dir": {
                     "type": "string"
@@ -3537,9 +2559,6 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "string"
-                },
-                "yolo": {
-                    "type": "boolean"
                 }
             }
         },
@@ -3577,7 +2596,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/v1",
 	Schemes:          []string{},
 	Title:            "Lenos API",
-	Description:      "Lenos is a terminal-based AI coding assistant. This API is served over a Unix socket (or Windows named pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP, and more.",
+	Description:      "Lenos is a terminal-based AI coding assistant and interactive runtime for the ttal ecosystem. This API is served over a Unix socket (or Windows named pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP, and more.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

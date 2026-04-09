@@ -303,28 +303,6 @@ func (c *controllerV1) handleGetWorkspaceSession(w http.ResponseWriter, r *http.
 	jsonEncode(w, sessionToProto(sess))
 }
 
-// handleGetWorkspaceSessionHistory returns the history for a session.
-//
-//	@Summary		Get session history
-//	@Tags			sessions
-//	@Produce		json
-//	@Param			id	path		string		true	"Workspace ID"
-//	@Param			sid	path		string		true	"Session ID"
-//	@Success		200	{array}		proto.File
-//	@Failure		404	{object}	proto.Error
-//	@Failure		500	{object}	proto.Error
-//	@Router			/workspaces/{id}/sessions/{sid}/history [get]
-func (c *controllerV1) handleGetWorkspaceSessionHistory(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	sid := r.PathValue("sid")
-	history, err := c.backend.ListSessionHistory(r.Context(), id, sid)
-	if err != nil {
-		c.handleError(w, r, err)
-		return
-	}
-	jsonEncode(w, history)
-}
-
 // handleGetWorkspaceSessionMessages returns all messages for a session.
 //
 //	@Summary		Get session messages
@@ -439,82 +417,6 @@ func (c *controllerV1) handleGetWorkspaceAllUserMessages(w http.ResponseWriter, 
 		return
 	}
 	jsonEncode(w, messagesToProto(messages))
-}
-
-// handleGetWorkspaceSessionFileTrackerFiles lists files read in a session.
-//
-//	@Summary		List tracked files for session
-//	@Tags			filetracker
-//	@Produce		json
-//	@Param			id	path		string		true	"Workspace ID"
-//	@Param			sid	path		string		true	"Session ID"
-//	@Success		200	{array}		string
-//	@Failure		404	{object}	proto.Error
-//	@Failure		500	{object}	proto.Error
-//	@Router			/workspaces/{id}/sessions/{sid}/filetracker/files [get]
-func (c *controllerV1) handleGetWorkspaceSessionFileTrackerFiles(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	sid := r.PathValue("sid")
-	files, err := c.backend.FileTrackerListReadFiles(r.Context(), id, sid)
-	if err != nil {
-		c.handleError(w, r, err)
-		return
-	}
-	jsonEncode(w, files)
-}
-
-// handlePostWorkspaceFileTrackerRead records a file read event.
-//
-//	@Summary		Record file read
-//	@Tags			filetracker
-//	@Accept			json
-//	@Param			id		path	string							true	"Workspace ID"
-//	@Param			request	body	proto.FileTrackerReadRequest	true	"File tracker read request"
-//	@Success		200
-//	@Failure		400	{object}	proto.Error
-//	@Failure		404	{object}	proto.Error
-//	@Failure		500	{object}	proto.Error
-//	@Router			/workspaces/{id}/filetracker/read [post]
-func (c *controllerV1) handlePostWorkspaceFileTrackerRead(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-
-	var req proto.FileTrackerReadRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		c.server.logError(r, "Failed to decode request", "error", err)
-		jsonError(w, http.StatusBadRequest, "failed to decode request")
-		return
-	}
-
-	if err := c.backend.FileTrackerRecordRead(r.Context(), id, req.SessionID, req.Path); err != nil {
-		c.handleError(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-// handleGetWorkspaceFileTrackerLastRead returns the last read time for a file.
-//
-//	@Summary		Get last read time for file
-//	@Tags			filetracker
-//	@Produce		json
-//	@Param			id			path		string	true	"Workspace ID"
-//	@Param			session_id	query		string	false	"Session ID"
-//	@Param			path		query		string	true	"File path"
-//	@Success		200			{object}	object
-//	@Failure		404			{object}	proto.Error
-//	@Failure		500			{object}	proto.Error
-//	@Router			/workspaces/{id}/filetracker/lastread [get]
-func (c *controllerV1) handleGetWorkspaceFileTrackerLastRead(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	sid := r.URL.Query().Get("session_id")
-	path := r.URL.Query().Get("path")
-
-	t, err := c.backend.FileTrackerLastReadTime(r.Context(), id, sid, path)
-	if err != nil {
-		c.handleError(w, r, err)
-		return
-	}
-	jsonEncode(w, t)
 }
 
 // @Param			id	path		string			true	"Workspace ID"

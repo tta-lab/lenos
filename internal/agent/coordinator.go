@@ -22,8 +22,6 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/filetracker"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
@@ -72,12 +70,10 @@ type Coordinator interface {
 }
 
 type coordinator struct {
-	cfg         *config.ConfigStore
-	sessions    session.Service
-	messages    message.Service
-	history     history.Service
-	filetracker filetracker.Service
-	notify      pubsub.Publisher[notify.Notification]
+	cfg      *config.ConfigStore
+	sessions session.Service
+	messages message.Service
+	notify   pubsub.Publisher[notify.Notification]
 
 	currentAgent SessionAgent
 	agents       map[string]SessionAgent
@@ -90,18 +86,14 @@ func NewCoordinator(
 	cfg *config.ConfigStore,
 	sessions session.Service,
 	messages message.Service,
-	history history.Service,
-	filetracker filetracker.Service,
 	notify pubsub.Publisher[notify.Notification],
 ) (Coordinator, error) {
 	c := &coordinator{
-		cfg:         cfg,
-		sessions:    sessions,
-		messages:    messages,
-		history:     history,
-		filetracker: filetracker,
-		notify:      notify,
-		agents:      make(map[string]SessionAgent),
+		cfg:      cfg,
+		sessions: sessions,
+		messages: messages,
+		notify:   notify,
+		agents:   make(map[string]SessionAgent),
 	}
 
 	agentCfg, ok := cfg.Config().Agents[config.AgentCoder]
@@ -424,7 +416,6 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fan
 	allTools := []fantasy.AgentTool{
 		tools.NewBashTool(c.cfg.WorkingDir(), c.cfg.Config().Options.Attribution, modelName),
 		tools.NewSourcegraphTool(nil),
-		tools.NewWriteTool(c.history, c.filetracker, c.cfg.WorkingDir()),
 	}
 
 	return allTools, nil
