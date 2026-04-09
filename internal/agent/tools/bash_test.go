@@ -59,7 +59,7 @@ func TestBashTool_MissingCommand(t *testing.T) {
 
 func newBashToolForTest(workingDir string) fantasy.AgentTool {
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
-	return NewBashTool(workingDir, attribution, "test-model")
+	return NewBashTool(workingDir, attribution, "test-model", nil)
 }
 
 func runBashTool(t *testing.T, tool fantasy.AgentTool, ctx context.Context, params BashParams) fantasy.ToolResponse {

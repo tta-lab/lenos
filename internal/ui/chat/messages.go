@@ -291,6 +291,8 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, toolResults m
 			))
 		}
 		return items
+	case message.Result:
+		return []MessageItem{NewResultMessageItem(sty, msg)}
 	}
 	return []MessageItem{}
 }

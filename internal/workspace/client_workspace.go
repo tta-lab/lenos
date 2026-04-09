@@ -14,6 +14,7 @@ import (
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
+	"github.com/tta-lab/logos"
 
 	"github.com/tta-lab/lenos/internal/proto"
 	"github.com/tta-lab/lenos/internal/pubsub"
@@ -226,7 +227,7 @@ func (w *ClientWorkspace) UpdateAgentModel(ctx context.Context) error {
 	return w.client.UpdateAgent(ctx, w.workspaceID())
 }
 
-func (w *ClientWorkspace) InitCoderAgent(ctx context.Context) error {
+func (w *ClientWorkspace) InitCoderAgent(ctx context.Context, _ logos.CommandRunner) error {
 	return w.client.InitiateAgentProcessing(ctx, w.workspaceID())
 }
 

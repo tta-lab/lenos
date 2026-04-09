@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"charm.land/fantasy"
+	"github.com/stretchr/testify/require"
 )
 
 func makeTestAttachments(n int, contentSize int) []Attachment {
@@ -42,4 +45,22 @@ func BenchmarkPromptWithTextAttachments(b *testing.B) {
 			}
 		})
 	}
+}
+
+func TestToAIMessage_Result(t *testing.T) {
+	t.Parallel()
+
+	msg := Message{
+		Role: Result,
+		Parts: []ContentPart{
+			TextContent{Text: "command output text"},
+		},
+	}
+	result := msg.ToAIMessage()
+	require.Len(t, result, 1)
+	require.Equal(t, fantasy.MessageRoleUser, result[0].Role)
+	require.Len(t, result[0].Content, 1)
+	text, ok := result[0].Content[0].(fantasy.TextPart)
+	require.True(t, ok, "expected TextPart, got %T", result[0].Content[0])
+	require.Equal(t, "command output text", text.Text)
 }

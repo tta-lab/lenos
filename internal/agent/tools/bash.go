@@ -15,6 +15,7 @@ import (
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/shell"
+	"github.com/tta-lab/logos"
 )
 
 type BashParams struct {
@@ -64,7 +65,7 @@ func bashDescription(attribution *config.Attribution, modelName string) string {
 	return out.String()
 }
 
-func NewBashTool(workingDir string, attribution *config.Attribution, modelName string) fantasy.AgentTool {
+func NewBashTool(workingDir string, attribution *config.Attribution, modelName string, cr logos.CommandRunner) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		BashToolName,
 		bashDescription(attribution, modelName),
@@ -79,14 +80,30 @@ func NewBashTool(workingDir string, attribution *config.Attribution, modelName s
 			}
 
 			startTime := time.Now()
+			var stdout string
 
-			sh := shell.NewShell(&shell.Options{
-				WorkingDir: execWorkingDir,
-			})
-
-			stdout, stderr, execErr := sh.Exec(ctx, params.Command)
-
-			stdout = formatOutput(stdout, stderr, execErr)
+			if cr != nil {
+				// Use temenos sandbox for real bash execution.
+				resp, err := cr.Run(ctx, logos.RunRequest{
+					Command: params.Command,
+				})
+				if err != nil {
+					return fantasy.NewTextErrorResponse("bash: " + err.Error()), nil
+				}
+				stdout = formatOutput(resp.Stdout, resp.Stderr, nil)
+				if resp.ExitCode != 0 {
+					stdout += fmt.Sprintf("\nexit code: %d", resp.ExitCode)
+				}
+			} else {
+				// Fallback to mvdan/sh.
+				sh := shell.NewShell(&shell.Options{
+					WorkingDir: execWorkingDir,
+				})
+				var stderr string
+				var execErr error
+				stdout, stderr, execErr = sh.Exec(ctx, params.Command)
+				stdout = formatOutput(stdout, stderr, execErr)
+			}
 
 			metadata := BashResponseMetadata{
 				StartTime:        startTime.UnixMilli(),

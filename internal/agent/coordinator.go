@@ -25,8 +25,10 @@ import (
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
+	"github.com/tta-lab/lenos/internal/project"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
+	"github.com/tta-lab/logos"
 	"golang.org/x/sync/errgroup"
 
 	"charm.land/fantasy/providers/anthropic"
@@ -78,6 +80,8 @@ type coordinator struct {
 	currentAgent SessionAgent
 	agents       map[string]SessionAgent
 
+	temenos logos.CommandRunner
+
 	readyWg errgroup.Group
 }
 
@@ -87,6 +91,7 @@ func NewCoordinator(
 	sessions session.Service,
 	messages message.Service,
 	notify pubsub.Publisher[notify.Notification],
+	temenos logos.CommandRunner,
 ) (Coordinator, error) {
 	c := &coordinator{
 		cfg:      cfg,
@@ -94,6 +99,7 @@ func NewCoordinator(
 		messages: messages,
 		notify:   notify,
 		agents:   make(map[string]SessionAgent),
+		temenos:  temenos,
 	}
 
 	agentCfg, ok := cfg.Config().Agents[config.AgentCoder]
@@ -152,6 +158,10 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return nil, errModelProviderNotConfigured
 	}
 
+	if c.temenos != nil {
+		return c.runWithTemenos(ctx, sessionID, prompt, model, maxTokens)
+	}
+
 	mergedOptions, temp, topP, topK, freqPenalty, presPenalty := mergeCallOptions(model, providerCfg)
 
 	if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
@@ -197,6 +207,118 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	}
 
 	return result, originalErr
+}
+
+// runWithTemenos executes the agent using logos.Run with temenos sandbox.
+func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prompt string, model Model, maxTokens int64) (*fantasy.AgentResult, error) {
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+	if !ok {
+		return nil, errModelProviderNotConfigured
+	}
+
+	prov, err := c.buildProvider(providerCfg, model.ModelCfg, false)
+	if err != nil {
+		return nil, fmt.Errorf("build provider: %w", err)
+	}
+
+	// Build env map from process environment.
+	sandboxEnv := make(map[string]string, len(os.Environ()))
+	for _, e := range os.Environ() {
+		if idx := strings.IndexByte(e, '='); idx >= 0 {
+			sandboxEnv[e[:idx]] = e[idx+1:]
+		}
+	}
+
+	// Build additional read-only paths from ttal project list.
+	cwd := c.cfg.WorkingDir()
+	var additionalReadOnlyPaths []string
+	if projects, err := project.List(ctx); err == nil {
+		for _, p := range projects {
+			if p.Path != "" && p.Path != cwd {
+				additionalReadOnlyPaths = append(additionalReadOnlyPaths, p.Path)
+			}
+		}
+	}
+
+	allowedPaths := BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...)
+
+	logosCfg := logos.Config{
+		Provider:     prov,
+		Model:        model.ModelCfg.Model,
+		MaxSteps:     30,
+		MaxTokens:    int(maxTokens),
+		Temenos:      c.temenos,
+		SandboxEnv:   sandboxEnv,
+		AllowedPaths: allowedPaths,
+	}
+
+	// Get session history as fantasy messages for logos history.
+	_, err = c.sessions.Get(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+	historyMsgs, err := c.messages.List(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session messages: %w", err)
+	}
+	var history []fantasy.Message
+	for _, m := range historyMsgs {
+		history = append(history, m.ToAIMessage()...)
+	}
+
+	// Streaming callback for text deltas.
+	var currentAssistant *message.Message
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+
+	result, runErr := logos.Run(streamCtx, logosCfg, history, prompt, logos.Callbacks{
+		OnDelta: func(text string) {
+			// Strip leading newline from initial text content.
+			if currentAssistant == nil {
+				text = strings.TrimPrefix(text, "\n")
+				msg, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
+					Role:  message.Assistant,
+					Parts: []message.ContentPart{},
+				})
+				if err != nil {
+					slog.Warn("Failed to create assistant message", "error", err)
+					return
+				}
+				currentAssistant = &msg
+			}
+			if currentAssistant != nil {
+				currentAssistant.AppendContent(text)
+				if err := c.messages.Update(ctx, *currentAssistant); err != nil {
+					slog.Warn("Failed to update assistant message", "error", err)
+				}
+			}
+		},
+		OnCommandResult: func(command string, output string, exitCode int) {
+			content := fmt.Sprintf("%s\n<result>exit code: %d</result>", output, exitCode)
+			_, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
+				Role:  message.Result,
+				Parts: []message.ContentPart{message.TextContent{Text: content}},
+			})
+			if err != nil {
+				slog.Warn("Failed to persist command result", "error", err)
+			}
+		},
+		OnRetry: func(reason string, step int) {
+			slog.Warn("Logos retry", "reason", reason, "step", step)
+		},
+	})
+
+	if runErr != nil {
+		return nil, fmt.Errorf("logos.Run: %w", runErr)
+	}
+
+	return &fantasy.AgentResult{
+		Response: fantasy.Response{
+			Content: fantasy.ResponseContent{
+				fantasy.TextContent{Text: result.Response},
+			},
+		},
+	}, nil
 }
 
 func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.ProviderOptions {
@@ -414,7 +536,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fan
 	}
 
 	allTools := []fantasy.AgentTool{
-		tools.NewBashTool(c.cfg.WorkingDir(), c.cfg.Config().Options.Attribution, modelName),
+		tools.NewBashTool(c.cfg.WorkingDir(), c.cfg.Config().Options.Attribution, modelName, c.temenos),
 	}
 
 	return allTools, nil

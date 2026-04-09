@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/stringext"
 	"github.com/tta-lab/lenos/internal/ui/styles"
@@ -115,4 +116,50 @@ func looksLikeMarkdown(content string) bool {
 		}
 	}
 	return false
+}
+
+// ResultMessageItem represents a command result message in the chat UI.
+type ResultMessageItem struct {
+	*cachedMessageItem
+	*focusableMessageItem
+
+	message *message.Message
+	sty     *styles.Styles
+}
+
+var _ MessageItem = (*ResultMessageItem)(nil)
+
+// NewResultMessageItem creates a new ResultMessageItem.
+func NewResultMessageItem(sty *styles.Styles, message *message.Message) MessageItem {
+	return &ResultMessageItem{
+		cachedMessageItem:    &cachedMessageItem{},
+		focusableMessageItem: &focusableMessageItem{},
+		message:              message,
+		sty:                  sty,
+	}
+}
+
+// RawRender implements [MessageItem].
+func (m *ResultMessageItem) RawRender(width int) string {
+	cappedWidth := cappedMessageWidth(width)
+
+	content, _, ok := m.getCachedRender(cappedWidth)
+	if ok {
+		return content
+	}
+
+	content = m.sty.Chat.Message.ResultBlock.Render(m.message.Content().Text)
+	height := lipgloss.Height(content)
+	m.setCachedRender(content, cappedWidth, height)
+	return content
+}
+
+// Render implements MessageItem.
+func (m *ResultMessageItem) Render(width int) string {
+	return m.RawRender(width)
+}
+
+// ID implements MessageItem.
+func (m *ResultMessageItem) ID() string {
+	return m.message.ID
 }
