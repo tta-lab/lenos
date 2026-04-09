@@ -415,7 +415,6 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fan
 
 	allTools := []fantasy.AgentTool{
 		tools.NewBashTool(c.cfg.WorkingDir(), c.cfg.Config().Options.Attribution, modelName),
-		tools.NewSourcegraphTool(nil),
 	}
 
 	return allTools, nil

@@ -216,8 +216,6 @@ func NewToolMessageItem(
 	switch toolCall.Name {
 	case tools.BashToolName:
 		item = NewBashToolMessageItem(sty, toolCall, result, canceled)
-	case tools.SourcegraphToolName:
-		item = NewSourcegraphToolMessageItem(sty, toolCall, result, canceled)
 	default:
 		item = NewGenericToolMessageItem(sty, toolCall, result, canceled)
 	}
@@ -791,19 +789,6 @@ func (t *baseToolMessageItem) formatParametersForCopy() string {
 			cmd = strings.ReplaceAll(cmd, "\t", "    ")
 			return fmt.Sprintf("**Command:** %s", cmd)
 		}
-	case tools.SourcegraphToolName:
-		var params tools.SourcegraphParams
-		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
-			var parts []string
-			parts = append(parts, fmt.Sprintf("**Query:** %s", params.Query))
-			if params.Count > 0 {
-				parts = append(parts, fmt.Sprintf("**Count:** %d", params.Count))
-			}
-			if params.ContextWindow > 0 {
-				parts = append(parts, fmt.Sprintf("**Context:** %d", params.ContextWindow))
-			}
-			return strings.Join(parts, "\n")
-		}
 	}
 
 	var params map[string]any
@@ -838,8 +823,6 @@ func (t *baseToolMessageItem) formatResultForCopy() string {
 	switch t.toolCall.Name {
 	case tools.BashToolName:
 		return t.formatBashResultForCopy()
-	case tools.SourcegraphToolName:
-		return fmt.Sprintf("```\n%s\n```", t.result.Content)
 	default:
 		return t.result.Content
 	}
@@ -873,8 +856,6 @@ func prettifyToolName(name string) string {
 	switch name {
 	case tools.BashToolName:
 		return "Bash"
-	case tools.SourcegraphToolName:
-		return "Sourcegraph"
 	default:
 		return genericPrettyName(name)
 	}

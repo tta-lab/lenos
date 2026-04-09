@@ -134,7 +134,6 @@ tool names to specific types:
 | --------------------- | ---------------------------------------------- |
 | `chat/bash.go`        | Bash, JobOutput, JobKill                       |
 | `chat/write.go`       | Write                                          |
-| `chat/sourcegraph.go` | Sourcegraph                                    |
 | `chat/mcp.go`         | MCP tools (`mcp_` prefix)                      |
 | `chat/generic.go`     | Fallback for unrecognized tools                |
 | `chat/assistant.go`   | Assistant messages (thinking, content, errors) |
