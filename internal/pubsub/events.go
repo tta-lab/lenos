@@ -16,8 +16,6 @@ const (
 type PayloadType = string
 
 const (
-	PayloadTypeLSPEvent   PayloadType = "lsp_event"
-	PayloadTypeMCPEvent   PayloadType = "mcp_event"
 	PayloadTypeMessage    PayloadType = "message"
 	PayloadTypeSession    PayloadType = "session"
 	PayloadTypeFile       PayloadType = "file"

@@ -60,7 +60,6 @@ const (
 
 const (
 	AgentCoder string = "coder"
-	AgentTask  string = "task"
 )
 
 type SelectedModel struct {
@@ -158,40 +157,6 @@ func (c *ProviderConfig) SetupGitHubCopilot() {
 	maps.Copy(c.ExtraHeaders, copilot.Headers())
 }
 
-type MCPType string
-
-const (
-	MCPStdio MCPType = "stdio"
-	MCPSSE   MCPType = "sse"
-	MCPHttp  MCPType = "http"
-)
-
-type MCPConfig struct {
-	Command       string            `json:"command,omitempty" jsonschema:"description=Command to execute for stdio MCP servers,example=npx"`
-	Env           map[string]string `json:"env,omitempty" jsonschema:"description=Environment variables to set for the MCP server"`
-	Args          []string          `json:"args,omitempty" jsonschema:"description=Arguments to pass to the MCP server command"`
-	Type          MCPType           `json:"type" jsonschema:"required,description=Type of MCP connection,enum=stdio,enum=sse,enum=http,default=stdio"`
-	URL           string            `json:"url,omitempty" jsonschema:"description=URL for HTTP or SSE MCP servers,format=uri,example=http://localhost:3000/mcp"`
-	Disabled      bool              `json:"disabled,omitempty" jsonschema:"description=Whether this MCP server is disabled,default=false"`
-	DisabledTools []string          `json:"disabled_tools,omitempty" jsonschema:"description=List of tools from this MCP server to disable,example=get-library-doc"`
-	Timeout       int               `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for MCP server connections,default=15,example=30,example=60,example=120"`
-
-	// TODO: maybe make it possible to get the value from the env
-	Headers map[string]string `json:"headers,omitempty" jsonschema:"description=HTTP headers for HTTP/SSE MCP servers"`
-}
-
-type LSPConfig struct {
-	Disabled    bool              `json:"disabled,omitempty" jsonschema:"description=Whether this LSP server is disabled,default=false"`
-	Command     string            `json:"command,omitempty" jsonschema:"description=Command to execute for the LSP server,example=gopls"`
-	Args        []string          `json:"args,omitempty" jsonschema:"description=Arguments to pass to the LSP server command"`
-	Env         map[string]string `json:"env,omitempty" jsonschema:"description=Environment variables to set to the LSP server command"`
-	FileTypes   []string          `json:"filetypes,omitempty" jsonschema:"description=File types this LSP server handles,example=go,example=mod,example=rs,example=c,example=js,example=ts"`
-	RootMarkers []string          `json:"root_markers,omitempty" jsonschema:"description=Files or directories that indicate the project root,example=go.mod,example=package.json,example=Cargo.toml"`
-	InitOptions map[string]any    `json:"init_options,omitempty" jsonschema:"description=Initialization options passed to the LSP server during initialize request"`
-	Options     map[string]any    `json:"options,omitempty" jsonschema:"description=LSP server-specific settings passed during initialization"`
-	Timeout     int               `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for LSP server initialization,default=30,example=60,example=120"`
-}
-
 type TUIOptions struct {
 	CompactMode  bool        `json:"compact_mode,omitempty" jsonschema:"description=Enable compact mode for the TUI interface,default=false"`
 	DiffMode     string      `json:"diff_mode,omitempty" jsonschema:"description=Diff mode for the TUI interface,enum=unified,enum=split"`
@@ -243,82 +208,17 @@ type Options struct {
 	AgentPaths                []string     `json:"agent_paths,omitempty" jsonschema:"description=Paths to directories containing Agent identity files (agent.md files),example=~/.config/lenos/agents,example=./.lenos/agents"`
 	TUI                       *TUIOptions  `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
 	Debug                     bool         `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
-	DebugLSP                  bool         `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
 	DisableAutoSummarize      bool         `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
 	DataDirectory             string       `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data (relative to working directory),default=.lenos,example=.lenos"` // Relative to the cwd
-	DisabledTools             []string     `json:"disabled_tools,omitempty" jsonschema:"description=List of built-in tools to disable and hide from the agent,example=bash,example=sourcegraph"`
+	DisabledTools             []string     `json:"disabled_tools,omitempty" jsonschema:"description=List of built-in tools to disable and hide from the agent,example=bash"`
 	DisableProviderAutoUpdate bool         `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable providers auto-update,default=false"`
 	DisableDefaultProviders   bool         `json:"disable_default_providers,omitempty" jsonschema:"description=Ignore all default/embedded providers. When enabled, providers must be fully specified in the config file with base_url, models, and api_key - no merging with defaults occurs,default=false"`
 	Attribution               *Attribution `json:"attribution,omitempty" jsonschema:"description=Attribution settings for generated content"`
 	DisableMetrics            bool         `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending metrics,default=false"`
 	InitializeAs              string       `json:"initialize_as,omitempty" jsonschema:"description=Name of the context file to create/update during project initialization,default=AGENTS.md,example=AGENTS.md,example=LENOS.md,example=CLAUDE.md,example=docs/LLMs.md"`
-	AutoLSP                   *bool        `json:"auto_lsp,omitempty" jsonschema:"description=Automatically setup LSPs based on root markers,default=true"`
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
 	DisableNotifications      bool         `json:"disable_notifications,omitempty" jsonschema:"description=Disable desktop notifications,default=false"`
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=lenos-config"`
-}
-
-type MCPs map[string]MCPConfig
-
-type MCP struct {
-	Name string    `json:"name"`
-	MCP  MCPConfig `json:"mcp"`
-}
-
-func (m MCPs) Sorted() []MCP {
-	sorted := make([]MCP, 0, len(m))
-	for k, v := range m {
-		sorted = append(sorted, MCP{
-			Name: k,
-			MCP:  v,
-		})
-	}
-	slices.SortFunc(sorted, func(a, b MCP) int {
-		return strings.Compare(a.Name, b.Name)
-	})
-	return sorted
-}
-
-type LSPs map[string]LSPConfig
-
-type LSP struct {
-	Name string    `json:"name"`
-	LSP  LSPConfig `json:"lsp"`
-}
-
-func (l LSPs) Sorted() []LSP {
-	sorted := make([]LSP, 0, len(l))
-	for k, v := range l {
-		sorted = append(sorted, LSP{
-			Name: k,
-			LSP:  v,
-		})
-	}
-	slices.SortFunc(sorted, func(a, b LSP) int {
-		return strings.Compare(a.Name, b.Name)
-	})
-	return sorted
-}
-
-func (l LSPConfig) ResolvedEnv() []string {
-	return resolveEnvs(l.Env)
-}
-
-func (m MCPConfig) ResolvedEnv() []string {
-	return resolveEnvs(m.Env)
-}
-
-func (m MCPConfig) ResolvedHeaders() map[string]string {
-	resolver := NewShellVariableResolver(env.New())
-	for e, v := range m.Headers {
-		var err error
-		m.Headers[e], err = resolver.ResolveValue(v)
-		if err != nil {
-			slog.Error("Error resolving header variable", "error", err, "variable", e, "value", v)
-			continue
-		}
-	}
-	return m.Headers
 }
 
 type Agent struct {
@@ -333,12 +233,6 @@ type Agent struct {
 	// The available tools for the agent
 	//  if this is nil, all tools are available
 	AllowedTools []string `json:"allowed_tools,omitempty"`
-
-	// this tells us which MCPs are available for this agent
-	//  if this is empty all mcps are available
-	//  the string array is the list of tools from the AllowedMCP the agent has available
-	//  if the string array is nil, all tools from the AllowedMCP are available
-	AllowedMCP map[string][]string `json:"allowed_mcp,omitempty"`
 
 	// Overrides the context paths for this agent
 	ContextPaths []string `json:"context_paths,omitempty"`
@@ -380,10 +274,6 @@ type Config struct {
 
 	// The providers that are configured
 	Providers *csync.Map[string, ProviderConfig] `json:"providers,omitempty" jsonschema:"description=AI provider configurations"`
-
-	MCP MCPs `json:"mcp,omitempty" jsonschema:"description=Model Context Protocol server configurations"`
-
-	LSP LSPs `json:"lsp,omitempty" jsonschema:"description=Language Server Protocol configurations"`
 
 	Options *Options `json:"options,omitempty" jsonschema:"description=General application options"`
 
@@ -459,23 +349,7 @@ const maxRecentModelsPerType = 5
 
 func allToolNames() []string {
 	return []string{
-		"agent",
 		"bash",
-		"download",
-		"edit",
-		"lsp_diagnostics",
-		"lsp_references",
-		"lsp_restart",
-		"fetch",
-		"agentic_fetch",
-		"glob",
-		"grep",
-		"ls",
-		"sourcegraph",
-		"view",
-		"write",
-		"list_mcp_resources",
-		"read_mcp_resource",
 	}
 }
 
@@ -485,12 +359,6 @@ func resolveAllowedTools(allTools []string, disabledTools []string) []string {
 	}
 	// filter out disabled tools (exclude mode)
 	return filterSlice(allTools, disabledTools, false)
-}
-
-func resolveReadOnlyTools(tools []string) []string {
-	readOnlyTools := []string{"glob", "grep", "ls", "sourcegraph", "view"}
-	// filter to only include tools that are in allowedtools (include mode)
-	return filterSlice(tools, readOnlyTools, true)
 }
 
 func filterSlice(data []string, mask []string, include bool) []string {
@@ -516,17 +384,6 @@ func (c *Config) SetupAgents() {
 			Model:        SelectedModelTypeLarge,
 			ContextPaths: c.Options.ContextPaths,
 			AllowedTools: allowedTools,
-		},
-
-		AgentTask: {
-			ID:           AgentTask,
-			Name:         "Task",
-			Description:  "An agent that helps with searching for context and finding implementation details.",
-			Model:        SelectedModelTypeLarge,
-			ContextPaths: c.Options.ContextPaths,
-			AllowedTools: resolveReadOnlyTools(allowedTools),
-			// NO MCPs or LSPs by default
-			AllowedMCP: map[string][]string{},
 		},
 	}
 	c.Agents = agents

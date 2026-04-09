@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/env"
@@ -51,8 +50,6 @@ func TestConfig_setDefaults(t *testing.T) {
 	require.NotNil(t, cfg.Options.ContextPaths)
 	require.NotNil(t, cfg.Providers)
 	require.NotNil(t, cfg.Models)
-	require.NotNil(t, cfg.LSP)
-	require.NotNil(t, cfg.MCP)
 	require.Equal(t, filepath.Join("/tmp", ".lenos"), cfg.Options.DataDirectory)
 	require.Equal(t, "AGENTS.md", cfg.Options.InitializeAs)
 	for _, path := range defaultContextPaths {
@@ -456,68 +453,6 @@ func TestConfig_IsConfigured(t *testing.T) {
 
 		require.False(t, cfg.IsConfigured())
 	})
-}
-
-func TestConfig_setupAgentsWithNoDisabledTools(t *testing.T) {
-	cfg := &Config{
-		Options: &Options{
-			DisabledTools: []string{},
-		},
-	}
-
-	cfg.SetupAgents()
-	coderAgent, ok := cfg.Agents[AgentCoder]
-	require.True(t, ok)
-	assert.Equal(t, allToolNames(), coderAgent.AllowedTools)
-
-	taskAgent, ok := cfg.Agents[AgentTask]
-	require.True(t, ok)
-	assert.Equal(t, []string{"glob", "grep", "ls", "sourcegraph", "view"}, taskAgent.AllowedTools)
-}
-
-func TestConfig_setupAgentsWithDisabledTools(t *testing.T) {
-	cfg := &Config{
-		Options: &Options{
-			DisabledTools: []string{
-				"edit",
-				"download",
-				"grep",
-			},
-		},
-	}
-
-	cfg.SetupAgents()
-	coderAgent, ok := cfg.Agents[AgentCoder]
-	require.True(t, ok)
-
-	assert.Equal(t, []string{"agent", "bash", "lsp_diagnostics", "lsp_references", "lsp_restart", "fetch", "agentic_fetch", "glob", "ls", "sourcegraph", "view", "write", "list_mcp_resources", "read_mcp_resource"}, coderAgent.AllowedTools)
-
-	taskAgent, ok := cfg.Agents[AgentTask]
-	require.True(t, ok)
-	assert.Equal(t, []string{"glob", "ls", "sourcegraph", "view"}, taskAgent.AllowedTools)
-}
-
-func TestConfig_setupAgentsWithEveryReadOnlyToolDisabled(t *testing.T) {
-	cfg := &Config{
-		Options: &Options{
-			DisabledTools: []string{
-				"glob",
-				"grep",
-				"ls",
-				"sourcegraph",
-				"view",
-			},
-		},
-	}
-
-	cfg.SetupAgents()
-	coderAgent, ok := cfg.Agents[AgentCoder]
-	require.True(t, ok)
-	assert.Equal(t, []string{"agent", "bash", "download", "edit", "lsp_diagnostics", "lsp_references", "lsp_restart", "fetch", "agentic_fetch", "write", "list_mcp_resources", "read_mcp_resource"}, coderAgent.AllowedTools)
-
-	taskAgent, ok := cfg.Agents[AgentTask]
-	require.True(t, ok)
-	assert.Len(t, taskAgent.AllowedTools, 0)
 }
 
 func TestConfig_configureProvidersWithDisabledProvider(t *testing.T) {

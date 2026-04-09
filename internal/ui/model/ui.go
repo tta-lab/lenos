@@ -2,7 +2,6 @@ package model
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -30,12 +29,9 @@ import (
 	"github.com/charmbracelet/ultraviolet/screen"
 	"github.com/charmbracelet/x/editor"
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	agenttools "github.com/tta-lab/lenos/internal/agent/tools"
-	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/fsext"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/home"
 	"github.com/tta-lab/lenos/internal/message"
 
@@ -116,16 +112,7 @@ type (
 	userCommandsLoadedMsg struct {
 		Commands []commands.CustomCommand
 	}
-	// mcpPromptsLoadedMsg is sent when mcp prompts are loaded.
-	mcpPromptsLoadedMsg struct {
-		Prompts []commands.MCPPrompt
-	}
-	// mcpStateChangedMsg is sent when there is a change in MCP client states.
-	mcpStateChangedMsg struct {
-		states map[string]mcp.ClientInfo
-	}
 	// sendMessageMsg is sent to send a message.
-	// currently only used for mcp prompts.
 	sendMessageMsg struct {
 		Content     string
 		Attachments []message.Attachment
@@ -136,18 +123,14 @@ type (
 
 	// copyChatHighlightMsg is sent to copy the current chat highlight to clipboard.
 	copyChatHighlightMsg struct{}
-
-	// sessionFilesUpdatesMsg is sent when the files for this session have been updated
-	sessionFilesUpdatesMsg struct {
-		sessionFiles []SessionFile
-	}
 )
 
 // UI represents the main user interface model.
 type UI struct {
-	com          *common.Common
-	session      *session.Session
-	sessionFiles []SessionFile
+	com           *common.Common
+	session       *session.Session
+	gitWorktree   bool
+	modifiedFiles []workspace.ModifiedFile
 
 	// keeps track of read files while we don't have a session id
 	sessionFileReads []string
@@ -214,21 +197,14 @@ type UI struct {
 		yesInitializeSelected bool
 	}
 
-	// lsp
-	lspStates map[string]workspace.LSPClientInfo
-
-	// mcp
-	mcpStates map[string]mcp.ClientInfo
-
 	// sidebarLogo keeps a cached version of the sidebar sidebarLogo.
 	sidebarLogo string
 
 	// Notification state
 	notifyBackend       notification.Backend
 	notifyWindowFocused bool
-	// custom commands & mcp commands
+	// custom commands
 	customCommands []commands.CustomCommand
-	mcpPrompts     []commands.MCPPrompt
 
 	// forceCompactMode tracks whether compact mode is forced by user toggle
 	forceCompactMode bool
@@ -254,6 +230,9 @@ type UI struct {
 	twTodos      []session.Todo
 	twPollTicker *time.Ticker
 	twJobID      string
+
+	// Git modified files polling
+	gitPollTicker *time.Ticker
 
 	// mouse highlighting related state
 	lastClickTime time.Time
@@ -322,8 +301,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 		completions:         comp,
 		attachments:         attachments,
 		todoSpinner:         todoSpinner,
-		lspStates:           make(map[string]workspace.LSPClientInfo),
-		mcpStates:           make(map[string]mcp.ClientInfo),
 		notifyBackend:       notification.NoopBackend{},
 		notifyWindowFocused: true,
 		initialSessionID:    initialSessionID,
@@ -340,6 +317,12 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 
 	// Initialize compact mode from config
 	ui.forceCompactMode = com.Config().Options.TUI.CompactMode
+
+	// Initialize git worktree state
+	ui.gitWorktree = com.Workspace.IsGitWorktree(context.Background())
+	if ui.gitWorktree {
+		ui.modifiedFiles, _ = com.Workspace.ListModifiedFiles(context.Background())
+	}
 
 	// set onboarding state defaults
 	ui.onboarding.yesInitializeSelected = true
@@ -379,6 +362,10 @@ func (m *UI) Init() tea.Cmd {
 	cmds = append(cmds, m.loadPromptHistory())
 	// load initial session if specified
 	if cmd := m.loadInitialSession(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	// start git modified files polling
+	if cmd := m.startGitPoll(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 	// send trigger message if one was provided at startup
@@ -472,19 +459,6 @@ func (m *UI) loadCustomCommands() tea.Cmd {
 	}
 }
 
-// loadMCPrompts loads the MCP prompts asynchronously.
-func (m *UI) loadMCPrompts() tea.Msg {
-	prompts, err := commands.LoadMCPPrompts()
-	if err != nil {
-		slog.Error("Failed to load MCP prompts", "error", err)
-	}
-	if prompts == nil {
-		// flag them as loaded even if there is none or an error
-		prompts = []commands.MCPPrompt{}
-	}
-	return mcpPromptsLoadedMsg{Prompts: prompts}
-}
-
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -522,8 +496,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.setState(uiChat, m.focus)
 		m.session = msg.session
-		m.sessionFiles = msg.files
-		cmds = append(cmds, m.startLSPs(msg.lspFilePaths()))
 
 		msgs, err := m.com.Workspace.ListMessages(context.Background(), m.session.ID)
 		if err != nil {
@@ -553,14 +525,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.loadPromptHistory())
 		m.updateLayoutAndSize()
 
-	case sessionFilesUpdatesMsg:
-		m.sessionFiles = msg.sessionFiles
-		var paths []string
-		for _, f := range msg.sessionFiles {
-			paths = append(paths, f.LatestVersion.Path)
-		}
-		cmds = append(cmds, m.startLSPs(paths))
-
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
 
@@ -574,20 +538,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		commands, ok := dia.(*dialog.Commands)
 		if ok {
 			commands.SetCustomCommands(m.customCommands)
-		}
-
-	case mcpStateChangedMsg:
-		m.mcpStates = msg.states
-	case mcpPromptsLoadedMsg:
-		m.mcpPrompts = msg.Prompts
-		dia := m.dialog.Dialog(dialog.CommandsID)
-		if dia == nil {
-			break
-		}
-
-		commands, ok := dia.(*dialog.Commands)
-		if ok {
-			commands.SetMCPPrompts(m.mcpPrompts)
 		}
 
 	case promptHistoryLoadedMsg:
@@ -628,6 +578,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.renderPills()
 		cmds = append(cmds, m.waitNextTWTick())
+	case gitPollMsg:
+		m.modifiedFiles = msg.files
+		cmds = append(cmds, m.waitNextGitTick())
 	case pubsub.Event[message.Message]:
 		// Check if this is a child session message for an agent tool.
 		if m.session == nil {
@@ -659,24 +612,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// there is a number of things that could change the pills here so we want to re-render
 		m.renderPills()
-	case pubsub.Event[history.File]:
-		cmds = append(cmds, m.handleFileEvent(msg.Payload))
-	case pubsub.Event[workspace.LSPEvent]:
-		m.lspStates = m.com.Workspace.LSPGetStates()
-	case pubsub.Event[mcp.Event]:
-		switch msg.Payload.Type {
-		case mcp.EventStateChanged:
-			return m, tea.Batch(
-				m.handleStateChanged(),
-				m.loadMCPrompts,
-			)
-		case mcp.EventPromptsListChanged:
-			return m, handleMCPPromptsEvent(m.com.Workspace, msg.Payload.Name)
-		case mcp.EventToolsListChanged:
-			return m, handleMCPToolsEvent(m.com.Workspace, msg.Payload.Name)
-		case mcp.EventResourcesListChanged:
-			return m, handleMCPResourcesEvent(m.com.Workspace, msg.Payload.Name)
-		}
 	case cancelTimerExpiredMsg:
 		m.isCanceling = false
 	case tea.TerminalVersionMsg:
@@ -883,7 +818,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status.ClearInfoMsg()
 	case completions.CompletionItemsLoadedMsg:
 		if m.completionsOpen {
-			m.completions.SetItems(msg.Files, msg.Resources)
+			m.completions.SetItems(msg.Files)
 		}
 	case uv.KittyGraphicsEvent:
 		if !bytes.HasPrefix(msg.Payload, []byte("OK")) {
@@ -1431,12 +1366,6 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionQuit:
 		cmds = append(cmds, tea.Quit)
-	case dialog.ActionEnableDockerMCP:
-		m.dialog.CloseDialog(dialog.CommandsID)
-		cmds = append(cmds, m.enableDockerMCP)
-	case dialog.ActionDisableDockerMCP:
-		m.dialog.CloseDialog(dialog.CommandsID)
-		cmds = append(cmds, m.disableDockerMCP)
 	case dialog.ActionInitializeProject:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
@@ -1570,21 +1499,6 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 		cmds = append(cmds, m.sendMessage(content))
 		m.dialog.CloseFrontDialog()
-	case dialog.ActionRunMCPPrompt:
-		if len(msg.Arguments) > 0 && msg.Args == nil {
-			m.dialog.CloseFrontDialog()
-			title := cmp.Or(msg.Title, "MCP Prompt Arguments")
-			argsDialog := dialog.NewArguments(
-				m.com,
-				title,
-				msg.Description,
-				msg.Arguments,
-				msg, // Pass the action as the result
-			)
-			m.dialog.OpenDialog(argsDialog)
-			break
-		}
-		cmds = append(cmds, m.runMCPPrompt(msg.ClientID, msg.PromptID, msg.Args))
 	default:
 		cmds = append(cmds, util.CmdHandler(msg))
 	}
@@ -1726,11 +1640,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					switch msg := msg.(type) {
 					case completions.SelectionMsg[completions.FileCompletionValue]:
 						cmds = append(cmds, m.insertFileCompletion(msg.Value.Path))
-						if !msg.KeepOpen {
-							m.closeCompletions()
-						}
-					case completions.SelectionMsg[completions.ResourceCompletionValue]:
-						cmds = append(cmds, m.insertMCPResourceCompletion(msg.Value))
 						if !msg.KeepOpen {
 							m.closeCompletions()
 						}
@@ -2774,15 +2683,7 @@ func (m *UI) insertFileCompletion(path string) tea.Cmd {
 	fileCmd := func() tea.Msg {
 		absPath, _ := filepath.Abs(path)
 
-		if m.hasSession() {
-			// Skip attachment if file was already read and hasn't been modified.
-			lastRead := m.com.Workspace.FileTrackerLastReadTime(context.Background(), m.session.ID, absPath)
-			if !lastRead.IsZero() {
-				if info, err := os.Stat(path); err == nil && !info.ModTime().After(lastRead) {
-					return nil
-				}
-			}
-		} else if slices.Contains(m.sessionFileReads, absPath) {
+		if slices.Contains(m.sessionFileReads, absPath) {
 			return nil
 		}
 
@@ -2803,60 +2704,6 @@ func (m *UI) insertFileCompletion(path string) tea.Cmd {
 		}
 	}
 	return tea.Batch(heightCmd, fileCmd)
-}
-
-// insertMCPResourceCompletion inserts the selected resource into the textarea,
-// replacing the @query, and adds the resource as an attachment.
-func (m *UI) insertMCPResourceCompletion(item completions.ResourceCompletionValue) tea.Cmd {
-	displayText := cmp.Or(item.Title, item.URI)
-
-	prevHeight := m.textarea.Height()
-	if !m.insertCompletionText(displayText) {
-		return nil
-	}
-	heightCmd := m.handleTextareaHeightChange(prevHeight)
-
-	resourceCmd := func() tea.Msg {
-		contents, err := m.com.Workspace.ReadMCPResource(
-			context.Background(),
-			item.MCPName,
-			item.URI,
-		)
-		if err != nil {
-			slog.Warn("Failed to read MCP resource", "uri", item.URI, "error", err)
-			return nil
-		}
-		if len(contents) == 0 {
-			return nil
-		}
-
-		content := contents[0]
-		var data []byte
-		if content.Text != "" {
-			data = []byte(content.Text)
-		} else if len(content.Blob) > 0 {
-			data = content.Blob
-		}
-		if len(data) == 0 {
-			return nil
-		}
-
-		mimeType := item.MIMEType
-		if mimeType == "" && content.MIMEType != "" {
-			mimeType = content.MIMEType
-		}
-		if mimeType == "" {
-			mimeType = "text/plain"
-		}
-
-		return message.Attachment{
-			FilePath: item.URI,
-			FileName: displayText,
-			MimeType: mimeType,
-			Content:  data,
-		}
-	}
-	return tea.Batch(heightCmd, resourceCmd)
 }
 
 // completionsPosition returns the X and Y position for the completions popup.
@@ -2961,15 +2808,6 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 		}
 		m.setState(uiChat, m.focus)
 	}
-
-	ctx := context.Background()
-	cmds = append(cmds, func() tea.Msg {
-		for _, path := range m.sessionFileReads {
-			m.com.Workspace.FileTrackerRecordRead(ctx, m.session.ID, path)
-			m.com.Workspace.LSPStart(ctx, path)
-		}
-		return nil
-	})
 
 	// Capture session ID to avoid race with main goroutine updating m.session.
 	sessionID := m.session.ID
@@ -3115,14 +2953,14 @@ func (m *UI) openCommandsDialog() tea.Cmd {
 	hasTodos := hasSession && hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
 
-	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, m.customCommands, m.mcpPrompts)
+	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, m.customCommands)
 	if err != nil {
 		return util.ReportError(err)
 	}
 
 	m.dialog.OpenDialog(commands)
 
-	return commands.InitialCmd()
+	return nil
 }
 
 // openReasoningDialog opens the reasoning effort dialog.
@@ -3203,7 +3041,7 @@ func (m *UI) newSession() tea.Cmd {
 	}
 
 	m.session = nil
-	m.sessionFiles = nil
+	m.modifiedFiles = nil
 	m.sessionFileReads = nil
 	m.stopTWPoll()
 	m.setState(uiLanding, uiFocusEditor)
@@ -3214,14 +3052,7 @@ func (m *UI) newSession() tea.Cmd {
 	m.promptQueue = 0
 	m.pillsView = ""
 	m.historyReset()
-	agenttools.ResetCache()
-	return tea.Batch(
-		func() tea.Msg {
-			m.com.Workspace.LSPStopAll(context.Background())
-			return nil
-		},
-		m.loadPromptHistory(),
-	)
+	return m.loadPromptHistory()
 }
 
 // handlePasteMsg handles a paste message.
@@ -3461,10 +3292,8 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	sectionWidth := min(maxSectionWidth, width/3-2) // account for 2 spaces
 	maxItemsPerSection := remainingHeight - 3       // Account for section title and spacing
 
-	lspSection := m.lspInfo(sectionWidth, maxItemsPerSection, false)
-	mcpSection := m.mcpInfo(sectionWidth, maxItemsPerSection, false)
-	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), sectionWidth, maxItemsPerSection, false)
-	sections := lipgloss.JoinHorizontal(lipgloss.Top, filesSection, " ", lspSection, " ", mcpSection)
+	filesSection := m.modifiedFilesInfo(sectionWidth, maxItemsPerSection, false)
+	sections := filesSection
 	uv.NewStyledString(
 		s.CompactDetails.View.
 			Width(area.Dx()).
@@ -3479,63 +3308,6 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	).Draw(scr, area)
 }
 
-func (m *UI) runMCPPrompt(clientID, promptID string, arguments map[string]string) tea.Cmd {
-	load := func() tea.Msg {
-		prompt, err := m.com.Workspace.GetMCPPrompt(clientID, promptID, arguments)
-		if err != nil {
-			// TODO: make this better
-			return util.ReportError(err)()
-		}
-
-		if prompt == "" {
-			return nil
-		}
-		return sendMessageMsg{
-			Content: prompt,
-		}
-	}
-
-	var cmds []tea.Cmd
-	if cmd := m.dialog.StartLoading(); cmd != nil {
-		cmds = append(cmds, cmd)
-	}
-	cmds = append(cmds, load, func() tea.Msg {
-		return closeDialogMsg{}
-	})
-
-	return tea.Sequence(cmds...)
-}
-
-func (m *UI) handleStateChanged() tea.Cmd {
-	return func() tea.Msg {
-		m.com.Workspace.UpdateAgentModel(context.Background())
-		return mcpStateChangedMsg{
-			states: m.com.Workspace.MCPGetStates(),
-		}
-	}
-}
-
-func handleMCPPromptsEvent(ws workspace.Workspace, name string) tea.Cmd {
-	return func() tea.Msg {
-		ws.MCPRefreshPrompts(context.Background(), name)
-		return nil
-	}
-}
-
-func handleMCPToolsEvent(ws workspace.Workspace, name string) tea.Cmd {
-	return func() tea.Msg {
-		ws.RefreshMCPTools(context.Background(), name)
-		return nil
-	}
-}
-
-func handleMCPResourcesEvent(ws workspace.Workspace, name string) tea.Cmd {
-	return func() tea.Msg {
-		ws.MCPRefreshResources(context.Background(), name)
-		return nil
-	}
-}
-
 func (m *UI) copyChatHighlight() tea.Cmd {
 	text := m.chat.HighlightContent()
 	return common.CopyToClipboardWithCallback(
@@ -3546,23 +3318,6 @@ func (m *UI) copyChatHighlight() tea.Cmd {
 			return nil
 		},
 	)
-}
-
-func (m *UI) enableDockerMCP() tea.Msg {
-	ctx := context.Background()
-	if err := m.com.Workspace.EnableDockerMCP(ctx); err != nil {
-		return util.ReportError(err)()
-	}
-
-	return util.NewInfoMsg("Docker MCP enabled and started successfully")
-}
-
-func (m *UI) disableDockerMCP() tea.Msg {
-	if err := m.com.Workspace.DisableDockerMCP(); err != nil {
-		return util.ReportError(err)()
-	}
-
-	return util.NewInfoMsg("Docker MCP disabled successfully")
 }
 
 // renderLogo renders the Lenos logo with the given styles and dimensions.

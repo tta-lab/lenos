@@ -96,3 +96,23 @@ func genericPrettyName(name string) string {
 	name = strings.ReplaceAll(name, "-", " ")
 	return stringext.Capitalize(name)
 }
+
+func looksLikeMarkdown(content string) bool {
+	patterns := []string{
+		"# ",  // headers
+		"## ", // headers
+		"**",  // bold
+		"```", // code fence
+		"- ",  // unordered list
+		"1. ", // ordered list
+		"> ",  // blockquote
+		"---", // horizontal rule
+		"***", // horizontal rule
+	}
+	for _, p := range patterns {
+		if strings.Contains(content, p) {
+			return true
+		}
+	}
+	return false
+}

@@ -11,7 +11,6 @@ import (
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/ui/common"
-	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 const (
@@ -81,14 +80,9 @@ func (h *header) drawHeader(
 	b.WriteString(h.compactLogo)
 
 	availDetailWidth := width - leftPadding - rightPadding - lipgloss.Width(b.String()) - minHeaderDiags - diagToDetailsSpacing
-	lspErrorCount := 0
-	for _, info := range h.com.Workspace.LSPGetStates() {
-		lspErrorCount += info.DiagnosticCount
-	}
 	details := renderHeaderDetails(
 		h.com,
 		session,
-		lspErrorCount,
 		detailsOpen,
 		availDetailWidth,
 	)
@@ -115,17 +109,12 @@ func (h *header) drawHeader(
 func renderHeaderDetails(
 	com *common.Common,
 	session *session.Session,
-	lspErrorCount int,
 	detailsOpen bool,
 	availWidth int,
 ) string {
 	t := com.Styles
 
 	var parts []string
-
-	if lspErrorCount > 0 {
-		parts = append(parts, t.LSP.ErrorDiagnostic.Render(fmt.Sprintf("%s%d", styles.LSPErrorIcon, lspErrorCount)))
-	}
 
 	agentCfg := com.Config().Agents[config.AgentCoder]
 	model := com.Config().GetModelByType(agentCfg.Model)

@@ -6,17 +6,12 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/client"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/log"
-	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
 
@@ -243,85 +238,6 @@ func (w *ClientWorkspace) GetDefaultSmallModel(providerID string) config.Selecte
 	return *model
 }
 
-// -- FileTracker --
-
-func (w *ClientWorkspace) FileTrackerRecordRead(ctx context.Context, sessionID, path string) {
-	_ = w.client.FileTrackerRecordRead(ctx, w.workspaceID(), sessionID, path)
-}
-
-func (w *ClientWorkspace) FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time {
-	t, err := w.client.FileTrackerLastReadTime(ctx, w.workspaceID(), sessionID, path)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
-}
-
-func (w *ClientWorkspace) FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
-	return w.client.FileTrackerListReadFiles(ctx, w.workspaceID(), sessionID)
-}
-
-// -- History --
-
-func (w *ClientWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
-	files, err := w.client.ListSessionHistoryFiles(ctx, w.workspaceID(), sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return protoToFiles(files), nil
-}
-
-// -- LSP --
-
-func (w *ClientWorkspace) LSPStart(ctx context.Context, path string) {
-	_ = w.client.LSPStart(ctx, w.workspaceID(), path)
-}
-
-func (w *ClientWorkspace) LSPStopAll(ctx context.Context) {
-	_ = w.client.LSPStopAll(ctx, w.workspaceID())
-}
-
-func (w *ClientWorkspace) LSPGetStates() map[string]LSPClientInfo {
-	states, err := w.client.GetLSPs(context.Background(), w.workspaceID())
-	if err != nil {
-		return nil
-	}
-	result := make(map[string]LSPClientInfo, len(states))
-	for k, v := range states {
-		result[k] = LSPClientInfo{
-			Name:            v.Name,
-			State:           v.State,
-			Error:           v.Error,
-			DiagnosticCount: v.DiagnosticCount,
-			ConnectedAt:     v.ConnectedAt,
-		}
-	}
-	return result
-}
-
-func (w *ClientWorkspace) LSPGetDiagnosticCounts(name string) lsp.DiagnosticCounts {
-	diags, err := w.client.GetLSPDiagnostics(context.Background(), w.workspaceID(), name)
-	if err != nil {
-		return lsp.DiagnosticCounts{}
-	}
-	var counts lsp.DiagnosticCounts
-	for _, fileDiags := range diags {
-		for _, d := range fileDiags {
-			switch d.Severity {
-			case protocol.SeverityError:
-				counts.Error++
-			case protocol.SeverityWarning:
-				counts.Warning++
-			case protocol.SeverityInformation:
-				counts.Information++
-			case protocol.SeverityHint:
-				counts.Hint++
-			}
-		}
-	}
-	return counts
-}
-
 // -- Config (read-only) --
 
 func (w *ClientWorkspace) Config() *config.Config {
@@ -415,71 +331,6 @@ func (w *ClientWorkspace) InitializePrompt() (string, error) {
 	return w.client.GetInitializePrompt(context.Background(), w.workspaceID())
 }
 
-// -- MCP operations --
-
-func (w *ClientWorkspace) MCPGetStates() map[string]mcp.ClientInfo {
-	states, err := w.client.MCPGetStates(context.Background(), w.workspaceID())
-	if err != nil {
-		return nil
-	}
-	result := make(map[string]mcp.ClientInfo, len(states))
-	for k, v := range states {
-		result[k] = mcp.ClientInfo{
-			Name:  v.Name,
-			State: mcp.State(v.State),
-			Error: v.Error,
-			Counts: mcp.Counts{
-				Tools:     v.ToolCount,
-				Prompts:   v.PromptCount,
-				Resources: v.ResourceCount,
-			},
-			ConnectedAt: v.ConnectedAt,
-		}
-	}
-	return result
-}
-
-func (w *ClientWorkspace) MCPRefreshPrompts(ctx context.Context, name string) {
-	_ = w.client.MCPRefreshPrompts(ctx, w.workspaceID(), name)
-}
-
-func (w *ClientWorkspace) MCPRefreshResources(ctx context.Context, name string) {
-	_ = w.client.MCPRefreshResources(ctx, w.workspaceID(), name)
-}
-
-func (w *ClientWorkspace) RefreshMCPTools(ctx context.Context, name string) {
-	_ = w.client.RefreshMCPTools(ctx, w.workspaceID(), name)
-}
-
-func (w *ClientWorkspace) ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error) {
-	contents, err := w.client.ReadMCPResource(ctx, w.workspaceID(), name, uri)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]MCPResourceContents, len(contents))
-	for i, c := range contents {
-		result[i] = MCPResourceContents{
-			URI:      c.URI,
-			MIMEType: c.MIMEType,
-			Text:     c.Text,
-			Blob:     c.Blob,
-		}
-	}
-	return result, nil
-}
-
-func (w *ClientWorkspace) GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error) {
-	return w.client.GetMCPPrompt(context.Background(), w.workspaceID(), clientID, promptID, args)
-}
-
-func (w *ClientWorkspace) EnableDockerMCP(ctx context.Context) error {
-	return w.client.EnableDockerMCP(ctx, w.workspaceID())
-}
-
-func (w *ClientWorkspace) DisableDockerMCP() error {
-	return w.client.DisableDockerMCP(context.Background(), w.workspaceID())
-}
-
 // -- Lifecycle --
 
 func (w *ClientWorkspace) Subscribe(program *tea.Program) {
@@ -502,6 +353,16 @@ func (w *ClientWorkspace) Subscribe(program *tea.Program) {
 	}
 }
 
+func (w *ClientWorkspace) IsGitWorktree(ctx context.Context) bool {
+	return true // Client mode always assumes git worktree (server validates)
+}
+
+func (w *ClientWorkspace) ListModifiedFiles(ctx context.Context) ([]ModifiedFile, error) {
+	// In client mode, modified files come from the server via SSE events.
+	// The UI maintains its own state from git status updates sent by the server.
+	return nil, nil
+}
+
 func (w *ClientWorkspace) Shutdown() {
 	_ = w.client.DeleteWorkspace(context.Background(), w.workspaceID())
 }
@@ -510,32 +371,6 @@ func (w *ClientWorkspace) Shutdown() {
 // that the TUI's Update() method expects.
 func translateEvent(ev any) tea.Msg {
 	switch e := ev.(type) {
-	case pubsub.Event[proto.LSPEvent]:
-		return pubsub.Event[LSPEvent]{
-			Type: e.Type,
-			Payload: LSPEvent{
-				Type:            LSPEventType(e.Payload.Type),
-				Name:            e.Payload.Name,
-				State:           e.Payload.State,
-				Error:           e.Payload.Error,
-				DiagnosticCount: e.Payload.DiagnosticCount,
-			},
-		}
-	case pubsub.Event[proto.MCPEvent]:
-		return pubsub.Event[mcp.Event]{
-			Type: e.Type,
-			Payload: mcp.Event{
-				Type:  protoToMCPEventType(e.Payload.Type),
-				Name:  e.Payload.Name,
-				State: mcp.State(e.Payload.State),
-				Error: e.Payload.Error,
-				Counts: mcp.Counts{
-					Tools:     e.Payload.ToolCount,
-					Prompts:   e.Payload.PromptCount,
-					Resources: e.Payload.ResourceCount,
-				},
-			},
-		}
 	case pubsub.Event[proto.Message]:
 		return pubsub.Event[message.Message]{
 			Type:    e.Type,
@@ -545,11 +380,6 @@ func translateEvent(ev any) tea.Msg {
 		return pubsub.Event[session.Session]{
 			Type:    e.Type,
 			Payload: protoToSession(e.Payload),
-		}
-	case pubsub.Event[proto.File]:
-		return pubsub.Event[history.File]{
-			Type:    e.Type,
-			Payload: protoToFile(e.Payload),
 		}
 	case pubsub.Event[proto.AgentEvent]:
 		return pubsub.Event[notify.Notification]{
@@ -566,21 +396,6 @@ func translateEvent(ev any) tea.Msg {
 	}
 }
 
-func protoToMCPEventType(t proto.MCPEventType) mcp.EventType {
-	switch t {
-	case proto.MCPEventStateChanged:
-		return mcp.EventStateChanged
-	case proto.MCPEventToolsListChanged:
-		return mcp.EventToolsListChanged
-	case proto.MCPEventPromptsListChanged:
-		return mcp.EventPromptsListChanged
-	case proto.MCPEventResourcesListChanged:
-		return mcp.EventResourcesListChanged
-	default:
-		return mcp.EventStateChanged
-	}
-}
-
 func protoToSession(s proto.Session) session.Session {
 	return session.Session{
 		ID:               s.ID,
@@ -593,18 +408,6 @@ func protoToSession(s proto.Session) session.Session {
 		Cost:             s.Cost,
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
-	}
-}
-
-func protoToFile(f proto.File) history.File {
-	return history.File{
-		ID:        f.ID,
-		SessionID: f.SessionID,
-		Path:      f.Path,
-		Content:   f.Content,
-		Version:   f.Version,
-		CreatedAt: f.CreatedAt,
-		UpdatedAt: f.UpdatedAt,
 	}
 }
 
@@ -665,14 +468,6 @@ func protoToMessages(msgs []proto.Message) []message.Message {
 	out := make([]message.Message, len(msgs))
 	for i, m := range msgs {
 		out[i] = protoToMessage(m)
-	}
-	return out
-}
-
-func protoToFiles(files []proto.File) []history.File {
-	out := make([]history.File, len(files))
-	for i, f := range files {
-		out[i] = protoToFile(f)
 	}
 	return out
 }

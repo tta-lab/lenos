@@ -4,22 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/tta-lab/lenos/internal/diff"
-	"github.com/tta-lab/lenos/internal/fsext"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/ui/util"
+	"github.com/tta-lab/lenos/internal/workspace"
 )
 
 // twPollMsg is sent by the taskwarrior subtask poller with updated todos.
@@ -30,144 +25,28 @@ type twPollMsg struct {
 // loadSessionMsg is a message indicating that a session and its files have
 // been loaded.
 type loadSessionMsg struct {
-	session   *session.Session
-	files     []SessionFile
-	readFiles []string
+	session *session.Session
 }
 
-// lspFilePaths returns deduplicated file paths from both modified and read
-// files for starting LSP servers.
-func (msg loadSessionMsg) lspFilePaths() []string {
-	seen := make(map[string]struct{}, len(msg.files)+len(msg.readFiles))
-	paths := make([]string, 0, len(msg.files)+len(msg.readFiles))
-	for _, f := range msg.files {
-		p := f.LatestVersion.Path
-		if _, ok := seen[p]; ok {
-			continue
-		}
-		seen[p] = struct{}{}
-		paths = append(paths, p)
-	}
-	for _, p := range msg.readFiles {
-		if _, ok := seen[p]; ok {
-			continue
-		}
-		seen[p] = struct{}{}
-		paths = append(paths, p)
-	}
-	return paths
-}
-
-// SessionFile tracks the first and latest versions of a file in a session,
-// along with the total additions and deletions.
-type SessionFile struct {
-	FirstVersion  history.File
-	LatestVersion history.File
-	Additions     int
-	Deletions     int
-}
-
-// loadSession loads the session along with its associated files and computes
-// the diff statistics (additions and deletions) for each file in the session.
-// It returns a tea.Cmd that, when executed, fetches the session data and
-// returns a sessionFilesLoadedMsg containing the processed session files.
+// loadSession loads the session. It returns a tea.Cmd that, when executed,
+// fetches the session data and returns a loadSessionMsg.
 func (m *UI) loadSession(sessionID string) tea.Cmd {
 	return func() tea.Msg {
-		session, err := m.com.Workspace.GetSession(context.Background(), sessionID)
+		sess, err := m.com.Workspace.GetSession(context.Background(), sessionID)
 		if err != nil {
 			return util.ReportError(err)
 		}
-
-		sessionFiles, err := m.loadSessionFiles(sessionID)
-		if err != nil {
-			return util.ReportError(err)
-		}
-
-		readFiles, err := m.com.Workspace.FileTrackerListReadFiles(context.Background(), sessionID)
-		if err != nil {
-			slog.Error("Failed to load read files for session", "error", err)
-		}
-
-		return loadSessionMsg{
-			session:   &session,
-			files:     sessionFiles,
-			readFiles: readFiles,
-		}
+		return loadSessionMsg{session: &sess}
 	}
 }
 
-func (m *UI) loadSessionFiles(sessionID string) ([]SessionFile, error) {
-	files, err := m.com.Workspace.ListSessionHistory(context.Background(), sessionID)
-	if err != nil {
-		return nil, err
+// modifiedFilesInfo renders the modified files section for the sidebar,
+// showing files from git diff --numstat and untracked files.
+func (m *UI) modifiedFilesInfo(width, maxItems int, isSection bool) string {
+	if !m.gitWorktree {
+		return ""
 	}
 
-	filesByPath := make(map[string][]history.File)
-	for _, f := range files {
-		filesByPath[f.Path] = append(filesByPath[f.Path], f)
-	}
-	sessionFiles := make([]SessionFile, 0, len(filesByPath))
-	for _, versions := range filesByPath {
-		if len(versions) == 0 {
-			continue
-		}
-
-		first := versions[0]
-		last := versions[0]
-		for _, v := range versions {
-			if v.Version < first.Version {
-				first = v
-			}
-			if v.Version > last.Version {
-				last = v
-			}
-		}
-
-		_, additions, deletions := diff.GenerateDiff(first.Content, last.Content, first.Path)
-
-		sessionFiles = append(sessionFiles, SessionFile{
-			FirstVersion:  first,
-			LatestVersion: last,
-			Additions:     additions,
-			Deletions:     deletions,
-		})
-	}
-
-	slices.SortFunc(sessionFiles, func(a, b SessionFile) int {
-		if a.LatestVersion.UpdatedAt > b.LatestVersion.UpdatedAt {
-			return -1
-		}
-		if a.LatestVersion.UpdatedAt < b.LatestVersion.UpdatedAt {
-			return 1
-		}
-		return 0
-	})
-	return sessionFiles, nil
-}
-
-// handleFileEvent processes file change events and updates the session file
-// list with new or updated file information.
-func (m *UI) handleFileEvent(file history.File) tea.Cmd {
-	if m.session == nil || file.SessionID != m.session.ID {
-		return nil
-	}
-
-	return func() tea.Msg {
-		sessionFiles, err := m.loadSessionFiles(m.session.ID)
-		// could not load session files
-		if err != nil {
-			return util.NewErrorMsg(err)
-		}
-
-		return sessionFilesUpdatesMsg{
-			sessionFiles: sessionFiles,
-		}
-	}
-}
-
-// filesInfo renders the modified files section for the sidebar, showing files
-// with their addition/deletion counts.
-func (m *UI) filesInfo(cwd string, width, maxItems int, isSection bool) string {
 	t := m.com.Styles
 
 	title := t.Subtle.Render("Modified Files")
@@ -175,83 +54,85 @@ func (m *UI) filesInfo(cwd string, width, maxItems int, isSection bool) string {
 		title = common.Section(t, "Modified Files", width)
 	}
 	list := t.Subtle.Render("None")
-	var filesWithChanges []SessionFile
-	for _, f := range m.sessionFiles {
-		if f.Additions == 0 && f.Deletions == 0 {
-			continue
-		}
-		filesWithChanges = append(filesWithChanges, f)
-	}
-	if len(filesWithChanges) > 0 {
-		list = fileList(t, cwd, filesWithChanges, width, maxItems)
+
+	if len(m.modifiedFiles) > 0 {
+		list = gitFileList(t, m.modifiedFiles, width, maxItems)
 	}
 
-	return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("%s\n\n%s", title, list))
+	return lipgloss.NewStyle().Width(width).Render(title + "\n\n" + list)
 }
 
-// fileList renders a list of files with their diff statistics, truncating to
-// maxItems and showing a "...and N more" message if needed.
-func fileList(t *styles.Styles, cwd string, filesWithChanges []SessionFile, width, maxItems int) string {
-	if maxItems <= 0 {
+// gitFileList renders a list of modified files with line counts, truncating
+// to maxItems.
+func gitFileList(t *styles.Styles, files []workspace.ModifiedFile, width, maxItems int) string {
+	if maxItems <= 0 || len(files) == 0 {
 		return ""
 	}
-	var renderedFiles []string
-	filesShown := 0
 
-	for _, f := range filesWithChanges {
-		// Skip files with no changes
-		if filesShown >= maxItems {
-			break
-		}
-
-		// Build stats string with colors
-		var statusParts []string
-		if f.Additions > 0 {
-			statusParts = append(statusParts, t.Files.Additions.Render(fmt.Sprintf("+%d", f.Additions)))
-		}
-		if f.Deletions > 0 {
-			statusParts = append(statusParts, t.Files.Deletions.Render(fmt.Sprintf("-%d", f.Deletions)))
-		}
-		extraContent := strings.Join(statusParts, " ")
-
-		// Format file path
-		filePath := f.FirstVersion.Path
-		if rel, err := filepath.Rel(cwd, filePath); err == nil {
-			filePath = rel
-		}
-		filePath = fsext.DirTrim(filePath, 2)
-		filePath = ansi.Truncate(filePath, width-(lipgloss.Width(extraContent)-2), "…")
-
-		line := t.Files.Path.Render(filePath)
-		if extraContent != "" {
-			line = fmt.Sprintf("%s %s", line, extraContent)
-		}
-
-		renderedFiles = append(renderedFiles, line)
-		filesShown++
+	countWidth := 12
+	pathWidth := width - countWidth - 1
+	if pathWidth < 10 {
+		pathWidth = width
+		countWidth = 0
 	}
 
-	if len(filesWithChanges) > maxItems {
-		remaining := len(filesWithChanges) - maxItems
-		renderedFiles = append(renderedFiles, t.Subtle.Render(fmt.Sprintf("…and %d more", remaining)))
+	var lines []string
+	for i := 0; i < len(files) && i < maxItems; i++ {
+		f := files[i]
+		countStr := formatFileCount(t, f)
+		countPart := t.Subtle.Render(lipgloss.JoinHorizontal(
+			lipgloss.Right,
+			lipgloss.NewStyle().Width(countWidth).Render(countStr),
+		))
+		pathPart := truncatePath(t, f.Path, pathWidth)
+		if countWidth > 0 {
+			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Right, countPart, pathPart))
+		} else {
+			lines = append(lines, pathPart)
+		}
 	}
-
-	return lipgloss.JoinVertical(lipgloss.Left, renderedFiles...)
+	if len(files) > maxItems {
+		remaining := len(files) - maxItems
+		lines = append(lines, t.Subtle.Render(fmt.Sprintf("…and %d more", remaining)))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
-// startLSPs starts LSP servers for the given file paths.
-func (m *UI) startLSPs(paths []string) tea.Cmd {
-	if len(paths) == 0 {
-		return nil
+// formatFileCount returns a colored string for the Added/Deleted counts.
+func formatFileCount(t *styles.Styles, f workspace.ModifiedFile) string {
+	if f.IsNew {
+		return t.Files.Additions.Render("new")
 	}
+	if f.IsBinary {
+		return t.Subtle.Render("bin")
+	}
+	added := t.Files.Additions.Render(fmt.Sprintf("+%d", f.Added))
+	deleted := t.Files.Deletions.Render(fmt.Sprintf("-%d", f.Deleted))
+	return added + " " + deleted
+}
 
-	return func() tea.Msg {
-		ctx := context.Background()
-		for _, path := range paths {
-			m.com.Workspace.LSPStart(ctx, path)
-		}
-		return nil
+// truncatePath truncates a path from the left, keeping the filename and
+// enough context to identify the file.
+func truncatePath(t *styles.Styles, path string, maxWidth int) string {
+	rendered := t.Files.Path.Render(path)
+	if lipgloss.Width(rendered) <= maxWidth {
+		return rendered
 	}
+	// Truncate from left, preserve trailing component
+	parts := strings.Split(path, "/")
+	var truncated []string
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate := strings.Join(append([]string{"…"}, truncated...), "/")
+		if lipgloss.Width(t.Files.Path.Render(candidate)) <= maxWidth {
+			truncated = append([]string{parts[i]}, truncated...)
+		} else {
+			break
+		}
+	}
+	if len(truncated) == 0 {
+		return t.Files.Path.Render("…" + path[len(path)-maxWidth:])
+	}
+	return t.Files.Path.Render(strings.Join(truncated, "/"))
 }
 
 // stopTWPoll stops the taskwarrior subtask poller and clears its state.
@@ -303,4 +184,51 @@ func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
 
 	// Return the first scheduled tick via the shared helper.
 	return m.waitNextTWTick()
+}
+
+// gitPollMsg is sent by the git modified files poller with updated files.
+type gitPollMsg struct {
+	files []workspace.ModifiedFile
+}
+
+// stopGitPoll stops the git modified files poller.
+func (m *UI) stopGitPoll() {
+	if m.gitPollTicker != nil {
+		m.gitPollTicker.Stop()
+		m.gitPollTicker = nil
+	}
+}
+
+// waitNextGitTick returns a command that waits for the next ticker tick and
+// emits a gitPollMsg. Guards against a nil ticker (stopped poller).
+func (m *UI) waitNextGitTick() tea.Cmd {
+	if m.gitPollTicker == nil {
+		return nil
+	}
+	ticker := m.gitPollTicker
+	return func() tea.Msg {
+		_, ok := <-ticker.C
+		if !ok {
+			return gitPollMsg{files: nil}
+		}
+		files, err := m.com.Workspace.ListModifiedFiles(context.Background())
+		if err != nil {
+			slog.Warn("Git poll failed", "err", err)
+			return gitPollMsg{files: nil}
+		}
+		return gitPollMsg{files: files}
+	}
+}
+
+// startGitPoll starts a 2-second ticker that polls git status and sends
+// gitPollMsg when the results change. Idempotent — safe to call multiple times.
+func (m *UI) startGitPoll() tea.Cmd {
+	if !m.gitWorktree {
+		return nil
+	}
+	m.stopGitPoll()
+	m.gitPollTicker = time.NewTicker(2 * time.Second)
+
+	// Return the first scheduled tick.
+	return m.waitNextGitTick()
 }

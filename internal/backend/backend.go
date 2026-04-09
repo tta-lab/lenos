@@ -23,7 +23,6 @@ import (
 // Common errors returned by backend operations.
 var (
 	ErrWorkspaceNotFound       = errors.New("workspace not found")
-	ErrLSPClientNotFound       = errors.New("LSP client not found")
 	ErrAgentNotInitialized     = errors.New("agent coordinator not initialized")
 	ErrPathRequired            = errors.New("path is required")
 	ErrInvalidPermissionAction = errors.New("invalid permission action")

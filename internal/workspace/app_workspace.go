@@ -1,21 +1,20 @@
 package workspace
 
 import (
+	"bytes"
 	"context"
 	"errors"
-	"fmt"
-	"time"
+	"os/exec"
+	"sort"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/tta-lab/lenos/internal/agent"
-	mcptools "github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/app"
-	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/history"
-	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/tta-lab/lenos/internal/session"
 )
@@ -165,59 +164,6 @@ func (w *AppWorkspace) GetDefaultSmallModel(providerID string) config.SelectedMo
 	return w.app.GetDefaultSmallModel(providerID)
 }
 
-// -- FileTracker --
-
-func (w *AppWorkspace) FileTrackerRecordRead(ctx context.Context, sessionID, path string) {
-	w.app.FileTracker.RecordRead(ctx, sessionID, path)
-}
-
-func (w *AppWorkspace) FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time {
-	return w.app.FileTracker.LastReadTime(ctx, sessionID, path)
-}
-
-func (w *AppWorkspace) FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
-	return w.app.FileTracker.ListReadFiles(ctx, sessionID)
-}
-
-// -- History --
-
-func (w *AppWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
-	return w.app.History.ListBySession(ctx, sessionID)
-}
-
-// -- LSP --
-
-func (w *AppWorkspace) LSPStart(ctx context.Context, path string) {
-	w.app.LSPManager.Start(ctx, path)
-}
-
-func (w *AppWorkspace) LSPStopAll(ctx context.Context) {
-	w.app.LSPManager.StopAll(ctx)
-}
-
-func (w *AppWorkspace) LSPGetStates() map[string]LSPClientInfo {
-	states := app.GetLSPStates()
-	result := make(map[string]LSPClientInfo, len(states))
-	for k, v := range states {
-		result[k] = LSPClientInfo{
-			Name:            v.Name,
-			State:           v.State,
-			Error:           v.Error,
-			DiagnosticCount: v.DiagnosticCount,
-			ConnectedAt:     v.ConnectedAt,
-		}
-	}
-	return result
-}
-
-func (w *AppWorkspace) LSPGetDiagnosticCounts(name string) lsp.DiagnosticCounts {
-	state, ok := app.GetLSPState(name)
-	if !ok || state.Client == nil {
-		return lsp.DiagnosticCounts{}
-	}
-	return state.Client.GetDiagnosticCounts()
-}
-
 // -- Config (read-only) --
 
 func (w *AppWorkspace) Config() *config.Config {
@@ -276,73 +222,6 @@ func (w *AppWorkspace) InitializePrompt() (string, error) {
 	return agent.InitializePrompt(w.store)
 }
 
-// -- MCP operations --
-
-func (w *AppWorkspace) MCPGetStates() map[string]mcptools.ClientInfo {
-	return mcptools.GetStates()
-}
-
-func (w *AppWorkspace) MCPRefreshPrompts(ctx context.Context, name string) {
-	mcptools.RefreshPrompts(ctx, name)
-}
-
-func (w *AppWorkspace) MCPRefreshResources(ctx context.Context, name string) {
-	mcptools.RefreshResources(ctx, name)
-}
-
-func (w *AppWorkspace) RefreshMCPTools(ctx context.Context, name string) {
-	mcptools.RefreshTools(ctx, w.store, name)
-}
-
-func (w *AppWorkspace) ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error) {
-	contents, err := mcptools.ReadResource(ctx, w.store, name, uri)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]MCPResourceContents, len(contents))
-	for i, c := range contents {
-		result[i] = MCPResourceContents{
-			URI:      c.URI,
-			MIMEType: c.MIMEType,
-			Text:     c.Text,
-			Blob:     c.Blob,
-		}
-	}
-	return result, nil
-}
-
-func (w *AppWorkspace) GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error) {
-	return commands.GetMCPPrompt(w.store, clientID, promptID, args)
-}
-
-func (w *AppWorkspace) EnableDockerMCP(ctx context.Context) error {
-	mcpConfig, err := w.store.PrepareDockerMCPConfig()
-	if err != nil {
-		return err
-	}
-
-	if err := mcptools.InitializeSingle(ctx, config.DockerMCPName, w.store); err != nil {
-		disableErr := mcptools.DisableSingle(w.store, config.DockerMCPName)
-		delete(w.store.Config().MCP, config.DockerMCPName)
-		return fmt.Errorf("failed to start docker MCP: %w", errors.Join(err, disableErr))
-	}
-
-	if err := w.store.PersistDockerMCPConfig(mcpConfig); err != nil {
-		disableErr := mcptools.DisableSingle(w.store, config.DockerMCPName)
-		delete(w.store.Config().MCP, config.DockerMCPName)
-		return fmt.Errorf("docker MCP started but failed to persist configuration: %w", errors.Join(err, disableErr))
-	}
-
-	return nil
-}
-
-func (w *AppWorkspace) DisableDockerMCP() error {
-	if err := mcptools.DisableSingle(w.store, config.DockerMCPName); err != nil {
-		return fmt.Errorf("failed to disable docker MCP: %w", err)
-	}
-	return w.store.DisableDockerMCP()
-}
-
 // -- Lifecycle --
 
 func (w *AppWorkspace) Subscribe(program *tea.Program) {
@@ -365,6 +244,90 @@ func (w *AppWorkspace) Store() *config.ConfigStore {
 
 func (w *AppWorkspace) AgentName() string {
 	return w.store.Overrides().AgentName
+}
+
+// -- Git --
+
+func (w *AppWorkspace) IsGitWorktree(ctx context.Context) bool {
+	err := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree").Run()
+	return err == nil
+}
+
+func (w *AppWorkspace) ListModifiedFiles(ctx context.Context) ([]ModifiedFile, error) {
+	dir := w.store.WorkingDir()
+	var tracked, untracked []ModifiedFile
+	var g errgroup.Group
+
+	g.Go(func() error {
+		var err error
+		tracked, err = trackedNumstat(ctx, dir)
+		return err
+	})
+	g.Go(func() error {
+		var err error
+		untracked, err = untrackedFiles(ctx, dir)
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	files := append(tracked, untracked...)
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files, nil
+}
+
+// trackedNumstat runs git diff HEAD --numstat and returns ModifiedFiles for
+// all tracked files that differ from HEAD (staged + unstaged combined).
+func trackedNumstat(ctx context.Context, dir string) ([]ModifiedFile, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "diff", "HEAD", "--numstat", "--no-renames")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var files []ModifiedFile
+	for _, line := range bytes.Split(bytes.TrimSpace(out), []byte{'\n'}) {
+		if len(line) == 0 {
+			continue
+		}
+		fields := bytes.SplitN(line, []byte{'\t'}, 3)
+		if len(fields) != 3 {
+			continue
+		}
+		isBinary := bytes.Equal(fields[0], []byte("-"))
+		added, _ := strconv.Atoi(string(fields[0]))
+		deleted, _ := strconv.Atoi(string(fields[1]))
+		files = append(files, ModifiedFile{
+			Path:     string(fields[2]),
+			Added:    added,
+			Deleted:  deleted,
+			IsBinary: isBinary,
+		})
+	}
+	return files, nil
+}
+
+// untrackedFiles returns ModifiedFiles for all untracked files, respecting
+// .gitignore and standard excludes.
+func untrackedFiles(ctx context.Context, dir string) ([]ModifiedFile, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "ls-files", "--others", "--exclude-standard")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var files []ModifiedFile
+	for _, line := range bytes.Split(bytes.TrimSpace(out), []byte{'\n'}) {
+		if len(line) == 0 {
+			continue
+		}
+		files = append(files, ModifiedFile{
+			Path:  string(line),
+			Added: -1,
+			IsNew: true,
+		})
+	}
+	return files, nil
 }
 
 // Compile-time check that AppWorkspace implements Workspace.

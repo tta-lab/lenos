@@ -6,47 +6,15 @@ package workspace
 
 import (
 	"context"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
-	mcptools "github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/history"
-	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
 
 	"github.com/tta-lab/lenos/internal/session"
 )
-
-// LSPClientInfo holds information about an LSP client's state. This is
-// the frontend-facing type; implementations translate from the
-// underlying app or proto representation.
-type LSPClientInfo struct {
-	Name            string
-	State           lsp.ServerState
-	Error           error
-	DiagnosticCount int
-	ConnectedAt     time.Time
-}
-
-// LSPEventType represents the type of LSP event.
-type LSPEventType string
-
-const (
-	LSPEventStateChanged       LSPEventType = "state_changed"
-	LSPEventDiagnosticsChanged LSPEventType = "diagnostics_changed"
-)
-
-// LSPEvent represents an LSP event forwarded to the TUI.
-type LSPEvent struct {
-	Type            LSPEventType
-	Name            string
-	State           lsp.ServerState
-	Error           error
-	DiagnosticCount int
-}
 
 // AgentModel holds the model information exposed to the UI.
 type AgentModel struct {
@@ -88,19 +56,9 @@ type Workspace interface {
 	InitCoderAgent(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel
 
-	// FileTracker
-	FileTrackerRecordRead(ctx context.Context, sessionID, path string)
-	FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time
-	FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error)
-
-	// History
-	ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error)
-
-	// LSP
-	LSPStart(ctx context.Context, path string)
-	LSPStopAll(ctx context.Context)
-	LSPGetStates() map[string]LSPClientInfo
-	LSPGetDiagnosticCounts(name string) lsp.DiagnosticCounts
+	// Git
+	IsGitWorktree(ctx context.Context) bool
+	ListModifiedFiles(ctx context.Context) ([]ModifiedFile, error)
 
 	// Config (read-only data)
 	Config() *config.Config
@@ -122,25 +80,16 @@ type Workspace interface {
 	MarkProjectInitialized() error
 	InitializePrompt() (string, error)
 
-	// MCP operations (server-side in client mode)
-	MCPGetStates() map[string]mcptools.ClientInfo
-	MCPRefreshPrompts(ctx context.Context, name string)
-	MCPRefreshResources(ctx context.Context, name string)
-	RefreshMCPTools(ctx context.Context, name string)
-	ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error)
-	GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error)
-	EnableDockerMCP(ctx context.Context) error
-	DisableDockerMCP() error
-
 	// Events
 	Subscribe(program *tea.Program)
 	Shutdown()
 }
 
-// MCPResourceContents holds the contents of an MCP resource.
-type MCPResourceContents struct {
-	URI      string `json:"uri"`
-	MIMEType string `json:"mime_type,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Blob     []byte `json:"blob,omitempty"`
+// ModifiedFile describes a file that differs from HEAD.
+type ModifiedFile struct {
+	Path     string
+	Added    int // -1 for binary, -1 for untracked without wc
+	Deleted  int
+	IsBinary bool
+	IsNew    bool // true if untracked
 }

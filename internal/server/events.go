@@ -6,9 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
-	"github.com/tta-lab/lenos/internal/app"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/proto"
 	"github.com/tta-lab/lenos/internal/pubsub"
@@ -21,28 +18,6 @@ import (
 // proper JSON tags. Returns nil if the event type is unrecognized.
 func wrapEvent(ev any) *pubsub.Payload {
 	switch e := ev.(type) {
-	case pubsub.Event[app.LSPEvent]:
-		return envelope(pubsub.PayloadTypeLSPEvent, pubsub.Event[proto.LSPEvent]{
-			Type: e.Type,
-			Payload: proto.LSPEvent{
-				Type:            proto.LSPEventType(e.Payload.Type),
-				Name:            e.Payload.Name,
-				State:           e.Payload.State,
-				Error:           e.Payload.Error,
-				DiagnosticCount: e.Payload.DiagnosticCount,
-			},
-		})
-	case pubsub.Event[mcp.Event]:
-		return envelope(pubsub.PayloadTypeMCPEvent, pubsub.Event[proto.MCPEvent]{
-			Type: e.Type,
-			Payload: proto.MCPEvent{
-				Type:      mcpEventTypeToProto(e.Payload.Type),
-				Name:      e.Payload.Name,
-				State:     proto.MCPState(e.Payload.State),
-				Error:     e.Payload.Error,
-				ToolCount: e.Payload.Counts.Tools,
-			},
-		})
 	case pubsub.Event[message.Message]:
 		return envelope(pubsub.PayloadTypeMessage, pubsub.Event[proto.Message]{
 			Type:    e.Type,
@@ -52,11 +27,6 @@ func wrapEvent(ev any) *pubsub.Payload {
 		return envelope(pubsub.PayloadTypeSession, pubsub.Event[proto.Session]{
 			Type:    e.Type,
 			Payload: sessionToProto(e.Payload),
-		})
-	case pubsub.Event[history.File]:
-		return envelope(pubsub.PayloadTypeFile, pubsub.Event[proto.File]{
-			Type:    e.Type,
-			Payload: fileToProto(e.Payload),
 		})
 	case pubsub.Event[notify.Notification]:
 		return envelope(pubsub.PayloadTypeAgentEvent, pubsub.Event[proto.AgentEvent]{
@@ -86,21 +56,6 @@ func envelope(payloadType pubsub.PayloadType, inner any) *pubsub.Payload {
 	}
 }
 
-func mcpEventTypeToProto(t mcp.EventType) proto.MCPEventType {
-	switch t {
-	case mcp.EventStateChanged:
-		return proto.MCPEventStateChanged
-	case mcp.EventToolsListChanged:
-		return proto.MCPEventToolsListChanged
-	case mcp.EventPromptsListChanged:
-		return proto.MCPEventPromptsListChanged
-	case mcp.EventResourcesListChanged:
-		return proto.MCPEventResourcesListChanged
-	default:
-		return proto.MCPEventStateChanged
-	}
-}
-
 func sessionToProto(s session.Session) proto.Session {
 	return proto.Session{
 		ID:               s.ID,
@@ -113,18 +68,6 @@ func sessionToProto(s session.Session) proto.Session {
 		Cost:             s.Cost,
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
-	}
-}
-
-func fileToProto(f history.File) proto.File {
-	return proto.File{
-		ID:        f.ID,
-		SessionID: f.SessionID,
-		Path:      f.Path,
-		Content:   f.Content,
-		Version:   f.Version,
-		CreatedAt: f.CreatedAt,
-		UpdatedAt: f.UpdatedAt,
 	}
 }
 

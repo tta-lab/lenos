@@ -1,6 +1,6 @@
 ---
 name: lenos-config
-description: Configure Lenos settings including providers, LSPs, MCPs, skills, permissions, and behavior options. Use when the user needs help with config.json configuration, setting up providers, configuring LSPs, adding MCP servers, or changing Lenos behavior.
+description: Configure Lenos settings including providers, skills, permissions, and behavior options. Use when the user needs help with config.json configuration, setting up providers, configuring tools, or changing Lenos behavior.
 ---
 
 # Lenos Configuration
@@ -44,46 +44,6 @@ Add a relative path to keep project-specific skills alongside your code:
 >  * `.claude/skills`
 >  * `.cursor/skills`
 
-### LSP Configuration
-
-```json
-{
-  "lsp": {
-    "go": {
-      "command": "gopls",
-      "env": {
-        "GOTOOLCHAIN": "go1.24.5"
-      }
-    },
-    "typescript": {
-      "command": "typescript-language-server",
-      "args": ["--stdio"]
-    }
-  }
-}
-```
-
-### MCP Servers
-
-```json
-{
-  "mcp": {
-    "filesystem": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["/path/to/mcp-server.js"]
-    },
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/",
-      "headers": {
-        "Authorization": "Bearer $GH_PAT"
-      }
-    }
-  }
-}
-```
-
 ### Custom Provider
 
 ```json
@@ -110,7 +70,7 @@ Add a relative path to keep project-specific skills alongside your code:
 ```json
 {
   "permissions": {
-    "allowed_tools": ["view", "ls", "grep", "edit"]
+    "allowed_tools": ["bash", "sourcegraph"]
   }
 }
 ```
@@ -120,7 +80,7 @@ Add a relative path to keep project-specific skills alongside your code:
 ```json
 {
   "options": {
-    "disabled_tools": ["bash", "sourcegraph"]
+    "disabled_tools": ["sourcegraph"]
   }
 }
 ```
@@ -143,8 +103,7 @@ skills discovered from disk paths.
 ```json
 {
   "options": {
-    "debug": true,
-    "debug_lsp": true
+    "debug": true
   }
 }
 ```

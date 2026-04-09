@@ -310,8 +310,7 @@ type Styles struct {
 		JobDescription lipgloss.Style // Description text
 
 		// Agent task styles
-		AgentTaskTag lipgloss.Style // Agent task tag (blue background, bold)
-		AgentPrompt  lipgloss.Style // Agent prompt text
+		AgentPrompt lipgloss.Style // Agent prompt text
 
 		// Agentic fetch styles
 		AgenticFetchPromptTag lipgloss.Style // Agentic fetch prompt tag (green background, bold)
@@ -1157,7 +1156,6 @@ func DefaultStyles() Styles {
 	s.Tool.JobDescription = s.Subtle
 
 	// Agent task styles
-	s.Tool.AgentTaskTag = base.Bold(true).Padding(0, 1).MarginLeft(2).Background(blueLight).Foreground(white)
 	s.Tool.AgentPrompt = s.Muted
 
 	// Agentic fetch styles

@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/proto"
@@ -136,14 +135,6 @@ func (c *Client) SubscribeEvents(ctx context.Context, id string) (<-chan any, er
 			}
 
 			switch p.Type {
-			case pubsub.PayloadTypeLSPEvent:
-				var e pubsub.Event[proto.LSPEvent]
-				_ = json.Unmarshal(p.Payload, &e)
-				sendEvent(ctx, events, e)
-			case pubsub.PayloadTypeMCPEvent:
-				var e pubsub.Event[proto.MCPEvent]
-				_ = json.Unmarshal(p.Payload, &e)
-				sendEvent(ctx, events, e)
 			case pubsub.PayloadTypeMessage:
 				var e pubsub.Event[proto.Message]
 				_ = json.Unmarshal(p.Payload, &e)
@@ -178,91 +169,6 @@ func sendEvent(ctx context.Context, evc chan any, ev any) {
 		close(evc)
 		return
 	}
-}
-
-// GetLSPDiagnostics retrieves LSP diagnostics for a specific LSP client.
-func (c *Client) GetLSPDiagnostics(ctx context.Context, id string, lspName string) (map[protocol.DocumentURI][]protocol.Diagnostic, error) {
-	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/lsps/%s/diagnostics", id, lspName), nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get LSP diagnostics: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get LSP diagnostics: status code %d", rsp.StatusCode)
-	}
-	var diagnostics map[protocol.DocumentURI][]protocol.Diagnostic
-	if err := json.NewDecoder(rsp.Body).Decode(&diagnostics); err != nil {
-		return nil, fmt.Errorf("failed to decode LSP diagnostics: %w", err)
-	}
-	return diagnostics, nil
-}
-
-// GetLSPs retrieves the LSP client states for a workspace.
-func (c *Client) GetLSPs(ctx context.Context, id string) (map[string]proto.LSPClientInfo, error) {
-	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/lsps", id), nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get LSPs: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get LSPs: status code %d", rsp.StatusCode)
-	}
-	var lsps map[string]proto.LSPClientInfo
-	if err := json.NewDecoder(rsp.Body).Decode(&lsps); err != nil {
-		return nil, fmt.Errorf("failed to decode LSPs: %w", err)
-	}
-	return lsps, nil
-}
-
-// MCPGetStates retrieves the MCP client states for a workspace.
-func (c *Client) MCPGetStates(ctx context.Context, id string) (map[string]proto.MCPClientInfo, error) {
-	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/mcp/states", id), nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get MCP states: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get MCP states: status code %d", rsp.StatusCode)
-	}
-	var states map[string]proto.MCPClientInfo
-	if err := json.NewDecoder(rsp.Body).Decode(&states); err != nil {
-		return nil, fmt.Errorf("failed to decode MCP states: %w", err)
-	}
-	return states, nil
-}
-
-// MCPRefreshPrompts refreshes prompts for a named MCP client.
-func (c *Client) MCPRefreshPrompts(ctx context.Context, id, name string) error {
-	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/mcp/refresh-prompts", id), nil,
-		jsonBody(struct {
-			Name string `json:"name"`
-		}{Name: name}),
-		http.Header{"Content-Type": []string{"application/json"}})
-	if err != nil {
-		return fmt.Errorf("failed to refresh MCP prompts: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to refresh MCP prompts: status code %d", rsp.StatusCode)
-	}
-	return nil
-}
-
-// MCPRefreshResources refreshes resources for a named MCP client.
-func (c *Client) MCPRefreshResources(ctx context.Context, id, name string) error {
-	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/mcp/refresh-resources", id), nil,
-		jsonBody(struct {
-			Name string `json:"name"`
-		}{Name: name}),
-		http.Header{"Content-Type": []string{"application/json"}})
-	if err != nil {
-		return fmt.Errorf("failed to refresh MCP resources: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to refresh MCP resources: status code %d", rsp.StatusCode)
-	}
-	return nil
 }
 
 // GetAgentSessionQueuedPrompts retrieves the number of queued prompts for a
@@ -614,86 +520,4 @@ func (c *Client) GetDefaultSmallModel(ctx context.Context, id string, providerID
 		return nil, fmt.Errorf("failed to decode default small model: %w", err)
 	}
 	return &model, nil
-}
-
-// FileTrackerRecordRead records a file read for a session.
-func (c *Client) FileTrackerRecordRead(ctx context.Context, id string, sessionID, path string) error {
-	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/filetracker/read", id), nil, jsonBody(struct {
-		SessionID string `json:"session_id"`
-		Path      string `json:"path"`
-	}{SessionID: sessionID, Path: path}), http.Header{"Content-Type": []string{"application/json"}})
-	if err != nil {
-		return fmt.Errorf("failed to record file read: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to record file read: status code %d", rsp.StatusCode)
-	}
-	return nil
-}
-
-// FileTrackerLastReadTime returns the last read time for a file in a
-// session.
-func (c *Client) FileTrackerLastReadTime(ctx context.Context, id string, sessionID, path string) (time.Time, error) {
-	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/filetracker/lastread", id), url.Values{
-		"session_id": []string{sessionID},
-		"path":       []string{path},
-	}, nil)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to get last read time: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return time.Time{}, fmt.Errorf("failed to get last read time: status code %d", rsp.StatusCode)
-	}
-	var t time.Time
-	if err := json.NewDecoder(rsp.Body).Decode(&t); err != nil {
-		return time.Time{}, fmt.Errorf("failed to decode last read time: %w", err)
-	}
-	return t, nil
-}
-
-// FileTrackerListReadFiles returns the list of read files for a session.
-func (c *Client) FileTrackerListReadFiles(ctx context.Context, id string, sessionID string) ([]string, error) {
-	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/sessions/%s/filetracker/files", id, sessionID), nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get read files: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get read files: status code %d", rsp.StatusCode)
-	}
-	var files []string
-	if err := json.NewDecoder(rsp.Body).Decode(&files); err != nil {
-		return nil, fmt.Errorf("failed to decode read files: %w", err)
-	}
-	return files, nil
-}
-
-// LSPStart starts an LSP server for a path.
-func (c *Client) LSPStart(ctx context.Context, id string, path string) error {
-	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/lsps/start", id), nil, jsonBody(struct {
-		Path string `json:"path"`
-	}{Path: path}), http.Header{"Content-Type": []string{"application/json"}})
-	if err != nil {
-		return fmt.Errorf("failed to start LSP: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to start LSP: status code %d", rsp.StatusCode)
-	}
-	return nil
-}
-
-// LSPStopAll stops all LSP servers for a workspace.
-func (c *Client) LSPStopAll(ctx context.Context, id string) error {
-	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/lsps/stop", id), nil, nil, nil)
-	if err != nil {
-		return fmt.Errorf("failed to stop LSPs: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to stop LSPs: status code %d", rsp.StatusCode)
-	}
-	return nil
 }

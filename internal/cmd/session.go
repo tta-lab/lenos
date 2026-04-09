@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -20,7 +19,6 @@ import (
 
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
-	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/db"
 	"github.com/tta-lab/lenos/internal/event"
@@ -616,37 +614,7 @@ type sessionShowPart struct {
 }
 
 func extractSkillsFromMessages(msgs []*message.Message) []sessionShowSkill {
-	var skills []sessionShowSkill
-	seen := make(map[string]bool)
-
-	for _, msg := range msgs {
-		for _, part := range msg.Parts {
-			if tr, ok := part.(message.ToolResult); ok && tr.Metadata != "" {
-				var meta tools.ViewResponseMetadata
-				if err := json.Unmarshal([]byte(tr.Metadata), &meta); err == nil {
-					if meta.ResourceType == tools.ViewResourceSkill && meta.ResourceName != "" {
-						if !seen[meta.ResourceName] {
-							seen[meta.ResourceName] = true
-							skills = append(skills, sessionShowSkill{
-								Name:        meta.ResourceName,
-								Description: meta.ResourceDescription,
-								LoadedAt:    time.Unix(msg.CreatedAt, 0).Format(time.RFC3339),
-							})
-						}
-					}
-				}
-			}
-		}
-	}
-
-	sort.Slice(skills, func(i, j int) bool {
-		if skills[i].LoadedAt == skills[j].LoadedAt {
-			return skills[i].Name < skills[j].Name
-		}
-		return skills[i].LoadedAt < skills[j].LoadedAt
-	})
-
-	return skills
+	return nil
 }
 
 func convertParts(parts []message.ContentPart) []sessionShowPart {

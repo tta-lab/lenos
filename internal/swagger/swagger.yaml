@@ -63,85 +63,6 @@ definitions:
       max_items:
         type: integer
     type: object
-  config.LSPConfig:
-    properties:
-      args:
-        items:
-          type: string
-        type: array
-      command:
-        type: string
-      disabled:
-        type: boolean
-      env:
-        additionalProperties:
-          type: string
-        type: object
-      filetypes:
-        items:
-          type: string
-        type: array
-      init_options:
-        additionalProperties: {}
-        type: object
-      options:
-        additionalProperties: {}
-        type: object
-      root_markers:
-        items:
-          type: string
-        type: array
-      timeout:
-        type: integer
-    type: object
-  config.LSPs:
-    additionalProperties:
-      $ref: '#/definitions/config.LSPConfig'
-    type: object
-  config.MCPConfig:
-    properties:
-      args:
-        items:
-          type: string
-        type: array
-      command:
-        type: string
-      disabled:
-        type: boolean
-      disabled_tools:
-        items:
-          type: string
-        type: array
-      env:
-        additionalProperties:
-          type: string
-        type: object
-      headers:
-        additionalProperties:
-          type: string
-        description: 'TODO: maybe make it possible to get the value from the env'
-        type: object
-      timeout:
-        type: integer
-      type:
-        $ref: '#/definitions/config.MCPType'
-      url:
-        type: string
-    type: object
-  config.MCPType:
-    enum:
-    - stdio
-    - sse
-    - http
-    type: string
-    x-enum-varnames:
-    - MCPStdio
-    - MCPSSE
-    - MCPHttp
-  config.MCPs:
-    additionalProperties:
-      $ref: '#/definitions/config.MCPConfig'
-    type: object
   config.Permissions:
     properties:
       allowed_tools:
@@ -149,14 +70,6 @@ definitions:
           type: string
         type: array
     type: object
-  config.Scope:
-    enum:
-    - 0
-    - 1
-    type: integer
-    x-enum-varnames:
-    - ScopeGlobal
-    - ScopeWorkspace
   config.SelectedModel:
     properties:
       frequency_penalty:
@@ -211,6 +124,8 @@ definitions:
         $ref: '#/definitions/config.Completions'
       diff_mode:
         type: string
+      show_thinking:
+        type: boolean
       transparent:
         type: boolean
     type: object
@@ -245,21 +160,17 @@ definitions:
     - TrailerStyleAssistedBy
   csync.Map-string-config_ProviderConfig:
     type: object
-  github_com_charmbracelet_crush_internal_config.Config:
+  github_com_tta-lab_lenos_internal_config.Config:
     properties:
       $schema:
         type: string
-      lsp:
-        $ref: '#/definitions/config.LSPs'
-      mcp:
-        $ref: '#/definitions/config.MCPs'
       models:
         additionalProperties:
           $ref: '#/definitions/config.SelectedModel'
         description: We currently only support large/small as values here.
         type: object
       options:
-        $ref: '#/definitions/github_com_charmbracelet_crush_internal_config.Options'
+        $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Options'
       permissions:
         $ref: '#/definitions/config.Permissions'
       providers:
@@ -276,12 +187,14 @@ definitions:
       tools:
         $ref: '#/definitions/config.Tools'
     type: object
-  github_com_charmbracelet_crush_internal_config.Options:
+  github_com_tta-lab_lenos_internal_config.Options:
     properties:
+      agent_paths:
+        items:
+          type: string
+        type: array
       attribution:
         $ref: '#/definitions/config.Attribution'
-      auto_lsp:
-        type: boolean
       context_paths:
         items:
           type: string
@@ -290,8 +203,6 @@ definitions:
         description: Relative to the cwd
         type: string
       debug:
-        type: boolean
-      debug_lsp:
         type: boolean
       disable_auto_summarize:
         type: boolean
@@ -303,6 +214,10 @@ definitions:
         type: boolean
       disable_provider_auto_update:
         type: boolean
+      disabled_skills:
+        items:
+          type: string
+        type: array
       disabled_tools:
         items:
           type: string
@@ -318,7 +233,15 @@ definitions:
       tui:
         $ref: '#/definitions/config.TUIOptions'
     type: object
-  github_com_charmbracelet_crush_internal_proto.Message:
+  github_com_tta-lab_lenos_internal_config.Scope:
+    enum:
+    - 0
+    - 1
+    type: integer
+    x-enum-varnames:
+    - ScopeGlobal
+    - ScopeWorkspace
+  github_com_tta-lab_lenos_internal_proto.Message:
     properties:
       created_at:
         type: integer
@@ -338,22 +261,6 @@ definitions:
       updated_at:
         type: integer
     type: object
-  lsp.ServerState:
-    enum:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    type: integer
-    x-enum-varnames:
-    - StateUnstarted
-    - StateStarting
-    - StateReady
-    - StateError
-    - StateStopped
-    - StateDisabled
   proto.AgentInfo:
     properties:
       is_busy:
@@ -419,7 +326,7 @@ definitions:
       enabled:
         type: boolean
       scope:
-        $ref: '#/definitions/config.Scope'
+        $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Scope'
     type: object
   proto.ConfigModelRequest:
     properties:
@@ -428,7 +335,7 @@ definitions:
       model_type:
         $ref: '#/definitions/config.SelectedModelType'
       scope:
-        $ref: '#/definitions/config.Scope'
+        $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Scope'
     type: object
   proto.ConfigProviderKeyRequest:
     properties:
@@ -436,28 +343,28 @@ definitions:
       provider_id:
         type: string
       scope:
-        $ref: '#/definitions/config.Scope'
+        $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Scope'
     type: object
   proto.ConfigRefreshOAuthRequest:
     properties:
       provider_id:
         type: string
       scope:
-        $ref: '#/definitions/config.Scope'
+        $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Scope'
     type: object
   proto.ConfigRemoveRequest:
     properties:
       key:
         type: string
       scope:
-        $ref: '#/definitions/config.Scope'
+        $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Scope'
     type: object
   proto.ConfigSetRequest:
     properties:
       key:
         type: string
       scope:
-        $ref: '#/definitions/config.Scope'
+        $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Scope'
       value: {}
     type: object
   proto.Error:
@@ -495,79 +402,6 @@ definitions:
         type: boolean
       token: {}
     type: object
-  proto.LSPClientInfo:
-    properties:
-      connected_at:
-        type: string
-      diagnostic_count:
-        type: integer
-      error: {}
-      name:
-        type: string
-      state:
-        $ref: '#/definitions/lsp.ServerState'
-    type: object
-  proto.LSPStartRequest:
-    properties:
-      path:
-        type: string
-    type: object
-  proto.MCPClientInfo:
-    properties:
-      connected_at:
-        type: string
-      error: {}
-      name:
-        type: string
-      prompt_count:
-        type: integer
-      resource_count:
-        type: integer
-      state:
-        $ref: '#/definitions/proto.MCPState'
-      tool_count:
-        type: integer
-    type: object
-  proto.MCPGetPromptRequest:
-    properties:
-      args:
-        additionalProperties:
-          type: string
-        type: object
-      client_id:
-        type: string
-      prompt_id:
-        type: string
-    type: object
-  proto.MCPGetPromptResponse:
-    properties:
-      prompt:
-        type: string
-    type: object
-  proto.MCPNameRequest:
-    properties:
-      name:
-        type: string
-    type: object
-  proto.MCPReadResourceRequest:
-    properties:
-      name:
-        type: string
-      uri:
-        type: string
-    type: object
-  proto.MCPState:
-    enum:
-    - 0
-    - 1
-    - 2
-    - 3
-    type: integer
-    x-enum-varnames:
-    - MCPStateDisabled
-    - MCPStateStarting
-    - MCPStateConnected
-    - MCPStateError
   proto.MessageRole:
     enum:
     - assistant
@@ -580,46 +414,6 @@ definitions:
     - User
     - System
     - Tool
-  proto.PermissionAction:
-    enum:
-    - allow
-    - allow_session
-    - deny
-    type: string
-    x-enum-varnames:
-    - PermissionAllow
-    - PermissionAllowForSession
-    - PermissionDeny
-  proto.PermissionGrant:
-    properties:
-      action:
-        $ref: '#/definitions/proto.PermissionAction'
-      permission:
-        $ref: '#/definitions/proto.PermissionRequest'
-    type: object
-  proto.PermissionRequest:
-    properties:
-      action:
-        type: string
-      description:
-        type: string
-      id:
-        type: string
-      params: {}
-      path:
-        type: string
-      session_id:
-        type: string
-      tool_call_id:
-        type: string
-      tool_name:
-        type: string
-    type: object
-  proto.PermissionSkipRequest:
-    properties:
-      skip:
-        type: boolean
-    type: object
   proto.ProjectInitPromptResponse:
     properties:
       prompt:
@@ -672,7 +466,7 @@ definitions:
   proto.Workspace:
     properties:
       config:
-        $ref: '#/definitions/github_com_charmbracelet_crush_internal_config.Config'
+        $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Config'
       data_dir:
         type: string
       debug:
@@ -687,8 +481,6 @@ definitions:
         type: string
       version:
         type: string
-      yolo:
-        type: boolean
     type: object
   time.Duration:
     enum:
@@ -713,15 +505,16 @@ definitions:
     - Hour
 info:
   contact:
-    name: Charm
-    url: https://charm.sh
-  description: Crush is a terminal-based AI coding assistant. This API is served over
-    a Unix socket (or Windows named pipe) and provides programmatic access to workspaces,
-    sessions, agents, LSP, MCP, and more.
+    name: tta-lab
+    url: https://github.com/tta-lab/lenos
+  description: Lenos is a terminal-based AI coding assistant and interactive runtime
+    for the ttal ecosystem. This API is served over a Unix socket (or Windows named
+    pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP,
+    and more.
   license:
-    name: MIT
-    url: https://github.com/charmbracelet/crush/blob/main/LICENSE
-  title: Crush API
+    name: FSL-1.1-MIT
+    url: https://github.com/tta-lab/lenos/blob/main/LICENSE.md
+  title: Lenos API
   version: "1.0"
 paths:
   /config:
@@ -870,8 +663,6 @@ paths:
         name: id
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "200":
           description: OK
@@ -885,9 +676,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/proto.Error'
-      summary: Get agent info
-      tags:
-      - agent
     post:
       consumes:
       - application/json
@@ -1520,327 +1308,6 @@ paths:
       summary: Record file read
       tags:
       - filetracker
-  /workspaces/{id}/lsps:
-    get:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              $ref: '#/definitions/proto.LSPClientInfo'
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: List LSP clients
-      tags:
-      - lsp
-  /workspaces/{id}/lsps/{lsp}/diagnostics:
-    get:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: LSP client name
-        in: path
-        name: lsp
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Get LSP diagnostics
-      tags:
-      - lsp
-  /workspaces/{id}/lsps/start:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: LSP start request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.LSPStartRequest'
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Start LSP server
-      tags:
-      - lsp
-  /workspaces/{id}/lsps/stop:
-    post:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "200":
-          description: OK
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Stop all LSP servers
-      tags:
-      - lsp
-  /workspaces/{id}/mcp/get-prompt:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: MCP get prompt request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.MCPGetPromptRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/proto.MCPGetPromptResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Get MCP prompt
-      tags:
-      - mcp
-  /workspaces/{id}/mcp/read-resource:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: MCP read resource request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.MCPReadResourceRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Read MCP resource
-      tags:
-      - mcp
-  /workspaces/{id}/mcp/refresh-prompts:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: MCP name request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.MCPNameRequest'
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Refresh MCP prompts
-      tags:
-      - mcp
-  /workspaces/{id}/mcp/refresh-resources:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: MCP name request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.MCPNameRequest'
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Refresh MCP resources
-      tags:
-      - mcp
-  /workspaces/{id}/mcp/refresh-tools:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: MCP name request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.MCPNameRequest'
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Refresh MCP tools
-      tags:
-      - mcp
-  /workspaces/{id}/mcp/states:
-    get:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              $ref: '#/definitions/proto.MCPClientInfo'
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Get MCP client states
-      tags:
-      - mcp
   /workspaces/{id}/messages/user:
     get:
       parameters:
@@ -1856,7 +1323,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/github_com_charmbracelet_crush_internal_proto.Message'
+              $ref: '#/definitions/github_com_tta-lab_lenos_internal_proto.Message'
             type: array
         "404":
           description: Not Found
@@ -1869,99 +1336,6 @@ paths:
       summary: Get all user messages for workspace
       tags:
       - workspaces
-  /workspaces/{id}/permissions/grant:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Permission grant
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.PermissionGrant'
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Grant permission
-      tags:
-      - permissions
-  /workspaces/{id}/permissions/skip:
-    get:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/proto.PermissionSkipRequest'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Get skip permissions status
-      tags:
-      - permissions
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Permission skip request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.PermissionSkipRequest'
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Set skip permissions
-      tags:
-      - permissions
   /workspaces/{id}/project/init:
     post:
       parameters:
@@ -2064,32 +1438,7 @@ paths:
       - workspaces
   /workspaces/{id}/sessions:
     get:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/proto.Session'
-            type: array
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: List sessions
-      tags:
-      - sessions
+      responses: {}
     post:
       consumes:
       - application/json
@@ -2312,7 +1661,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/github_com_charmbracelet_crush_internal_proto.Message'
+              $ref: '#/definitions/github_com_tta-lab_lenos_internal_proto.Message'
             type: array
         "404":
           description: Not Found
@@ -2345,7 +1694,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/github_com_charmbracelet_crush_internal_proto.Message'
+              $ref: '#/definitions/github_com_tta-lab_lenos_internal_proto.Message'
             type: array
         "404":
           description: Not Found

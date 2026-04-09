@@ -22,10 +22,7 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/filetracker"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/log"
-	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
 	"github.com/tta-lab/lenos/internal/pubsub"
@@ -73,13 +70,10 @@ type Coordinator interface {
 }
 
 type coordinator struct {
-	cfg         *config.ConfigStore
-	sessions    session.Service
-	messages    message.Service
-	history     history.Service
-	filetracker filetracker.Service
-	lspManager  *lsp.Manager
-	notify      pubsub.Publisher[notify.Notification]
+	cfg      *config.ConfigStore
+	sessions session.Service
+	messages message.Service
+	notify   pubsub.Publisher[notify.Notification]
 
 	currentAgent SessionAgent
 	agents       map[string]SessionAgent
@@ -92,20 +86,14 @@ func NewCoordinator(
 	cfg *config.ConfigStore,
 	sessions session.Service,
 	messages message.Service,
-	history history.Service,
-	filetracker filetracker.Service,
-	lspManager *lsp.Manager,
 	notify pubsub.Publisher[notify.Notification],
 ) (Coordinator, error) {
 	c := &coordinator{
-		cfg:         cfg,
-		sessions:    sessions,
-		messages:    messages,
-		history:     history,
-		filetracker: filetracker,
-		lspManager:  lspManager,
-		notify:      notify,
-		agents:      make(map[string]SessionAgent),
+		cfg:      cfg,
+		sessions: sessions,
+		messages: messages,
+		notify:   notify,
+		agents:   make(map[string]SessionAgent),
 	}
 
 	agentCfg, ok := cfg.Config().Agents[config.AgentCoder]
@@ -418,24 +406,6 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 }
 
 func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fantasy.AgentTool, error) {
-	var allTools []fantasy.AgentTool
-	if slices.Contains(agent.AllowedTools, AgentToolName) {
-		agentTool, err := c.agentTool(ctx)
-		if err != nil {
-			return nil, err
-		}
-		allTools = append(allTools, agentTool)
-	}
-
-	if slices.Contains(agent.AllowedTools, tools.AgenticFetchToolName) {
-		agenticFetchTool, err := c.agenticFetchTool(ctx, nil)
-		if err != nil {
-			return nil, err
-		}
-		allTools = append(allTools, agenticFetchTool)
-	}
-
-	// Get the model name for the agent
 	modelName := ""
 	if modelCfg, ok := c.cfg.Config().Models[agent.Model]; ok {
 		if model := c.cfg.Config().GetModel(modelCfg.Provider, modelCfg.Model); model != nil {
@@ -443,66 +413,11 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fan
 		}
 	}
 
-	allTools = append(allTools,
+	allTools := []fantasy.AgentTool{
 		tools.NewBashTool(c.cfg.WorkingDir(), c.cfg.Config().Options.Attribution, modelName),
-		tools.NewDownloadTool(c.cfg.WorkingDir(), nil),
-		tools.NewEditTool(c.lspManager, c.history, c.filetracker, c.cfg.WorkingDir()),
-		tools.NewFetchTool(c.cfg.WorkingDir(), nil),
-		tools.NewGlobTool(c.cfg.WorkingDir()),
-		tools.NewGrepTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Grep),
-		tools.NewLsTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Ls),
-		tools.NewSourcegraphTool(nil),
-		tools.NewViewTool(c.lspManager, c.filetracker, c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...),
-		tools.NewWriteTool(c.lspManager, c.history, c.filetracker, c.cfg.WorkingDir()),
-	)
-
-	// Add LSP tools if user has configured LSPs or auto_lsp is enabled (nil or true).
-	if len(c.cfg.Config().LSP) > 0 || c.cfg.Config().Options.AutoLSP == nil || *c.cfg.Config().Options.AutoLSP {
-		allTools = append(allTools, tools.NewDiagnosticsTool(c.lspManager), tools.NewReferencesTool(c.lspManager), tools.NewLSPRestartTool(c.lspManager))
 	}
 
-	if len(c.cfg.Config().MCP) > 0 {
-		allTools = append(
-			allTools,
-			tools.NewListMCPResourcesTool(c.cfg),
-			tools.NewReadMCPResourceTool(c.cfg),
-		)
-	}
-
-	var filteredTools []fantasy.AgentTool
-	for _, tool := range allTools {
-		if slices.Contains(agent.AllowedTools, tool.Info().Name) {
-			filteredTools = append(filteredTools, tool)
-		}
-	}
-
-	for _, tool := range tools.GetMCPTools(c.cfg, c.cfg.WorkingDir()) {
-		if agent.AllowedMCP == nil {
-			// No MCP restrictions
-			filteredTools = append(filteredTools, tool)
-			continue
-		}
-		if len(agent.AllowedMCP) == 0 {
-			// No MCPs allowed
-			slog.Debug("No MCPs allowed", "tool", tool.Name(), "agent", agent.Name)
-			break
-		}
-
-		for mcp, tools := range agent.AllowedMCP {
-			if mcp != tool.MCP() {
-				continue
-			}
-			if len(tools) == 0 || slices.Contains(tools, tool.MCPToolName()) {
-				filteredTools = append(filteredTools, tool)
-				break
-			}
-			slog.Debug("MCP not allowed", "tool", tool.Name(), "agent", agent.Name)
-		}
-	}
-	slices.SortFunc(filteredTools, func(a, b fantasy.AgentTool) int {
-		return strings.Compare(a.Info().Name, b.Info().Name)
-	})
-	return filteredTools, nil
+	return allTools, nil
 }
 
 // TODO: when we support multiple agents we need to change this so that we pass in the agent specific model config
@@ -942,92 +857,5 @@ func (c *coordinator) refreshApiKeyTemplate(ctx context.Context, providerCfg con
 	if err := c.UpdateModels(ctx); err != nil {
 		return err
 	}
-	return nil
-}
-
-// subAgentParams holds the parameters for running a sub-agent.
-type subAgentParams struct {
-	Agent          SessionAgent
-	SessionID      string
-	AgentMessageID string
-	ToolCallID     string
-	Prompt         string
-	SessionTitle   string
-	// SessionSetup is an optional callback invoked after session creation
-	// but before agent execution, for custom session configuration.
-	SessionSetup func(sessionID string)
-}
-
-// runSubAgent runs a sub-agent and handles session management and cost accumulation.
-// It creates a sub-session, runs the agent with the given prompt, and propagates
-// the cost to the parent session.
-func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (fantasy.ToolResponse, error) {
-	// Create sub-session
-	agentToolSessionID := c.sessions.CreateAgentToolSessionID(params.AgentMessageID, params.ToolCallID)
-	session, err := c.sessions.CreateTaskSession(ctx, agentToolSessionID, params.SessionID, params.SessionTitle)
-	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("create session: %w", err)
-	}
-
-	// Call session setup function if provided
-	if params.SessionSetup != nil {
-		params.SessionSetup(session.ID)
-	}
-
-	// Get model configuration
-	model := params.Agent.Model()
-	maxTokens := model.CatwalkCfg.DefaultMaxTokens
-	if model.ModelCfg.MaxTokens != 0 {
-		maxTokens = model.ModelCfg.MaxTokens
-	}
-
-	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-	if !ok {
-		return fantasy.ToolResponse{}, errModelProviderNotConfigured
-	}
-
-	// Run the agent
-	result, err := params.Agent.Run(ctx, SessionAgentCall{
-		SessionID:        session.ID,
-		Prompt:           params.Prompt,
-		MaxOutputTokens:  maxTokens,
-		ProviderOptions:  getProviderOptions(model, providerCfg),
-		Temperature:      model.ModelCfg.Temperature,
-		TopP:             model.ModelCfg.TopP,
-		TopK:             model.ModelCfg.TopK,
-		FrequencyPenalty: model.ModelCfg.FrequencyPenalty,
-		PresencePenalty:  model.ModelCfg.PresencePenalty,
-		NonInteractive:   true,
-	})
-	if err != nil {
-		return fantasy.NewTextErrorResponse("error generating response: " + err.Error()), nil
-	}
-
-	// Update parent session cost
-	if err := c.updateParentSessionCost(ctx, session.ID, params.SessionID); err != nil {
-		return fantasy.ToolResponse{}, err
-	}
-
-	return fantasy.NewTextResponse(result.Response.Content.Text()), nil
-}
-
-// updateParentSessionCost accumulates the cost from a child session to its parent session.
-func (c *coordinator) updateParentSessionCost(ctx context.Context, childSessionID, parentSessionID string) error {
-	childSession, err := c.sessions.Get(ctx, childSessionID)
-	if err != nil {
-		return fmt.Errorf("get child session: %w", err)
-	}
-
-	parentSession, err := c.sessions.Get(ctx, parentSessionID)
-	if err != nil {
-		return fmt.Errorf("get parent session: %w", err)
-	}
-
-	parentSession.Cost += childSession.Cost
-
-	if _, err := c.sessions.Save(ctx, parentSession); err != nil {
-		return fmt.Errorf("save parent session: %w", err)
-	}
-
 	return nil
 }
