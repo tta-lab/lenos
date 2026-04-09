@@ -67,22 +67,6 @@ src delete <file> -s aB
 
 **Never use `sed -i`** — it silently fails on mismatch. Always use `src edit`.
 
-### Markdown Files
-
-Markdown uses heading-based sections instead of symbol IDs:
-
-```bash
-src README.md                 # shows heading tree with IDs
-src README.md -s 3K           # read section by heading ID
-src edit README.md --section 3K <<'EDIT'
-===BEFORE===
-old heading content
-===AFTER===
-new heading content
-EDIT
-src delete README.md -s 3K   # delete a section
-```
-
 <critical_rules>
 These rules override everything else. Follow them strictly:
 
