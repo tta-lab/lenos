@@ -3,65 +3,13 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
-	"time"
 
 	"charm.land/fantasy"
 	"github.com/stretchr/testify/require"
-	"github.com/tta-lab/lenos/internal/filetracker"
 	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/pubsub"
 )
-
-// workingDirForTest canonicalizes workingDir so that path lookups in the
-// testFiletracker mock are consistent with ContainedJoin inside the tools.
-func workingDirForTest(workingDir string) string {
-	real, err := filepath.EvalSymlinks(workingDir)
-	if err != nil {
-		return workingDir
-	}
-	return real
-}
-
-// testFiletracker is a minimal mock for filetracker.Service used across containment tests.
-// It stores exact paths (no relpath conversion) and returns zero time for any
-// path not previously recorded.
-type testFiletracker struct {
-	reads map[string]time.Time
-}
-
-var _ filetracker.Service = (*testFiletracker)(nil)
-
-func (m *testFiletracker) RecordRead(ctx context.Context, sessionID, path string) {
-	if m.reads == nil {
-		m.reads = make(map[string]time.Time)
-	}
-	m.reads[path] = time.Now()
-}
-
-func (m *testFiletracker) LastReadTime(ctx context.Context, sessionID, path string) time.Time {
-	if t, ok := m.reads[path]; ok {
-		return t
-	}
-	return time.Time{}
-}
-
-func (m *testFiletracker) ListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
-	var paths []string
-	for p := range m.reads {
-		paths = append(paths, p)
-	}
-	return paths, nil
-}
-
-// MarkAsRead records a path as having been read.
-func (m *testFiletracker) MarkAsRead(sessionID, path string) {
-	if m.reads == nil {
-		m.reads = make(map[string]time.Time)
-	}
-	m.reads[path] = time.Now()
-}
 
 // testHistory is a minimal mock for history.Service used across containment tests.
 type testHistory struct{}

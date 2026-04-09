@@ -2676,15 +2676,7 @@ func (m *UI) insertFileCompletion(path string) tea.Cmd {
 	fileCmd := func() tea.Msg {
 		absPath, _ := filepath.Abs(path)
 
-		if m.hasSession() {
-			// Skip attachment if file was already read and hasn't been modified.
-			lastRead := m.com.Workspace.FileTrackerLastReadTime(context.Background(), m.session.ID, absPath)
-			if !lastRead.IsZero() {
-				if info, err := os.Stat(path); err == nil && !info.ModTime().After(lastRead) {
-					return nil
-				}
-			}
-		} else if slices.Contains(m.sessionFileReads, absPath) {
+		if slices.Contains(m.sessionFileReads, absPath) {
 			return nil
 		}
 
@@ -2809,14 +2801,6 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 		}
 		m.setState(uiChat, m.focus)
 	}
-
-	ctx := context.Background()
-	cmds = append(cmds, func() tea.Msg {
-		for _, path := range m.sessionFileReads {
-			m.com.Workspace.FileTrackerRecordRead(ctx, m.session.ID, path)
-		}
-		return nil
-	})
 
 	// Capture session ID to avoid race with main goroutine updating m.session.
 	sessionID := m.session.ID

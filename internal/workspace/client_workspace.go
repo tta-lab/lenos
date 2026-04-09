@@ -354,6 +354,10 @@ func (w *ClientWorkspace) Subscribe(program *tea.Program) {
 	}
 }
 
+func (w *ClientWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
+	return nil, nil
+}
+
 func (w *ClientWorkspace) Shutdown() {
 	_ = w.client.DeleteWorkspace(context.Background(), w.workspaceID())
 }

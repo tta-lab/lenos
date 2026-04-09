@@ -60,15 +60,10 @@ func (m *UI) loadSession(sessionID string) tea.Cmd {
 			return util.ReportError(err)
 		}
 
-		readFiles, err := m.com.Workspace.FileTrackerListReadFiles(context.Background(), sessionID)
-		if err != nil {
-			slog.Error("Failed to load read files for session", "error", err)
-		}
-
 		return loadSessionMsg{
 			session:   &session,
 			files:     sessionFiles,
-			readFiles: readFiles,
+			readFiles: nil,
 		}
 	}
 }

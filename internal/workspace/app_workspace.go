@@ -8,6 +8,7 @@ import (
 	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/app"
 	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
 
@@ -239,6 +240,12 @@ func (w *AppWorkspace) Store() *config.ConfigStore {
 
 func (w *AppWorkspace) AgentName() string {
 	return w.store.Overrides().AgentName
+}
+
+// -- History (stub - no-op) --
+
+func (w *AppWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
+	return nil, nil
 }
 
 // Compile-time check that AppWorkspace implements Workspace.
