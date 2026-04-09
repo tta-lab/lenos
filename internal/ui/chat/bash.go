@@ -37,7 +37,7 @@ type BashToolRenderContext struct{}
 func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
 	cappedWidth := cappedMessageWidth(width)
 	if opts.IsPending() {
-		return pendingTool(sty, "Bash", opts.Anim, opts.Compact)
+		return pendingTool(sty, "$", opts.Anim, opts.Compact)
 	}
 
 	var params tools.BashParams
@@ -48,7 +48,7 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 	// Regular bash command.
 	cmd := strings.ReplaceAll(params.Command, "\n", " ")
 	cmd = strings.ReplaceAll(cmd, "\t", "    ")
-	header := toolHeader(sty, opts.Status, "Bash", cappedWidth, opts.Compact, cmd)
+	header := toolHeader(sty, opts.Status, "$", cappedWidth, opts.Compact, cmd)
 	if opts.Compact {
 		return header
 	}

@@ -49,6 +49,7 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/ui/util"
 	"github.com/tta-lab/lenos/internal/version"
+	"github.com/tta-lab/lenos/internal/workspace"
 )
 
 // MouseScrollThreshold defines how many lines to scroll the chat when a mouse
@@ -129,7 +130,7 @@ type UI struct {
 	com           *common.Common
 	session       *session.Session
 	gitWorktree   bool
-	modifiedFiles []string
+	modifiedFiles []workspace.ModifiedFile
 
 	// keeps track of read files while we don't have a session id
 	sessionFileReads []string

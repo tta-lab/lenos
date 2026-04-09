@@ -96,8 +96,8 @@ type testWorkspace struct {
 	workspace.Workspace
 	cfg            *config.Config
 	gitWorktree    bool
-	modifiedFiles  []string
-	listModifiedFn func() ([]string, error)
+	modifiedFiles  []workspace.ModifiedFile
+	listModifiedFn func() ([]workspace.ModifiedFile, error)
 }
 
 func (w *testWorkspace) Config() *config.Config {
@@ -112,7 +112,7 @@ func (w *testWorkspace) IsGitWorktree(ctx context.Context) bool {
 	return w.gitWorktree
 }
 
-func (w *testWorkspace) ListModifiedFiles(ctx context.Context) ([]string, error) {
+func (w *testWorkspace) ListModifiedFiles(ctx context.Context) ([]workspace.ModifiedFile, error) {
 	if w.listModifiedFn != nil {
 		return w.listModifiedFn()
 	}
@@ -192,7 +192,10 @@ func TestGitTickReArm(t *testing.T) {
 		ui.gitWorktree = true
 		ui.session = nil
 
-		_, cmds := ui.Update(gitPollMsg{files: []string{"foo.go", "bar.go"}})
+		_, cmds := ui.Update(gitPollMsg{files: []workspace.ModifiedFile{
+			{Path: "foo.go", Added: 3, Deleted: 1},
+			{Path: "bar.go", Added: 0, Deleted: 7},
+		}})
 		require.NotNil(t, cmds, "Update should return a re-arm command after gitPollMsg")
 	})
 
@@ -262,7 +265,10 @@ func TestModifiedFilesInfo(t *testing.T) {
 		t.Parallel()
 		ui := newTestUIWithConfig(t, nil)
 		ui.gitWorktree = true
-		ui.modifiedFiles = []string{"foo.go", "bar.go"}
+		ui.modifiedFiles = []workspace.ModifiedFile{
+			{Path: "foo.go", Added: 5, Deleted: 2},
+			{Path: "bar.go", Added: 1, Deleted: 0},
+		}
 
 		got := ui.modifiedFilesInfo(40, 10, false)
 		require.NotEqual(t, "", got)
@@ -281,8 +287,8 @@ func TestGitPollingIntegration(t *testing.T) {
 
 		require.Nil(t, ui.modifiedFiles)
 
-		_, cmds := ui.Update(gitPollMsg{files: []string{"changed.go"}})
-		require.Equal(t, []string{"changed.go"}, ui.modifiedFiles)
+		_, cmds := ui.Update(gitPollMsg{files: []workspace.ModifiedFile{{Path: "changed.go", Added: 3, Deleted: 1}}})
+		require.Equal(t, []workspace.ModifiedFile{{Path: "changed.go", Added: 3, Deleted: 1}}, ui.modifiedFiles)
 		require.NotNil(t, cmds)
 	})
 }

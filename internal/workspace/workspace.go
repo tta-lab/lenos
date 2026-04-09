@@ -58,7 +58,7 @@ type Workspace interface {
 
 	// Git
 	IsGitWorktree(ctx context.Context) bool
-	ListModifiedFiles(ctx context.Context) ([]string, error)
+	ListModifiedFiles(ctx context.Context) ([]ModifiedFile, error)
 
 	// Config (read-only data)
 	Config() *config.Config
@@ -83,4 +83,13 @@ type Workspace interface {
 	// Events
 	Subscribe(program *tea.Program)
 	Shutdown()
+}
+
+// ModifiedFile describes a file that differs from HEAD.
+type ModifiedFile struct {
+	Path     string
+	Added    int // -1 for binary, -1 for untracked without wc
+	Deleted  int
+	IsBinary bool
+	IsNew    bool // true if untracked
 }

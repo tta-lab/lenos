@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -13,6 +14,7 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/ui/util"
+	"github.com/tta-lab/lenos/internal/workspace"
 )
 
 // twPollMsg is sent by the taskwarrior subtask poller with updated todos.
@@ -39,7 +41,7 @@ func (m *UI) loadSession(sessionID string) tea.Cmd {
 }
 
 // modifiedFilesInfo renders the modified files section for the sidebar,
-// showing files from git status --porcelain.
+// showing files from git diff --numstat and untracked files.
 func (m *UI) modifiedFilesInfo(width, maxItems int, isSection bool) string {
 	if !m.gitWorktree {
 		return ""
@@ -60,20 +62,77 @@ func (m *UI) modifiedFilesInfo(width, maxItems int, isSection bool) string {
 	return lipgloss.NewStyle().Width(width).Render(title + "\n\n" + list)
 }
 
-// gitFileList renders a list of modified file paths, truncating to maxItems.
-func gitFileList(t *styles.Styles, files []string, width, maxItems int) string {
+// gitFileList renders a list of modified files with line counts, truncating
+// to maxItems.
+func gitFileList(t *styles.Styles, files []workspace.ModifiedFile, width, maxItems int) string {
 	if maxItems <= 0 || len(files) == 0 {
 		return ""
 	}
+
+	countWidth := 12
+	pathWidth := width - countWidth - 1
+	if pathWidth < 10 {
+		pathWidth = width
+		countWidth = 0
+	}
+
 	var lines []string
 	for i := 0; i < len(files) && i < maxItems; i++ {
-		lines = append(lines, t.Files.Path.Render(files[i]))
+		f := files[i]
+		countStr := formatFileCount(t, f)
+		countPart := t.Subtle.Render(lipgloss.JoinHorizontal(
+			lipgloss.Right,
+			lipgloss.NewStyle().Width(countWidth).Render(countStr),
+		))
+		pathPart := truncatePath(t, f.Path, pathWidth)
+		if countWidth > 0 {
+			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Right, countPart, pathPart))
+		} else {
+			lines = append(lines, pathPart)
+		}
 	}
 	if len(files) > maxItems {
 		remaining := len(files) - maxItems
 		lines = append(lines, t.Subtle.Render(fmt.Sprintf("…and %d more", remaining)))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+// formatFileCount returns a colored string for the Added/Deleted counts.
+func formatFileCount(t *styles.Styles, f workspace.ModifiedFile) string {
+	if f.IsNew {
+		return t.Files.Additions.Render("new")
+	}
+	if f.IsBinary {
+		return t.Subtle.Render("bin")
+	}
+	added := t.Files.Additions.Render(fmt.Sprintf("+%d", f.Added))
+	deleted := t.Files.Deletions.Render(fmt.Sprintf("-%d", f.Deleted))
+	return added + " " + deleted
+}
+
+// truncatePath truncates a path from the left, keeping the filename and
+// enough context to identify the file.
+func truncatePath(t *styles.Styles, path string, maxWidth int) string {
+	rendered := t.Files.Path.Render(path)
+	if lipgloss.Width(rendered) <= maxWidth {
+		return rendered
+	}
+	// Truncate from left, preserve trailing component
+	parts := strings.Split(path, "/")
+	var truncated []string
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate := strings.Join(append([]string{"…"}, truncated...), "/")
+		if lipgloss.Width(t.Files.Path.Render(candidate)) <= maxWidth {
+			truncated = append([]string{parts[i]}, truncated...)
+		} else {
+			break
+		}
+	}
+	if len(truncated) == 0 {
+		return t.Files.Path.Render("…" + path[len(path)-maxWidth:])
+	}
+	return t.Files.Path.Render(strings.Join(truncated, "/"))
 }
 
 // stopTWPoll stops the taskwarrior subtask poller and clears its state.
@@ -129,7 +188,7 @@ func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
 
 // gitPollMsg is sent by the git modified files poller with updated files.
 type gitPollMsg struct {
-	files []string
+	files []workspace.ModifiedFile
 }
 
 // stopGitPoll stops the git modified files poller.

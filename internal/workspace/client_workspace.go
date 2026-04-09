@@ -357,7 +357,7 @@ func (w *ClientWorkspace) IsGitWorktree(ctx context.Context) bool {
 	return true // Client mode always assumes git worktree (server validates)
 }
 
-func (w *ClientWorkspace) ListModifiedFiles(ctx context.Context) ([]string, error) {
+func (w *ClientWorkspace) ListModifiedFiles(ctx context.Context) ([]ModifiedFile, error) {
 	// In client mode, modified files come from the server via SSE events.
 	// The UI maintains its own state from git status updates sent by the server.
 	return nil, nil

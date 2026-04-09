@@ -855,7 +855,7 @@ func (t *baseToolMessageItem) formatBashResultForCopy() string {
 func prettifyToolName(name string) string {
 	switch name {
 	case tools.BashToolName:
-		return "Bash"
+		return "$"
 	default:
 		return genericPrettyName(name)
 	}

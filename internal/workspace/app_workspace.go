@@ -1,10 +1,12 @@
 package workspace
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os/exec"
-	"strings"
+	"sort"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/tta-lab/lenos/internal/agent"
@@ -12,6 +14,7 @@ import (
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/tta-lab/lenos/internal/session"
 )
@@ -250,26 +253,78 @@ func (w *AppWorkspace) IsGitWorktree(ctx context.Context) bool {
 	return err == nil
 }
 
-func (w *AppWorkspace) ListModifiedFiles(ctx context.Context) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
-	cmd.Dir = w.store.WorkingDir()
+func (w *AppWorkspace) ListModifiedFiles(ctx context.Context) ([]ModifiedFile, error) {
+	dir := w.store.WorkingDir()
+	var tracked, untracked []ModifiedFile
+	var g errgroup.Group
+
+	g.Go(func() error {
+		var err error
+		tracked, err = trackedNumstat(ctx, dir)
+		return err
+	})
+	g.Go(func() error {
+		var err error
+		untracked, err = untrackedFiles(ctx, dir)
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	files := append(tracked, untracked...)
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files, nil
+}
+
+// trackedNumstat runs git diff HEAD --numstat and returns ModifiedFiles for
+// all tracked files that differ from HEAD (staged + unstaged combined).
+func trackedNumstat(ctx context.Context, dir string) ([]ModifiedFile, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "diff", "HEAD", "--numstat", "--no-renames")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}
-	var files []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line == "" {
+	var files []ModifiedFile
+	for _, line := range bytes.Split(bytes.TrimSpace(out), []byte{'\n'}) {
+		if len(line) == 0 {
 			continue
 		}
-		// porcelain format: XY filename (2-char status + space + path)
-		if len(line) < 3 {
+		fields := bytes.SplitN(line, []byte{'\t'}, 3)
+		if len(fields) != 3 {
 			continue
 		}
-		filename := strings.TrimSpace(line[2:])
-		if filename != "" {
-			files = append(files, filename)
+		isBinary := bytes.Equal(fields[0], []byte("-"))
+		added, _ := strconv.Atoi(string(fields[0]))
+		deleted, _ := strconv.Atoi(string(fields[1]))
+		files = append(files, ModifiedFile{
+			Path:     string(fields[2]),
+			Added:    added,
+			Deleted:  deleted,
+			IsBinary: isBinary,
+		})
+	}
+	return files, nil
+}
+
+// untrackedFiles returns ModifiedFiles for all untracked files, respecting
+// .gitignore and standard excludes.
+func untrackedFiles(ctx context.Context, dir string) ([]ModifiedFile, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "ls-files", "--others", "--exclude-standard")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var files []ModifiedFile
+	for _, line := range bytes.Split(bytes.TrimSpace(out), []byte{'\n'}) {
+		if len(line) == 0 {
+			continue
 		}
+		files = append(files, ModifiedFile{
+			Path:  string(line),
+			Added: -1,
+		})
 	}
 	return files, nil
 }
