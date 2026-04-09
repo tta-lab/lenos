@@ -243,6 +243,7 @@ type Styles struct {
 			ToolCallCompact  lipgloss.Style
 			ToolCallBlurred  lipgloss.Style
 			SectionHeader    lipgloss.Style
+			ResultBlock      lipgloss.Style
 
 			// Thinking section styles
 			ThinkingBox            lipgloss.Style // Background for thinking content
@@ -1268,6 +1269,8 @@ func DefaultStyles() Styles {
 	// No padding or border for compact tool calls within messages
 	s.Chat.Message.ToolCallCompact = s.Muted
 	s.Chat.Message.SectionHeader = s.Base.PaddingLeft(2)
+	s.Chat.Message.ResultBlock = lipgloss.NewStyle().
+		Foreground(fgSubtle)
 	s.Chat.Message.AssistantInfoIcon = s.Subtle
 	s.Chat.Message.AssistantInfoModel = s.Muted
 	s.Chat.Message.AssistantInfoProvider = s.Subtle

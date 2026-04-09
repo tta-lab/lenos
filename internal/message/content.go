@@ -22,6 +22,7 @@ const (
 	User      MessageRole = "user"
 	System    MessageRole = "system"
 	Tool      MessageRole = "tool"
+	Result    MessageRole = "result"
 )
 
 type FinishReason string
@@ -559,6 +560,13 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 		messages = append(messages, fantasy.Message{
 			Role:    fantasy.MessageRoleTool,
 			Content: parts,
+		})
+	case Result:
+		messages = append(messages, fantasy.Message{
+			Role: fantasy.MessageRoleUser,
+			Content: []fantasy.MessagePart{
+				fantasy.TextPart{Text: m.Content().String()},
+			},
 		})
 	}
 	return messages

@@ -188,7 +188,7 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	}
 
 	allTools := []fantasy.AgentTool{
-		tools.NewBashTool(env.workingDir, cfg.Config().Options.Attribution, modelName),
+		tools.NewBashTool(env.workingDir, cfg.Config().Options.Attribution, modelName, nil),
 	}
 
 	return testSessionAgent(env, large, small, systemPrompt, allTools...), nil
