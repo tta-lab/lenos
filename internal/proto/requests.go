@@ -57,11 +57,6 @@ type ProjectInitPromptResponse struct {
 	Prompt string `json:"prompt"`
 }
 
-// LSPStartRequest represents a request to start an LSP for a path.
-type LSPStartRequest struct {
-	Path string `json:"path"`
-}
-
 // FileTrackerReadRequest represents a request to record a file read.
 type FileTrackerReadRequest struct {
 	SessionID string `json:"session_id"`

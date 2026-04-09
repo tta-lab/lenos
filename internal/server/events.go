@@ -6,8 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
-	"github.com/tta-lab/lenos/internal/app"
 	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/proto"
@@ -21,28 +19,6 @@ import (
 // proper JSON tags. Returns nil if the event type is unrecognized.
 func wrapEvent(ev any) *pubsub.Payload {
 	switch e := ev.(type) {
-	case pubsub.Event[app.LSPEvent]:
-		return envelope(pubsub.PayloadTypeLSPEvent, pubsub.Event[proto.LSPEvent]{
-			Type: e.Type,
-			Payload: proto.LSPEvent{
-				Type:            proto.LSPEventType(e.Payload.Type),
-				Name:            e.Payload.Name,
-				State:           e.Payload.State,
-				Error:           e.Payload.Error,
-				DiagnosticCount: e.Payload.DiagnosticCount,
-			},
-		})
-	case pubsub.Event[mcp.Event]:
-		return envelope(pubsub.PayloadTypeMCPEvent, pubsub.Event[proto.MCPEvent]{
-			Type: e.Type,
-			Payload: proto.MCPEvent{
-				Type:      mcpEventTypeToProto(e.Payload.Type),
-				Name:      e.Payload.Name,
-				State:     proto.MCPState(e.Payload.State),
-				Error:     e.Payload.Error,
-				ToolCount: e.Payload.Counts.Tools,
-			},
-		})
 	case pubsub.Event[message.Message]:
 		return envelope(pubsub.PayloadTypeMessage, pubsub.Event[proto.Message]{
 			Type:    e.Type,
@@ -83,21 +59,6 @@ func envelope(payloadType pubsub.PayloadType, inner any) *pubsub.Payload {
 	return &pubsub.Payload{
 		Type:    payloadType,
 		Payload: raw,
-	}
-}
-
-func mcpEventTypeToProto(t mcp.EventType) proto.MCPEventType {
-	switch t {
-	case mcp.EventStateChanged:
-		return proto.MCPEventStateChanged
-	case mcp.EventToolsListChanged:
-		return proto.MCPEventToolsListChanged
-	case mcp.EventPromptsListChanged:
-		return proto.MCPEventPromptsListChanged
-	case mcp.EventResourcesListChanged:
-		return proto.MCPEventResourcesListChanged
-	default:
-		return proto.MCPEventStateChanged
 	}
 }
 

@@ -235,68 +235,7 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 	}
 }
 
-// handleGetWorkspaceLSPs lists LSP clients for a workspace.
-//
-//	@Summary		List LSP clients
-//	@Tags			lsp
-//	@Produce		json
-//	@Param			id	path		string							true	"Workspace ID"
-//	@Success		200	{object}	map[string]proto.LSPClientInfo
-//	@Failure		404	{object}	proto.Error
-//	@Failure		500	{object}	proto.Error
-//	@Router			/workspaces/{id}/lsps [get]
-func (c *controllerV1) handleGetWorkspaceLSPs(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	states, err := c.backend.GetLSPStates(id)
-	if err != nil {
-		c.handleError(w, r, err)
-		return
-	}
-	result := make(map[string]proto.LSPClientInfo, len(states))
-	for k, v := range states {
-		result[k] = proto.LSPClientInfo{
-			Name:            v.Name,
-			State:           v.State,
-			Error:           v.Error,
-			DiagnosticCount: v.DiagnosticCount,
-			ConnectedAt:     v.ConnectedAt,
-		}
-	}
-	jsonEncode(w, result)
-}
-
-// handleGetWorkspaceLSPDiagnostics returns diagnostics for an LSP client.
-//
-//	@Summary		Get LSP diagnostics
-//	@Tags			lsp
-//	@Produce		json
-//	@Param			id	path		string	true	"Workspace ID"
-//	@Param			lsp	path		string	true	"LSP client name"
-//	@Success		200	{object}	object
-//	@Failure		404	{object}	proto.Error
-//	@Failure		500	{object}	proto.Error
-//	@Router			/workspaces/{id}/lsps/{lsp}/diagnostics [get]
-func (c *controllerV1) handleGetWorkspaceLSPDiagnostics(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	lspName := r.PathValue("lsp")
-	diagnostics, err := c.backend.GetLSPDiagnostics(id, lspName)
-	if err != nil {
-		c.handleError(w, r, err)
-		return
-	}
-	jsonEncode(w, diagnostics)
-}
-
-// handleGetWorkspaceSessions lists sessions for a workspace.
-//
-//	@Summary		List sessions
-//	@Tags			sessions
-//	@Produce		json
-//	@Param			id	path		string			true	"Workspace ID"
-//	@Success		200	{array}		proto.Session
-//	@Failure		404	{object}	proto.Error
-//	@Failure		500	{object}	proto.Error
-//	@Router			/workspaces/{id}/sessions [get]
+// @Router			/workspaces/{id}/sessions [get]
 func (c *controllerV1) handleGetWorkspaceSessions(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	sessions, err := c.backend.ListSessions(r.Context(), id)
@@ -578,63 +517,11 @@ func (c *controllerV1) handleGetWorkspaceFileTrackerLastRead(w http.ResponseWrit
 	jsonEncode(w, t)
 }
 
-// handlePostWorkspaceLSPStart starts an LSP server for a path.
-//
-//	@Summary		Start LSP server
-//	@Tags			lsp
-//	@Accept			json
-//	@Param			id		path	string					true	"Workspace ID"
-//	@Param			request	body	proto.LSPStartRequest	true	"LSP start request"
-//	@Success		200
-//	@Failure		400	{object}	proto.Error
-//	@Failure		404	{object}	proto.Error
-//	@Failure		500	{object}	proto.Error
-//	@Router			/workspaces/{id}/lsps/start [post]
-func (c *controllerV1) handlePostWorkspaceLSPStart(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-
-	var req proto.LSPStartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		c.server.logError(r, "Failed to decode request", "error", err)
-		jsonError(w, http.StatusBadRequest, "failed to decode request")
-		return
-	}
-
-	if err := c.backend.LSPStart(r.Context(), id, req.Path); err != nil {
-		c.handleError(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-// handlePostWorkspaceLSPStopAll stops all LSP servers.
-//
-//	@Summary		Stop all LSP servers
-//	@Tags			lsp
-//	@Param			id	path	string	true	"Workspace ID"
-//	@Success		200
-//	@Failure		404	{object}	proto.Error
-//	@Failure		500	{object}	proto.Error
-//	@Router			/workspaces/{id}/lsps/stop [post]
-func (c *controllerV1) handlePostWorkspaceLSPStopAll(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if err := c.backend.LSPStopAll(r.Context(), id); err != nil {
-		c.handleError(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-// handleGetWorkspaceAgent returns agent info for a workspace.
-//
-//	@Summary		Get agent info
-//	@Tags			agent
-//	@Produce		json
-//	@Param			id	path		string			true	"Workspace ID"
-//	@Success		200	{object}	proto.AgentInfo
-//	@Failure		404	{object}	proto.Error
-//	@Failure		500	{object}	proto.Error
-//	@Router			/workspaces/{id}/agent [get]
+// @Param			id	path		string			true	"Workspace ID"
+// @Success		200	{object}	proto.AgentInfo
+// @Failure		404	{object}	proto.Error
+// @Failure		500	{object}	proto.Error
+// @Router			/workspaces/{id}/agent [get]
 func (c *controllerV1) handleGetWorkspaceAgent(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	info, err := c.backend.GetAgentInfo(id)
@@ -864,8 +751,6 @@ func (c *controllerV1) handleError(w http.ResponseWriter, r *http.Request, err e
 	status := http.StatusInternalServerError
 	switch {
 	case errors.Is(err, backend.ErrWorkspaceNotFound):
-		status = http.StatusNotFound
-	case errors.Is(err, backend.ErrLSPClientNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, backend.ErrAgentNotInitialized):
 		status = http.StatusBadRequest

@@ -9,14 +9,12 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/client"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/log"
-	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
 
@@ -271,57 +269,6 @@ func (w *ClientWorkspace) ListSessionHistory(ctx context.Context, sessionID stri
 	return protoToFiles(files), nil
 }
 
-// -- LSP --
-
-func (w *ClientWorkspace) LSPStart(ctx context.Context, path string) {
-	_ = w.client.LSPStart(ctx, w.workspaceID(), path)
-}
-
-func (w *ClientWorkspace) LSPStopAll(ctx context.Context) {
-	_ = w.client.LSPStopAll(ctx, w.workspaceID())
-}
-
-func (w *ClientWorkspace) LSPGetStates() map[string]LSPClientInfo {
-	states, err := w.client.GetLSPs(context.Background(), w.workspaceID())
-	if err != nil {
-		return nil
-	}
-	result := make(map[string]LSPClientInfo, len(states))
-	for k, v := range states {
-		result[k] = LSPClientInfo{
-			Name:            v.Name,
-			State:           v.State,
-			Error:           v.Error,
-			DiagnosticCount: v.DiagnosticCount,
-			ConnectedAt:     v.ConnectedAt,
-		}
-	}
-	return result
-}
-
-func (w *ClientWorkspace) LSPGetDiagnosticCounts(name string) lsp.DiagnosticCounts {
-	diags, err := w.client.GetLSPDiagnostics(context.Background(), w.workspaceID(), name)
-	if err != nil {
-		return lsp.DiagnosticCounts{}
-	}
-	var counts lsp.DiagnosticCounts
-	for _, fileDiags := range diags {
-		for _, d := range fileDiags {
-			switch d.Severity {
-			case protocol.SeverityError:
-				counts.Error++
-			case protocol.SeverityWarning:
-				counts.Warning++
-			case protocol.SeverityInformation:
-				counts.Information++
-			case protocol.SeverityHint:
-				counts.Hint++
-			}
-		}
-	}
-	return counts
-}
-
 // -- Config (read-only) --
 
 func (w *ClientWorkspace) Config() *config.Config {
@@ -510,17 +457,6 @@ func (w *ClientWorkspace) Shutdown() {
 // that the TUI's Update() method expects.
 func translateEvent(ev any) tea.Msg {
 	switch e := ev.(type) {
-	case pubsub.Event[proto.LSPEvent]:
-		return pubsub.Event[LSPEvent]{
-			Type: e.Type,
-			Payload: LSPEvent{
-				Type:            LSPEventType(e.Payload.Type),
-				Name:            e.Payload.Name,
-				State:           e.Payload.State,
-				Error:           e.Payload.Error,
-				DiagnosticCount: e.Payload.DiagnosticCount,
-			},
-		}
 	case pubsub.Event[proto.MCPEvent]:
 		return pubsub.Event[mcp.Event]{
 			Type: e.Type,

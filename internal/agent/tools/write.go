@@ -15,8 +15,6 @@ import (
 	"github.com/tta-lab/lenos/internal/filepathext"
 	"github.com/tta-lab/lenos/internal/filetracker"
 	"github.com/tta-lab/lenos/internal/history"
-
-	"github.com/tta-lab/lenos/internal/lsp"
 )
 
 //go:embed write.md
@@ -36,7 +34,6 @@ type WriteResponseMetadata struct {
 const WriteToolName = "write"
 
 func NewWriteTool(
-	lspManager *lsp.Manager,
 	files history.Service,
 	filetracker filetracker.Service,
 	workingDir string,
@@ -132,11 +129,8 @@ func NewWriteTool(
 
 			filetracker.RecordRead(ctx, sessionID, filePath)
 
-			notifyLSPs(ctx, lspManager, params.FilePath)
-
 			result := fmt.Sprintf("File successfully written: %s", filePath)
 			result = fmt.Sprintf("<result>\n%s\n</result>", result)
-			result += getDiagnostics(filePath, lspManager)
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result),
 				WriteResponseMetadata{
 					Diff:      diff,

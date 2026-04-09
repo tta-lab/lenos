@@ -13,7 +13,7 @@ func TestWriteTool_ContainedJoin_AcceptsInScopePaths(t *testing.T) {
 	t.Parallel()
 	workingDir := t.TempDir()
 
-	tool := NewWriteTool(nil, &testHistory{}, &testFiletracker{}, workingDir)
+	tool := NewWriteTool(&testHistory{}, &testFiletracker{}, workingDir)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 
 	// Relative path in root.
@@ -37,7 +37,7 @@ func TestWriteTool_ContainedJoin_RejectsOutOfScopePaths(t *testing.T) {
 	t.Parallel()
 	workingDir := t.TempDir()
 
-	tool := NewWriteTool(nil, nil, nil, workingDir)
+	tool := NewWriteTool(nil, nil, workingDir)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 
 	for _, tc := range escapeCases {
@@ -57,7 +57,7 @@ func TestWriteTool_ContainedJoin_RejectionFiresBeforeFilesystemAccess(t *testing
 	// Create a file outside workingDir that the tool should NOT be able to write.
 	outsidePath := filepath.Join(t.TempDir(), "should_not_exist.txt")
 
-	tool := NewWriteTool(nil, nil, nil, workingDir)
+	tool := NewWriteTool(nil, nil, workingDir)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 
 	resp := runTool(t, tool, ctx, WriteToolName, WriteParams{
@@ -75,7 +75,7 @@ func TestWriteTool_ContainedJoin_AcceptsAbsolutePathInsideWorkingDir(t *testing.
 	t.Parallel()
 	workingDir := t.TempDir()
 
-	tool := NewWriteTool(nil, &testHistory{}, &testFiletracker{}, workingDir)
+	tool := NewWriteTool(&testHistory{}, &testFiletracker{}, workingDir)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 
 	absInside := filepath.Join(workingDir, "absolute_inside.txt")

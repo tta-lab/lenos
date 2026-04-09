@@ -19,11 +19,9 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/db"
 	"github.com/tta-lab/lenos/internal/filetracker"
 	"github.com/tta-lab/lenos/internal/history"
-	"github.com/tta-lab/lenos/internal/lsp"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/session"
 
@@ -37,7 +35,6 @@ type fakeEnv struct {
 	messages    message.Service
 	history     history.Service
 	filetracker *filetracker.Service
-	lspClients  *csync.Map[string, *lsp.Client]
 }
 
 type builderFunc func(t *testing.T, r *vcr.Recorder) (fantasy.LanguageModel, error)
@@ -116,7 +113,6 @@ func testEnv(t *testing.T) fakeEnv {
 	messages := message.NewService(q)
 	history := history.NewService(q, conn)
 	filetrackerService := filetracker.NewService(q)
-	lspClients := csync.NewMap[string, *lsp.Client]()
 
 	t.Cleanup(func() {
 		conn.Close()
@@ -129,7 +125,6 @@ func testEnv(t *testing.T) fakeEnv {
 		messages,
 		history,
 		&filetrackerService,
-		lspClients,
 	}
 }
 
@@ -188,7 +183,6 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	cfg.Config().Options.SkillsPaths = nil
 	cfg.Config().Options.DisabledSkills = []string{"lenos-config"}
 	cfg.Config().Options.ContextPaths = nil
-	cfg.Config().LSP = nil
 
 	systemPrompt, err := prompt.Build(context.TODO(), large.Provider(), large.Model(), cfg)
 	if err != nil {
@@ -203,15 +197,8 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 
 	allTools := []fantasy.AgentTool{
 		tools.NewBashTool(env.workingDir, cfg.Config().Options.Attribution, modelName),
-		tools.NewDownloadTool(env.workingDir, r.GetDefaultClient()),
-		tools.NewEditTool(nil, env.history, *env.filetracker, env.workingDir),
-		tools.NewFetchTool(env.workingDir, r.GetDefaultClient()),
-		tools.NewGlobTool(env.workingDir),
-		tools.NewGrepTool(env.workingDir, cfg.Config().Tools.Grep),
-		tools.NewLsTool(env.workingDir, cfg.Config().Tools.Ls),
 		tools.NewSourcegraphTool(r.GetDefaultClient()),
-		tools.NewViewTool(nil, *env.filetracker, env.workingDir),
-		tools.NewWriteTool(nil, env.history, *env.filetracker, env.workingDir),
+		tools.NewWriteTool(env.history, *env.filetracker, env.workingDir),
 	}
 
 	return testSessionAgent(env, large, small, systemPrompt, allTools...), nil

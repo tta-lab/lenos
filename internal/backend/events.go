@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	mcptools "github.com/tta-lab/lenos/internal/agent/tools/mcp"
-	"github.com/tta-lab/lenos/internal/app"
 	"github.com/tta-lab/lenos/internal/config"
 )
 
@@ -18,33 +17,6 @@ func (b *Backend) SubscribeEvents(workspaceID string) (<-chan tea.Msg, error) {
 	}
 
 	return ws.Events(), nil
-}
-
-// GetLSPStates returns the state of all LSP clients.
-func (b *Backend) GetLSPStates(workspaceID string) (map[string]app.LSPClientInfo, error) {
-	_, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	return app.GetLSPStates(), nil
-}
-
-// GetLSPDiagnostics returns diagnostics for a specific LSP client in
-// the workspace.
-func (b *Backend) GetLSPDiagnostics(workspaceID, lspName string) (any, error) {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	for name, client := range ws.LSPManager.Clients().Seq2() {
-		if name == lspName {
-			return client.GetDiagnostics(), nil
-		}
-	}
-
-	return nil, ErrLSPClientNotFound
 }
 
 // GetWorkspaceConfig returns the workspace-level configuration.
@@ -67,28 +39,6 @@ func (b *Backend) GetWorkspaceProviders(workspaceID string) (any, error) {
 
 	providers, _ := config.Providers(ws.Cfg.Config())
 	return providers, nil
-}
-
-// LSPStart starts an LSP server for the given path.
-func (b *Backend) LSPStart(ctx context.Context, workspaceID, path string) error {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	ws.LSPManager.Start(ctx, path)
-	return nil
-}
-
-// LSPStopAll stops all LSP servers for a workspace.
-func (b *Backend) LSPStopAll(ctx context.Context, workspaceID string) error {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	ws.LSPManager.StopAll(ctx)
-	return nil
 }
 
 // MCPGetStates returns the current state of all MCP clients.
