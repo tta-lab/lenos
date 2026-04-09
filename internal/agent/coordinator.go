@@ -288,9 +288,9 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 			}
 			if currentAssistant != nil {
 				currentAssistant.AppendContent(text)
-			}
-			if err := c.messages.Update(ctx, *currentAssistant); err != nil {
-				slog.Warn("Failed to update assistant message", "error", err)
+				if err := c.messages.Update(ctx, *currentAssistant); err != nil {
+					slog.Warn("Failed to update assistant message", "error", err)
+				}
 			}
 		},
 		OnCommandResult: func(command string, output string, exitCode int) {
