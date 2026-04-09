@@ -70,7 +70,7 @@ Add a relative path to keep project-specific skills alongside your code:
 ```json
 {
   "permissions": {
-    "allowed_tools": ["bash", "sourcegraph", "write"]
+    "allowed_tools": ["bash", "sourcegraph"]
   }
 }
 ```

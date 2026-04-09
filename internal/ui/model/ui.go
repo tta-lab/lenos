@@ -32,7 +32,6 @@ import (
 	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/fsext"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/home"
 	"github.com/tta-lab/lenos/internal/message"
 
@@ -123,18 +122,14 @@ type (
 
 	// copyChatHighlightMsg is sent to copy the current chat highlight to clipboard.
 	copyChatHighlightMsg struct{}
-
-	// sessionFilesUpdatesMsg is sent when the files for this session have been updated
-	sessionFilesUpdatesMsg struct {
-		sessionFiles []SessionFile
-	}
 )
 
 // UI represents the main user interface model.
 type UI struct {
-	com          *common.Common
-	session      *session.Session
-	sessionFiles []SessionFile
+	com           *common.Common
+	session       *session.Session
+	gitWorktree   bool
+	modifiedFiles []string
 
 	// keeps track of read files while we don't have a session id
 	sessionFileReads []string
@@ -319,6 +314,12 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 	// Initialize compact mode from config
 	ui.forceCompactMode = com.Config().Options.TUI.CompactMode
 
+	// Initialize git worktree state
+	ui.gitWorktree = com.Workspace.IsGitWorktree(context.Background())
+	if ui.gitWorktree {
+		ui.modifiedFiles, _ = com.Workspace.ListModifiedFiles(context.Background())
+	}
+
 	// set onboarding state defaults
 	ui.onboarding.yesInitializeSelected = true
 
@@ -487,7 +488,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.setState(uiChat, m.focus)
 		m.session = msg.session
-		m.sessionFiles = msg.files
 
 		msgs, err := m.com.Workspace.ListMessages(context.Background(), m.session.ID)
 		if err != nil {
@@ -517,8 +517,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.loadPromptHistory())
 		m.updateLayoutAndSize()
 
-	case sessionFilesUpdatesMsg:
-		m.sessionFiles = msg.sessionFiles
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
 
@@ -603,8 +601,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// there is a number of things that could change the pills here so we want to re-render
 		m.renderPills()
-	case pubsub.Event[history.File]:
-		cmds = append(cmds, m.handleFileEvent(msg.Payload))
 	case cancelTimerExpiredMsg:
 		m.isCanceling = false
 	case tea.TerminalVersionMsg:
@@ -3034,7 +3030,7 @@ func (m *UI) newSession() tea.Cmd {
 	}
 
 	m.session = nil
-	m.sessionFiles = nil
+	m.modifiedFiles = nil
 	m.sessionFileReads = nil
 	m.stopTWPoll()
 	m.setState(uiLanding, uiFocusEditor)
@@ -3285,7 +3281,7 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	sectionWidth := min(maxSectionWidth, width/3-2) // account for 2 spaces
 	maxItemsPerSection := remainingHeight - 3       // Account for section title and spacing
 
-	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), sectionWidth, maxItemsPerSection, false)
+	filesSection := m.modifiedFilesInfo(sectionWidth, maxItemsPerSection, false)
 	sections := filesSection
 	uv.NewStyledString(
 		s.CompactDetails.View.

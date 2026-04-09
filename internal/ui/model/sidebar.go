@@ -88,7 +88,7 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 		blocks...,
 	)
 
-	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), width, 10, true)
+	filesSection := m.modifiedFilesInfo(width, 10, true)
 
 	uv.NewStyledString(
 		lipgloss.NewStyle().

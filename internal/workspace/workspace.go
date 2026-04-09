@@ -10,7 +10,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
 
@@ -57,8 +56,9 @@ type Workspace interface {
 	InitCoderAgent(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel
 
-	// History (stub - no-op)
-	ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error)
+	// Git
+	IsGitWorktree(ctx context.Context) bool
+	ListModifiedFiles(ctx context.Context) ([]string, error)
 
 	// Config (read-only data)
 	Config() *config.Config

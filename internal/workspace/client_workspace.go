@@ -11,7 +11,6 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/client"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
@@ -354,7 +353,13 @@ func (w *ClientWorkspace) Subscribe(program *tea.Program) {
 	}
 }
 
-func (w *ClientWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
+func (w *ClientWorkspace) IsGitWorktree(ctx context.Context) bool {
+	return true // Client mode always assumes git worktree (server validates)
+}
+
+func (w *ClientWorkspace) ListModifiedFiles(ctx context.Context) ([]string, error) {
+	// In client mode, modified files come from the server via SSE events.
+	// The UI maintains its own state from git status updates sent by the server.
 	return nil, nil
 }
 
@@ -375,11 +380,6 @@ func translateEvent(ev any) tea.Msg {
 		return pubsub.Event[session.Session]{
 			Type:    e.Type,
 			Payload: protoToSession(e.Payload),
-		}
-	case pubsub.Event[proto.File]:
-		return pubsub.Event[history.File]{
-			Type:    e.Type,
-			Payload: protoToFile(e.Payload),
 		}
 	case pubsub.Event[proto.AgentEvent]:
 		return pubsub.Event[notify.Notification]{
@@ -408,18 +408,6 @@ func protoToSession(s proto.Session) session.Session {
 		Cost:             s.Cost,
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
-	}
-}
-
-func protoToFile(f proto.File) history.File {
-	return history.File{
-		ID:        f.ID,
-		SessionID: f.SessionID,
-		Path:      f.Path,
-		Content:   f.Content,
-		Version:   f.Version,
-		CreatedAt: f.CreatedAt,
-		UpdatedAt: f.UpdatedAt,
 	}
 }
 
@@ -480,14 +468,6 @@ func protoToMessages(msgs []proto.Message) []message.Message {
 	out := make([]message.Message, len(msgs))
 	for i, m := range msgs {
 		out[i] = protoToMessage(m)
-	}
-	return out
-}
-
-func protoToFiles(files []proto.File) []history.File {
-	out := make([]history.File, len(files))
-	for i, f := range files {
-		out[i] = protoToFile(f)
 	}
 	return out
 }

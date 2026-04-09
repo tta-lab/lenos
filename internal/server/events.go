@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/proto"
 	"github.com/tta-lab/lenos/internal/pubsub"
@@ -28,11 +27,6 @@ func wrapEvent(ev any) *pubsub.Payload {
 		return envelope(pubsub.PayloadTypeSession, pubsub.Event[proto.Session]{
 			Type:    e.Type,
 			Payload: sessionToProto(e.Payload),
-		})
-	case pubsub.Event[history.File]:
-		return envelope(pubsub.PayloadTypeFile, pubsub.Event[proto.File]{
-			Type:    e.Type,
-			Payload: fileToProto(e.Payload),
 		})
 	case pubsub.Event[notify.Notification]:
 		return envelope(pubsub.PayloadTypeAgentEvent, pubsub.Event[proto.AgentEvent]{
@@ -74,18 +68,6 @@ func sessionToProto(s session.Session) proto.Session {
 		Cost:             s.Cost,
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
-	}
-}
-
-func fileToProto(f history.File) proto.File {
-	return proto.File{
-		ID:        f.ID,
-		SessionID: f.SessionID,
-		Path:      f.Path,
-		Content:   f.Content,
-		Version:   f.Version,
-		CreatedAt: f.CreatedAt,
-		UpdatedAt: f.UpdatedAt,
 	}
 }
 

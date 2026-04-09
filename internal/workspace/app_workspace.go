@@ -3,12 +3,13 @@ package workspace
 import (
 	"context"
 	"errors"
+	"os/exec"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/app"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
 
@@ -242,10 +243,33 @@ func (w *AppWorkspace) AgentName() string {
 	return w.store.Overrides().AgentName
 }
 
-// -- History (stub - no-op) --
+// -- Git --
 
-func (w *AppWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
-	return nil, nil
+func (w *AppWorkspace) IsGitWorktree(ctx context.Context) bool {
+	err := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree").Run()
+	return err == nil
+}
+
+func (w *AppWorkspace) ListModifiedFiles(ctx context.Context) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
+	cmd.Dir = w.store.WorkingDir()
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		// porcelain format: XY filename
+		// X=index, Y=worktree status
+		filename := strings.TrimSpace(line[2:])
+		if filename != "" {
+			files = append(files, filename)
+		}
+	}
+	return files, nil
 }
 
 // Compile-time check that AppWorkspace implements Workspace.

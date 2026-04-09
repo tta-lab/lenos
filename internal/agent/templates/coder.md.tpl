@@ -17,7 +17,7 @@ Run `ttal skill list` once at the start of a session to see available shell-out 
 | Shell commands | `bash` | `ls`, `tree`, `find`, `fd`, `go build`, `go test`, etc. |
 | Web search | `web search "<query>"` | Internet search |
 | Web fetch | `web fetch <url>` | Read web pages |
-| Write file | `write` | Create or overwrite entire file |
+| Write file | `src edit` | Text replacement — tolerant 4-pass matching |
 
 **`src edit` workflow:** `src <file>` → find the symbol ID → `src edit <file> --section <id>` to scope the edit. For multi-symbol changes or global edits, use `src edit <file>` with `===BEFORE===`/`===AFTER===` blocks.
 
@@ -300,7 +300,7 @@ After significant changes:
 </testing>
 
 <tool_usage>
-- Default to using tools (bash, sourcegraph, write, src, web search, web fetch) rather than speculation whenever they can reduce uncertainty or unlock progress, even if it takes multiple tool calls.
+- Default to using tools (bash, sourcegraph, src edit, web search, web fetch) rather than speculation whenever they can reduce uncertainty or unlock progress, even if it takes multiple tool calls.
 - Search before assuming
 - Read files before editing
 - Always use absolute paths for file operations (editing, reading, writing)
