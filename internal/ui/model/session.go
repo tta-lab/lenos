@@ -124,3 +124,50 @@ func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
 	// Return the first scheduled tick via the shared helper.
 	return m.waitNextTWTick()
 }
+
+// gitPollMsg is sent by the git modified files poller with updated files.
+type gitPollMsg struct {
+	files []string
+}
+
+// stopGitPoll stops the git modified files poller.
+func (m *UI) stopGitPoll() {
+	if m.gitPollTicker != nil {
+		m.gitPollTicker.Stop()
+		m.gitPollTicker = nil
+	}
+}
+
+// waitNextGitTick returns a command that waits for the next ticker tick and
+// emits a gitPollMsg. Guards against a nil ticker (stopped poller).
+func (m *UI) waitNextGitTick() tea.Cmd {
+	if m.gitPollTicker == nil {
+		return nil
+	}
+	ticker := m.gitPollTicker
+	return func() tea.Msg {
+		_, ok := <-ticker.C
+		if !ok {
+			return gitPollMsg{files: nil}
+		}
+		files, err := m.com.Workspace.ListModifiedFiles(context.Background())
+		if err != nil {
+			slog.Warn("Git poll failed", "err", err)
+			return gitPollMsg{files: nil}
+		}
+		return gitPollMsg{files: files}
+	}
+}
+
+// startGitPoll starts a 2-second ticker that polls git status and sends
+// gitPollMsg when the results change. Idempotent — safe to call multiple times.
+func (m *UI) startGitPoll() tea.Cmd {
+	if !m.gitWorktree {
+		return nil
+	}
+	m.stopGitPoll()
+	m.gitPollTicker = time.NewTicker(2 * time.Second)
+
+	// Return the first scheduled tick.
+	return m.waitNextGitTick()
+}

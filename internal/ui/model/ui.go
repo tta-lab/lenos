@@ -230,6 +230,9 @@ type UI struct {
 	twPollTicker *time.Ticker
 	twJobID      string
 
+	// Git modified files polling
+	gitPollTicker *time.Ticker
+
 	// mouse highlighting related state
 	lastClickTime time.Time
 
@@ -358,6 +361,10 @@ func (m *UI) Init() tea.Cmd {
 	cmds = append(cmds, m.loadPromptHistory())
 	// load initial session if specified
 	if cmd := m.loadInitialSession(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	// start git modified files polling
+	if cmd := m.startGitPoll(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 	// send trigger message if one was provided at startup
@@ -570,6 +577,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.renderPills()
 		cmds = append(cmds, m.waitNextTWTick())
+	case gitPollMsg:
+		m.modifiedFiles = msg.files
+		cmds = append(cmds, m.waitNextGitTick())
 	case pubsub.Event[message.Message]:
 		// Check if this is a child session message for an agent tool.
 		if m.session == nil {
