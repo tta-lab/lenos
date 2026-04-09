@@ -41,6 +41,10 @@ func (m *UI) loadSession(sessionID string) tea.Cmd {
 // modifiedFilesInfo renders the modified files section for the sidebar,
 // showing files from git status --porcelain.
 func (m *UI) modifiedFilesInfo(width, maxItems int, isSection bool) string {
+	if !m.gitWorktree {
+		return ""
+	}
+
 	t := m.com.Styles
 
 	title := t.Subtle.Render("Modified Files")
@@ -49,9 +53,7 @@ func (m *UI) modifiedFilesInfo(width, maxItems int, isSection bool) string {
 	}
 	list := t.Subtle.Render("None")
 
-	if !m.gitWorktree {
-		list = t.Subtle.Render("Not a git repository")
-	} else if len(m.modifiedFiles) > 0 {
+	if len(m.modifiedFiles) > 0 {
 		list = gitFileList(t, m.modifiedFiles, width, maxItems)
 	}
 
