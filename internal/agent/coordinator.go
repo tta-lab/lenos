@@ -232,7 +232,7 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 	// Build additional read-only paths from ttal project list.
 	cwd := c.cfg.WorkingDir()
 	var additionalReadOnlyPaths []string
-	if projects, err := project.List(); err == nil {
+	if projects, err := project.List(ctx); err == nil {
 		for _, p := range projects {
 			if p.Path != "" && p.Path != cwd {
 				additionalReadOnlyPaths = append(additionalReadOnlyPaths, p.Path)
@@ -240,7 +240,7 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		}
 	}
 
-	allowedPaths := BuildAllowedPaths(cwd, "rw", additionalReadOnlyPaths...)
+	allowedPaths := BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...)
 
 	logosCfg := logos.Config{
 		Provider:     prov,
@@ -281,14 +281,16 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 					Parts: []message.ContentPart{},
 				})
 				if err != nil {
-					slog.Warn("failed to create assistant message", "error", err)
+					slog.Warn("Failed to create assistant message", "error", err)
 					return
 				}
 				currentAssistant = &msg
 			}
-			currentAssistant.AppendContent(text)
+			if currentAssistant != nil {
+				currentAssistant.AppendContent(text)
+			}
 			if err := c.messages.Update(ctx, *currentAssistant); err != nil {
-				slog.Warn("failed to update assistant message", "error", err)
+				slog.Warn("Failed to update assistant message", "error", err)
 			}
 		},
 		OnCommandResult: func(command string, output string, exitCode int) {
@@ -298,20 +300,13 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 				Parts: []message.ContentPart{message.TextContent{Text: content}},
 			})
 			if err != nil {
-				slog.Warn("failed to persist command result", "error", err)
+				slog.Warn("Failed to persist command result", "error", err)
 			}
 		},
 		OnRetry: func(reason string, step int) {
-			slog.Warn("logos retry", "reason", reason, "step", step)
+			slog.Warn("Logos retry", "reason", reason, "step", step)
 		},
 	})
-
-	// Persist any remaining steps that were not handled via streaming callbacks.
-	if result != nil && len(result.Steps) > 0 {
-		if err := stepsToMessages(ctx, result.Steps, sessionID, c.messages); err != nil {
-			slog.Warn("failed to persist step messages", "error", err)
-		}
-	}
 
 	if runErr != nil {
 		return nil, fmt.Errorf("logos.Run: %w", runErr)

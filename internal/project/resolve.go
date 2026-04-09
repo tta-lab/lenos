@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"time"
 )
 
 // Project holds a ttal project entry.
@@ -15,8 +16,10 @@ type Project struct {
 }
 
 // List calls ttal project list --json and returns all active projects.
-func List() ([]Project, error) {
-	out, err := exec.CommandContext(context.Background(), "ttal", "project", "list", "--json").Output()
+func List(ctx context.Context) ([]Project, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ttal", "project", "list", "--json").Output()
 	if err != nil {
 		return nil, fmt.Errorf("ttal project list: %w", err)
 	}

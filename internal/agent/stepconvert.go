@@ -14,15 +14,15 @@ func stepsToMessages(ctx context.Context, steps []logos.StepMessage, sessionID s
 		switch step.Role {
 		case logos.StepRoleAssistant:
 			parts := []message.ContentPart{}
-			text := strings.TrimSpace(step.Content)
-			if text != "" {
-				parts = append(parts, message.TextContent{Text: text})
-			}
 			if step.Reasoning != "" {
 				parts = append(parts, message.ReasoningContent{
 					Thinking:  step.Reasoning,
 					Signature: step.ReasoningSignature,
 				})
+			}
+			text := strings.TrimSpace(step.Content)
+			if text != "" {
+				parts = append(parts, message.TextContent{Text: text})
 			}
 			_, err := msgs.Create(ctx, sessionID, message.CreateMessageParams{
 				Role:  message.Assistant,

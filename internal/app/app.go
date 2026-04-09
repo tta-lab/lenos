@@ -104,20 +104,23 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore) (*App, er
 		return app, nil
 	}
 
-	// Try to create temenos client. If socket exists, require daemon to be running.
+	// Try to create temenos client. In worker mode (TTAL_JOB_ID set), require the daemon
+	// if socket exists. In standalone mode, skip silently.
 	var temenos logos.CommandRunner
-	usr, err := user.Current()
-	if err != nil {
-		// Cannot determine home dir, skip temenos
-	} else {
-		socketPath := filepath.Join(usr.HomeDir, ".temenos", "daemon.sock")
-		if _, err := os.Stat(socketPath); err == nil {
-			tc, err := logos.NewClient("")
-			if err != nil {
-				return nil, fmt.Errorf("temenos daemon not running: %w", err)
-			}
-			temenos = tc
+	if os.Getenv("TTAL_JOB_ID") != "" {
+		usr, err := user.Current()
+		if err != nil {
+			return nil, fmt.Errorf("determine home dir for temenos socket: %w", err)
 		}
+		socketPath := filepath.Join(usr.HomeDir, ".temenos", "daemon.sock")
+		if _, err := os.Stat(socketPath); err != nil {
+			return nil, fmt.Errorf("temenos socket not found at %s (is daemon running?): %w", socketPath, err)
+		}
+		tc, err := logos.NewClient("")
+		if err != nil {
+			return nil, fmt.Errorf("connect to temenos daemon: %w", err)
+		}
+		temenos = tc
 	}
 
 	if err := app.InitCoderAgent(ctx, temenos); err != nil {
