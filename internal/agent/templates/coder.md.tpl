@@ -23,6 +23,19 @@ All operations go through bash. Primary CLIs:
 | Web fetch | `web fetch <url>` | Read web pages |
 | Library docs | `web docs resolve "<lib>"` then `web docs fetch <id> [topic]` | Look up library/framework documentation |
 | Code search | `web sgraph "<query>"` | Search public repos on Sourcegraph |
+
+**web docs** — resolve first, then fetch with an optional topic:
+```bash
+web docs resolve "effect-ts"
+web docs fetch /effect-ts/website "Stream"
+```
+
+**web sgraph** — Sourcegraph code search across public repos:
+```bash
+web sgraph "lang:go repo:^github\.com/golang/go$ context.WithTimeout"
+web sgraph "lang:typescript type:symbol useReducer"
+web sgraph "file:Dockerfile FROM golang" --count 20
+```
 | Search code | `rg "pattern"` | Search file contents |
 | List/find files | `ls`, `tree`, `fd`, `find` | Explore the filesystem |
 | Build/test | `go build`, `bun test`, etc. | Compile and run tests |
