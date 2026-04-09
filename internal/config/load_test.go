@@ -51,7 +51,6 @@ func TestConfig_setDefaults(t *testing.T) {
 	require.NotNil(t, cfg.Options.ContextPaths)
 	require.NotNil(t, cfg.Providers)
 	require.NotNil(t, cfg.Models)
-	require.NotNil(t, cfg.MCP)
 	require.Equal(t, filepath.Join("/tmp", ".lenos"), cfg.Options.DataDirectory)
 	require.Equal(t, "AGENTS.md", cfg.Options.InitializeAs)
 	for _, path := range defaultContextPaths {

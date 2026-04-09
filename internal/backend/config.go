@@ -2,24 +2,11 @@ package backend
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/tta-lab/lenos/internal/agent"
-	mcptools "github.com/tta-lab/lenos/internal/agent/tools/mcp"
-	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/oauth"
 )
-
-// MCPResourceContents holds the contents of an MCP resource returned
-// by the backend.
-type MCPResourceContents struct {
-	URI      string `json:"uri"`
-	MIMEType string `json:"mime_type,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Blob     []byte `json:"blob,omitempty"`
-}
 
 // SetConfigField sets a key/value pair in the config file for the
 // given scope.
@@ -114,94 +101,6 @@ func (b *Backend) InitializePrompt(workspaceID string) (string, error) {
 		return "", err
 	}
 	return agent.InitializePrompt(ws.Cfg)
-}
-
-// EnableDockerMCP validates Docker MCP availability, stages the
-// configuration, starts the MCP client, and persists the config.
-func (b *Backend) EnableDockerMCP(ctx context.Context, workspaceID string) error {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	mcpConfig, err := ws.Cfg.PrepareDockerMCPConfig()
-	if err != nil {
-		return err
-	}
-
-	if err := mcptools.InitializeSingle(ctx, config.DockerMCPName, ws.Cfg); err != nil {
-		disableErr := mcptools.DisableSingle(ws.Cfg, config.DockerMCPName)
-		delete(ws.Cfg.Config().MCP, config.DockerMCPName)
-		return fmt.Errorf("failed to start docker MCP: %w", errors.Join(err, disableErr))
-	}
-
-	if err := ws.Cfg.PersistDockerMCPConfig(mcpConfig); err != nil {
-		disableErr := mcptools.DisableSingle(ws.Cfg, config.DockerMCPName)
-		delete(ws.Cfg.Config().MCP, config.DockerMCPName)
-		return fmt.Errorf("docker MCP started but failed to persist configuration: %w", errors.Join(err, disableErr))
-	}
-
-	return nil
-}
-
-// DisableDockerMCP closes the Docker MCP client, removes the
-// configuration, and persists the change.
-func (b *Backend) DisableDockerMCP(workspaceID string) error {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	if err := mcptools.DisableSingle(ws.Cfg, config.DockerMCPName); err != nil {
-		return fmt.Errorf("failed to disable docker MCP: %w", err)
-	}
-
-	if err := ws.Cfg.DisableDockerMCP(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// RefreshMCPTools refreshes the tools for a named MCP server.
-func (b *Backend) RefreshMCPTools(ctx context.Context, workspaceID, name string) error {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-	mcptools.RefreshTools(ctx, ws.Cfg, name)
-	return nil
-}
-
-// ReadMCPResource reads a resource from a named MCP server.
-func (b *Backend) ReadMCPResource(ctx context.Context, workspaceID, name, uri string) ([]MCPResourceContents, error) {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	contents, err := mcptools.ReadResource(ctx, ws.Cfg, name, uri)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]MCPResourceContents, len(contents))
-	for i, c := range contents {
-		result[i] = MCPResourceContents{
-			URI:      c.URI,
-			MIMEType: c.MIMEType,
-			Text:     c.Text,
-			Blob:     c.Blob,
-		}
-	}
-	return result, nil
-}
-
-// GetMCPPrompt retrieves a prompt from a named MCP server.
-func (b *Backend) GetMCPPrompt(workspaceID, clientID, promptID string, args map[string]string) (string, error) {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return "", err
-	}
-	return commands.GetMCPPrompt(ws.Cfg, clientID, promptID, args)
 }
 
 // GetWorkingDir returns the working directory for a workspace.

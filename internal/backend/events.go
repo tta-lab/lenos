@@ -1,11 +1,8 @@
 package backend
 
 import (
-	"context"
-
 	tea "charm.land/bubbletea/v2"
 
-	mcptools "github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/config"
 )
 
@@ -39,19 +36,4 @@ func (b *Backend) GetWorkspaceProviders(workspaceID string) (any, error) {
 
 	providers, _ := config.Providers(ws.Cfg.Config())
 	return providers, nil
-}
-
-// MCPGetStates returns the current state of all MCP clients.
-func (b *Backend) MCPGetStates(_ string) map[string]mcptools.ClientInfo {
-	return mcptools.GetStates()
-}
-
-// MCPRefreshPrompts refreshes prompts for a named MCP client.
-func (b *Backend) MCPRefreshPrompts(ctx context.Context, _ string, name string) {
-	mcptools.RefreshPrompts(ctx, name)
-}
-
-// MCPRefreshResources refreshes resources for a named MCP client.
-func (b *Backend) MCPRefreshResources(ctx context.Context, _ string, name string) {
-	mcptools.RefreshResources(ctx, name)
 }

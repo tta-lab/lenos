@@ -158,28 +158,6 @@ func (c *ProviderConfig) SetupGitHubCopilot() {
 	maps.Copy(c.ExtraHeaders, copilot.Headers())
 }
 
-type MCPType string
-
-const (
-	MCPStdio MCPType = "stdio"
-	MCPSSE   MCPType = "sse"
-	MCPHttp  MCPType = "http"
-)
-
-type MCPConfig struct {
-	Command       string            `json:"command,omitempty" jsonschema:"description=Command to execute for stdio MCP servers,example=npx"`
-	Env           map[string]string `json:"env,omitempty" jsonschema:"description=Environment variables to set for the MCP server"`
-	Args          []string          `json:"args,omitempty" jsonschema:"description=Arguments to pass to the MCP server command"`
-	Type          MCPType           `json:"type" jsonschema:"required,description=Type of MCP connection,enum=stdio,enum=sse,enum=http,default=stdio"`
-	URL           string            `json:"url,omitempty" jsonschema:"description=URL for HTTP or SSE MCP servers,format=uri,example=http://localhost:3000/mcp"`
-	Disabled      bool              `json:"disabled,omitempty" jsonschema:"description=Whether this MCP server is disabled,default=false"`
-	DisabledTools []string          `json:"disabled_tools,omitempty" jsonschema:"description=List of tools from this MCP server to disable,example=get-library-doc"`
-	Timeout       int               `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for MCP server connections,default=15,example=30,example=60,example=120"`
-
-	// TODO: maybe make it possible to get the value from the env
-	Headers map[string]string `json:"headers,omitempty" jsonschema:"description=HTTP headers for HTTP/SSE MCP servers"`
-}
-
 type TUIOptions struct {
 	CompactMode  bool        `json:"compact_mode,omitempty" jsonschema:"description=Enable compact mode for the TUI interface,default=false"`
 	DiffMode     string      `json:"diff_mode,omitempty" jsonschema:"description=Diff mode for the TUI interface,enum=unified,enum=split"`
@@ -244,44 +222,6 @@ type Options struct {
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=lenos-config"`
 }
 
-type MCPs map[string]MCPConfig
-
-type MCP struct {
-	Name string    `json:"name"`
-	MCP  MCPConfig `json:"mcp"`
-}
-
-func (m MCPs) Sorted() []MCP {
-	sorted := make([]MCP, 0, len(m))
-	for k, v := range m {
-		sorted = append(sorted, MCP{
-			Name: k,
-			MCP:  v,
-		})
-	}
-	slices.SortFunc(sorted, func(a, b MCP) int {
-		return strings.Compare(a.Name, b.Name)
-	})
-	return sorted
-}
-
-func (m MCPConfig) ResolvedEnv() []string {
-	return resolveEnvs(m.Env)
-}
-
-func (m MCPConfig) ResolvedHeaders() map[string]string {
-	resolver := NewShellVariableResolver(env.New())
-	for e, v := range m.Headers {
-		var err error
-		m.Headers[e], err = resolver.ResolveValue(v)
-		if err != nil {
-			slog.Error("Error resolving header variable", "error", err, "variable", e, "value", v)
-			continue
-		}
-	}
-	return m.Headers
-}
-
 type Agent struct {
 	ID          string `json:"id,omitempty"`
 	Name        string `json:"name,omitempty"`
@@ -335,8 +275,6 @@ type Config struct {
 
 	// The providers that are configured
 	Providers *csync.Map[string, ProviderConfig] `json:"providers,omitempty" jsonschema:"description=AI provider configurations"`
-
-	MCP MCPs `json:"mcp,omitempty" jsonschema:"description=Model Context Protocol server configurations"`
 
 	Options *Options `json:"options,omitempty" jsonschema:"description=General application options"`
 

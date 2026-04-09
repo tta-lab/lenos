@@ -62,26 +62,3 @@ type FileTrackerReadRequest struct {
 	SessionID string `json:"session_id"`
 	Path      string `json:"path"`
 }
-
-// MCPNameRequest represents a request targeting a named MCP server.
-type MCPNameRequest struct {
-	Name string `json:"name"`
-}
-
-// MCPReadResourceRequest represents a request to read an MCP resource.
-type MCPReadResourceRequest struct {
-	Name string `json:"name"`
-	URI  string `json:"uri"`
-}
-
-// MCPGetPromptRequest represents a request to get an MCP prompt.
-type MCPGetPromptRequest struct {
-	ClientID string            `json:"client_id"`
-	PromptID string            `json:"prompt_id"`
-	Args     map[string]string `json:"args"`
-}
-
-// MCPGetPromptResponse represents the response from getting an MCP prompt.
-type MCPGetPromptResponse struct {
-	Prompt string `json:"prompt"`
-}

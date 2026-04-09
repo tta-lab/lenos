@@ -1,7 +1,6 @@
 package completions
 
 import (
-	"cmp"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/ordered"
-	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/ui/list"
 )
@@ -40,8 +38,7 @@ type ClosedMsg struct{}
 
 // CompletionItemsLoadedMsg is sent when files have been loaded for completions.
 type CompletionItemsLoadedMsg struct {
-	Files     []FileCompletionValue
-	Resources []ResourceCompletionValue
+	Files []FileCompletionValue
 }
 
 // Completions represents the completions popup component.
@@ -139,35 +136,21 @@ func (c *Completions) Open(depth, limit int) tea.Cmd {
 		wg.Go(func() {
 			msg.Files = loadFiles(depth, limit)
 		})
-		wg.Go(func() {
-			msg.Resources = loadMCPResources()
-		})
+
 		wg.Wait()
 		return msg
 	}
 }
 
-// SetItems sets the files and MCP resources and rebuilds the merged list.
-func (c *Completions) SetItems(files []FileCompletionValue, resources []ResourceCompletionValue) {
-	items := make([]list.FilterableItem, 0, len(files)+len(resources))
+// SetItems sets the files and rebuilds the merged list.
+func (c *Completions) SetItems(files []FileCompletionValue) {
+	items := make([]list.FilterableItem, 0, len(files))
 
 	// Add files first.
 	for _, file := range files {
 		item := NewCompletionItem(
 			file.Path,
 			file,
-			c.normalStyle,
-			c.focusedStyle,
-			c.matchStyle,
-		)
-		items = append(items, item)
-	}
-
-	// Add MCP resources.
-	for _, resource := range resources {
-		item := NewCompletionItem(
-			resource.MCPName+"/"+cmp.Or(resource.Title, resource.URI),
-			resource,
 			c.normalStyle,
 			c.focusedStyle,
 			c.matchStyle,
@@ -366,11 +349,6 @@ func (c *Completions) selectCurrent(keepOpen bool) tea.Msg {
 	}
 
 	switch item := item.Value().(type) {
-	case ResourceCompletionValue:
-		return SelectionMsg[ResourceCompletionValue]{
-			Value:    item,
-			KeepOpen: keepOpen,
-		}
 	case FileCompletionValue:
 		return SelectionMsg[FileCompletionValue]{
 			Value:    item,
@@ -405,19 +383,4 @@ func loadFiles(depth, limit int) []FileCompletionValue {
 		})
 	}
 	return result
-}
-
-func loadMCPResources() []ResourceCompletionValue {
-	var resources []ResourceCompletionValue
-	for mcpName, mcpResources := range mcp.Resources() {
-		for _, r := range mcpResources {
-			resources = append(resources, ResourceCompletionValue{
-				MCPName:  mcpName,
-				URI:      r.URI,
-				Title:    r.Name,
-				MIMEType: r.MIMEType,
-			})
-		}
-	}
-	return resources
 }

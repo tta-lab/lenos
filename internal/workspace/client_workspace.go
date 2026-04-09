@@ -10,7 +10,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	"github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/client"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/history"
@@ -362,71 +361,6 @@ func (w *ClientWorkspace) InitializePrompt() (string, error) {
 	return w.client.GetInitializePrompt(context.Background(), w.workspaceID())
 }
 
-// -- MCP operations --
-
-func (w *ClientWorkspace) MCPGetStates() map[string]mcp.ClientInfo {
-	states, err := w.client.MCPGetStates(context.Background(), w.workspaceID())
-	if err != nil {
-		return nil
-	}
-	result := make(map[string]mcp.ClientInfo, len(states))
-	for k, v := range states {
-		result[k] = mcp.ClientInfo{
-			Name:  v.Name,
-			State: mcp.State(v.State),
-			Error: v.Error,
-			Counts: mcp.Counts{
-				Tools:     v.ToolCount,
-				Prompts:   v.PromptCount,
-				Resources: v.ResourceCount,
-			},
-			ConnectedAt: v.ConnectedAt,
-		}
-	}
-	return result
-}
-
-func (w *ClientWorkspace) MCPRefreshPrompts(ctx context.Context, name string) {
-	_ = w.client.MCPRefreshPrompts(ctx, w.workspaceID(), name)
-}
-
-func (w *ClientWorkspace) MCPRefreshResources(ctx context.Context, name string) {
-	_ = w.client.MCPRefreshResources(ctx, w.workspaceID(), name)
-}
-
-func (w *ClientWorkspace) RefreshMCPTools(ctx context.Context, name string) {
-	_ = w.client.RefreshMCPTools(ctx, w.workspaceID(), name)
-}
-
-func (w *ClientWorkspace) ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error) {
-	contents, err := w.client.ReadMCPResource(ctx, w.workspaceID(), name, uri)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]MCPResourceContents, len(contents))
-	for i, c := range contents {
-		result[i] = MCPResourceContents{
-			URI:      c.URI,
-			MIMEType: c.MIMEType,
-			Text:     c.Text,
-			Blob:     c.Blob,
-		}
-	}
-	return result, nil
-}
-
-func (w *ClientWorkspace) GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error) {
-	return w.client.GetMCPPrompt(context.Background(), w.workspaceID(), clientID, promptID, args)
-}
-
-func (w *ClientWorkspace) EnableDockerMCP(ctx context.Context) error {
-	return w.client.EnableDockerMCP(ctx, w.workspaceID())
-}
-
-func (w *ClientWorkspace) DisableDockerMCP() error {
-	return w.client.DisableDockerMCP(context.Background(), w.workspaceID())
-}
-
 // -- Lifecycle --
 
 func (w *ClientWorkspace) Subscribe(program *tea.Program) {
@@ -457,21 +391,6 @@ func (w *ClientWorkspace) Shutdown() {
 // that the TUI's Update() method expects.
 func translateEvent(ev any) tea.Msg {
 	switch e := ev.(type) {
-	case pubsub.Event[proto.MCPEvent]:
-		return pubsub.Event[mcp.Event]{
-			Type: e.Type,
-			Payload: mcp.Event{
-				Type:  protoToMCPEventType(e.Payload.Type),
-				Name:  e.Payload.Name,
-				State: mcp.State(e.Payload.State),
-				Error: e.Payload.Error,
-				Counts: mcp.Counts{
-					Tools:     e.Payload.ToolCount,
-					Prompts:   e.Payload.PromptCount,
-					Resources: e.Payload.ResourceCount,
-				},
-			},
-		}
 	case pubsub.Event[proto.Message]:
 		return pubsub.Event[message.Message]{
 			Type:    e.Type,
@@ -499,21 +418,6 @@ func translateEvent(ev any) tea.Msg {
 	default:
 		slog.Warn("Unknown event type in translateEvent", "type", fmt.Sprintf("%T", ev))
 		return nil
-	}
-}
-
-func protoToMCPEventType(t proto.MCPEventType) mcp.EventType {
-	switch t {
-	case proto.MCPEventStateChanged:
-		return mcp.EventStateChanged
-	case proto.MCPEventToolsListChanged:
-		return mcp.EventToolsListChanged
-	case proto.MCPEventPromptsListChanged:
-		return mcp.EventPromptsListChanged
-	case proto.MCPEventResourcesListChanged:
-		return mcp.EventResourcesListChanged
-	default:
-		return mcp.EventStateChanged
 	}
 }
 

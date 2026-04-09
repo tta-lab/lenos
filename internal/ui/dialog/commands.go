@@ -24,7 +24,7 @@ const CommandsID = "commands"
 type CommandType uint
 
 // String returns the string representation of the CommandType.
-func (c CommandType) String() string { return []string{"System", "User", "MCP"}[c] }
+func (c CommandType) String() string { return []string{"System", "User"}[c] }
 
 const (
 	sidebarCompactModeBreakpoint = 120
@@ -33,14 +33,9 @@ const (
 const (
 	SystemCommands CommandType = iota
 	UserCommands
-	MCPPrompts
 )
 
 // Commands represents a dialog that shows available commands.
-type dockerMCPAvailabilityCheckedMsg struct {
-	available bool
-}
-
 type Commands struct {
 	com    *common.Common
 	keyMap struct {
@@ -69,16 +64,12 @@ type Commands struct {
 	windowWidth int
 
 	customCommands []commands.CustomCommand
-	mcpPrompts     []commands.MCPPrompt
-
-	dockerMCPAvailable     *bool
-	dockerMCPCheckInFlight bool
 }
 
 var _ Dialog = (*Commands)(nil)
 
 // NewCommands creates a new commands dialog.
-func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, hasQueue bool, customCommands []commands.CustomCommand, mcpPrompts []commands.MCPPrompt) (*Commands, error) {
+func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, hasQueue bool, customCommands []commands.CustomCommand) (*Commands, error) {
 	c := &Commands{
 		com:            com,
 		selected:       SystemCommands,
@@ -87,7 +78,6 @@ func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, has
 		hasTodos:       hasTodos,
 		hasQueue:       hasQueue,
 		customCommands: customCommands,
-		mcpPrompts:     mcpPrompts,
 	}
 
 	help := help.New()
@@ -133,10 +123,6 @@ func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, has
 	closeKey.SetHelp("esc", "cancel")
 	c.keyMap.Close = closeKey
 
-	if available, known := config.DockerMCPAvailabilityCached(); known {
-		c.dockerMCPAvailable = &available
-	}
-
 	// Set initial commands
 	c.setCommandItems(c.selected)
 
@@ -156,13 +142,6 @@ func (c *Commands) ID() string {
 // HandleMsg implements [Dialog].
 func (c *Commands) HandleMsg(msg tea.Msg) Action {
 	switch msg := msg.(type) {
-	case dockerMCPAvailabilityCheckedMsg:
-		c.dockerMCPAvailable = &msg.available
-		c.dockerMCPCheckInFlight = false
-		if c.selected == SystemCommands {
-			c.setCommandItems(c.selected)
-		}
-		return nil
 	case spinner.TickMsg:
 		if c.loading {
 			var cmd tea.Cmd
@@ -196,12 +175,12 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 				}
 			}
 		case key.Matches(msg, c.keyMap.Tab):
-			if len(c.customCommands) > 0 || len(c.mcpPrompts) > 0 {
+			if len(c.customCommands) > 0 {
 				c.selected = c.nextCommandType()
 				c.setCommandItems(c.selected)
 			}
 		case key.Matches(msg, c.keyMap.ShiftTab):
-			if len(c.customCommands) > 0 || len(c.mcpPrompts) > 0 {
+			if len(c.customCommands) > 0 {
 				c.selected = c.previousCommandType()
 				c.setCommandItems(c.selected)
 			}
@@ -225,28 +204,14 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 	return nil
 }
 
-func checkDockerMCPAvailabilityCmd() tea.Cmd {
-	return func() tea.Msg {
-		return dockerMCPAvailabilityCheckedMsg{available: config.RefreshDockerMCPAvailability()}
-	}
-}
-
-func (c *Commands) InitialCmd() tea.Cmd {
-	if c.dockerMCPAvailable != nil || c.dockerMCPCheckInFlight {
-		return nil
-	}
-	c.dockerMCPCheckInFlight = true
-	return checkDockerMCPAvailabilityCmd()
-}
-
 // Cursor returns the cursor position relative to the dialog.
 func (c *Commands) Cursor() *tea.Cursor {
 	return InputCursor(c.com.Styles, c.input.Cursor())
 }
 
 // commandsRadioView generates the command type selector radio buttons.
-func commandsRadioView(sty *styles.Styles, selected CommandType, hasUserCmds bool, hasMCPPrompts bool) string {
-	if !hasUserCmds && !hasMCPPrompts {
+func commandsRadioView(sty *styles.Styles, selected CommandType, hasUserCmds bool) string {
+	if !hasUserCmds {
 		return ""
 	}
 
@@ -264,10 +229,6 @@ func commandsRadioView(sty *styles.Styles, selected CommandType, hasUserCmds boo
 	if hasUserCmds {
 		parts = append(parts, selectedFn(UserCommands))
 	}
-	if hasMCPPrompts {
-		parts = append(parts, selectedFn(MCPPrompts))
-	}
-
 	return strings.Join(parts, " ")
 }
 
@@ -296,7 +257,7 @@ func (c *Commands) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	rc := NewRenderContext(t, width)
 	rc.Title = "Commands"
-	rc.TitleInfo = commandsRadioView(t, c.selected, len(c.customCommands) > 0, len(c.mcpPrompts) > 0)
+	rc.TitleInfo = commandsRadioView(t, c.selected, len(c.customCommands) > 0)
 	inputView := t.Dialog.InputPrompt.Render(c.input.View())
 	rc.AddPart(inputView)
 	listView := t.Dialog.List.Height(c.list.Height()).Render(c.list.Render())
@@ -339,16 +300,8 @@ func (c *Commands) nextCommandType() CommandType {
 		if len(c.customCommands) > 0 {
 			return UserCommands
 		}
-		if len(c.mcpPrompts) > 0 {
-			return MCPPrompts
-		}
-		fallthrough
+		return SystemCommands
 	case UserCommands:
-		if len(c.mcpPrompts) > 0 {
-			return MCPPrompts
-		}
-		fallthrough
-	case MCPPrompts:
 		return SystemCommands
 	default:
 		return SystemCommands
@@ -359,19 +312,11 @@ func (c *Commands) nextCommandType() CommandType {
 func (c *Commands) previousCommandType() CommandType {
 	switch c.selected {
 	case SystemCommands:
-		if len(c.mcpPrompts) > 0 {
-			return MCPPrompts
-		}
 		if len(c.customCommands) > 0 {
 			return UserCommands
 		}
 		return SystemCommands
 	case UserCommands:
-		return SystemCommands
-	case MCPPrompts:
-		if len(c.customCommands) > 0 {
-			return UserCommands
-		}
 		return SystemCommands
 	default:
 		return SystemCommands
@@ -395,17 +340,6 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 				Arguments: cmd.Arguments,
 			}
 			commandItems = append(commandItems, NewCommandItem(c.com.Styles, "custom_"+cmd.ID, cmd.Name, "", action))
-		}
-	case MCPPrompts:
-		for _, cmd := range c.mcpPrompts {
-			action := ActionRunMCPPrompt{
-				Title:       cmd.Title,
-				Description: cmd.Description,
-				PromptID:    cmd.PromptID,
-				ClientID:    cmd.ClientID,
-				Arguments:   cmd.Arguments,
-			}
-			commandItems = append(commandItems, NewCommandItem(c.com.Styles, "mcp_"+cmd.ID, cmd.PromptID, "", action))
 		}
 	}
 
@@ -478,16 +412,6 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "open_external_editor", "Open External Editor", "ctrl+o", ActionExternalEditor{}))
 	}
 
-	// Add Docker MCP command if available and not already enabled.
-	if !cfg.IsDockerMCPEnabled() && c.dockerMCPAvailable != nil && *c.dockerMCPAvailable {
-		commands = append(commands, NewCommandItem(c.com.Styles, "enable_docker_mcp", "Enable Docker MCP Catalog", "", ActionEnableDockerMCP{}))
-	}
-
-	// Add disable Docker MCP command if it's currently enabled
-	if cfg.IsDockerMCPEnabled() {
-		commands = append(commands, NewCommandItem(c.com.Styles, "disable_docker_mcp", "Disable Docker MCP Catalog", "", ActionDisableDockerMCP{}))
-	}
-
 	if c.hasTodos || c.hasQueue {
 		var label string
 		switch {
@@ -533,14 +457,6 @@ func (c *Commands) defaultCommands() []*CommandItem {
 func (c *Commands) SetCustomCommands(customCommands []commands.CustomCommand) {
 	c.customCommands = customCommands
 	if c.selected == UserCommands {
-		c.setCommandItems(c.selected)
-	}
-}
-
-// SetMCPPrompts sets the MCP prompts and refreshes the view if MCP prompts are currently displayed.
-func (c *Commands) SetMCPPrompts(mcpPrompts []commands.MCPPrompt) {
-	c.mcpPrompts = mcpPrompts
-	if c.selected == MCPPrompts {
 		c.setCommandItems(c.selected)
 	}
 }

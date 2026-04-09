@@ -384,10 +384,6 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	if c.RecentModels == nil {
 		c.RecentModels = make(map[SelectedModelType][]SelectedModel)
 	}
-	if c.MCP == nil {
-		c.MCP = make(map[string]MCPConfig)
-	}
-
 	// Add the default context paths if they are not already present
 	c.Options.ContextPaths = append(defaultContextPaths, c.Options.ContextPaths...)
 	slices.Sort(c.Options.ContextPaths)

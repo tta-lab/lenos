@@ -6,7 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/ultraviolet/layout"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/logo"
 )
@@ -55,40 +54,6 @@ func (m *UI) modelInfo(width int) string {
 	return common.ModelInfo(m.com.Styles, modelName, providerName, reasoningInfo, modelContext, width)
 }
 
-// getDynamicHeightLimits will give us the num of items to show in each section based on the hight
-// some items are more important than others.
-func getDynamicHeightLimits(availableHeight int) (maxFiles, maxMCPs int) {
-	const (
-		minItemsPerSection      = 2
-		defaultMaxFilesShown    = 10
-		defaultMaxMCPsShown     = 8
-		minAvailableHeightLimit = 10
-	)
-
-	if availableHeight < minAvailableHeightLimit {
-		return minItemsPerSection, minItemsPerSection
-	}
-
-	totalSections := 2
-	heightPerSection := availableHeight / totalSections
-
-	maxFiles = max(minItemsPerSection, min(defaultMaxFilesShown, heightPerSection))
-	maxMCPs = max(minItemsPerSection, min(defaultMaxMCPsShown, heightPerSection))
-
-	remainingHeight := availableHeight - (maxFiles + maxMCPs)
-	if remainingHeight > 0 {
-		extraForFiles := min(remainingHeight, defaultMaxFilesShown-maxFiles)
-		maxFiles += extraForFiles
-		remainingHeight -= extraForFiles
-
-		if remainingHeight > 0 {
-			maxMCPs += min(remainingHeight, defaultMaxMCPsShown-maxMCPs)
-		}
-	}
-
-	return maxFiles, maxMCPs
-}
-
 // sidebar renders the chat sidebar containing session title, working
 // directory, model info, file list, LSP status, and MCP status.
 func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
@@ -123,12 +88,7 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 		blocks...,
 	)
 
-	_, remainingHeightArea := layout.SplitVertical(m.layout.sidebar, layout.Fixed(lipgloss.Height(sidebarHeader)))
-	remainingHeight := remainingHeightArea.Dy() - 10
-	maxFiles, maxMCPs := getDynamicHeightLimits(remainingHeight)
-
-	mcpSection := m.mcpInfo(width, maxMCPs, true)
-	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), width, maxFiles, true)
+	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), width, 10, true)
 
 	uv.NewStyledString(
 		lipgloss.NewStyle().
@@ -139,8 +99,6 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 					lipgloss.Left,
 					sidebarHeader,
 					filesSection,
-					"",
-					mcpSection,
 				),
 			),
 	).Draw(scr, area)

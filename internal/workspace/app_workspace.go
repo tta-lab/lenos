@@ -3,14 +3,11 @@ package workspace
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/tta-lab/lenos/internal/agent"
-	mcptools "github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/app"
-	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
@@ -240,73 +237,6 @@ func (w *AppWorkspace) MarkProjectInitialized() error {
 
 func (w *AppWorkspace) InitializePrompt() (string, error) {
 	return agent.InitializePrompt(w.store)
-}
-
-// -- MCP operations --
-
-func (w *AppWorkspace) MCPGetStates() map[string]mcptools.ClientInfo {
-	return mcptools.GetStates()
-}
-
-func (w *AppWorkspace) MCPRefreshPrompts(ctx context.Context, name string) {
-	mcptools.RefreshPrompts(ctx, name)
-}
-
-func (w *AppWorkspace) MCPRefreshResources(ctx context.Context, name string) {
-	mcptools.RefreshResources(ctx, name)
-}
-
-func (w *AppWorkspace) RefreshMCPTools(ctx context.Context, name string) {
-	mcptools.RefreshTools(ctx, w.store, name)
-}
-
-func (w *AppWorkspace) ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error) {
-	contents, err := mcptools.ReadResource(ctx, w.store, name, uri)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]MCPResourceContents, len(contents))
-	for i, c := range contents {
-		result[i] = MCPResourceContents{
-			URI:      c.URI,
-			MIMEType: c.MIMEType,
-			Text:     c.Text,
-			Blob:     c.Blob,
-		}
-	}
-	return result, nil
-}
-
-func (w *AppWorkspace) GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error) {
-	return commands.GetMCPPrompt(w.store, clientID, promptID, args)
-}
-
-func (w *AppWorkspace) EnableDockerMCP(ctx context.Context) error {
-	mcpConfig, err := w.store.PrepareDockerMCPConfig()
-	if err != nil {
-		return err
-	}
-
-	if err := mcptools.InitializeSingle(ctx, config.DockerMCPName, w.store); err != nil {
-		disableErr := mcptools.DisableSingle(w.store, config.DockerMCPName)
-		delete(w.store.Config().MCP, config.DockerMCPName)
-		return fmt.Errorf("failed to start docker MCP: %w", errors.Join(err, disableErr))
-	}
-
-	if err := w.store.PersistDockerMCPConfig(mcpConfig); err != nil {
-		disableErr := mcptools.DisableSingle(w.store, config.DockerMCPName)
-		delete(w.store.Config().MCP, config.DockerMCPName)
-		return fmt.Errorf("docker MCP started but failed to persist configuration: %w", errors.Join(err, disableErr))
-	}
-
-	return nil
-}
-
-func (w *AppWorkspace) DisableDockerMCP() error {
-	if err := mcptools.DisableSingle(w.store, config.DockerMCPName); err != nil {
-		return fmt.Errorf("failed to disable docker MCP: %w", err)
-	}
-	return w.store.DisableDockerMCP()
 }
 
 // -- Lifecycle --

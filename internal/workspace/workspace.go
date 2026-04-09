@@ -10,7 +10,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
-	mcptools "github.com/tta-lab/lenos/internal/agent/tools/mcp"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/history"
 	"github.com/tta-lab/lenos/internal/message"
@@ -87,25 +86,7 @@ type Workspace interface {
 	MarkProjectInitialized() error
 	InitializePrompt() (string, error)
 
-	// MCP operations (server-side in client mode)
-	MCPGetStates() map[string]mcptools.ClientInfo
-	MCPRefreshPrompts(ctx context.Context, name string)
-	MCPRefreshResources(ctx context.Context, name string)
-	RefreshMCPTools(ctx context.Context, name string)
-	ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error)
-	GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error)
-	EnableDockerMCP(ctx context.Context) error
-	DisableDockerMCP() error
-
 	// Events
 	Subscribe(program *tea.Program)
 	Shutdown()
-}
-
-// MCPResourceContents holds the contents of an MCP resource.
-type MCPResourceContents struct {
-	URI      string `json:"uri"`
-	MIMEType string `json:"mime_type,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Blob     []byte `json:"blob,omitempty"`
 }
