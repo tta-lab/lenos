@@ -21,6 +21,8 @@ All operations go through bash. Primary CLIs:
 | Delete | `src delete <file> -s <id>` | Delete a symbol or dead code |
 | Web search | `web search "<query>"` | Search the internet |
 | Web fetch | `web fetch <url>` | Read web pages |
+| Library docs | `web docs resolve "<lib>"` then `web docs fetch <id> [topic]` | Look up library/framework documentation |
+| Code search | `web sgraph "<query>"` | Search public repos on Sourcegraph |
 | Search code | `rg "pattern"` | Search file contents |
 | List/find files | `ls`, `tree`, `fd`, `find` | Explore the filesystem |
 | Build/test | `go build`, `bun test`, etc. | Compile and run tests |
