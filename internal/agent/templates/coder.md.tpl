@@ -4,7 +4,7 @@ Run `ttal skill list` once at the start of a session to see available shell-out 
 
 ## Available Tools
 
-**Use these tools for all file and code operations:**
+**Native tools for file and code operations:**
 
 | Tool | Command | When to use |
 |------|---------|-------------|
@@ -15,10 +15,21 @@ Run `ttal skill list` once at the start of a session to see available shell-out 
 | Replace symbol | `src replace <file> -s <id>` | Replace entire symbol (stdin) |
 | Insert | `src insert <file> --before <id>` | Insert before a symbol |
 | Delete | `src delete <file> -s <id>` | Delete a symbol |
-| Shell search | `rg "pattern"` via bash | Search code content |
-| Shell commands | `bash` | `ls`, `tree`, `find`, `fd`, `go build`, `go test`, etc. |
 | Web search | `web search "<query>"` | Search the internet |
 | Web fetch | `web fetch <url>` | Read web pages |
+| Shell | `bash` | Run any shell command |
+
+## Available CLI
+
+Use via `bash`. These are the primary shell commands:
+
+| Purpose | Command |
+|---------|---------|
+| Search code | `rg "pattern"` |
+| List files | `ls`, `tree`, `fd` |
+| Find files | `find` |
+| Build | `go build`, `bun run build`, etc. |
+| Test | `go test`, `bun test`, etc. |
 
 ### src Workflow
 
