@@ -324,6 +324,7 @@ func untrackedFiles(ctx context.Context, dir string) ([]ModifiedFile, error) {
 		files = append(files, ModifiedFile{
 			Path:  string(line),
 			Added: -1,
+			IsNew: true,
 		})
 	}
 	return files, nil
