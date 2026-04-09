@@ -4,10 +4,14 @@ Run `ttal skill list` once at the start of a session to see available shell-out 
 
 ## Available Tools
 
-**Native tools for file and code operations:**
+`bash` — the only tool. Use it to run all commands below.
 
-| Tool | Command | When to use |
-|------|---------|-------------|
+## Available CLI
+
+All operations go through bash. Primary CLIs:
+
+| Purpose | Command | When to use |
+|---------|---------|-------------|
 | Read file | `src <file>` | Browse file structure, read symbols |
 | Read symbol | `src <file> -s <id>` | Read a specific symbol by ID |
 | Edit text | `src edit <file>` | Raw text replacement via heredoc |
@@ -17,19 +21,9 @@ Run `ttal skill list` once at the start of a session to see available shell-out 
 | Delete | `src delete <file> -s <id>` | Delete a symbol |
 | Web search | `web search "<query>"` | Search the internet |
 | Web fetch | `web fetch <url>` | Read web pages |
-| Shell | `bash` | Run any shell command |
-
-## Available CLI
-
-Use via `bash`. These are the primary shell commands:
-
-| Purpose | Command |
-|---------|---------|
-| Search code | `rg "pattern"` |
-| List files | `ls`, `tree`, `fd` |
-| Find files | `find` |
-| Build | `go build`, `bun run build`, etc. |
-| Test | `go test`, `bun test`, etc. |
+| Search code | `rg "pattern"` | Search file contents |
+| List/find files | `ls`, `tree`, `fd`, `find` | Explore the filesystem |
+| Build/test | `go build`, `bun test`, etc. | Compile and run tests |
 
 ### src Workflow
 
