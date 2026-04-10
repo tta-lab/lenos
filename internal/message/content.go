@@ -68,6 +68,29 @@ func (tc TextContent) String() string {
 
 func (TextContent) isPart() {}
 
+// CommandContent represents a command execution result in a message.
+type CommandContent struct {
+	Command  string `json:"command"`
+	Output   string `json:"output"`
+	ExitCode *int   `json:"exit_code,omitempty"`
+	Pending  bool   `json:"pending"`
+}
+
+func (CommandContent) isPart() {}
+func (cc CommandContent) String() string {
+	if cc.Pending {
+		return "$ " + cc.Command + " (running...)"
+	}
+	s := "$ " + cc.Command
+	if cc.Output != "" {
+		s += "\n" + cc.Output
+	}
+	if cc.ExitCode != nil {
+		s += fmt.Sprintf("\nexit code: %d", *cc.ExitCode)
+	}
+	return s
+}
+
 type ImageURLContent struct {
 	URL    string `json:"url"`
 	Detail string `json:"detail,omitempty"`
@@ -145,6 +168,16 @@ func (m *Message) Content() TextContent {
 		}
 	}
 	return TextContent{}
+}
+
+// CommandContent returns the first command content part.
+func (m *Message) CommandContent() CommandContent {
+	for _, part := range m.Parts {
+		if c, ok := part.(CommandContent); ok {
+			return c
+		}
+	}
+	return CommandContent{}
 }
 
 func (m *Message) ReasoningContent() ReasoningContent {

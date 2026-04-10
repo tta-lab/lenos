@@ -199,11 +199,8 @@ func newBaseToolMessageItem(
 	return t
 }
 
-// NewToolMessageItem creates a new [ToolMessageItem] based on the tool call name.
-//
-// It returns a specific tool message item type if implemented, otherwise it
-// returns a generic tool message item. The messageID is the ID of the assistant
-// message containing this tool call.
+// NewToolMessageItem creates a new [ToolMessageItem] for the given tool call.
+// The messageID is the ID of the assistant message containing this tool call.
 func NewToolMessageItem(
 	sty *styles.Styles,
 	messageID string,
@@ -211,13 +208,7 @@ func NewToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) ToolMessageItem {
-	var item ToolMessageItem
-	switch toolCall.Name {
-	case CommandToolName:
-		item = NewBashToolMessageItem(sty, toolCall, result, canceled)
-	default:
-		item = NewGenericToolMessageItem(sty, toolCall, result, canceled)
-	}
+	item := newBaseToolMessageItem(sty, toolCall, result, &DefaultToolRenderContext{}, canceled)
 	item.SetMessageID(messageID)
 	return item
 }
@@ -780,16 +771,6 @@ func (t *baseToolMessageItem) formatToolForCopy() string {
 
 // formatParametersForCopy formats tool parameters for clipboard copying.
 func (t *baseToolMessageItem) formatParametersForCopy() string {
-	switch t.toolCall.Name {
-	case CommandToolName:
-		var params CommandParams
-		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
-			cmd := strings.ReplaceAll(params.Command, "\n", " ")
-			cmd = strings.ReplaceAll(cmd, "\t", "    ")
-			return fmt.Sprintf("**Command:** %s", cmd)
-		}
-	}
-
 	var params map[string]any
 	if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
 		var parts []string
@@ -819,43 +800,10 @@ func (t *baseToolMessageItem) formatResultForCopy() string {
 		return fmt.Sprintf("[Media: %s]", t.result.MIMEType)
 	}
 
-	switch t.toolCall.Name {
-	case CommandToolName:
-		return t.formatBashResultForCopy()
-	default:
-		return t.result.Content
-	}
-}
-
-// formatBashResultForCopy formats bash tool results for clipboard.
-func (t *baseToolMessageItem) formatBashResultForCopy() string {
-	if t.result == nil {
-		return ""
-	}
-
-	var meta CommandResponseMetadata
-	if t.result.Metadata != "" {
-		json.Unmarshal([]byte(t.result.Metadata), &meta)
-	}
-
-	output := meta.Output
-	if output == "" && t.result.Content != CommandNoOutput {
-		output = t.result.Content
-	}
-
-	if output == "" {
-		return ""
-	}
-
-	return fmt.Sprintf("```bash\n%s\n```", output)
+	return t.result.Content
 }
 
 // prettifyToolName returns a human-readable name for tool names.
 func prettifyToolName(name string) string {
-	switch name {
-	case CommandToolName:
-		return "$"
-	default:
-		return genericPrettyName(name)
-	}
+	return genericPrettyName(name)
 }
