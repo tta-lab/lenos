@@ -1,41 +1,23 @@
-Manage tasks, send messages, and control the ttal agent runtime
+Manage tasks and PRs via the ttal agent runtime
 
-## Tasks
-  ttal task add "description" --project <alias> --tag <tag> --priority M
-  ttal task get              # load full task context and plan
-  ttal task find "keyword"   # search pending tasks
-  ttal task find "keyword" --completed  # search completed tasks
-  ttal go <uuid>            # advance task through pipeline stage
+## Session Start
+  ttal task get              # load full task context and plan (no extra params)
 
-## Messaging
-  ttal send --to <agent> "message"              # send to agent
-  ttal send --to <job_id>:<agent> "message"    # send to worker
+## Subtasks (taskwarrior)
+  task <uuid> done           # mark a completed subtask
+  task <uuid> start          # mark a subtask as in-progress
+  task <uuid> annotate '<note>'  # add a note to a subtask
 
-## Projects & Agents
-  ttal project list         # all active projects with paths
-  ttal agent list           # all registered agents
-  ttal agent info <name>    # agent details
+## Alerts (CRITICAL)
+  ttal alert "message"       # escalate blockers to the planner — routes to owner agent, falls back to Telegram
 
-## Today
-  ttal today list           # tasks scheduled for today
-  ttal today add <uuid>     # schedule task for today
-  ttal today completed      # completed today
+## Comments & Status
+  ttal comment add "message" # post progress updates, triage reports, findings
 
 ## PRs
   ttal pr create "title" --body "description"
-  ttal pr modify --title "new"
-  ttal go <uuid>            # squash merge (after LGTM)
+  ttal pr modify --title "new" --body "description"
+  ttal go                   # squash merge after LGTM (no extra params)
 
-## Voice
-  ttal voice speak "text"   # speak with your assigned voice
-  ttal voice speak "text" --voice <id>  # specific voice
-  ttal voice status         # check voice server health
-
-## Sync
-  ttal sync                # deploy agents + config to runtime dirs
-  ttal sync --dry-run       # preview what would be deployed
-
-## Tips
-- Always use `ttal task get` (no extra params) to load task context at session start.
-- Use `ttal go <uuid>` to route tasks to agents — don't do everything yourself.
-- Reply naturally to human messages — the bridge delivers your text to Telegram.
+## Git
+  ttal push                 # push current branch to origin — ALWAYS use this, never git push

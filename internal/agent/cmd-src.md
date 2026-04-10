@@ -80,13 +80,3 @@ Recovery steps:
 **NEVER use these tools to modify files:** `sed -i`, `perl -i`, `awk ... > file`, `python script.py` (when writing), `printf ... > file`.
 
 You may freely use `sed`, `perl`, `awk`, `python` to **read** or **transform** data in pipelines — the restriction is only on writing changes to disk.
-
-## If src edit fails
-
-src edit shows the closest region it found and which matching pass failed. Recovery steps:
-
-1. **"text not found"** — Add more surrounding lines to your ===BEFORE=== block, or switch to `src edit --section <id>` for symbol-level targeting.
-2. **"found N matches"** — Use `--section <id>` to disambiguate, or add 3+ context lines so src can identify the unique location.
-3. **"pass failed"** — Re-scan the file with `src <file>` to get fresh symbol IDs.
-
-**If none of these work:** Run `ttal alert "src failed: <reason>"` — do not fall back to sed, awk, perl, or python for file modifications.
