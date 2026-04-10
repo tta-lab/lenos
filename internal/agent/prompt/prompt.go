@@ -307,3 +307,15 @@ func getGitRecentCommits(ctx context.Context, sh *shell.Shell) (string, error) {
 func (p *Prompt) Name() string {
 	return p.name
 }
+
+// IsGitRepo reports whether dir is a git repository.
+func IsGitRepo(dir string) bool {
+	return isGitRepo(dir)
+}
+
+// GetGitStatus returns the git status for dir (branch + status + recent commits).
+// Returns empty string if dir is not a git repo or on error.
+func GetGitStatus(ctx context.Context, dir string) string {
+	status, _ := getGitStatus(ctx, dir)
+	return status
+}

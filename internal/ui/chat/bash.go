@@ -4,14 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
-
-// -----------------------------------------------------------------------------
-// Bash Tool
-// -----------------------------------------------------------------------------
 
 // BashToolMessageItem is a message item that represents a bash tool call.
 type BashToolMessageItem struct {
@@ -40,7 +35,7 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return pendingTool(sty, "$", opts.Anim, opts.Compact)
 	}
 
-	var params tools.BashParams
+	var params CommandParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
 		params.Command = "failed to parse command"
 	}
@@ -61,11 +56,11 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return header
 	}
 
-	var meta tools.BashResponseMetadata
+	var meta CommandResponseMetadata
 	_ = json.Unmarshal([]byte(opts.Result.Metadata), &meta)
 
 	output := meta.Output
-	if output == "" && opts.Result.Content != tools.BashNoOutput {
+	if output == "" && opts.Result.Content != CommandNoOutput {
 		output = opts.Result.Content
 	}
 	if output == "" {

@@ -3,9 +3,12 @@ package agent
 import (
 	"context"
 	_ "embed"
+	"runtime"
+	"time"
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/logos"
 )
 
 //go:embed templates/coder.md.tpl
@@ -31,6 +34,71 @@ func taskPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
 		return nil, err
 	}
 	return systemPrompt, nil
+}
+
+// SystemPrompt builds the full system prompt by concatenating:
+// 1. logos.BuildSystemPrompt (base: cmd block format, env, available commands)
+// 2. cmd-git.tpl (git section with attribution)
+// 3. coder post-template (lenos-specific: rules, style, conventions)
+func SystemPrompt(
+	ctx context.Context,
+	workingDir string,
+	provider, model string,
+	store *config.ConfigStore,
+	opts ...prompt.Option,
+) (string, error) {
+	cmds, err := loadCommandDocs()
+	if err != nil {
+		return "", err
+	}
+
+	base, err := logosBuildSystemPrompt(workingDir, cmds)
+	if err != nil {
+		return "", err
+	}
+
+	gitData := GitTemplateData{
+		IsGitRepo:   prompt.IsGitRepo(workingDir),
+		GitStatus:   prompt.GetGitStatus(ctx, workingDir),
+		Attribution: store.Config().Options.Attribution.Render(),
+	}
+	gitSection, err := renderGitTemplate(gitData)
+	if err != nil {
+		return "", err
+	}
+
+	coder, err := buildCoderPostTemplate(ctx, provider, model, store, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	return base + "\n" + gitSection + "\n" + coder, nil
+}
+
+func logosBuildSystemPrompt(workingDir string, cmds []logos.CommandDoc) (string, error) {
+	base, err := logos.BuildSystemPrompt(logos.PromptData{
+		WorkingDir: workingDir,
+		Platform:   runtime.GOOS,
+		Date:       time.Now().UTC().Format("2006-01-02"),
+		Commands:   cmds,
+	})
+	if err != nil {
+		return "", err
+	}
+	return base, nil
+}
+
+func buildCoderPostTemplate(
+	ctx context.Context,
+	provider, model string,
+	store *config.ConfigStore,
+	opts ...prompt.Option,
+) (string, error) {
+	p, err := coderPrompt(opts...)
+	if err != nil {
+		return "", err
+	}
+	return p.Build(ctx, provider, model, store)
 }
 
 func InitializePrompt(cfg *config.ConfigStore) (string, error) {

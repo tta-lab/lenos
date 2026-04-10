@@ -50,7 +50,7 @@ func (b *Backend) InitAgent(ctx context.Context, workspaceID string) error {
 		return err
 	}
 
-	return ws.InitCoderAgent(ctx, nil)
+	return ws.InitCoderAgent(ctx)
 }
 
 // UpdateAgent reloads the agent model configuration.

@@ -17,7 +17,6 @@ import (
 	"charm.land/x/vcr"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/agent/prompt"
-	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/db"
 	"github.com/tta-lab/lenos/internal/message"
@@ -181,17 +180,8 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 		return nil, err
 	}
 
-	// Get the model name for the bash tool
-	modelName := large.Model() // fallback to ID if Name not available
-	if model := cfg.Config().GetModel(large.Provider(), large.Model()); model != nil {
-		modelName = model.Name
-	}
-
-	allTools := []fantasy.AgentTool{
-		tools.NewBashTool(env.workingDir, cfg.Config().Options.Attribution, modelName, nil),
-	}
-
-	return testSessionAgent(env, large, small, systemPrompt, allTools...), nil
+	// No tools needed for test agents since the coordinator now uses logos directly.
+	return testSessionAgent(env, large, small, systemPrompt), nil
 }
 
 // createSimpleGoProject creates a simple Go project structure in the given directory.

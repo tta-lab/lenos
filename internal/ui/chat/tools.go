@@ -9,7 +9,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/tree"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/stringext"
 	"github.com/tta-lab/lenos/internal/ui/anim"
@@ -214,7 +213,7 @@ func NewToolMessageItem(
 ) ToolMessageItem {
 	var item ToolMessageItem
 	switch toolCall.Name {
-	case tools.BashToolName:
+	case CommandToolName:
 		item = NewBashToolMessageItem(sty, toolCall, result, canceled)
 	default:
 		item = NewGenericToolMessageItem(sty, toolCall, result, canceled)
@@ -782,8 +781,8 @@ func (t *baseToolMessageItem) formatToolForCopy() string {
 // formatParametersForCopy formats tool parameters for clipboard copying.
 func (t *baseToolMessageItem) formatParametersForCopy() string {
 	switch t.toolCall.Name {
-	case tools.BashToolName:
-		var params tools.BashParams
+	case CommandToolName:
+		var params CommandParams
 		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
 			cmd := strings.ReplaceAll(params.Command, "\n", " ")
 			cmd = strings.ReplaceAll(cmd, "\t", "    ")
@@ -821,7 +820,7 @@ func (t *baseToolMessageItem) formatResultForCopy() string {
 	}
 
 	switch t.toolCall.Name {
-	case tools.BashToolName:
+	case CommandToolName:
 		return t.formatBashResultForCopy()
 	default:
 		return t.result.Content
@@ -834,13 +833,13 @@ func (t *baseToolMessageItem) formatBashResultForCopy() string {
 		return ""
 	}
 
-	var meta tools.BashResponseMetadata
+	var meta CommandResponseMetadata
 	if t.result.Metadata != "" {
 		json.Unmarshal([]byte(t.result.Metadata), &meta)
 	}
 
 	output := meta.Output
-	if output == "" && t.result.Content != tools.BashNoOutput {
+	if output == "" && t.result.Content != CommandNoOutput {
 		output = t.result.Content
 	}
 
@@ -854,7 +853,7 @@ func (t *baseToolMessageItem) formatBashResultForCopy() string {
 // prettifyToolName returns a human-readable name for tool names.
 func prettifyToolName(name string) string {
 	switch name {
-	case tools.BashToolName:
+	case CommandToolName:
 		return "$"
 	default:
 		return genericPrettyName(name)

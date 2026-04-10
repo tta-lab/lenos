@@ -57,7 +57,8 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
-	github.com/tta-lab/logos v1.4.0
+	github.com/tta-lab/logos v1.5.0
+	github.com/tta-lab/temenos v0.7.0
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/sync v0.20.0
@@ -170,7 +171,6 @@ require (
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
-	github.com/tta-lab/temenos v0.7.0 // indirect
 	github.com/u-root/u-root v0.14.1-0.20250807200646-5e7721023dc7 // indirect
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect

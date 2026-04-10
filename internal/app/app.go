@@ -10,15 +10,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/user"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/fantasy"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -104,26 +101,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore) (*App, er
 		return app, nil
 	}
 
-	// Try to create temenos client. In worker mode (TTAL_JOB_ID set), require the daemon
-	// if socket exists. In standalone mode, skip silently.
-	var temenos logos.CommandRunner
-	if os.Getenv("TTAL_JOB_ID") != "" {
-		usr, err := user.Current()
-		if err != nil {
-			return nil, fmt.Errorf("determine home dir for temenos socket: %w", err)
-		}
-		socketPath := filepath.Join(usr.HomeDir, ".temenos", "daemon.sock")
-		if _, err := os.Stat(socketPath); err != nil {
-			return nil, fmt.Errorf("temenos socket not found at %s (is daemon running?): %w", socketPath, err)
-		}
-		tc, err := logos.NewClient("")
-		if err != nil {
-			return nil, fmt.Errorf("connect to temenos daemon: %w", err)
-		}
-		temenos = tc
-	}
-
-	if err := app.InitCoderAgent(ctx, temenos); err != nil {
+	if err := app.InitCoderAgent(ctx); err != nil {
 		return nil, fmt.Errorf("failed to initialize coder agent: %w", err)
 	}
 
@@ -271,7 +249,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	_ = sess.ID // sess.ID available if permission system is re-enabled
 
 	type response struct {
-		result *fantasy.AgentResult
+		result *logos.RunResult
 		err    error
 	}
 	done := make(chan response, 1)
@@ -515,7 +493,7 @@ func setupSubscriber[T any](
 	})
 }
 
-func (app *App) InitCoderAgent(ctx context.Context, temenos logos.CommandRunner) error {
+func (app *App) InitCoderAgent(ctx context.Context) error {
 	coderAgentCfg := app.config.Config().Agents[config.AgentCoder]
 	if coderAgentCfg.ID == "" {
 		return fmt.Errorf("coder agent configuration is missing")
@@ -527,7 +505,6 @@ func (app *App) InitCoderAgent(ctx context.Context, temenos logos.CommandRunner)
 		app.Sessions,
 		app.Messages,
 		app.agentNotifications,
-		temenos,
 	)
 	if err != nil {
 		slog.Error("Failed to create coder agent", "err", err)

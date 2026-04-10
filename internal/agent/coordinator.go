@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,7 +19,6 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/agent/prompt"
-	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
@@ -58,7 +56,7 @@ var (
 type Coordinator interface {
 	// INFO: (kujtim) this is not used yet we will use this when we have multiple agents
 	// SetMainAgent(string)
-	Run(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error)
+	Run(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) (*logos.RunResult, error)
 	Cancel(sessionID string)
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
@@ -72,17 +70,13 @@ type Coordinator interface {
 }
 
 type coordinator struct {
-	cfg      *config.ConfigStore
-	sessions session.Service
-	messages message.Service
-	notify   pubsub.Publisher[notify.Notification]
-
+	cfg          *config.ConfigStore
+	sessions     session.Service
+	messages     message.Service
+	notify       pubsub.Publisher[notify.Notification]
 	currentAgent SessionAgent
-	agents       map[string]SessionAgent
-
-	temenos logos.CommandRunner
-
-	readyWg errgroup.Group
+	systemPrompt string
+	readyWg      errgroup.Group
 }
 
 func NewCoordinator(
@@ -91,50 +85,57 @@ func NewCoordinator(
 	sessions session.Service,
 	messages message.Service,
 	notify pubsub.Publisher[notify.Notification],
-	temenos logos.CommandRunner,
 ) (Coordinator, error) {
 	c := &coordinator{
 		cfg:      cfg,
 		sessions: sessions,
 		messages: messages,
 		notify:   notify,
-		agents:   make(map[string]SessionAgent),
-		temenos:  temenos,
 	}
 
-	agentCfg, ok := cfg.Config().Agents[config.AgentCoder]
-	if !ok {
-		return nil, errCoderAgentNotConfigured
+	large, small, err := c.buildAgentModels(ctx, false)
+	if err != nil {
+		return nil, err
 	}
 
-	// TODO: make this dynamic when we support multiple agents
-	prompt, err := coderPrompt(
-		prompt.WithWorkingDir(c.cfg.WorkingDir()),
-		prompt.WithContextPaths(agentCfg.ContextPaths),
+	c.currentAgent = NewSessionAgent(SessionAgentOptions{
+		LargeModel:           large,
+		SmallModel:           small,
+		SystemPromptPrefix:   "",
+		SystemPrompt:         "",
+		IsSubAgent:           false,
+		DisableAutoSummarize: cfg.Config().Options.DisableAutoSummarize,
+		Sessions:             sessions,
+		Messages:             messages,
+		Tools:                nil,
+		Notify:               notify,
+	})
+
+	// Build system prompt: logos base (cmd block format, env, commands) + lenos post-template.
+	c.systemPrompt, err = SystemPrompt(
+		ctx,
+		c.cfg.WorkingDir(),
+		large.Model.Provider(),
+		large.Model.Model(),
+		c.cfg,
+		prompt.WithContextPaths(c.cfg.Config().Agents[config.AgentCoder].ContextPaths),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build system prompt: %w", err)
 	}
 
-	agent, err := c.buildAgent(ctx, prompt, agentCfg, false)
-	if err != nil {
-		return nil, err
-	}
-	c.currentAgent = agent
-	c.agents[config.AgentCoder] = agent
 	return c, nil
 }
 
 // Run implements Coordinator.
-func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
+func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) (*logos.RunResult, error) {
 	if err := c.readyWg.Wait(); err != nil {
 		return nil, err
 	}
 
-	// refresh models before each run
-	if err := c.UpdateModels(ctx); err != nil {
-		return nil, fmt.Errorf("failed to update models: %w", err)
-	}
+	// Note: attachments are currently not used in the logos path.
+	// They were used in the fantasy agent fallback which has been removed.
+	_ = attachments
 
 	model := c.currentAgent.Model()
 	maxTokens := model.CatwalkCfg.DefaultMaxTokens
@@ -142,75 +143,6 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		maxTokens = model.ModelCfg.MaxTokens
 	}
 
-	if !model.CatwalkCfg.SupportsImages && attachments != nil {
-		// filter out image attachments
-		filteredAttachments := make([]message.Attachment, 0, len(attachments))
-		for _, att := range attachments {
-			if att.IsText() {
-				filteredAttachments = append(filteredAttachments, att)
-			}
-		}
-		attachments = filteredAttachments
-	}
-
-	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-	if !ok {
-		return nil, errModelProviderNotConfigured
-	}
-
-	if c.temenos != nil {
-		return c.runWithTemenos(ctx, sessionID, prompt, model, maxTokens)
-	}
-
-	mergedOptions, temp, topP, topK, freqPenalty, presPenalty := mergeCallOptions(model, providerCfg)
-
-	if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
-		slog.Debug("Token needs to be refreshed", "provider", providerCfg.ID)
-		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
-			return nil, err
-		}
-	}
-
-	run := func() (*fantasy.AgentResult, error) {
-		return c.currentAgent.Run(ctx, SessionAgentCall{
-			SessionID:        sessionID,
-			Prompt:           prompt,
-			Attachments:      attachments,
-			MaxOutputTokens:  maxTokens,
-			ProviderOptions:  mergedOptions,
-			Temperature:      temp,
-			TopP:             topP,
-			TopK:             topK,
-			FrequencyPenalty: freqPenalty,
-			PresencePenalty:  presPenalty,
-		})
-	}
-	result, originalErr := run()
-
-	if c.isUnauthorized(originalErr) {
-		switch {
-		case providerCfg.OAuthToken != nil:
-			slog.Debug("Received 401. Refreshing token and retrying", "provider", providerCfg.ID)
-			if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
-				return nil, originalErr
-			}
-			slog.Debug("Retrying request with refreshed OAuth token", "provider", providerCfg.ID)
-			return run()
-		case strings.Contains(providerCfg.APIKeyTemplate, "$"):
-			slog.Debug("Received 401. Refreshing API Key template and retrying", "provider", providerCfg.ID)
-			if err := c.refreshApiKeyTemplate(ctx, providerCfg); err != nil {
-				return nil, originalErr
-			}
-			slog.Debug("Retrying request with refreshed API key", "provider", providerCfg.ID)
-			return run()
-		}
-	}
-
-	return result, originalErr
-}
-
-// runWithTemenos executes the agent using logos.Run with temenos sandbox.
-func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prompt string, model Model, maxTokens int64) (*fantasy.AgentResult, error) {
 	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 	if !ok {
 		return nil, errModelProviderNotConfigured
@@ -221,7 +153,6 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		return nil, fmt.Errorf("build provider: %w", err)
 	}
 
-	// Build env map from process environment.
 	sandboxEnv := make(map[string]string, len(os.Environ()))
 	for _, e := range os.Environ() {
 		if idx := strings.IndexByte(e, '='); idx >= 0 {
@@ -229,7 +160,6 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		}
 	}
 
-	// Build additional read-only paths from ttal project list.
 	cwd := c.cfg.WorkingDir()
 	var additionalReadOnlyPaths []string
 	if projects, err := project.List(ctx); err == nil {
@@ -240,19 +170,17 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		}
 	}
 
-	allowedPaths := BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...)
-
 	logosCfg := logos.Config{
 		Provider:     prov,
 		Model:        model.ModelCfg.Model,
+		SystemPrompt: c.systemPrompt,
+		Sandbox:      resolveSandbox(c.cfg.Config().Options.Sandbox),
+		SandboxEnv:   sandboxEnv,
+		AllowedPaths: BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...),
 		MaxSteps:     30,
 		MaxTokens:    int(maxTokens),
-		Temenos:      c.temenos,
-		SandboxEnv:   sandboxEnv,
-		AllowedPaths: allowedPaths,
 	}
 
-	// Get session history as fantasy messages for logos history.
 	_, err = c.sessions.Get(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
@@ -266,14 +194,54 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		history = append(history, m.ToAIMessage()...)
 	}
 
-	// Streaming callback for text deltas.
+	// Refresh OAuth token if expired before running.
+	if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
+		slog.Debug("OAuth token expired, refreshing", "provider", providerCfg.ID)
+		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
+			return nil, err
+		}
+		// Re-fetch fresh config from store and rebuild provider with refreshed credentials.
+		freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+		if !ok {
+			return nil, fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
+		}
+		prov, err = c.buildProvider(freshCfg, model.ModelCfg, false)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
+		}
+		logosCfg.Provider = prov
+	}
+
+	// pendingCommands maps command text → message ID for in-flight commands.
+	pendingCommands := make(map[string]string)
 	var currentAssistant *message.Message
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
-	result, runErr := logos.Run(streamCtx, logosCfg, history, prompt, logos.Callbacks{
+	callbacks := logos.Callbacks{
 		OnDelta: func(text string) {
-			// Strip leading newline from initial text content.
+			// Detect <cmd> block: logos emits the full <cmd>...</cmd> text as one chunk.
+			if strings.HasPrefix(text, "<cmd>") {
+				cmdText, _, _ := strings.Cut(text, "</cmd>")
+				cmdText = strings.TrimPrefix(cmdText, ">")
+				cmdText = strings.TrimSpace(cmdText)
+				if cmdText == "" {
+					return
+				}
+				// Emit pending command to UI (shows "running..." before result arrives).
+				content := "$ " + cmdText + "\n<pending>running...</pending>"
+				msg, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
+					Role:  message.Result,
+					Parts: []message.ContentPart{message.TextContent{Text: content}},
+				})
+				if err != nil {
+					slog.Warn("Failed to create pending command message", "error", err)
+					return
+				}
+				pendingCommands[cmdText] = msg.ID
+				return
+			}
+
 			if currentAssistant == nil {
 				text = strings.TrimPrefix(text, "\n")
 				msg, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
@@ -295,6 +263,19 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		},
 		OnCommandResult: func(command string, output string, exitCode int) {
 			content := fmt.Sprintf("%s\n<result>exit code: %d</result>", output, exitCode)
+			// If we emitted a pending message for this command, update it with the result.
+			if msgID, ok := pendingCommands[command]; ok {
+				existing, err := c.messages.Get(ctx, msgID)
+				if err == nil {
+					existing.Parts = []message.ContentPart{message.TextContent{Text: content}}
+					if err := c.messages.Update(ctx, existing); err != nil {
+						slog.Warn("Failed to update pending command message", "error", err)
+					}
+				}
+				delete(pendingCommands, command)
+				return
+			}
+			// Fallback: create a new result message.
 			_, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
 				Role:  message.Result,
 				Parts: []message.ContentPart{message.TextContent{Text: content}},
@@ -306,19 +287,58 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		OnRetry: func(reason string, step int) {
 			slog.Warn("Logos retry", "reason", reason, "step", step)
 		},
-	})
+	}
+
+	result, runErr := logos.Run(streamCtx, logosCfg, history, prompt, callbacks)
 
 	if runErr != nil {
+		// Handle 401 errors with retry.
+		if c.isUnauthorized(runErr) {
+			slog.Debug("Received 401, attempting token refresh", "provider", providerCfg.ID)
+			if providerCfg.OAuthToken != nil {
+				if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
+					return nil, fmt.Errorf("token refresh failed after 401: %w", err)
+				}
+				freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+				if !ok {
+					return nil, fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
+				}
+				freshProv, err := c.buildProvider(freshCfg, model.ModelCfg, false)
+				if err != nil {
+					return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
+				}
+				logosCfg.Provider = freshProv
+				result, runErr = logos.Run(ctx, logosCfg, history, prompt, callbacks)
+				if runErr != nil {
+					return nil, fmt.Errorf("logos.Run after token refresh: %w", runErr)
+				}
+				return result, nil
+			}
+			if strings.Contains(providerCfg.APIKeyTemplate, "$") {
+				slog.Debug("Received 401, refreshing API key template", "provider", providerCfg.ID)
+				if err := c.refreshApiKeyTemplate(ctx, providerCfg); err != nil {
+					return nil, fmt.Errorf("API key refresh failed after 401: %w", err)
+				}
+				freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+				if !ok {
+					return nil, fmt.Errorf("provider %s not found after API key refresh", model.ModelCfg.Provider)
+				}
+				freshProv, err := c.buildProvider(freshCfg, model.ModelCfg, false)
+				if err != nil {
+					return nil, fmt.Errorf("rebuild provider after API key refresh: %w", err)
+				}
+				logosCfg.Provider = freshProv
+				result, runErr = logos.Run(ctx, logosCfg, history, prompt, callbacks)
+				if runErr != nil {
+					return nil, fmt.Errorf("logos.Run after API key refresh: %w", runErr)
+				}
+				return result, nil
+			}
+		}
 		return nil, fmt.Errorf("logos.Run: %w", runErr)
 	}
 
-	return &fantasy.AgentResult{
-		Response: fantasy.Response{
-			Content: fantasy.ResponseContent{
-				fantasy.TextContent{Text: result.Response},
-			},
-		},
-	}, nil
+	return result, nil
 }
 
 func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.ProviderOptions {
@@ -474,72 +494,6 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 	}
 
 	return options
-}
-
-func mergeCallOptions(model Model, cfg config.ProviderConfig) (fantasy.ProviderOptions, *float64, *float64, *int64, *float64, *float64) {
-	modelOptions := getProviderOptions(model, cfg)
-	temp := cmp.Or(model.ModelCfg.Temperature, model.CatwalkCfg.Options.Temperature)
-	topP := cmp.Or(model.ModelCfg.TopP, model.CatwalkCfg.Options.TopP)
-	topK := cmp.Or(model.ModelCfg.TopK, model.CatwalkCfg.Options.TopK)
-	freqPenalty := cmp.Or(model.ModelCfg.FrequencyPenalty, model.CatwalkCfg.Options.FrequencyPenalty)
-	presPenalty := cmp.Or(model.ModelCfg.PresencePenalty, model.CatwalkCfg.Options.PresencePenalty)
-	return modelOptions, temp, topP, topK, freqPenalty, presPenalty
-}
-
-func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, agent config.Agent, isSubAgent bool) (SessionAgent, error) {
-	large, small, err := c.buildAgentModels(ctx, isSubAgent)
-	if err != nil {
-		return nil, err
-	}
-
-	largeProviderCfg, _ := c.cfg.Config().Providers.Get(large.ModelCfg.Provider)
-	result := NewSessionAgent(SessionAgentOptions{
-		LargeModel:           large,
-		SmallModel:           small,
-		SystemPromptPrefix:   largeProviderCfg.SystemPromptPrefix,
-		SystemPrompt:         "",
-		IsSubAgent:           isSubAgent,
-		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
-		Sessions:             c.sessions,
-		Messages:             c.messages,
-		Tools:                nil,
-		Notify:               c.notify,
-	})
-
-	c.readyWg.Go(func() error {
-		systemPrompt, err := prompt.Build(ctx, large.Model.Provider(), large.Model.Model(), c.cfg)
-		if err != nil {
-			return err
-		}
-		result.SetSystemPrompt(systemPrompt)
-		return nil
-	})
-
-	c.readyWg.Go(func() error {
-		tools, err := c.buildTools(ctx, agent)
-		if err != nil {
-			return err
-		}
-		result.SetTools(tools)
-		return nil
-	})
-
-	return result, nil
-}
-
-func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fantasy.AgentTool, error) {
-	modelName := ""
-	if modelCfg, ok := c.cfg.Config().Models[agent.Model]; ok {
-		if model := c.cfg.Config().GetModel(modelCfg.Provider, modelCfg.Model); model != nil {
-			modelName = model.Name
-		}
-	}
-
-	allTools := []fantasy.AgentTool{
-		tools.NewBashTool(c.cfg.WorkingDir(), c.cfg.Config().Options.Attribution, modelName, c.temenos),
-	}
-
-	return allTools, nil
 }
 
 // TODO: when we support multiple agents we need to change this so that we pass in the agent specific model config
@@ -843,8 +797,15 @@ func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model con
 		}
 	}
 
-	apiKey, _ := c.cfg.Resolve(providerCfg.APIKey)
-	baseURL, _ := c.cfg.Resolve(providerCfg.BaseURL)
+	apiKey, resolveErr := c.cfg.Resolve(providerCfg.APIKey)
+	if resolveErr != nil {
+		return nil, fmt.Errorf("resolve API key: %w", resolveErr)
+	}
+	var baseURL string
+	baseURL, resolveErr = c.cfg.Resolve(providerCfg.BaseURL)
+	if resolveErr != nil {
+		return nil, fmt.Errorf("resolve base URL: %w", resolveErr)
+	}
 
 	switch providerCfg.Type {
 	case openai.Name:
@@ -914,23 +875,12 @@ func (c *coordinator) Model() Model {
 }
 
 func (c *coordinator) UpdateModels(ctx context.Context) error {
-	// build the models again so we make sure we get the latest config
+	// Build the models again so we make sure we get the latest config.
 	large, small, err := c.buildAgentModels(ctx, false)
 	if err != nil {
 		return err
 	}
 	c.currentAgent.SetModels(large, small)
-
-	agentCfg, ok := c.cfg.Config().Agents[config.AgentCoder]
-	if !ok {
-		return errCoderAgentNotConfigured
-	}
-
-	tools, err := c.buildTools(ctx, agentCfg)
-	if err != nil {
-		return err
-	}
-	c.currentAgent.SetTools(tools)
 	return nil
 }
 
@@ -957,10 +907,7 @@ func (c *coordinator) isUnauthorized(err error) bool {
 
 func (c *coordinator) refreshOAuth2Token(ctx context.Context, providerCfg config.ProviderConfig) error {
 	if err := c.cfg.RefreshOAuthToken(ctx, config.ScopeGlobal, providerCfg.ID); err != nil {
-		slog.Error("Failed to refresh OAuth token after 401 error", "provider", providerCfg.ID, "error", err)
-		return err
-	}
-	if err := c.UpdateModels(ctx); err != nil {
+		slog.Error("Failed to refresh OAuth token", "provider", providerCfg.ID, "error", err)
 		return err
 	}
 	return nil
@@ -969,15 +916,18 @@ func (c *coordinator) refreshOAuth2Token(ctx context.Context, providerCfg config
 func (c *coordinator) refreshApiKeyTemplate(ctx context.Context, providerCfg config.ProviderConfig) error {
 	newAPIKey, err := c.cfg.Resolve(providerCfg.APIKeyTemplate)
 	if err != nil {
-		slog.Error("Failed to re-resolve API key after 401 error", "provider", providerCfg.ID, "error", err)
+		slog.Error("Failed to resolve API key template", "provider", providerCfg.ID, "error", err)
 		return err
 	}
-
 	providerCfg.APIKey = newAPIKey
 	c.cfg.Config().Providers.Set(providerCfg.ID, providerCfg)
-
-	if err := c.UpdateModels(ctx); err != nil {
-		return err
-	}
 	return nil
+}
+
+// resolveSandbox returns the sandbox setting, defaulting to true if nil.
+func resolveSandbox(p *bool) bool {
+	if p == nil {
+		return true
+	}
+	return *p
 }

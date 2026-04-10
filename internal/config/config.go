@@ -193,6 +193,31 @@ type Attribution struct {
 	GeneratedWith bool         `json:"generated_with,omitempty" jsonschema:"description=Add Generated with Lenos line to commit messages and issues and PRs,default=true"`
 }
 
+// Render returns the git attribution trailer lines based on the configured style.
+func (a Attribution) Render() string {
+	if a.TrailerStyle == TrailerStyleNone {
+		return ""
+	}
+	var lines []string
+	switch a.TrailerStyle {
+	case TrailerStyleCoAuthoredBy:
+		lines = append(lines, "Co-authored-by: Lenos <lenos@tta-lab.com>")
+	case TrailerStyleAssistedBy:
+		lines = append(lines, "Assisted-by: Lenos <lenos@tta-lab.com>")
+	}
+	if a.GeneratedWith {
+		lines = append(lines, "Generated-with: Lenos <lenos@tta-lab.com>")
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	s := lines[0]
+	for _, l := range lines[1:] {
+		s += "\n" + l
+	}
+	return s
+}
+
 // JSONSchemaExtend marks the co_authored_by field as deprecated in the schema.
 func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 	if schema.Properties != nil {
@@ -217,6 +242,7 @@ type Options struct {
 	DisableMetrics            bool         `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending metrics,default=false"`
 	InitializeAs              string       `json:"initialize_as,omitempty" jsonschema:"description=Name of the context file to create/update during project initialization,default=AGENTS.md,example=AGENTS.md,example=LENOS.md,example=CLAUDE.md,example=docs/LLMs.md"`
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
+	Sandbox                   *bool        `json:"sandbox,omitempty" jsonschema:"description=Enable sandbox isolation for command execution via temenos,default=true"`
 	DisableNotifications      bool         `json:"disable_notifications,omitempty" jsonschema:"description=Disable desktop notifications,default=false"`
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=lenos-config"`
 }
