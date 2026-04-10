@@ -200,8 +200,9 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
 			return nil, err
 		}
-		// Rebuild provider with refreshed credentials.
-		prov, err = c.buildProvider(providerCfg, model.ModelCfg, false)
+		// Re-fetch fresh config from store and rebuild provider with refreshed credentials.
+		freshCfg, _ := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+		prov, err = c.buildProvider(freshCfg, model.ModelCfg, false)
 		if err != nil {
 			return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
 		}
