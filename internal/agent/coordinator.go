@@ -18,6 +18,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
+	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
@@ -74,6 +75,7 @@ type coordinator struct {
 	messages     message.Service
 	notify       pubsub.Publisher[notify.Notification]
 	currentAgent SessionAgent
+	systemPrompt string
 	readyWg      errgroup.Group
 }
 
@@ -108,6 +110,18 @@ func NewCoordinator(
 		Tools:                nil,
 		Notify:               notify,
 	})
+
+	// Build system prompt for logos.
+	coderPrompt, err := coderPrompt(
+		prompt.WithWorkingDir(c.cfg.WorkingDir()),
+	)
+	if err != nil {
+		return nil, err
+	}
+	c.systemPrompt, err = coderPrompt.Build(ctx, large.Model.Provider(), large.Model.Model(), c.cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	return c, nil
 }
@@ -158,6 +172,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	logosCfg := logos.Config{
 		Provider:     prov,
 		Model:        model.ModelCfg.Model,
+		SystemPrompt: c.systemPrompt,
 		Sandbox:      true,
 		SandboxEnv:   sandboxEnv,
 		AllowedPaths: BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...),
@@ -220,12 +235,6 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 
 	if runErr != nil {
 		return nil, fmt.Errorf("logos.Run: %w", runErr)
-	}
-
-	if len(result.Steps) > 1 {
-		if err := stepsToMessages(ctx, result.Steps[1:], sessionID, c.messages); err != nil {
-			slog.Warn("Failed to persist run result steps", "error", err)
-		}
 	}
 
 	return result, nil
