@@ -114,6 +114,7 @@ func NewCoordinator(
 	// Build system prompt for logos.
 	coderPrompt, err := coderPrompt(
 		prompt.WithWorkingDir(c.cfg.WorkingDir()),
+		prompt.WithContextPaths(c.cfg.Config().Agents[config.AgentCoder].ContextPaths),
 	)
 	if err != nil {
 		return nil, err
@@ -193,6 +194,14 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		history = append(history, m.ToAIMessage()...)
 	}
 
+	// Refresh OAuth token if expired before running.
+	if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
+		slog.Debug("OAuth token expired, refreshing", "provider", providerCfg.ID)
+		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
+			return nil, err
+		}
+	}
+
 	var currentAssistant *message.Message
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
@@ -234,6 +243,40 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	})
 
 	if runErr != nil {
+		// Handle 401 errors with retry.
+		if c.isUnauthorized(runErr) {
+			slog.Debug("Received 401, attempting token refresh", "provider", providerCfg.ID)
+			if providerCfg.OAuthToken != nil {
+				if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
+					return nil, runErr
+				}
+				// Retry once after refresh.
+				result, runErr = logos.Run(ctx, logosCfg, history, prompt, logos.Callbacks{
+					OnDelta:         nil,
+					OnCommandResult: nil,
+					OnRetry:         nil,
+				})
+				if runErr != nil {
+					return nil, fmt.Errorf("logos.Run after token refresh: %w", runErr)
+				}
+				return result, nil
+			}
+			if strings.Contains(providerCfg.APIKeyTemplate, "$") {
+				slog.Debug("Received 401, refreshing API key template", "provider", providerCfg.ID)
+				if err := c.refreshApiKeyTemplate(ctx, providerCfg); err != nil {
+					return nil, runErr
+				}
+				result, runErr = logos.Run(ctx, logosCfg, history, prompt, logos.Callbacks{
+					OnDelta:         nil,
+					OnCommandResult: nil,
+					OnRetry:         nil,
+				})
+				if runErr != nil {
+					return nil, fmt.Errorf("logos.Run after API key refresh: %w", runErr)
+				}
+				return result, nil
+			}
+		}
 		return nil, fmt.Errorf("logos.Run: %w", runErr)
 	}
 
@@ -790,6 +833,30 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 		return errModelProviderNotConfigured
 	}
 	return c.currentAgent.Summarize(ctx, sessionID, getProviderOptions(c.currentAgent.Model(), providerCfg))
+}
+
+func (c *coordinator) isUnauthorized(err error) bool {
+	var providerErr *fantasy.ProviderError
+	return errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusUnauthorized
+}
+
+func (c *coordinator) refreshOAuth2Token(ctx context.Context, providerCfg config.ProviderConfig) error {
+	if err := c.cfg.RefreshOAuthToken(ctx, config.ScopeGlobal, providerCfg.ID); err != nil {
+		slog.Error("Failed to refresh OAuth token", "provider", providerCfg.ID, "error", err)
+		return err
+	}
+	return nil
+}
+
+func (c *coordinator) refreshApiKeyTemplate(ctx context.Context, providerCfg config.ProviderConfig) error {
+	newAPIKey, err := c.cfg.Resolve(providerCfg.APIKeyTemplate)
+	if err != nil {
+		slog.Error("Failed to resolve API key template", "provider", providerCfg.ID, "error", err)
+		return err
+	}
+	providerCfg.APIKey = newAPIKey
+	c.cfg.Config().Providers.Set(providerCfg.ID, providerCfg)
+	return nil
 }
 
 // resolveSandbox returns the sandbox setting, defaulting to true if nil.
