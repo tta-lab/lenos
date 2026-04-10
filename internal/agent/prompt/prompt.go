@@ -273,6 +273,7 @@ func getGitBranch(ctx context.Context, dir string) (string, error) {
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
+		slog.Debug("getGitBranch failed", "dir", dir, "error", err)
 		return "", nil
 	}
 	outStr := strings.TrimSpace(string(out))
@@ -287,6 +288,7 @@ func getGitStatusSummary(ctx context.Context, dir string) (string, error) {
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
+		slog.Debug("getGitStatusSummary failed", "dir", dir, "error", err)
 		return "", nil
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
@@ -304,7 +306,11 @@ func getGitRecentCommits(ctx context.Context, dir string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "log", "--oneline", "-n", "3")
 	cmd.Dir = dir
 	out, err := cmd.Output()
-	if err != nil || len(out) == 0 {
+	if err != nil {
+		slog.Debug("getGitRecentCommits failed", "dir", dir, "error", err)
+		return "", nil
+	}
+	if len(out) == 0 {
 		return "", nil
 	}
 	outStr := strings.TrimSpace(string(out))
