@@ -173,7 +173,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		Provider:     prov,
 		Model:        model.ModelCfg.Model,
 		SystemPrompt: c.systemPrompt,
-		Sandbox:      true,
+		Sandbox:      resolveSandbox(c.cfg.Config().Options.Sandbox),
 		SandboxEnv:   sandboxEnv,
 		AllowedPaths: BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...),
 		MaxSteps:     30,
@@ -790,4 +790,12 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 		return errModelProviderNotConfigured
 	}
 	return c.currentAgent.Summarize(ctx, sessionID, getProviderOptions(c.currentAgent.Model(), providerCfg))
+}
+
+// resolveSandbox returns the sandbox setting, defaulting to true if nil.
+func resolveSandbox(p *bool) bool {
+	if p == nil {
+		return true
+	}
+	return *p
 }
