@@ -429,7 +429,6 @@ func outputSessionJSON(w io.Writer, sess session.Session, msgs []*message.Messag
 
 func outputSessionHuman(ctx context.Context, sess session.Session, msgs []*message.Message) error {
 	sty := styles.DefaultStyles()
-	toolResults := chat.BuildToolResultMap(msgs)
 
 	width := sessionOutputWidth
 	if w, _, err := term.GetSize(os.Stdout.Fd()); err == nil && w > 0 {
@@ -469,7 +468,7 @@ func outputSessionHuman(ctx context.Context, sess session.Session, msgs []*messa
 
 	first := true
 	for _, msg := range msgs {
-		items := chat.ExtractMessageItems(&sty, msg, toolResults, true)
+		items := chat.ExtractMessageItems(&sty, msg, true)
 		for _, item := range items {
 			if !first {
 				fmt.Fprintln(&buf)

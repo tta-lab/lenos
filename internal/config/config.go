@@ -9,7 +9,6 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -256,10 +255,6 @@ type Agent struct {
 
 	Model SelectedModelType `json:"model" jsonschema:"required,description=The model type to use for this agent,enum=large,enum=small,default=large"`
 
-	// The available tools for the agent
-	//  if this is nil, all tools are available
-	AllowedTools []string `json:"allowed_tools,omitempty"`
-
 	// Overrides the context paths for this agent
 	ContextPaths []string `json:"context_paths,omitempty"`
 }
@@ -373,35 +368,7 @@ func (c *Config) SmallModel() *catwalk.Model {
 
 const maxRecentModelsPerType = 5
 
-func allToolNames() []string {
-	return []string{
-		"bash",
-	}
-}
-
-func resolveAllowedTools(allTools []string, disabledTools []string) []string {
-	if disabledTools == nil {
-		return allTools
-	}
-	// filter out disabled tools (exclude mode)
-	return filterSlice(allTools, disabledTools, false)
-}
-
-func filterSlice(data []string, mask []string, include bool) []string {
-	var filtered []string
-	for _, s := range data {
-		// if include is true, we include items that ARE in the mask
-		// if include is false, we include items that are NOT in the mask
-		if include == slices.Contains(mask, s) {
-			filtered = append(filtered, s)
-		}
-	}
-	return filtered
-}
-
 func (c *Config) SetupAgents() {
-	allowedTools := resolveAllowedTools(allToolNames(), c.Options.DisabledTools)
-
 	agents := map[string]Agent{
 		AgentCoder: {
 			ID:           AgentCoder,
@@ -409,7 +376,6 @@ func (c *Config) SetupAgents() {
 			Description:  "An agent that helps with executing coding tasks.",
 			Model:        SelectedModelTypeLarge,
 			ContextPaths: c.Options.ContextPaths,
-			AllowedTools: allowedTools,
 		},
 	}
 	c.Agents = agents

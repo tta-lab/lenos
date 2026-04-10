@@ -244,6 +244,7 @@ type Styles struct {
 			ToolCallBlurred  lipgloss.Style
 			SectionHeader    lipgloss.Style
 			ResultBlock      lipgloss.Style
+			ResultHeader     lipgloss.Style // Command result header: $ <command>
 
 			// Thinking section styles
 			ThinkingBox            lipgloss.Style // Background for thinking content
@@ -322,21 +323,12 @@ type Styles struct {
 		TodoInProgressIcon lipgloss.Style // In-progress todo icon
 		TodoPendingIcon    lipgloss.Style // Pending todo icon
 
-		// MCP tools
-		MCPName     lipgloss.Style // The mcp name
-		MCPToolName lipgloss.Style // The mcp tool name
-		MCPArrow    lipgloss.Style // The mcp arrow icon
-
 		// Images and external resources
 		ResourceLoadedText      lipgloss.Style
 		ResourceLoadedIndicator lipgloss.Style
 		ResourceName            lipgloss.Style
 		ResourceSize            lipgloss.Style
 		MediaType               lipgloss.Style
-
-		// Docker MCP tools
-		DockerMCPActionAdd lipgloss.Style // Docker MCP add action (green)
-		DockerMCPActionDel lipgloss.Style // Docker MCP remove action (red)
 	}
 
 	// Dialog styles
@@ -1168,21 +1160,12 @@ func DefaultStyles() Styles {
 	s.Tool.TodoInProgressIcon = base.Foreground(greenDark)
 	s.Tool.TodoPendingIcon = base.Foreground(fgMuted)
 
-	// MCP styles
-	s.Tool.MCPName = base.Foreground(blue)
-	s.Tool.MCPToolName = base.Foreground(blueDark)
-	s.Tool.MCPArrow = base.Foreground(blue).SetString(ArrowRightIcon)
-
 	// Loading indicators for images, skills
 	s.Tool.ResourceLoadedText = base.Foreground(green)
 	s.Tool.ResourceLoadedIndicator = base.Foreground(greenDark)
 	s.Tool.ResourceName = base
 	s.Tool.MediaType = base
 	s.Tool.ResourceSize = base.Foreground(fgMuted)
-
-	// Docker MCP styles
-	s.Tool.DockerMCPActionAdd = base.Foreground(greenLight)
-	s.Tool.DockerMCPActionDel = base.Foreground(red)
 
 	// Buttons
 	s.ButtonFocus = lipgloss.NewStyle().Foreground(white).Background(secondary)
@@ -1271,6 +1254,8 @@ func DefaultStyles() Styles {
 	s.Chat.Message.SectionHeader = s.Base.PaddingLeft(2)
 	s.Chat.Message.ResultBlock = lipgloss.NewStyle().
 		Foreground(fgSubtle)
+	s.Chat.Message.ResultHeader = lipgloss.NewStyle().
+		Foreground(fgBase)
 	s.Chat.Message.AssistantInfoIcon = s.Subtle
 	s.Chat.Message.AssistantInfoModel = s.Muted
 	s.Chat.Message.AssistantInfoProvider = s.Subtle

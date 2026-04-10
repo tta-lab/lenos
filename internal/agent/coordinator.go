@@ -134,7 +134,6 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	}
 
 	// Note: attachments are currently not used in the logos path.
-	// They were used in the fantasy agent fallback which has been removed.
 	_ = attachments
 
 	model := c.currentAgent.Model()
@@ -181,26 +180,12 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		MaxTokens:    int(maxTokens),
 	}
 
-	_, err = c.sessions.Get(ctx, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get session: %w", err)
-	}
-	historyMsgs, err := c.messages.List(ctx, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get session messages: %w", err)
-	}
-	var history []fantasy.Message
-	for _, m := range historyMsgs {
-		history = append(history, m.ToAIMessage()...)
-	}
-
 	// Refresh OAuth token if expired before running.
 	if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
 		slog.Debug("OAuth token expired, refreshing", "provider", providerCfg.ID)
 		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
 			return nil, err
 		}
-		// Re-fetch fresh config from store and rebuild provider with refreshed credentials.
 		freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 		if !ok {
 			return nil, fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
@@ -212,87 +197,15 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		logosCfg.Provider = prov
 	}
 
-	// pendingCommands maps command text → message ID for in-flight commands.
-	pendingCommands := make(map[string]string)
-	var currentAssistant *message.Message
-	streamCtx, cancelStream := context.WithCancel(ctx)
-	defer cancelStream()
-
-	callbacks := logos.Callbacks{
-		OnDelta: func(text string) {
-			// Detect <cmd> block: logos emits the full <cmd>...</cmd> text as one chunk.
-			if strings.HasPrefix(text, "<cmd>") {
-				cmdText, _, _ := strings.Cut(text, "</cmd>")
-				cmdText = strings.TrimPrefix(cmdText, ">")
-				cmdText = strings.TrimSpace(cmdText)
-				if cmdText == "" {
-					return
-				}
-				// Emit pending command to UI (shows "running..." before result arrives).
-				content := "$ " + cmdText + "\n<pending>running...</pending>"
-				msg, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
-					Role:  message.Result,
-					Parts: []message.ContentPart{message.TextContent{Text: content}},
-				})
-				if err != nil {
-					slog.Warn("Failed to create pending command message", "error", err)
-					return
-				}
-				pendingCommands[cmdText] = msg.ID
-				return
-			}
-
-			if currentAssistant == nil {
-				text = strings.TrimPrefix(text, "\n")
-				msg, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
-					Role:  message.Assistant,
-					Parts: []message.ContentPart{},
-				})
-				if err != nil {
-					slog.Warn("Failed to create assistant message", "error", err)
-					return
-				}
-				currentAssistant = &msg
-			}
-			if currentAssistant != nil {
-				currentAssistant.AppendContent(text)
-				if err := c.messages.Update(ctx, *currentAssistant); err != nil {
-					slog.Warn("Failed to update assistant message", "error", err)
-				}
-			}
-		},
-		OnCommandResult: func(command string, output string, exitCode int) {
-			content := fmt.Sprintf("%s\n<result>exit code: %d</result>", output, exitCode)
-			// If we emitted a pending message for this command, update it with the result.
-			if msgID, ok := pendingCommands[command]; ok {
-				existing, err := c.messages.Get(ctx, msgID)
-				if err == nil {
-					existing.Parts = []message.ContentPart{message.TextContent{Text: content}}
-					if err := c.messages.Update(ctx, existing); err != nil {
-						slog.Warn("Failed to update pending command message", "error", err)
-					}
-				}
-				delete(pendingCommands, command)
-				return
-			}
-			// Fallback: create a new result message.
-			_, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
-				Role:  message.Result,
-				Parts: []message.ContentPart{message.TextContent{Text: content}},
-			})
-			if err != nil {
-				slog.Warn("Failed to persist command result", "error", err)
-			}
-		},
-		OnRetry: func(reason string, step int) {
-			slog.Warn("Logos retry", "reason", reason, "step", step)
-		},
+	call := SessionAgentCall{
+		SessionID: sessionID,
+		Prompt:    prompt,
+		LogosCfg:  logosCfg,
 	}
 
-	result, runErr := logos.Run(streamCtx, logosCfg, history, prompt, callbacks)
+	result, runErr := c.currentAgent.Run(ctx, call)
 
 	if runErr != nil {
-		// Handle 401 errors with retry.
 		if c.isUnauthorized(runErr) {
 			slog.Debug("Received 401, attempting token refresh", "provider", providerCfg.ID)
 			if providerCfg.OAuthToken != nil {
@@ -308,9 +221,10 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 					return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
 				}
 				logosCfg.Provider = freshProv
-				result, runErr = logos.Run(ctx, logosCfg, history, prompt, callbacks)
+				call.LogosCfg = logosCfg
+				result, runErr = c.currentAgent.Run(ctx, call)
 				if runErr != nil {
-					return nil, fmt.Errorf("logos.Run after token refresh: %w", runErr)
+					return nil, fmt.Errorf("agent.Run after token refresh: %w", runErr)
 				}
 				return result, nil
 			}
@@ -328,14 +242,15 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 					return nil, fmt.Errorf("rebuild provider after API key refresh: %w", err)
 				}
 				logosCfg.Provider = freshProv
-				result, runErr = logos.Run(ctx, logosCfg, history, prompt, callbacks)
+				call.LogosCfg = logosCfg
+				result, runErr = c.currentAgent.Run(ctx, call)
 				if runErr != nil {
-					return nil, fmt.Errorf("logos.Run after API key refresh: %w", runErr)
+					return nil, fmt.Errorf("agent.Run after API key refresh: %w", runErr)
 				}
 				return result, nil
 			}
 		}
-		return nil, fmt.Errorf("logos.Run: %w", runErr)
+		return nil, fmt.Errorf("agent.Run: %w", runErr)
 	}
 
 	return result, nil

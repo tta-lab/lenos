@@ -107,6 +107,16 @@ func (tc TextContent) String() string {
 
 func (TextContent) isPart() {}
 
+// CommandContent represents a command execution result in a message.
+type CommandContent struct {
+	Command  string `json:"command"`
+	Output   string `json:"output"`
+	ExitCode *int   `json:"exit_code,omitempty"`
+	Pending  bool   `json:"pending"`
+}
+
+func (CommandContent) isPart() {}
+
 // ImageURLContent represents an image URL part of a message.
 type ImageURLContent struct {
 	URL    string `json:"url"`
@@ -495,6 +505,7 @@ type partType string
 const (
 	reasoningType  partType = "reasoning"
 	textType       partType = "text"
+	commandType    partType = "command"
 	imageURLType   partType = "image_url"
 	binaryType     partType = "binary"
 	toolCallType   partType = "tool_call"
@@ -519,6 +530,8 @@ func MarshalParts(parts []ContentPart) ([]byte, error) {
 			typ = reasoningType
 		case TextContent:
 			typ = textType
+		case CommandContent:
+			typ = commandType
 		case ImageURLContent:
 			typ = imageURLType
 		case BinaryContent:
@@ -570,6 +583,12 @@ func UnmarshalParts(data []byte) ([]ContentPart, error) {
 			parts = append(parts, part)
 		case textType:
 			part := TextContent{}
+			if err := json.Unmarshal(wrapper.Data, &part); err != nil {
+				return nil, err
+			}
+			parts = append(parts, part)
+		case commandType:
+			part := CommandContent{}
 			if err := json.Unmarshal(wrapper.Data, &part); err != nil {
 				return nil, err
 			}
