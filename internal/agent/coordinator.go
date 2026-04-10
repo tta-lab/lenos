@@ -200,13 +200,20 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
 			return nil, err
 		}
+		// Rebuild provider with refreshed credentials.
+		prov, err = c.buildProvider(providerCfg, model.ModelCfg, false)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
+		}
+		logosCfg.Provider = prov
 	}
 
+	// Build callbacks for streaming and persistence.
 	var currentAssistant *message.Message
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
-	result, runErr := logos.Run(streamCtx, logosCfg, history, prompt, logos.Callbacks{
+	callbacks := logos.Callbacks{
 		OnDelta: func(text string) {
 			if currentAssistant == nil {
 				text = strings.TrimPrefix(text, "\n")
@@ -240,7 +247,9 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		OnRetry: func(reason string, step int) {
 			slog.Warn("Logos retry", "reason", reason, "step", step)
 		},
-	})
+	}
+
+	result, runErr := logos.Run(streamCtx, logosCfg, history, prompt, callbacks)
 
 	if runErr != nil {
 		// Handle 401 errors with retry.
@@ -250,12 +259,14 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 				if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
 					return nil, runErr
 				}
-				// Retry once after refresh.
-				result, runErr = logos.Run(ctx, logosCfg, history, prompt, logos.Callbacks{
-					OnDelta:         nil,
-					OnCommandResult: nil,
-					OnRetry:         nil,
-				})
+				// Rebuild provider and retry with same callbacks.
+				freshCfg, _ := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+				freshProv, err := c.buildProvider(freshCfg, model.ModelCfg, false)
+				if err != nil {
+					return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
+				}
+				logosCfg.Provider = freshProv
+				result, runErr = logos.Run(ctx, logosCfg, history, prompt, callbacks)
 				if runErr != nil {
 					return nil, fmt.Errorf("logos.Run after token refresh: %w", runErr)
 				}
@@ -266,11 +277,14 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 				if err := c.refreshApiKeyTemplate(ctx, providerCfg); err != nil {
 					return nil, runErr
 				}
-				result, runErr = logos.Run(ctx, logosCfg, history, prompt, logos.Callbacks{
-					OnDelta:         nil,
-					OnCommandResult: nil,
-					OnRetry:         nil,
-				})
+				// Rebuild provider and retry with same callbacks.
+				freshCfg, _ := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+				freshProv, err := c.buildProvider(freshCfg, model.ModelCfg, false)
+				if err != nil {
+					return nil, fmt.Errorf("rebuild provider after API key refresh: %w", err)
+				}
+				logosCfg.Provider = freshProv
+				result, runErr = logos.Run(ctx, logosCfg, history, prompt, callbacks)
 				if runErr != nil {
 					return nil, fmt.Errorf("logos.Run after API key refresh: %w", runErr)
 				}
