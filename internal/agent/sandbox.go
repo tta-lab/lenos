@@ -6,24 +6,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tta-lab/logos"
+	"github.com/tta-lab/temenos/client"
 )
 
 // BuildAllowedPaths returns the allowed paths for an agent running in cwd with given access.
 // access is "rw" or "ro". CWD is always the first element (temenos uses first path as WorkingDir).
 // additionalReadOnlyPaths are added as read-only paths (useful for granting cross-project read access).
-func BuildAllowedPaths(ctx context.Context, cwd, access string, additionalReadOnlyPaths ...string) []logos.AllowedPath {
+func BuildAllowedPaths(ctx context.Context, cwd, access string, additionalReadOnlyPaths ...string) []client.AllowedPath {
 	readOnly := access != "rw"
-	paths := []logos.AllowedPath{{Path: cwd, ReadOnly: readOnly}}
+	paths := []client.AllowedPath{{Path: cwd, ReadOnly: readOnly}}
 
 	gitDir := resolveGitCommonDir(ctx, cwd)
 	if gitDir != "" && gitDir != cwd+"/.git" {
-		paths = append(paths, logos.AllowedPath{Path: gitDir, ReadOnly: false})
+		paths = append(paths, client.AllowedPath{Path: gitDir, ReadOnly: false})
 	}
 
 	for _, p := range additionalReadOnlyPaths {
 		if p != cwd {
-			paths = append(paths, logos.AllowedPath{Path: p, ReadOnly: true})
+			paths = append(paths, client.AllowedPath{Path: p, ReadOnly: true})
 		}
 	}
 

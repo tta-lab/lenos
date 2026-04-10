@@ -12,7 +12,6 @@ import (
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
-	"github.com/tta-lab/logos"
 
 	"github.com/tta-lab/lenos/internal/session"
 )
@@ -54,7 +53,7 @@ type Workspace interface {
 	AgentClearQueue(sessionID string)
 	AgentSummarize(ctx context.Context, sessionID string) error
 	UpdateAgentModel(ctx context.Context) error
-	InitCoderAgent(ctx context.Context, temenos logos.CommandRunner) error
+	InitCoderAgent(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel
 
 	// Git

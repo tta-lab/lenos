@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,8 +18,6 @@ import (
 	"charm.land/fantasy"
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	"github.com/tta-lab/lenos/internal/agent/prompt"
-	"github.com/tta-lab/lenos/internal/agent/tools"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
@@ -58,7 +55,7 @@ var (
 type Coordinator interface {
 	// INFO: (kujtim) this is not used yet we will use this when we have multiple agents
 	// SetMainAgent(string)
-	Run(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error)
+	Run(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) (*logos.RunResult, error)
 	Cancel(sessionID string)
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
@@ -72,17 +69,12 @@ type Coordinator interface {
 }
 
 type coordinator struct {
-	cfg      *config.ConfigStore
-	sessions session.Service
-	messages message.Service
-	notify   pubsub.Publisher[notify.Notification]
-
+	cfg          *config.ConfigStore
+	sessions     session.Service
+	messages     message.Service
+	notify       pubsub.Publisher[notify.Notification]
 	currentAgent SessionAgent
-	agents       map[string]SessionAgent
-
-	temenos logos.CommandRunner
-
-	readyWg errgroup.Group
+	readyWg      errgroup.Group
 }
 
 func NewCoordinator(
@@ -91,50 +83,44 @@ func NewCoordinator(
 	sessions session.Service,
 	messages message.Service,
 	notify pubsub.Publisher[notify.Notification],
-	temenos logos.CommandRunner,
 ) (Coordinator, error) {
 	c := &coordinator{
 		cfg:      cfg,
 		sessions: sessions,
 		messages: messages,
 		notify:   notify,
-		agents:   make(map[string]SessionAgent),
-		temenos:  temenos,
 	}
 
-	agentCfg, ok := cfg.Config().Agents[config.AgentCoder]
-	if !ok {
-		return nil, errCoderAgentNotConfigured
-	}
-
-	// TODO: make this dynamic when we support multiple agents
-	prompt, err := coderPrompt(
-		prompt.WithWorkingDir(c.cfg.WorkingDir()),
-		prompt.WithContextPaths(agentCfg.ContextPaths),
-	)
+	large, small, err := c.buildAgentModels(ctx, false)
 	if err != nil {
 		return nil, err
 	}
 
-	agent, err := c.buildAgent(ctx, prompt, agentCfg, false)
-	if err != nil {
-		return nil, err
-	}
-	c.currentAgent = agent
-	c.agents[config.AgentCoder] = agent
+	c.currentAgent = NewSessionAgent(SessionAgentOptions{
+		LargeModel:           large,
+		SmallModel:           small,
+		SystemPromptPrefix:   "",
+		SystemPrompt:         "",
+		IsSubAgent:           false,
+		DisableAutoSummarize: cfg.Config().Options.DisableAutoSummarize,
+		Sessions:             sessions,
+		Messages:             messages,
+		Tools:                nil,
+		Notify:               notify,
+	})
+
 	return c, nil
 }
 
 // Run implements Coordinator.
-func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
+func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) (*logos.RunResult, error) {
 	if err := c.readyWg.Wait(); err != nil {
 		return nil, err
 	}
 
-	// refresh models before each run
-	if err := c.UpdateModels(ctx); err != nil {
-		return nil, fmt.Errorf("failed to update models: %w", err)
-	}
+	// Note: attachments are currently not used in the logos path.
+	// They were used in the fantasy agent fallback which has been removed.
+	_ = attachments
 
 	model := c.currentAgent.Model()
 	maxTokens := model.CatwalkCfg.DefaultMaxTokens
@@ -142,75 +128,6 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		maxTokens = model.ModelCfg.MaxTokens
 	}
 
-	if !model.CatwalkCfg.SupportsImages && attachments != nil {
-		// filter out image attachments
-		filteredAttachments := make([]message.Attachment, 0, len(attachments))
-		for _, att := range attachments {
-			if att.IsText() {
-				filteredAttachments = append(filteredAttachments, att)
-			}
-		}
-		attachments = filteredAttachments
-	}
-
-	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-	if !ok {
-		return nil, errModelProviderNotConfigured
-	}
-
-	if c.temenos != nil {
-		return c.runWithTemenos(ctx, sessionID, prompt, model, maxTokens)
-	}
-
-	mergedOptions, temp, topP, topK, freqPenalty, presPenalty := mergeCallOptions(model, providerCfg)
-
-	if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
-		slog.Debug("Token needs to be refreshed", "provider", providerCfg.ID)
-		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
-			return nil, err
-		}
-	}
-
-	run := func() (*fantasy.AgentResult, error) {
-		return c.currentAgent.Run(ctx, SessionAgentCall{
-			SessionID:        sessionID,
-			Prompt:           prompt,
-			Attachments:      attachments,
-			MaxOutputTokens:  maxTokens,
-			ProviderOptions:  mergedOptions,
-			Temperature:      temp,
-			TopP:             topP,
-			TopK:             topK,
-			FrequencyPenalty: freqPenalty,
-			PresencePenalty:  presPenalty,
-		})
-	}
-	result, originalErr := run()
-
-	if c.isUnauthorized(originalErr) {
-		switch {
-		case providerCfg.OAuthToken != nil:
-			slog.Debug("Received 401. Refreshing token and retrying", "provider", providerCfg.ID)
-			if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
-				return nil, originalErr
-			}
-			slog.Debug("Retrying request with refreshed OAuth token", "provider", providerCfg.ID)
-			return run()
-		case strings.Contains(providerCfg.APIKeyTemplate, "$"):
-			slog.Debug("Received 401. Refreshing API Key template and retrying", "provider", providerCfg.ID)
-			if err := c.refreshApiKeyTemplate(ctx, providerCfg); err != nil {
-				return nil, originalErr
-			}
-			slog.Debug("Retrying request with refreshed API key", "provider", providerCfg.ID)
-			return run()
-		}
-	}
-
-	return result, originalErr
-}
-
-// runWithTemenos executes the agent using logos.Run with temenos sandbox.
-func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prompt string, model Model, maxTokens int64) (*fantasy.AgentResult, error) {
 	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 	if !ok {
 		return nil, errModelProviderNotConfigured
@@ -221,7 +138,6 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		return nil, fmt.Errorf("build provider: %w", err)
 	}
 
-	// Build env map from process environment.
 	sandboxEnv := make(map[string]string, len(os.Environ()))
 	for _, e := range os.Environ() {
 		if idx := strings.IndexByte(e, '='); idx >= 0 {
@@ -229,7 +145,6 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		}
 	}
 
-	// Build additional read-only paths from ttal project list.
 	cwd := c.cfg.WorkingDir()
 	var additionalReadOnlyPaths []string
 	if projects, err := project.List(ctx); err == nil {
@@ -240,19 +155,16 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		}
 	}
 
-	allowedPaths := BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...)
-
 	logosCfg := logos.Config{
 		Provider:     prov,
 		Model:        model.ModelCfg.Model,
+		Sandbox:      true,
+		SandboxEnv:   sandboxEnv,
+		AllowedPaths: BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...),
 		MaxSteps:     30,
 		MaxTokens:    int(maxTokens),
-		Temenos:      c.temenos,
-		SandboxEnv:   sandboxEnv,
-		AllowedPaths: allowedPaths,
 	}
 
-	// Get session history as fantasy messages for logos history.
 	_, err = c.sessions.Get(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
@@ -266,14 +178,12 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		history = append(history, m.ToAIMessage()...)
 	}
 
-	// Streaming callback for text deltas.
 	var currentAssistant *message.Message
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
 	result, runErr := logos.Run(streamCtx, logosCfg, history, prompt, logos.Callbacks{
 		OnDelta: func(text string) {
-			// Strip leading newline from initial text content.
 			if currentAssistant == nil {
 				text = strings.TrimPrefix(text, "\n")
 				msg, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
@@ -312,13 +222,13 @@ func (c *coordinator) runWithTemenos(ctx context.Context, sessionID string, prom
 		return nil, fmt.Errorf("logos.Run: %w", runErr)
 	}
 
-	return &fantasy.AgentResult{
-		Response: fantasy.Response{
-			Content: fantasy.ResponseContent{
-				fantasy.TextContent{Text: result.Response},
-			},
-		},
-	}, nil
+	if len(result.Steps) > 1 {
+		if err := stepsToMessages(ctx, result.Steps[1:], sessionID, c.messages); err != nil {
+			slog.Warn("Failed to persist run result steps", "error", err)
+		}
+	}
+
+	return result, nil
 }
 
 func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.ProviderOptions {
@@ -474,72 +384,6 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 	}
 
 	return options
-}
-
-func mergeCallOptions(model Model, cfg config.ProviderConfig) (fantasy.ProviderOptions, *float64, *float64, *int64, *float64, *float64) {
-	modelOptions := getProviderOptions(model, cfg)
-	temp := cmp.Or(model.ModelCfg.Temperature, model.CatwalkCfg.Options.Temperature)
-	topP := cmp.Or(model.ModelCfg.TopP, model.CatwalkCfg.Options.TopP)
-	topK := cmp.Or(model.ModelCfg.TopK, model.CatwalkCfg.Options.TopK)
-	freqPenalty := cmp.Or(model.ModelCfg.FrequencyPenalty, model.CatwalkCfg.Options.FrequencyPenalty)
-	presPenalty := cmp.Or(model.ModelCfg.PresencePenalty, model.CatwalkCfg.Options.PresencePenalty)
-	return modelOptions, temp, topP, topK, freqPenalty, presPenalty
-}
-
-func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, agent config.Agent, isSubAgent bool) (SessionAgent, error) {
-	large, small, err := c.buildAgentModels(ctx, isSubAgent)
-	if err != nil {
-		return nil, err
-	}
-
-	largeProviderCfg, _ := c.cfg.Config().Providers.Get(large.ModelCfg.Provider)
-	result := NewSessionAgent(SessionAgentOptions{
-		LargeModel:           large,
-		SmallModel:           small,
-		SystemPromptPrefix:   largeProviderCfg.SystemPromptPrefix,
-		SystemPrompt:         "",
-		IsSubAgent:           isSubAgent,
-		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
-		Sessions:             c.sessions,
-		Messages:             c.messages,
-		Tools:                nil,
-		Notify:               c.notify,
-	})
-
-	c.readyWg.Go(func() error {
-		systemPrompt, err := prompt.Build(ctx, large.Model.Provider(), large.Model.Model(), c.cfg)
-		if err != nil {
-			return err
-		}
-		result.SetSystemPrompt(systemPrompt)
-		return nil
-	})
-
-	c.readyWg.Go(func() error {
-		tools, err := c.buildTools(ctx, agent)
-		if err != nil {
-			return err
-		}
-		result.SetTools(tools)
-		return nil
-	})
-
-	return result, nil
-}
-
-func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fantasy.AgentTool, error) {
-	modelName := ""
-	if modelCfg, ok := c.cfg.Config().Models[agent.Model]; ok {
-		if model := c.cfg.Config().GetModel(modelCfg.Provider, modelCfg.Model); model != nil {
-			modelName = model.Name
-		}
-	}
-
-	allTools := []fantasy.AgentTool{
-		tools.NewBashTool(c.cfg.WorkingDir(), c.cfg.Config().Options.Attribution, modelName, c.temenos),
-	}
-
-	return allTools, nil
 }
 
 // TODO: when we support multiple agents we need to change this so that we pass in the agent specific model config
@@ -914,23 +758,12 @@ func (c *coordinator) Model() Model {
 }
 
 func (c *coordinator) UpdateModels(ctx context.Context) error {
-	// build the models again so we make sure we get the latest config
+	// Build the models again so we make sure we get the latest config.
 	large, small, err := c.buildAgentModels(ctx, false)
 	if err != nil {
 		return err
 	}
 	c.currentAgent.SetModels(large, small)
-
-	agentCfg, ok := c.cfg.Config().Agents[config.AgentCoder]
-	if !ok {
-		return errCoderAgentNotConfigured
-	}
-
-	tools, err := c.buildTools(ctx, agentCfg)
-	if err != nil {
-		return err
-	}
-	c.currentAgent.SetTools(tools)
 	return nil
 }
 
@@ -948,36 +781,4 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 		return errModelProviderNotConfigured
 	}
 	return c.currentAgent.Summarize(ctx, sessionID, getProviderOptions(c.currentAgent.Model(), providerCfg))
-}
-
-func (c *coordinator) isUnauthorized(err error) bool {
-	var providerErr *fantasy.ProviderError
-	return errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusUnauthorized
-}
-
-func (c *coordinator) refreshOAuth2Token(ctx context.Context, providerCfg config.ProviderConfig) error {
-	if err := c.cfg.RefreshOAuthToken(ctx, config.ScopeGlobal, providerCfg.ID); err != nil {
-		slog.Error("Failed to refresh OAuth token after 401 error", "provider", providerCfg.ID, "error", err)
-		return err
-	}
-	if err := c.UpdateModels(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *coordinator) refreshApiKeyTemplate(ctx context.Context, providerCfg config.ProviderConfig) error {
-	newAPIKey, err := c.cfg.Resolve(providerCfg.APIKeyTemplate)
-	if err != nil {
-		slog.Error("Failed to re-resolve API key after 401 error", "provider", providerCfg.ID, "error", err)
-		return err
-	}
-
-	providerCfg.APIKey = newAPIKey
-	c.cfg.Config().Providers.Set(providerCfg.ID, providerCfg)
-
-	if err := c.UpdateModels(ctx); err != nil {
-		return err
-	}
-	return nil
 }

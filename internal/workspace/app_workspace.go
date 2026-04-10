@@ -14,7 +14,6 @@ import (
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth"
-	"github.com/tta-lab/logos"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/tta-lab/lenos/internal/session"
@@ -157,8 +156,8 @@ func (w *AppWorkspace) UpdateAgentModel(ctx context.Context) error {
 	return w.app.UpdateAgentModel(ctx)
 }
 
-func (w *AppWorkspace) InitCoderAgent(ctx context.Context, temenos logos.CommandRunner) error {
-	return w.app.InitCoderAgent(ctx, temenos)
+func (w *AppWorkspace) InitCoderAgent(ctx context.Context) error {
+	return w.app.InitCoderAgent(ctx)
 }
 
 func (w *AppWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
