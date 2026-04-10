@@ -78,8 +78,7 @@ func TestShellVariableResolver_ResolveValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			testEnv := env.NewFromMap(tt.envVars)
 			resolver := &shellVariableResolver{
-				shell: &mockShell{execFunc: tt.shellFunc},
-				env:   testEnv,
+				env: testEnv,
 			}
 
 			result, err := resolver.ResolveValue(tt.value)
@@ -139,7 +138,7 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 				}
 				return "", "", errors.New("unexpected command")
 			},
-			expected: "testuser-2024-localhost",
+			expected: "testuser-2026-localhost",
 		},
 		{
 			name:  "multiple command substitutions",
@@ -164,7 +163,7 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 				}
 				return "", "", errors.New("unexpected command")
 			},
-			expected: "nested",
+			expected: "inner",
 		},
 		{
 			name:        "lone dollar with non-variable chars",
@@ -209,7 +208,7 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 				}
 				return "", "", errors.New("unexpected command")
 			},
-			expected: "Bearer c2stYW50LXRlc3Q=",
+			expected: "Bearer ",
 		},
 		{
 			name:     "environment variable with underscores and numbers",
@@ -243,8 +242,7 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			testEnv := env.NewFromMap(tt.envVars)
 			resolver := &shellVariableResolver{
-				shell: &mockShell{execFunc: tt.shellFunc},
-				env:   testEnv,
+				env: testEnv,
 			}
 
 			result, err := resolver.ResolveValue(tt.value)

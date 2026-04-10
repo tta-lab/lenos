@@ -30,7 +30,6 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/lenos/internal/shell"
 	"github.com/tta-lab/lenos/internal/ui/anim"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/update"
@@ -566,11 +565,6 @@ func (app *App) Shutdown() {
 	// Send exit event
 	wg.Go(func() {
 		event.AppExited()
-	})
-
-	// Kill all background shells.
-	wg.Go(func() {
-		shell.GetBackgroundShellManager().KillAll(shutdownCtx)
 	})
 
 	// Call all cleanup functions.
