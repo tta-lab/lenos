@@ -111,17 +111,17 @@ func NewCoordinator(
 		Notify:               notify,
 	})
 
-	// Build system prompt for logos.
-	coderPrompt, err := coderPrompt(
-		prompt.WithWorkingDir(c.cfg.WorkingDir()),
+	// Build system prompt: logos base (cmd block format, env, commands) + lenos post-template.
+	c.systemPrompt, err = SystemPrompt(
+		ctx,
+		c.cfg.WorkingDir(),
+		large.Model.Provider(),
+		large.Model.Model(),
+		c.cfg,
 		prompt.WithContextPaths(c.cfg.Config().Agents[config.AgentCoder].ContextPaths),
 	)
 	if err != nil {
-		return nil, err
-	}
-	c.systemPrompt, err = coderPrompt.Build(ctx, large.Model.Provider(), large.Model.Model(), c.cfg)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build system prompt: %w", err)
 	}
 
 	return c, nil
@@ -201,7 +201,10 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 			return nil, err
 		}
 		// Re-fetch fresh config from store and rebuild provider with refreshed credentials.
-		freshCfg, _ := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+		freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+		if !ok {
+			return nil, fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
+		}
 		prov, err = c.buildProvider(freshCfg, model.ModelCfg, false)
 		if err != nil {
 			return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
@@ -209,13 +212,36 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		logosCfg.Provider = prov
 	}
 
-	// Build callbacks for streaming and persistence.
+	// pendingCommands maps command text → message ID for in-flight commands.
+	pendingCommands := make(map[string]string)
 	var currentAssistant *message.Message
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
 	callbacks := logos.Callbacks{
 		OnDelta: func(text string) {
+			// Detect <cmd> block: logos emits the full <cmd>...</cmd> text as one chunk.
+			if strings.HasPrefix(text, "<cmd>") {
+				cmdText, _, _ := strings.Cut(text, "</cmd>")
+				cmdText = strings.TrimPrefix(cmdText, ">")
+				cmdText = strings.TrimSpace(cmdText)
+				if cmdText == "" {
+					return
+				}
+				// Emit pending command to UI (shows "running..." before result arrives).
+				content := "$ " + cmdText + "\n<pending>running...</pending>"
+				msg, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
+					Role:  message.Result,
+					Parts: []message.ContentPart{message.TextContent{Text: content}},
+				})
+				if err != nil {
+					slog.Warn("Failed to create pending command message", "error", err)
+					return
+				}
+				pendingCommands[cmdText] = msg.ID
+				return
+			}
+
 			if currentAssistant == nil {
 				text = strings.TrimPrefix(text, "\n")
 				msg, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
@@ -237,6 +263,19 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		},
 		OnCommandResult: func(command string, output string, exitCode int) {
 			content := fmt.Sprintf("%s\n<result>exit code: %d</result>", output, exitCode)
+			// If we emitted a pending message for this command, update it with the result.
+			if msgID, ok := pendingCommands[command]; ok {
+				existing, err := c.messages.Get(ctx, msgID)
+				if err == nil {
+					existing.Parts = []message.ContentPart{message.TextContent{Text: content}}
+					if err := c.messages.Update(ctx, existing); err != nil {
+						slog.Warn("Failed to update pending command message", "error", err)
+					}
+				}
+				delete(pendingCommands, command)
+				return
+			}
+			// Fallback: create a new result message.
 			_, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
 				Role:  message.Result,
 				Parts: []message.ContentPart{message.TextContent{Text: content}},
@@ -258,10 +297,12 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 			slog.Debug("Received 401, attempting token refresh", "provider", providerCfg.ID)
 			if providerCfg.OAuthToken != nil {
 				if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
-					return nil, runErr
+					return nil, fmt.Errorf("token refresh failed after 401: %w", err)
 				}
-				// Rebuild provider and retry with same callbacks.
-				freshCfg, _ := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+				freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+				if !ok {
+					return nil, fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
+				}
 				freshProv, err := c.buildProvider(freshCfg, model.ModelCfg, false)
 				if err != nil {
 					return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
@@ -276,10 +317,12 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 			if strings.Contains(providerCfg.APIKeyTemplate, "$") {
 				slog.Debug("Received 401, refreshing API key template", "provider", providerCfg.ID)
 				if err := c.refreshApiKeyTemplate(ctx, providerCfg); err != nil {
-					return nil, runErr
+					return nil, fmt.Errorf("API key refresh failed after 401: %w", err)
 				}
-				// Rebuild provider and retry with same callbacks.
-				freshCfg, _ := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+				freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+				if !ok {
+					return nil, fmt.Errorf("provider %s not found after API key refresh", model.ModelCfg.Provider)
+				}
 				freshProv, err := c.buildProvider(freshCfg, model.ModelCfg, false)
 				if err != nil {
 					return nil, fmt.Errorf("rebuild provider after API key refresh: %w", err)
@@ -754,8 +797,15 @@ func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model con
 		}
 	}
 
-	apiKey, _ := c.cfg.Resolve(providerCfg.APIKey)
-	baseURL, _ := c.cfg.Resolve(providerCfg.BaseURL)
+	apiKey, resolveErr := c.cfg.Resolve(providerCfg.APIKey)
+	if resolveErr != nil {
+		return nil, fmt.Errorf("resolve API key: %w", resolveErr)
+	}
+	var baseURL string
+	baseURL, resolveErr = c.cfg.Resolve(providerCfg.BaseURL)
+	if resolveErr != nil {
+		return nil, fmt.Errorf("resolve base URL: %w", resolveErr)
+	}
 
 	switch providerCfg.Type {
 	case openai.Name:

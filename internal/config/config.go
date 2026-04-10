@@ -193,6 +193,31 @@ type Attribution struct {
 	GeneratedWith bool         `json:"generated_with,omitempty" jsonschema:"description=Add Generated with Lenos line to commit messages and issues and PRs,default=true"`
 }
 
+// Render returns the git attribution trailer lines based on the configured style.
+func (a Attribution) Render() string {
+	if a.TrailerStyle == TrailerStyleNone {
+		return ""
+	}
+	var lines []string
+	switch a.TrailerStyle {
+	case TrailerStyleCoAuthoredBy:
+		lines = append(lines, "Co-authored-by: Lenos <lenos@tta-lab.com>")
+	case TrailerStyleAssistedBy:
+		lines = append(lines, "Assisted-by: Lenos <lenos@tta-lab.com>")
+	}
+	if a.GeneratedWith {
+		lines = append(lines, "Generated-with: Lenos <lenos@tta-lab.com>")
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	s := lines[0]
+	for _, l := range lines[1:] {
+		s += "\n" + l
+	}
+	return s
+}
+
 // JSONSchemaExtend marks the co_authored_by field as deprecated in the schema.
 func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 	if schema.Properties != nil {

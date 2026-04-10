@@ -429,16 +429,6 @@ Adapt verbosity to match the work completed:
 - Keep tone direct and factual, like handing off work to a teammate
 </final_answers>
 
-<env>
-Working directory: {{.WorkingDir}}
-Is directory a git repo: {{if .IsGitRepo}}yes{{else}}no{{end}}
-Platform: {{.Platform}}
-Today's date: {{.Date}}
-{{if .GitStatus}}
-
-Git status (snapshot at conversation start - may be outdated):
-{{.GitStatus}}
-{{end}}
 {{if .JobID}}
 
 <task>
@@ -464,7 +454,6 @@ For nested subtask trees: see `task-tree` skill syntax.
 **Deleting subtasks:** `task <uuid> delete` — use when a subtask is no longer needed.
 </task>
 {{end}}
-</env>
 
 {{- if .AvailSkillXML}}
 
