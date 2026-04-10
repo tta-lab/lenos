@@ -3,13 +3,13 @@ Manage tasks and PRs via the ttal agent runtime
 ## Session Start
   ttal task get              # load full task context and plan (no extra params)
 
-## Subtasks
+## Subtasks (taskwarrior)
   task <uuid> done           # mark a completed subtask
   task <uuid> start          # mark a subtask as in-progress
   task <uuid> annotate '<note>'  # add a note to a subtask
 
 ## Alerts (CRITICAL)
-  ttal alert "message"       # escalate blockers to the planner — triggers Telegram notification
+  ttal alert "message"       # escalate blockers to the planner — routes to owner agent, falls back to Telegram
 
 ## Comments & Status
   ttal comment add "message" # post progress updates, triage reports, findings

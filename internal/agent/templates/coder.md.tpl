@@ -228,7 +228,7 @@ When errors occur:
 7. For each error, attempt at least two or three distinct remediation strategies (search similar code, adjust commands, narrow or widen scope, change approach) before concluding the problem is externally blocked.
 
 Common errors:
-- Import/Module → check paths, spelling, typo
+- Import/Module → check paths, spelling, typos
 - Syntax → check brackets, indentation, typos
 - Tests fail → read test, see what it expects
 - File not found → use ls, check exact path

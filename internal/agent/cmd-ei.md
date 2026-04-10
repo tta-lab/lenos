@@ -11,4 +11,4 @@ Async (runs in background, notifies on completion):
   ei ask "explain this code" --async --project myapp
 
 ## Tip
-Use --async for long-running queries — pueue handles background execution.
+Use --async for long-running queries — runs in background, notifies on completion.
