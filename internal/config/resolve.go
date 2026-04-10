@@ -2,12 +2,13 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/tta-lab/lenos/internal/env"
-	"github.com/tta-lab/lenos/internal/shell"
 )
 
 type VariableResolver interface {
@@ -28,24 +29,30 @@ func IdentityResolver() VariableResolver {
 	return identityResolver{}
 }
 
-type Shell interface {
-	Exec(ctx context.Context, command string) (stdout, stderr string, err error)
-}
-
 type shellVariableResolver struct {
-	shell Shell
-	env   env.Env
+	env env.Env
 }
 
 func NewShellVariableResolver(env env.Env) VariableResolver {
 	return &shellVariableResolver{
 		env: env,
-		shell: shell.NewShell(
-			&shell.Options{
-				Env: env.Env(),
-			},
-		),
 	}
+}
+
+func shellExec(ctx context.Context, env []string, command string) (string, error) {
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", command)
+	if len(env) > 0 {
+		cmd.Env = env
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return "", fmt.Errorf("command execution failed for '%s': stderr=%q: %w", command, string(exitErr.Stderr), err)
+		}
+		return "", fmt.Errorf("command execution failed for '%s': %w", command, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // ResolveValue is a method for resolving values, such as environment variables.
@@ -94,15 +101,14 @@ func (r *shellVariableResolver) ResolveValue(value string) (string, error) {
 		command := result[start+2 : end]
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 
-		stdout, _, err := r.shell.Exec(ctx, command)
+		stdout, err := shellExec(ctx, r.env.Env(), command)
 		cancel()
 		if err != nil {
-			return "", fmt.Errorf("command execution failed for '%s': %w", command, err)
+			return "", err
 		}
 
 		// Replace the $(command) with the output
-		replacement := strings.TrimSpace(stdout)
-		result = result[:start] + replacement + result[end+1:]
+		result = result[:start] + stdout + result[end+1:]
 	}
 
 	// Handle environment variables: $VAR and ${VAR}

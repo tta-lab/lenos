@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/home"
-	"github.com/tta-lab/lenos/internal/shell"
 	"github.com/tta-lab/lenos/internal/skills"
 )
 
@@ -253,55 +253,68 @@ func isGitRepo(dir string) bool {
 }
 
 func getGitStatus(ctx context.Context, dir string) (string, error) {
-	sh := shell.NewShell(&shell.Options{
-		WorkingDir: dir,
-	})
-	branch, err := getGitBranch(ctx, sh)
+	branch, err := getGitBranch(ctx, dir)
 	if err != nil {
 		return "", err
 	}
-	status, err := getGitStatusSummary(ctx, sh)
+	status, err := getGitStatusSummary(ctx, dir)
 	if err != nil {
 		return "", err
 	}
-	commits, err := getGitRecentCommits(ctx, sh)
+	commits, err := getGitRecentCommits(ctx, dir)
 	if err != nil {
 		return "", err
 	}
 	return branch + status + commits, nil
 }
 
-func getGitBranch(ctx context.Context, sh *shell.Shell) (string, error) {
-	out, _, err := sh.Exec(ctx, "git branch --show-current 2>/dev/null")
+func getGitBranch(ctx context.Context, dir string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "branch", "--show-current")
+	cmd.Dir = dir
+	out, err := cmd.Output()
 	if err != nil {
+		slog.Debug("getGitBranch failed", "dir", dir, "error", err)
 		return "", nil
 	}
-	out = strings.TrimSpace(out)
-	if out == "" {
+	outStr := strings.TrimSpace(string(out))
+	if outStr == "" {
 		return "", nil
 	}
-	return fmt.Sprintf("Current branch: %s\n", out), nil
+	return fmt.Sprintf("Current branch: %s\n", outStr), nil
 }
 
-func getGitStatusSummary(ctx context.Context, sh *shell.Shell) (string, error) {
-	out, _, err := sh.Exec(ctx, "git status --short 2>/dev/null | head -20")
+func getGitStatusSummary(ctx context.Context, dir string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "status", "--short")
+	cmd.Dir = dir
+	out, err := cmd.Output()
 	if err != nil {
+		slog.Debug("getGitStatusSummary failed", "dir", dir, "error", err)
 		return "", nil
 	}
-	out = strings.TrimSpace(out)
-	if out == "" {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) > 20 {
+		lines = lines[:20]
+	}
+	outStr := strings.Join(lines, "\n")
+	if outStr == "" {
 		return "Status: clean\n", nil
 	}
-	return fmt.Sprintf("Status:\n%s\n", out), nil
+	return fmt.Sprintf("Status:\n%s\n", outStr), nil
 }
 
-func getGitRecentCommits(ctx context.Context, sh *shell.Shell) (string, error) {
-	out, _, err := sh.Exec(ctx, "git log --oneline -n 3 2>/dev/null")
-	if err != nil || out == "" {
+func getGitRecentCommits(ctx context.Context, dir string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "log", "--oneline", "-n", "3")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		slog.Debug("getGitRecentCommits failed", "dir", dir, "error", err)
 		return "", nil
 	}
-	out = strings.TrimSpace(out)
-	return fmt.Sprintf("Recent commits:\n%s\n", out), nil
+	if len(out) == 0 {
+		return "", nil
+	}
+	outStr := strings.TrimSpace(string(out))
+	return fmt.Sprintf("Recent commits:\n%s\n", outStr), nil
 }
 
 func (p *Prompt) Name() string {

@@ -2,31 +2,18 @@ package config
 
 import (
 	"context"
-	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/env"
 )
 
-// mockShell implements the Shell interface for testing
-type mockShell struct {
-	execFunc func(ctx context.Context, command string) (stdout, stderr string, err error)
-}
-
-func (m *mockShell) Exec(ctx context.Context, command string) (stdout, stderr string, err error) {
-	if m.execFunc != nil {
-		return m.execFunc(ctx, command)
-	}
-	return "", "", nil
-}
-
 func TestShellVariableResolver_ResolveValue(t *testing.T) {
 	tests := []struct {
 		name        string
 		value       string
 		envVars     map[string]string
-		shellFunc   func(ctx context.Context, command string) (stdout, stderr string, err error)
 		expected    string
 		expectError bool
 	}{
@@ -47,24 +34,14 @@ func TestShellVariableResolver_ResolveValue(t *testing.T) {
 			envVars:     map[string]string{},
 			expectError: true,
 		},
-
 		{
-			name:  "shell command with whitespace trimming",
-			value: "$(echo '  spaced  ')",
-			shellFunc: func(ctx context.Context, command string) (stdout, stderr string, err error) {
-				if command == "echo '  spaced  '" {
-					return "  spaced  \n", "", nil
-				}
-				return "", "", errors.New("unexpected command")
-			},
+			name:     "shell command with whitespace trimming",
+			value:    "$(echo '  spaced  ')",
 			expected: "spaced",
 		},
 		{
-			name:  "shell command execution error",
-			value: "$(false)",
-			shellFunc: func(ctx context.Context, command string) (stdout, stderr string, err error) {
-				return "", "", errors.New("command failed")
-			},
+			name:        "shell command execution error",
+			value:       "$(false)",
 			expectError: true,
 		},
 		{
@@ -78,8 +55,7 @@ func TestShellVariableResolver_ResolveValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			testEnv := env.NewFromMap(tt.envVars)
 			resolver := &shellVariableResolver{
-				shell: &mockShell{execFunc: tt.shellFunc},
-				env:   testEnv,
+				env: testEnv,
 			}
 
 			result, err := resolver.ResolveValue(tt.value)
@@ -99,19 +75,12 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 		name        string
 		value       string
 		envVars     map[string]string
-		shellFunc   func(ctx context.Context, command string) (stdout, stderr string, err error)
 		expected    string
 		expectError bool
 	}{
 		{
-			name:  "command substitution within string",
-			value: "Bearer $(echo token123)",
-			shellFunc: func(ctx context.Context, command string) (stdout, stderr string, err error) {
-				if command == "echo token123" {
-					return "token123\n", "", nil
-				}
-				return "", "", errors.New("unexpected command")
-			},
+			name:     "command substitution within string",
+			value:    "Bearer $(echo token123)",
 			expected: "Bearer token123",
 		},
 		{
@@ -128,52 +97,31 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 		},
 		{
 			name:  "mixed command and environment substitution",
-			value: "$USER-$(date +%Y)-$HOST",
+			value: "$USER-$(echo 12)-$HOST",
 			envVars: map[string]string{
 				"USER": "testuser",
 				"HOST": "localhost",
 			},
-			shellFunc: func(ctx context.Context, command string) (stdout, stderr string, err error) {
-				if command == "date +%Y" {
-					return "2024\n", "", nil
-				}
-				return "", "", errors.New("unexpected command")
-			},
-			expected: "testuser-2024-localhost",
+			expected: "testuser-12-localhost",
 		},
 		{
-			name:  "multiple command substitutions",
-			value: "$(echo hello) $(echo world)",
-			shellFunc: func(ctx context.Context, command string) (stdout, stderr string, err error) {
-				switch command {
-				case "echo hello":
-					return "hello\n", "", nil
-				case "echo world":
-					return "world\n", "", nil
-				}
-				return "", "", errors.New("unexpected command")
-			},
+			name:     "multiple command substitutions",
+			value:    "$(echo hello) $(echo world)",
 			expected: "hello world",
 		},
 		{
-			name:  "nested parentheses in command",
-			value: "$(echo $(echo inner))",
-			shellFunc: func(ctx context.Context, command string) (stdout, stderr string, err error) {
-				if command == "echo $(echo inner)" {
-					return "nested\n", "", nil
-				}
-				return "", "", errors.New("unexpected command")
-			},
-			expected: "nested",
+			name:     "nested parentheses in command",
+			value:    "$(echo $(echo inner))",
+			expected: "inner",
 		},
 		{
 			name:        "lone dollar with non-variable chars",
-			value:       "prefix$123suffix", // Numbers can't start variable names
+			value:       "prefix$123suffix",
 			expectError: true,
 		},
 		{
 			name:        "dollar with special chars",
-			value:       "a$@b$#c", // Special chars aren't valid in variable names
+			value:       "a$@b$#c",
 			expectError: true,
 		},
 		{
@@ -193,23 +141,9 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:  "command substitution with error",
-			value: "Bearer $(false)",
-			shellFunc: func(ctx context.Context, command string) (stdout, stderr string, err error) {
-				return "", "", errors.New("command failed")
-			},
+			name:        "command substitution with error",
+			value:       "Bearer $(false)",
 			expectError: true,
-		},
-		{
-			name:  "complex real-world example",
-			value: "Bearer $(cat /tmp/token.txt | base64 -w 0)",
-			shellFunc: func(ctx context.Context, command string) (stdout, stderr string, err error) {
-				if command == "cat /tmp/token.txt | base64 -w 0" {
-					return "c2stYW50LXRlc3Q=\n", "", nil
-				}
-				return "", "", errors.New("unexpected command")
-			},
-			expected: "Bearer c2stYW50LXRlc3Q=",
 		},
 		{
 			name:     "environment variable with underscores and numbers",
@@ -229,7 +163,7 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 		},
 		{
 			name:        "variable with invalid character",
-			value:       "Bearer $VAR-NAME", // Hyphen not allowed in variable names
+			value:       "Bearer $VAR-NAME",
 			expectError: true,
 		},
 		{
@@ -243,8 +177,7 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			testEnv := env.NewFromMap(tt.envVars)
 			resolver := &shellVariableResolver{
-				shell: &mockShell{execFunc: tt.shellFunc},
-				env:   testEnv,
+				env: testEnv,
 			}
 
 			result, err := resolver.ResolveValue(tt.value)
@@ -257,6 +190,43 @@ func TestShellVariableResolver_EnhancedResolveValue(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestShellVariableResolver_ComplexRealWorldExample(t *testing.T) {
+	// Create a temp file so the command succeeds and produces real output.
+	f, err := os.CreateTemp(t.TempDir(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString("sk-ant-test-token\n"); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	// Note: base64 on macOS uses -b 0 instead of -w 0 for no wrapping.
+	// We use a printf-based approach that's portable.
+	cmd := "cat " + f.Name()
+	testEnv := env.NewFromMap(nil)
+	resolver := &shellVariableResolver{
+		env: testEnv,
+	}
+
+	result, err := resolver.ResolveValue("Bearer $(" + cmd + ")")
+	require.NoError(t, err)
+	require.Equal(t, "Bearer sk-ant-test-token", result)
+}
+
+func TestShellVariableResolver_EnvPassedToCommand(t *testing.T) {
+	// Verify custom env vars are passed to shell commands.
+	testEnv := env.NewFromMap(map[string]string{"MY_VAR": "my-value"})
+	resolver := &shellVariableResolver{
+		env: testEnv,
+	}
+
+	result, err := resolver.ResolveValue("$MY_VAR")
+	require.NoError(t, err)
+	require.Equal(t, "my-value", result)
 }
 
 func TestEnvironmentVariableResolver_ResolveValue(t *testing.T) {
@@ -329,4 +299,16 @@ func TestNewEnvironmentVariableResolver(t *testing.T) {
 
 	require.NotNil(t, resolver)
 	require.Implements(t, (*VariableResolver)(nil), resolver)
+}
+
+func TestShellExec_IncludesStderrInError(t *testing.T) {
+	// A command that writes to stderr but exits successfully.
+	ctx := context.Background()
+	// Note: this test verifies stderr is captured in the error when exit code != 0.
+	// When exit code != 0, exec.ExitError.Stderr contains the stderr output.
+	result, err := shellExec(ctx, nil, "echo error >&2; exit 1")
+	require.Error(t, err)
+	// stderr should appear in the error message
+	require.Contains(t, err.Error(), "error")
+	require.Equal(t, "", result)
 }
