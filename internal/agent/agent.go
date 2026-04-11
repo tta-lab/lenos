@@ -166,6 +166,14 @@ runLoop:
 		return nil, fmt.Errorf("failed to get session messages: %w", err)
 	}
 
+	// Persist the user message to the database so it appears in the session history.
+	if _, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: call.Prompt}},
+	}); err != nil {
+		return nil, fmt.Errorf("failed to create user message: %w", err)
+	}
+
 	var wg sync.WaitGroup
 	// Generate title if first message.
 	if len(msgs) == 0 {
@@ -211,9 +219,10 @@ runLoop:
 				})
 				if err != nil {
 					slog.Warn("Failed to create pending command message", "error", err)
-					return
+					// Fall through: let OnCommandResult create the completed message directly.
+				} else {
+					pendingCommands[cmdText] = append(pendingCommands[cmdText], msg.ID)
 				}
-				pendingCommands[cmdText] = append(pendingCommands[cmdText], msg.ID)
 				return
 			}
 
@@ -252,6 +261,8 @@ runLoop:
 				existing.Parts = []message.ContentPart{message.CommandContent{Command: command, Output: output, ExitCode: &exitCode, Pending: false}}
 				if err := a.messages.Update(ctx, existing); err != nil {
 					slog.Warn("Failed to update pending command message", "error", err)
+					// Fall through to create a new message so output is not lost.
+					goto createCommandResult
 				}
 				return
 			createCommandResult:

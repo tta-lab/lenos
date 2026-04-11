@@ -176,7 +176,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		Sandbox:      resolveSandbox(c.cfg.Config().Options.Sandbox),
 		SandboxEnv:   sandboxEnv,
 		AllowedPaths: BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...),
-		MaxSteps:     30,
+		MaxSteps:     200, // No hard limit pre-logos; 200 accommodates a coding agent that reads, edits, and runs tests.
 		MaxTokens:    int(maxTokens),
 	}
 

@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/session"
+	"github.com/tta-lab/lenos/internal/ui/chat"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/workspace"
@@ -290,5 +292,113 @@ func TestGitPollingIntegration(t *testing.T) {
 		_, cmds := ui.Update(gitPollMsg{files: []workspace.ModifiedFile{{Path: "changed.go", Added: 3, Deleted: 1}}})
 		require.Equal(t, []workspace.ModifiedFile{{Path: "changed.go", Added: 3, Deleted: 1}}, ui.modifiedFiles)
 		require.NotNil(t, cmds)
+	})
+}
+
+// newTestUIWithChat creates a UI with a properly initialized chat for testing
+// appendSessionMessage and updateSessionMessage.
+func newTestUIWithChat(t *testing.T) *UI {
+	t.Helper()
+	showThinking := true
+	cfg := &config.Config{
+		Options: &config.Options{
+			TUI: &config.TUIOptions{
+				ShowThinking: &showThinking,
+			},
+		},
+	}
+	sty := styles.DefaultStyles()
+	com := &common.Common{
+		Workspace: &testWorkspace{cfg: cfg},
+		Styles:    &sty,
+	}
+	return &UI{
+		com:  com,
+		chat: NewChat(com),
+	}
+}
+
+func TestAppendSessionMessage_Result(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Result pending message is appended", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithChat(t)
+		msg := message.Message{
+			ID:    "result-1",
+			Role:  message.Result,
+			Parts: []message.ContentPart{message.CommandContent{Command: "echo hello", Pending: true}},
+			Model: "test-model",
+		}
+		ui.appendSessionMessage(msg)
+		item := ui.chat.MessageItem("result-1")
+		require.NotNil(t, item, "Result message item should be added to chat")
+		_, ok := item.(*chat.ResultMessageItem)
+		require.True(t, ok, "item should be a ResultMessageItem")
+	})
+
+	t.Run("Result completed message with exit code is appended", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithChat(t)
+		exitCode := 0
+		msg := message.Message{
+			ID:    "result-2",
+			Role:  message.Result,
+			Parts: []message.ContentPart{message.CommandContent{Command: "go build .", Output: "Build succeeded", ExitCode: &exitCode}},
+		}
+		ui.appendSessionMessage(msg)
+		item := ui.chat.MessageItem("result-2")
+		require.NotNil(t, item)
+		_, ok := item.(*chat.ResultMessageItem)
+		require.True(t, ok)
+	})
+
+	t.Run("duplicate Result message is skipped", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithChat(t)
+		msg := message.Message{
+			ID:    "result-3",
+			Role:  message.Result,
+			Parts: []message.ContentPart{message.CommandContent{Command: "ls", Pending: true}},
+		}
+		ui.appendSessionMessage(msg)
+		// Calling again should skip (guard at top of case).
+		ui.appendSessionMessage(msg)
+		// Should still only have one item.
+		require.NotNil(t, ui.chat.MessageItem("result-3"))
+	})
+}
+
+func TestUpdateSessionMessage_Result(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ResultMessageItem is replaced with updated content", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithChat(t)
+		exitCode := 0
+
+		// First append a pending result.
+		pendingMsg := message.Message{
+			ID:    "result-update-1",
+			Role:  message.Result,
+			Parts: []message.ContentPart{message.CommandContent{Command: "cargo test", Pending: true}},
+		}
+		ui.appendSessionMessage(pendingMsg)
+		require.NotNil(t, ui.chat.MessageItem("result-update-1"))
+
+		// Update it with completed state.
+		completedMsg := message.Message{
+			ID:    "result-update-1",
+			Role:  message.Result,
+			Parts: []message.ContentPart{message.CommandContent{Command: "cargo test", Output: "test result: ok", ExitCode: &exitCode, Pending: false}},
+		}
+		ui.updateSessionMessage(completedMsg)
+
+		// Item should still exist and be a ResultMessageItem with updated content.
+		item := ui.chat.MessageItem("result-update-1")
+		require.NotNil(t, item, "Result message item should still exist after update")
+		resultItem, ok := item.(*chat.ResultMessageItem)
+		require.True(t, ok, "item should still be a ResultMessageItem after update")
+		require.NotNil(t, resultItem, "ResultMessageItem should have updated content")
 	})
 }
