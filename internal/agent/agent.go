@@ -11,7 +11,6 @@ import (
 	"cmp"
 	"context"
 	_ "embed"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -381,17 +380,11 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return nil
 	}
 
-	aiMsgs, _ := a.preparePrompt(msgs)
-
 	genCtx, cancel := context.WithCancel(ctx)
 	a.activeRequests.Set(sessionID, cancel)
 	defer a.activeRequests.Del(sessionID)
 	defer cancel()
 
-	agent := fantasy.NewAgent(largeModel.Model,
-		fantasy.WithSystemPrompt(string(summaryPrompt)),
-		fantasy.WithUserAgent(userAgent),
-	)
 	summaryMessage, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
 		Role:             message.Assistant,
 		Model:            largeModel.Model.Model(),
@@ -402,72 +395,70 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return err
 	}
 
-	summaryPromptText := buildSummaryPrompt(ctx, os.Getenv("TTAL_JOB_ID"))
+	// Build history as text-only fantasy.Messages (no tool-call/result parts).
+	history := make([]fantasy.Message, 0, len(msgs))
+	for _, m := range msgs {
+		history = append(history, m.ToAIMessage()...)
+	}
 
-	resp, err := agent.Stream(genCtx, fantasy.AgentStreamCall{
-		Prompt:          summaryPromptText,
-		Messages:        aiMsgs,
+	// Build prompt: system(s) + history + final user prompt.
+	prompt := fantasy.Prompt{fantasy.NewSystemMessage(string(summaryPrompt))}
+	if systemPromptPrefix != "" {
+		prompt = append(prompt, fantasy.NewSystemMessage(systemPromptPrefix))
+	}
+	prompt = append(prompt, history...)
+	prompt = append(prompt, fantasy.NewUserMessage(buildSummaryPrompt(ctx, os.Getenv("TTAL_JOB_ID"))))
+
+	stream, err := largeModel.Model.Stream(genCtx, fantasy.Call{
+		Prompt:          prompt,
 		ProviderOptions: opts,
-		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
-			prepared.Messages = options.Messages
-			if systemPromptPrefix != "" {
-				prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(systemPromptPrefix)}, prepared.Messages...)
-			}
-			return callContext, prepared, nil
-		},
-		OnReasoningDelta: func(id string, text string) error {
-			summaryMessage.AppendReasoningContent(text)
-			return a.messages.Update(genCtx, summaryMessage)
-		},
-		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-			// Handle anthropic signature.
-			if anthropicData, ok := reasoning.ProviderMetadata["anthropic"]; ok {
-				if signature, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && signature.Signature != "" {
-					summaryMessage.AppendReasoningSignature(signature.Signature)
+		UserAgent:       userAgent,
+	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return a.messages.Delete(ctx, summaryMessage.ID)
+		}
+		return err
+	}
+
+	var totalUsage fantasy.Usage
+	var providerMeta fantasy.ProviderMetadata
+	for part := range stream {
+		switch part.Type {
+		case fantasy.StreamPartTypeTextDelta:
+			summaryMessage.AppendContent(part.Delta)
+			_ = a.messages.Update(genCtx, summaryMessage)
+		case fantasy.StreamPartTypeReasoningDelta:
+			summaryMessage.AppendReasoningContent(part.Delta)
+			_ = a.messages.Update(genCtx, summaryMessage)
+		case fantasy.StreamPartTypeReasoningEnd:
+			if anthropicData, ok := part.ProviderMetadata["anthropic"]; ok {
+				if sig, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && sig.Signature != "" {
+					summaryMessage.AppendReasoningSignature(sig.Signature)
 				}
 			}
 			summaryMessage.FinishThinking()
-			return a.messages.Update(genCtx, summaryMessage)
-		},
-		OnTextDelta: func(id, text string) error {
-			summaryMessage.AppendContent(text)
-			return a.messages.Update(genCtx, summaryMessage)
-		},
-	})
-	if err != nil {
-		isCancelErr := errors.Is(err, context.Canceled)
-		if isCancelErr {
-			// User cancelled summarize we need to remove the summary message.
-			deleteErr := a.messages.Delete(ctx, summaryMessage.ID)
-			return deleteErr
+			_ = a.messages.Update(genCtx, summaryMessage)
+		case fantasy.StreamPartTypeFinish:
+			totalUsage = part.Usage
+			providerMeta = part.ProviderMetadata
+		case fantasy.StreamPartTypeError:
+			if errors.Is(part.Error, context.Canceled) {
+				return a.messages.Delete(ctx, summaryMessage.ID)
+			}
+			return part.Error
 		}
-		return err
 	}
 
 	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
-	err = a.messages.Update(genCtx, summaryMessage)
-	if err != nil {
+	if err := a.messages.Update(genCtx, summaryMessage); err != nil {
 		return err
 	}
 
-	var openrouterCost *float64
-	for _, step := range resp.Steps {
-		stepCost := a.openrouterCost(step.ProviderMetadata)
-		if stepCost != nil {
-			newCost := *stepCost
-			if openrouterCost != nil {
-				newCost += *openrouterCost
-			}
-			openrouterCost = &newCost
-		}
-	}
-
-	a.updateSessionUsage(largeModel, &currentSession, resp.TotalUsage, openrouterCost)
-
-	// Just in case, get just the last usage info.
-	usage := resp.Response.Usage
+	openrouterCost := a.openrouterCost(providerMeta)
+	a.updateSessionUsage(largeModel, &currentSession, totalUsage, openrouterCost)
 	currentSession.SummaryMessageID = summaryMessage.ID
-	currentSession.CompletionTokens = usage.OutputTokens
+	currentSession.CompletionTokens = totalUsage.OutputTokens
 	currentSession.PromptTokens = 0
 	_, err = a.sessions.Save(genCtx, currentSession)
 	return err
@@ -488,35 +479,6 @@ func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
 			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
 		},
 	}
-}
-
-func (a *sessionAgent) preparePrompt(msgs []message.Message, attachments ...message.Attachment) ([]fantasy.Message, []fantasy.FilePart) {
-	var history []fantasy.Message
-	for _, m := range msgs {
-		if len(m.Parts) == 0 {
-			continue
-		}
-		// Assistant message without content or tool calls (cancelled before it
-		// returned anything).
-		if m.Role == message.Assistant && len(m.ToolCalls()) == 0 && m.Content().Text == "" && m.ReasoningContent().String() == "" {
-			continue
-		}
-		history = append(history, m.ToAIMessage()...)
-	}
-
-	var files []fantasy.FilePart
-	for _, attachment := range attachments {
-		if attachment.IsText() {
-			continue
-		}
-		files = append(files, fantasy.FilePart{
-			Filename:  attachment.FileName,
-			Data:      attachment.Content,
-			MediaType: attachment.MimeType,
-		})
-	}
-
-	return history, files
 }
 
 func (a *sessionAgent) getSessionMessages(ctx context.Context, session session.Session) ([]message.Message, error) {
@@ -712,128 +674,6 @@ func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
 
 func (a *sessionAgent) Model() Model {
 	return a.largeModel.Get()
-}
-
-// convertToToolResult converts a fantasy tool result to a message tool result.
-func (a *sessionAgent) convertToToolResult(result fantasy.ToolResultContent) message.ToolResult {
-	baseResult := message.ToolResult{
-		ToolCallID: result.ToolCallID,
-		Name:       result.ToolName,
-		Metadata:   result.ClientMetadata,
-	}
-
-	switch result.Result.GetType() {
-	case fantasy.ToolResultContentTypeText:
-		if r, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentText](result.Result); ok {
-			baseResult.Content = r.Text
-		}
-	case fantasy.ToolResultContentTypeError:
-		if r, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentError](result.Result); ok {
-			baseResult.Content = r.Error.Error()
-			baseResult.IsError = true
-		}
-	case fantasy.ToolResultContentTypeMedia:
-		if r, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentMedia](result.Result); ok {
-			content := r.Text
-			if content == "" {
-				content = fmt.Sprintf("Loaded %s content", r.MediaType)
-			}
-			baseResult.Content = content
-			baseResult.Data = r.Data
-			baseResult.MIMEType = r.MediaType
-		}
-	}
-
-	return baseResult
-}
-
-// workaroundProviderMediaLimitations converts media content in tool results to
-// user messages for providers that don't natively support images in tool results.
-//
-// Problem: OpenAI, Google, OpenRouter, and other OpenAI-compatible providers
-// don't support sending images/media in tool result messages - they only accept
-// text in tool results. However, they DO support images in user messages.
-//
-// If we send media in tool results to these providers, the API returns an error.
-//
-// Solution: For these providers, we:
-//  1. Replace the media in the tool result with a text placeholder
-//  2. Inject a user message immediately after with the image as a file attachment
-//  3. This maintains the tool execution flow while working around API limitations
-//
-// Anthropic and Bedrock support images natively in tool results, so we skip
-// this workaround for them.
-//
-// Example transformation:
-//
-//	BEFORE: [tool result: image data]
-//	AFTER:  [tool result: "Image loaded - see attached"], [user: image attachment]
-func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Message, largeModel Model) []fantasy.Message {
-	providerSupportsMedia := largeModel.ModelCfg.Provider == string(catwalk.InferenceProviderAnthropic) ||
-		largeModel.ModelCfg.Provider == string(catwalk.InferenceProviderBedrock)
-
-	if providerSupportsMedia {
-		return messages
-	}
-
-	convertedMessages := make([]fantasy.Message, 0, len(messages))
-
-	for _, msg := range messages {
-		if msg.Role != fantasy.MessageRoleTool {
-			convertedMessages = append(convertedMessages, msg)
-			continue
-		}
-
-		textParts := make([]fantasy.MessagePart, 0, len(msg.Content))
-		var mediaFiles []fantasy.FilePart
-
-		for _, part := range msg.Content {
-			toolResult, ok := fantasy.AsMessagePart[fantasy.ToolResultPart](part)
-			if !ok {
-				textParts = append(textParts, part)
-				continue
-			}
-
-			if media, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentMedia](toolResult.Output); ok {
-				decoded, err := base64.StdEncoding.DecodeString(media.Data)
-				if err != nil {
-					slog.Warn("Failed to decode media data", "error", err)
-					textParts = append(textParts, part)
-					continue
-				}
-
-				mediaFiles = append(mediaFiles, fantasy.FilePart{
-					Data:      decoded,
-					MediaType: media.MediaType,
-					Filename:  fmt.Sprintf("tool-result-%s", toolResult.ToolCallID),
-				})
-
-				textParts = append(textParts, fantasy.ToolResultPart{
-					ToolCallID: toolResult.ToolCallID,
-					Output: fantasy.ToolResultOutputContentText{
-						Text: "[Image/media content loaded - see attached file]",
-					},
-					ProviderOptions: toolResult.ProviderOptions,
-				})
-			} else {
-				textParts = append(textParts, part)
-			}
-		}
-
-		convertedMessages = append(convertedMessages, fantasy.Message{
-			Role:    fantasy.MessageRoleTool,
-			Content: textParts,
-		})
-
-		if len(mediaFiles) > 0 {
-			convertedMessages = append(convertedMessages, fantasy.NewUserMessage(
-				"Here is the media content from the tool result:",
-				mediaFiles...,
-			))
-		}
-	}
-
-	return convertedMessages
 }
 
 // formatSummaryPrompt formats the session summarization prompt from a todo list.
