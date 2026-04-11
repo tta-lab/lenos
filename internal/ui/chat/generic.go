@@ -142,7 +142,7 @@ func (m *ResultMessageItem) formatCommandForCopy() string {
 			sb.WriteString("\n")
 		}
 		sb.WriteString("(exit code: ")
-		sb.WriteString(fmt.Sprintf("%d", *cmd.ExitCode))
+		fmt.Fprintf(&sb, "%d", *cmd.ExitCode)
 		sb.WriteString(")")
 	}
 
