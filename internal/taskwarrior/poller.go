@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"sort"
 
 	"github.com/tta-lab/lenos/internal/session"
 )
@@ -13,6 +14,7 @@ type twTask struct {
 	Description string `json:"description"`
 	Status      string `json:"status"`
 	Start       string `json:"start"`
+	Position    string `json:"position,omitempty"`
 }
 
 // parseSubtasks parses a JSON array of task objects and returns a list of todos.
@@ -21,6 +23,10 @@ func parseSubtasks(data []byte) ([]session.Todo, error) {
 	if err := json.Unmarshal(data, &tasks); err != nil {
 		return nil, err
 	}
+
+	sort.SliceStable(tasks, func(i, j int) bool {
+		return tasks[i].Position < tasks[j].Position
+	})
 
 	todos := make([]session.Todo, 0, len(tasks))
 	for _, task := range tasks {

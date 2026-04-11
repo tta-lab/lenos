@@ -118,3 +118,54 @@ func TestPollSubtasks_ExecFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "task export failed")
 }
+
+func TestParseSubtasks_PositionOrder(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		input     string
+		wantOrder []string // descriptions in expected order
+		wantCount int
+	}{
+		{
+			name:      "out_of_order_positions_sorted_ascending",
+			input:     `[{"description":"third","status":"pending","position":"0003000"},{"description":"first","status":"pending","position":"0001000"},{"description":"second","status":"pending","position":"0002000"}]`,
+			wantOrder: []string{"first", "second", "third"},
+			wantCount: 3,
+		},
+		{
+			name:      "already_sorted_positions",
+			input:     `[{"description":"alpha","status":"pending","position":"0001000"},{"description":"beta","status":"pending","position":"0002000"}]`,
+			wantOrder: []string{"alpha", "beta"},
+			wantCount: 2,
+		},
+		{
+			name:      "empty_position_strings_stable",
+			input:     `[{"description":"second","status":"pending","position":""},{"description":"first","status":"pending","position":"0001000"}]`,
+			wantOrder: []string{"second", "first"}, // empty sorts before non-empty
+			wantCount: 2,
+		},
+		{
+			name:      "duplicate_positions_stable",
+			input:     `[{"description":"second","status":"pending","position":"0001000"},{"description":"first","status":"pending","position":"0001000"}]`,
+			wantOrder: []string{"second", "first"}, // stable: original order preserved
+			wantCount: 2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			todos, err := parseSubtasks([]byte(tc.input))
+			require.NoError(t, err)
+			require.Len(t, todos, tc.wantCount)
+
+			got := make([]string, len(todos))
+			for i, todo := range todos {
+				got[i] = todo.Content
+			}
+			require.Equal(t, tc.wantOrder, got)
+		})
+	}
+}
