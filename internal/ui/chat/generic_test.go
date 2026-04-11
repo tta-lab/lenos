@@ -38,18 +38,20 @@ func TestResultMessageItem_HandleKeyEvent(t *testing.T) {
 		}
 	}
 
-	t.Run("y key copies command and output", func(t *testing.T) {
+	t.Run("y key handled and copy cmd returned", func(t *testing.T) {
 		item := makeItem("echo hello", "hello", intPtr(0), false)
 		handled, cmd := item.HandleKeyEvent(fakeKeyMsg{s: "y"})
 		assert.True(t, handled, "y key should be handled")
 		require.NotNil(t, cmd, "copy cmd should be returned")
+		assert.Equal(t, "$ echo hello\nhello", item.formatCommandForCopy())
 	})
 
-	t.Run("c key copies command and output", func(t *testing.T) {
-		item := makeItem("echo hello", "hello", intPtr(0), false)
+	t.Run("c key also handled", func(t *testing.T) {
+		item := makeItem("ls -la", "total 4\ndrwxr-xr-x  3 neil staff  96 Apr 11 .", intPtr(0), false)
 		handled, cmd := item.HandleKeyEvent(fakeKeyMsg{s: "c"})
 		assert.True(t, handled, "c key should be handled")
-		require.NotNil(t, cmd, "copy cmd should be returned")
+		require.NotNil(t, cmd)
+		assert.Equal(t, "$ ls -la\ntotal 4\ndrwxr-xr-x  3 neil staff  96 Apr 11 .", item.formatCommandForCopy())
 	})
 
 	t.Run("unrelated key not handled", func(t *testing.T) {
@@ -63,12 +65,21 @@ func TestResultMessageItem_HandleKeyEvent(t *testing.T) {
 		item := makeItem("exit 1", "command failed", intPtr(1), false)
 		_, cmd := item.HandleKeyEvent(fakeKeyMsg{s: "y"})
 		require.NotNil(t, cmd)
+		assert.Equal(t, "$ exit 1\ncommand failed\n(exit code: 1)", item.formatCommandForCopy())
+	})
+
+	t.Run("non-zero exit no output", func(t *testing.T) {
+		item := makeItem("false", "", intPtr(42), false)
+		_, cmd := item.HandleKeyEvent(fakeKeyMsg{s: "y"})
+		require.NotNil(t, cmd)
+		assert.Equal(t, "$ false\n(exit code: 42)", item.formatCommandForCopy())
 	})
 
 	t.Run("pending command copies command only", func(t *testing.T) {
 		item := makeItem("sleep 10", "", nil, true)
 		_, cmd := item.HandleKeyEvent(fakeKeyMsg{s: "y"})
 		require.NotNil(t, cmd)
+		assert.Equal(t, "$ sleep 10", item.formatCommandForCopy())
 	})
 }
 
@@ -144,6 +155,12 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 		item := makeItem("f4", "echo", "", nil, false)
 		got := item.formatCommandForCopy()
 		assert.Equal(t, "$ echo", got)
+	})
+
+	t.Run("multi-line output preserved exactly", func(t *testing.T) {
+		item := makeItem("f5", "ls -la /tmp", "drwxr-xr-x  4 neil staff  128 Apr 11 tmp\n-rw-r--r--  1 neil staff   64 Apr 11 log", nil, false)
+		got := item.formatCommandForCopy()
+		assert.Equal(t, "$ ls -la /tmp\ndrwxr-xr-x  4 neil staff  128 Apr 11 tmp\n-rw-r--r--  1 neil staff   64 Apr 11 log", got)
 	})
 }
 

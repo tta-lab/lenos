@@ -136,12 +136,9 @@ func (m *ResultMessageItem) formatCommandForCopy() string {
 		sb.WriteString(cmd.Output)
 	}
 
-	// Append exit code for non-zero exits.
+	// Append exit code for non-zero exits on its own line.
 	if cmd.ExitCode != nil && *cmd.ExitCode != 0 {
-		if cmd.Output == "" {
-			sb.WriteString("\n")
-		}
-		sb.WriteString("(exit code: ")
+		sb.WriteString("\n(exit code: ")
 		fmt.Fprintf(&sb, "%d", *cmd.ExitCode)
 		sb.WriteString(")")
 	}

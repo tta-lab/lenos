@@ -428,10 +428,12 @@ func protoToMessage(m proto.Message) message.Message {
 			msg.Parts = append(msg.Parts, message.TextContent{Text: v.Text})
 		case proto.ReasoningContent:
 			msg.Parts = append(msg.Parts, message.ReasoningContent{
-				Thinking:   v.Thinking,
-				Signature:  v.Signature,
-				StartedAt:  v.StartedAt,
-				FinishedAt: v.FinishedAt,
+				Thinking:         v.Thinking,
+				Signature:        v.Signature,
+				ThoughtSignature: v.ThoughtSignature,
+				ToolID:           v.ToolID,
+				StartedAt:        v.StartedAt,
+				FinishedAt:       v.FinishedAt,
 			})
 		case proto.Finish:
 			msg.Parts = append(msg.Parts, message.Finish{
@@ -444,6 +446,16 @@ func protoToMessage(m proto.Message) message.Message {
 			msg.Parts = append(msg.Parts, message.ImageURLContent{URL: v.URL, Detail: v.Detail})
 		case proto.BinaryContent:
 			msg.Parts = append(msg.Parts, message.BinaryContent{Path: v.Path, MIMEType: v.MIMEType, Data: v.Data})
+		case proto.CommandContent:
+			msg.Parts = append(msg.Parts, message.CommandContent{
+				Command:  v.Command,
+				Output:   v.Output,
+				ExitCode: v.ExitCode,
+				Pending:  v.Pending,
+			})
+		default:
+			// Unknown part type — silently skipped on the wire.
+			slog.Debug("protoToMessage: skipped unknown part", "type", fmt.Sprintf("%T", p))
 		}
 	}
 

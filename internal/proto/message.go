@@ -82,10 +82,15 @@ type ContentPart interface {
 
 // ReasoningContent represents the reasoning/thinking part of a message.
 type ReasoningContent struct {
-	Thinking   string `json:"thinking"`
-	Signature  string `json:"signature"`
-	StartedAt  int64  `json:"started_at,omitempty"`
-	FinishedAt int64  `json:"finished_at,omitempty"`
+	Thinking         string `json:"thinking"`
+	Signature        string `json:"signature"`
+	ThoughtSignature string `json:"thought_signature,omitempty"` // Google models
+	ToolID           string `json:"tool_id,omitempty"`           // OpenRouter Google models
+	// ResponsesData is intentionally omitted here to avoid a heavy dependency
+	// in the wire protocol layer. OpenAI Responses API reasoning metadata is
+	// available on the fantasy.LanguageModel but not persisted over the wire.
+	StartedAt  int64 `json:"started_at,omitempty"`
+	FinishedAt int64 `json:"finished_at,omitempty"`
 }
 
 // String returns the thinking content as a string.

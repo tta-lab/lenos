@@ -427,10 +427,14 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		switch part.Type {
 		case fantasy.StreamPartTypeTextDelta:
 			summaryMessage.AppendContent(part.Delta)
-			_ = a.messages.Update(genCtx, summaryMessage)
+			if err := a.messages.Update(genCtx, summaryMessage); err != nil {
+				slog.Warn("failed to persist summary text delta", "session_id", sessionID, "err", err)
+			}
 		case fantasy.StreamPartTypeReasoningDelta:
 			summaryMessage.AppendReasoningContent(part.Delta)
-			_ = a.messages.Update(genCtx, summaryMessage)
+			if err := a.messages.Update(genCtx, summaryMessage); err != nil {
+				slog.Warn("failed to persist summary reasoning delta", "session_id", sessionID, "err", err)
+			}
 		case fantasy.StreamPartTypeReasoningEnd:
 			if anthropicData, ok := part.ProviderMetadata["anthropic"]; ok {
 				if sig, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && sig.Signature != "" {
@@ -438,7 +442,9 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 				}
 			}
 			summaryMessage.FinishThinking()
-			_ = a.messages.Update(genCtx, summaryMessage)
+			if err := a.messages.Update(genCtx, summaryMessage); err != nil {
+				slog.Warn("failed to persist summary reasoning end", "session_id", sessionID, "err", err)
+			}
 		case fantasy.StreamPartTypeFinish:
 			totalUsage = part.Usage
 			providerMeta = part.ProviderMetadata
