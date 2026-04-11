@@ -166,6 +166,14 @@ runLoop:
 		return nil, fmt.Errorf("failed to get session messages: %w", err)
 	}
 
+	// Persist the user message so the UI can render it via pubsub.
+	if _, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: call.Prompt}},
+	}); err != nil {
+		return nil, fmt.Errorf("failed to create user message: %w", err)
+	}
+
 	var wg sync.WaitGroup
 	// Generate title if first message.
 	if len(msgs) == 0 {

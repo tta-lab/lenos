@@ -215,6 +215,7 @@ const (
 	imageURLType   partType = "image_url"
 	binaryType     partType = "binary"
 	toolCallType   partType = "tool_call"
+	commandType    partType = "command"
 	toolResultType partType = "tool_result"
 	finishType     partType = "finish"
 )
@@ -241,6 +242,8 @@ func marshalParts(parts []ContentPart) ([]byte, error) {
 			typ = binaryType
 		case ToolCall:
 			typ = toolCallType
+		case CommandContent:
+			typ = commandType
 		case ToolResult:
 			typ = toolResultType
 		case Finish:
@@ -303,6 +306,12 @@ func unmarshalParts(data []byte) ([]ContentPart, error) {
 			parts = append(parts, part)
 		case toolCallType:
 			part := ToolCall{}
+			if err := json.Unmarshal(wrapper.Data, &part); err != nil {
+				return nil, err
+			}
+			parts = append(parts, part)
+		case commandType:
+			part := CommandContent{}
 			if err := json.Unmarshal(wrapper.Data, &part); err != nil {
 				return nil, err
 			}

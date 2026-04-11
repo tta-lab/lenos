@@ -1031,6 +1031,21 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 				}
 			}
 		}
+	case message.Result:
+		items := chat.ExtractMessageItems(m.com.Styles, &msg, showThinking)
+		for _, item := range items {
+			if animatable, ok := item.(chat.Animatable); ok {
+				if cmd := animatable.StartAnimation(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+			}
+		}
+		m.chat.AppendMessages(items...)
+		if m.chat.Follow() {
+			if cmd := m.chat.ScrollToBottomAndAnimate(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
 	}
 	return tea.Sequence(cmds...)
 }
@@ -1063,6 +1078,11 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 	if existingItem != nil {
 		if assistantItem, ok := existingItem.(*chat.AssistantMessageItem); ok {
 			assistantItem.SetMessage(&msg)
+		}
+		if _, ok := existingItem.(*chat.ResultMessageItem); ok {
+			m.chat.RemoveMessage(msg.ID)
+			items := chat.ExtractMessageItems(m.com.Styles, &msg, true)
+			m.chat.AppendMessages(items...)
 		}
 	}
 
