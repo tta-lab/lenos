@@ -115,12 +115,6 @@ func (m *Chat) SetMessages(msgs ...chat.MessageItem) {
 	items := make([]list.Item, len(msgs))
 	for i, msg := range msgs {
 		m.idInxMap[msg.ID()] = i
-		// Register nested tool IDs for tools that contain nested tools.
-		if container, ok := msg.(chat.NestedToolContainer); ok {
-			for _, nested := range container.NestedTools() {
-				m.idInxMap[nested.ID()] = i
-			}
-		}
 		items[i] = msg
 	}
 	m.list.SetItems(items...)
@@ -133,39 +127,9 @@ func (m *Chat) AppendMessages(msgs ...chat.MessageItem) {
 	indexOffset := m.list.Len()
 	for i, msg := range msgs {
 		m.idInxMap[msg.ID()] = indexOffset + i
-		// Register nested tool IDs for tools that contain nested tools.
-		if container, ok := msg.(chat.NestedToolContainer); ok {
-			for _, nested := range container.NestedTools() {
-				m.idInxMap[nested.ID()] = indexOffset + i
-			}
-		}
 		items[i] = msg
 	}
 	m.list.AppendItems(items...)
-}
-
-// UpdateNestedToolIDs updates the ID map for nested tools within a container.
-// Call this after modifying nested tools to ensure animations work correctly.
-func (m *Chat) UpdateNestedToolIDs(containerID string) {
-	idx, ok := m.idInxMap[containerID]
-	if !ok {
-		return
-	}
-
-	item, ok := m.list.ItemAt(idx).(chat.MessageItem)
-	if !ok {
-		return
-	}
-
-	container, ok := item.(chat.NestedToolContainer)
-	if !ok {
-		return
-	}
-
-	// Register all nested tool IDs to point to the container's index.
-	for _, nested := range container.NestedTools() {
-		m.idInxMap[nested.ID()] = idx
-	}
 }
 
 // Animate animates items in the chat list. Only propagates animation messages
