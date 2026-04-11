@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/stringext"
+	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
@@ -20,6 +22,7 @@ func genericPrettyName(name string) string {
 
 // ResultMessageItem represents a command result message in the chat UI.
 type ResultMessageItem struct {
+	*highlightableMessageItem
 	*cachedMessageItem
 	*focusableMessageItem
 
@@ -32,10 +35,11 @@ var _ MessageItem = (*ResultMessageItem)(nil)
 // NewResultMessageItem creates a new ResultMessageItem.
 func NewResultMessageItem(sty *styles.Styles, message *message.Message) MessageItem {
 	return &ResultMessageItem{
-		cachedMessageItem:    &cachedMessageItem{},
-		focusableMessageItem: &focusableMessageItem{},
-		message:              message,
-		sty:                  sty,
+		highlightableMessageItem: defaultHighlighter(sty),
+		cachedMessageItem:        &cachedMessageItem{},
+		focusableMessageItem:     &focusableMessageItem{},
+		message:                  message,
+		sty:                      sty,
 	}
 }
 
@@ -43,9 +47,9 @@ func NewResultMessageItem(sty *styles.Styles, message *message.Message) MessageI
 func (m *ResultMessageItem) RawRender(width int) string {
 	cappedWidth := cappedMessageWidth(width)
 
-	rendered, _, ok := m.getCachedRender(cappedWidth)
+	rendered, height, ok := m.getCachedRender(cappedWidth)
 	if ok {
-		return rendered
+		return m.renderHighlighted(rendered, cappedWidth, height)
 	}
 
 	var content string
@@ -56,9 +60,9 @@ func (m *ResultMessageItem) RawRender(width int) string {
 		content = m.sty.Chat.Message.ResultBlock.Render(m.message.Content().Text)
 	}
 
-	height := lipgloss.Height(content)
+	height = lipgloss.Height(content)
 	m.setCachedRender(content, cappedWidth, height)
-	return content
+	return m.renderHighlighted(content, cappedWidth, height)
 }
 
 // renderCommandResult renders a command result with header and output.
@@ -103,4 +107,44 @@ func (m *ResultMessageItem) Render(width int) string {
 // ID implements MessageItem.
 func (m *ResultMessageItem) ID() string {
 	return m.message.ID
+}
+
+// HandleKeyEvent implements [KeyEventHandler].
+func (m *ResultMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
+	if k := key.String(); k == "c" || k == "y" {
+		text := m.formatCommandForCopy()
+		return true, common.CopyToClipboard(text, "Command copied to clipboard")
+	}
+	return false, nil
+}
+
+// formatCommandForCopy formats the command result for clipboard copying.
+func (m *ResultMessageItem) formatCommandForCopy() string {
+	cmd := m.message.CommandContent()
+
+	// Pending commands: just the command line.
+	if cmd.Pending {
+		return "$ " + cmd.Command
+	}
+
+	var sb strings.Builder
+	sb.WriteString("$ ")
+	sb.WriteString(cmd.Command)
+
+	if cmd.Output != "" {
+		sb.WriteString("\n")
+		sb.WriteString(cmd.Output)
+	}
+
+	// Append exit code for non-zero exits.
+	if cmd.ExitCode != nil && *cmd.ExitCode != 0 {
+		if cmd.Output == "" {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("(exit code: ")
+		sb.WriteString(fmt.Sprintf("%d", *cmd.ExitCode))
+		sb.WriteString(")")
+	}
+
+	return sb.String()
 }
