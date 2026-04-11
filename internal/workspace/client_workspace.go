@@ -433,20 +433,6 @@ func protoToMessage(m proto.Message) message.Message {
 				StartedAt:  v.StartedAt,
 				FinishedAt: v.FinishedAt,
 			})
-		case proto.ToolCall:
-			msg.Parts = append(msg.Parts, message.ToolCall{
-				ID:       v.ID,
-				Name:     v.Name,
-				Input:    v.Input,
-				Finished: v.Finished,
-			})
-		case proto.ToolResult:
-			msg.Parts = append(msg.Parts, message.ToolResult{
-				ToolCallID: v.ToolCallID,
-				Name:       v.Name,
-				Content:    v.Content,
-				IsError:    v.IsError,
-			})
 		case proto.Finish:
 			msg.Parts = append(msg.Parts, message.Finish{
 				Reason:  message.FinishReason(v.Reason),

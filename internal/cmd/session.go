@@ -632,22 +632,6 @@ func convertParts(parts []message.ContentPart) []sessionShowPart {
 				StartedAt:  p.StartedAt,
 				FinishedAt: p.FinishedAt,
 			})
-		case message.ToolCall:
-			result = append(result, sessionShowPart{
-				Type:       "tool_call",
-				ToolCallID: p.ID,
-				Name:       p.Name,
-				Input:      p.Input,
-			})
-		case message.ToolResult:
-			result = append(result, sessionShowPart{
-				Type:       "tool_result",
-				ToolCallID: p.ToolCallID,
-				Name:       p.Name,
-				Content:    p.Content,
-				IsError:    p.IsError,
-				MIMEType:   p.MIMEType,
-			})
 		case message.BinaryContent:
 			result = append(result, sessionShowPart{
 				Type:     "binary",
