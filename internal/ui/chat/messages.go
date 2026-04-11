@@ -290,23 +290,5 @@ func ShouldRenderAssistantMessage(msg *message.Message) bool {
 	thinking := strings.TrimSpace(msg.ReasoningContent().Thinking)
 	isError := msg.FinishReason() == message.FinishReasonError
 	isCancelled := msg.FinishReason() == message.FinishReasonCanceled
-	hasToolCalls := len(msg.ToolCalls()) > 0
-	return !hasToolCalls || content != "" || thinking != "" || msg.IsThinking() || isError || isCancelled
-}
-
-// BuildToolResultMap creates a map of tool call IDs to their results from a list of messages.
-// Tool result messages (role == message.Tool) contain the results that should be linked
-// to tool calls in assistant messages.
-func BuildToolResultMap(messages []*message.Message) map[string]message.ToolResult {
-	resultMap := make(map[string]message.ToolResult)
-	for _, msg := range messages {
-		if msg.Role == message.Tool {
-			for _, result := range msg.ToolResults() {
-				if result.ToolCallID != "" {
-					resultMap[result.ToolCallID] = result
-				}
-			}
-		}
-	}
-	return resultMap
+	return content != "" || thinking != "" || msg.IsThinking() || isError || isCancelled
 }

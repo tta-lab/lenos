@@ -82,10 +82,15 @@ type ContentPart interface {
 
 // ReasoningContent represents the reasoning/thinking part of a message.
 type ReasoningContent struct {
-	Thinking   string `json:"thinking"`
-	Signature  string `json:"signature"`
-	StartedAt  int64  `json:"started_at,omitempty"`
-	FinishedAt int64  `json:"finished_at,omitempty"`
+	Thinking         string `json:"thinking"`
+	Signature        string `json:"signature"`
+	ThoughtSignature string `json:"thought_signature,omitempty"` // Google models
+	ToolID           string `json:"tool_id,omitempty"`           // OpenRouter Google models
+	// ResponsesData is intentionally omitted here to avoid a heavy dependency
+	// in the wire protocol layer. OpenAI Responses API reasoning metadata is
+	// available on the fantasy.LanguageModel but not persisted over the wire.
+	StartedAt  int64 `json:"started_at,omitempty"`
+	FinishedAt int64 `json:"finished_at,omitempty"`
 }
 
 // String returns the thinking content as a string.
@@ -147,28 +152,6 @@ func (bc BinaryContent) String(p catwalk.InferenceProvider) string {
 }
 
 func (BinaryContent) isPart() {}
-
-// ToolCall represents a tool call in a message.
-type ToolCall struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Input    string `json:"input"`
-	Type     string `json:"type,omitempty"`
-	Finished bool   `json:"finished,omitempty"`
-}
-
-func (ToolCall) isPart() {}
-
-// ToolResult represents the result of a tool call.
-type ToolResult struct {
-	ToolCallID string `json:"tool_call_id"`
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	Metadata   string `json:"metadata"`
-	IsError    bool   `json:"is_error"`
-}
-
-func (ToolResult) isPart() {}
 
 // Finish represents the end of a message generation.
 type Finish struct {
@@ -260,28 +243,6 @@ func (m *Message) BinaryContent() []BinaryContent {
 		}
 	}
 	return binaryContents
-}
-
-// ToolCalls returns all tool call parts.
-func (m *Message) ToolCalls() []ToolCall {
-	toolCalls := make([]ToolCall, 0)
-	for _, part := range m.Parts {
-		if c, ok := part.(ToolCall); ok {
-			toolCalls = append(toolCalls, c)
-		}
-	}
-	return toolCalls
-}
-
-// ToolResults returns all tool result parts.
-func (m *Message) ToolResults() []ToolResult {
-	toolResults := make([]ToolResult, 0)
-	for _, part := range m.Parts {
-		if c, ok := part.(ToolResult); ok {
-			toolResults = append(toolResults, c)
-		}
-	}
-	return toolResults
 }
 
 // IsFinished returns true if the message has a finish part.
@@ -403,82 +364,6 @@ func (m *Message) ThinkingDuration() time.Duration {
 	return time.Duration(endTime-reasoning.StartedAt) * time.Second
 }
 
-// FinishToolCall marks a tool call as finished.
-func (m *Message) FinishToolCall(toolCallID string) {
-	for i, part := range m.Parts {
-		if c, ok := part.(ToolCall); ok {
-			if c.ID == toolCallID {
-				m.Parts[i] = ToolCall{
-					ID:       c.ID,
-					Name:     c.Name,
-					Input:    c.Input,
-					Type:     c.Type,
-					Finished: true,
-				}
-				return
-			}
-		}
-	}
-}
-
-// AppendToolCallInput appends input to a tool call.
-func (m *Message) AppendToolCallInput(toolCallID string, inputDelta string) {
-	for i, part := range m.Parts {
-		if c, ok := part.(ToolCall); ok {
-			if c.ID == toolCallID {
-				m.Parts[i] = ToolCall{
-					ID:       c.ID,
-					Name:     c.Name,
-					Input:    c.Input + inputDelta,
-					Type:     c.Type,
-					Finished: c.Finished,
-				}
-				return
-			}
-		}
-	}
-}
-
-// AddToolCall adds or updates a tool call.
-func (m *Message) AddToolCall(tc ToolCall) {
-	for i, part := range m.Parts {
-		if c, ok := part.(ToolCall); ok {
-			if c.ID == tc.ID {
-				m.Parts[i] = tc
-				return
-			}
-		}
-	}
-	m.Parts = append(m.Parts, tc)
-}
-
-// SetToolCalls replaces all tool call parts.
-func (m *Message) SetToolCalls(tc []ToolCall) {
-	parts := make([]ContentPart, 0)
-	for _, part := range m.Parts {
-		if _, ok := part.(ToolCall); ok {
-			continue
-		}
-		parts = append(parts, part)
-	}
-	m.Parts = parts
-	for _, toolCall := range tc {
-		m.Parts = append(m.Parts, toolCall)
-	}
-}
-
-// AddToolResult adds a tool result.
-func (m *Message) AddToolResult(tr ToolResult) {
-	m.Parts = append(m.Parts, tr)
-}
-
-// SetToolResults adds multiple tool results.
-func (m *Message) SetToolResults(tr []ToolResult) {
-	for _, toolResult := range tr {
-		m.Parts = append(m.Parts, toolResult)
-	}
-}
-
 // AddFinish adds a finish part to the message.
 func (m *Message) AddFinish(reason FinishReason, message, details string) {
 	for i, part := range m.Parts {
@@ -503,14 +388,12 @@ func (m *Message) AddBinary(mimeType string, data []byte) {
 type partType string
 
 const (
-	reasoningType  partType = "reasoning"
-	textType       partType = "text"
-	commandType    partType = "command"
-	imageURLType   partType = "image_url"
-	binaryType     partType = "binary"
-	toolCallType   partType = "tool_call"
-	toolResultType partType = "tool_result"
-	finishType     partType = "finish"
+	reasoningType partType = "reasoning"
+	textType      partType = "text"
+	commandType   partType = "command"
+	imageURLType  partType = "image_url"
+	binaryType    partType = "binary"
+	finishType    partType = "finish"
 )
 
 type partWrapper struct {
@@ -536,10 +419,6 @@ func MarshalParts(parts []ContentPart) ([]byte, error) {
 			typ = imageURLType
 		case BinaryContent:
 			typ = binaryType
-		case ToolCall:
-			typ = toolCallType
-		case ToolResult:
-			typ = toolResultType
 		case Finish:
 			typ = finishType
 		default:
@@ -601,18 +480,6 @@ func UnmarshalParts(data []byte) ([]ContentPart, error) {
 			parts = append(parts, part)
 		case binaryType:
 			part := BinaryContent{}
-			if err := json.Unmarshal(wrapper.Data, &part); err != nil {
-				return nil, err
-			}
-			parts = append(parts, part)
-		case toolCallType:
-			part := ToolCall{}
-			if err := json.Unmarshal(wrapper.Data, &part); err != nil {
-				return nil, err
-			}
-			parts = append(parts, part)
-		case toolResultType:
-			part := ToolResult{}
 			if err := json.Unmarshal(wrapper.Data, &part); err != nil {
 				return nil, err
 			}

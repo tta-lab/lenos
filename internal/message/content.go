@@ -2,7 +2,6 @@ package message
 
 import (
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -118,28 +117,6 @@ func (bc BinaryContent) String(p catwalk.InferenceProvider) string {
 
 func (BinaryContent) isPart() {}
 
-type ToolCall struct {
-	ID               string `json:"id"`
-	Name             string `json:"name"`
-	Input            string `json:"input"`
-	ProviderExecuted bool   `json:"provider_executed"`
-	Finished         bool   `json:"finished"`
-}
-
-func (ToolCall) isPart() {}
-
-type ToolResult struct {
-	ToolCallID string `json:"tool_call_id"`
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	Data       string `json:"data"`
-	MIMEType   string `json:"mime_type"`
-	Metadata   string `json:"metadata"`
-	IsError    bool   `json:"is_error"`
-}
-
-func (ToolResult) isPart() {}
-
 type Finish struct {
 	Reason  FinishReason `json:"reason"`
 	Time    int64        `json:"time"`
@@ -207,26 +184,6 @@ func (m *Message) BinaryContent() []BinaryContent {
 		}
 	}
 	return binaryContents
-}
-
-func (m *Message) ToolCalls() []ToolCall {
-	toolCalls := make([]ToolCall, 0)
-	for _, part := range m.Parts {
-		if c, ok := part.(ToolCall); ok {
-			toolCalls = append(toolCalls, c)
-		}
-	}
-	return toolCalls
-}
-
-func (m *Message) ToolResults() []ToolResult {
-	toolResults := make([]ToolResult, 0)
-	for _, part := range m.Parts {
-		if c, ok := part.(ToolResult); ok {
-			toolResults = append(toolResults, c)
-		}
-	}
-	return toolResults
 }
 
 func (m *Message) IsFinished() bool {
@@ -373,75 +330,6 @@ func (m *Message) ThinkingDuration() time.Duration {
 	return time.Duration(endTime-reasoning.StartedAt) * time.Second
 }
 
-func (m *Message) FinishToolCall(toolCallID string) {
-	for i, part := range m.Parts {
-		if c, ok := part.(ToolCall); ok {
-			if c.ID == toolCallID {
-				m.Parts[i] = ToolCall{
-					ID:       c.ID,
-					Name:     c.Name,
-					Input:    c.Input,
-					Finished: true,
-				}
-				return
-			}
-		}
-	}
-}
-
-func (m *Message) AppendToolCallInput(toolCallID string, inputDelta string) {
-	for i, part := range m.Parts {
-		if c, ok := part.(ToolCall); ok {
-			if c.ID == toolCallID {
-				m.Parts[i] = ToolCall{
-					ID:       c.ID,
-					Name:     c.Name,
-					Input:    c.Input + inputDelta,
-					Finished: c.Finished,
-				}
-				return
-			}
-		}
-	}
-}
-
-func (m *Message) AddToolCall(tc ToolCall) {
-	for i, part := range m.Parts {
-		if c, ok := part.(ToolCall); ok {
-			if c.ID == tc.ID {
-				m.Parts[i] = tc
-				return
-			}
-		}
-	}
-	m.Parts = append(m.Parts, tc)
-}
-
-func (m *Message) SetToolCalls(tc []ToolCall) {
-	// remove any existing tool call part it could have multiple
-	parts := make([]ContentPart, 0)
-	for _, part := range m.Parts {
-		if _, ok := part.(ToolCall); ok {
-			continue
-		}
-		parts = append(parts, part)
-	}
-	m.Parts = parts
-	for _, toolCall := range tc {
-		m.Parts = append(m.Parts, toolCall)
-	}
-}
-
-func (m *Message) AddToolResult(tr ToolResult) {
-	m.Parts = append(m.Parts, tr)
-}
-
-func (m *Message) SetToolResults(tr []ToolResult) {
-	for _, toolResult := range tr {
-		m.Parts = append(m.Parts, toolResult)
-	}
-}
-
 // Clone returns a deep copy of the message with an independent Parts slice.
 // This prevents race conditions when the message is modified concurrently.
 func (m *Message) Clone() Message {
@@ -555,43 +443,8 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 			}
 			parts = append(parts, reasoningPart)
 		}
-		for _, call := range m.ToolCalls() {
-			parts = append(parts, fantasy.ToolCallPart{
-				ToolCallID:       call.ID,
-				ToolName:         call.Name,
-				Input:            call.Input,
-				ProviderExecuted: call.ProviderExecuted,
-			})
-		}
 		messages = append(messages, fantasy.Message{
 			Role:    fantasy.MessageRoleAssistant,
-			Content: parts,
-		})
-	case Tool:
-		var parts []fantasy.MessagePart
-		for _, result := range m.ToolResults() {
-			var content fantasy.ToolResultOutputContent
-			if result.IsError {
-				content = fantasy.ToolResultOutputContentError{
-					Error: errors.New(result.Content),
-				}
-			} else if result.Data != "" {
-				content = fantasy.ToolResultOutputContentMedia{
-					Data:      result.Data,
-					MediaType: result.MIMEType,
-				}
-			} else {
-				content = fantasy.ToolResultOutputContentText{
-					Text: result.Content,
-				}
-			}
-			parts = append(parts, fantasy.ToolResultPart{
-				ToolCallID: result.ToolCallID,
-				Output:     content,
-			})
-		}
-		messages = append(messages, fantasy.Message{
-			Role:    fantasy.MessageRoleTool,
 			Content: parts,
 		})
 	case Result:

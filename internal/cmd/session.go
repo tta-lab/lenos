@@ -590,14 +590,9 @@ type sessionShowPart struct {
 	StartedAt  int64  `json:"started_at,omitempty"`
 	FinishedAt int64  `json:"finished_at,omitempty"`
 
-	// Tool call
-	ToolCallID string `json:"tool_call_id,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Input      string `json:"input,omitempty"`
+	// Command output
+	Content string `json:"content,omitempty"`
 
-	// Tool result
-	Content  string `json:"content,omitempty"`
-	IsError  bool   `json:"is_error,omitempty"`
 	MIMEType string `json:"mime_type,omitempty"`
 
 	// Binary
@@ -632,22 +627,6 @@ func convertParts(parts []message.ContentPart) []sessionShowPart {
 				StartedAt:  p.StartedAt,
 				FinishedAt: p.FinishedAt,
 			})
-		case message.ToolCall:
-			result = append(result, sessionShowPart{
-				Type:       "tool_call",
-				ToolCallID: p.ID,
-				Name:       p.Name,
-				Input:      p.Input,
-			})
-		case message.ToolResult:
-			result = append(result, sessionShowPart{
-				Type:       "tool_result",
-				ToolCallID: p.ToolCallID,
-				Name:       p.Name,
-				Content:    p.Content,
-				IsError:    p.IsError,
-				MIMEType:   p.MIMEType,
-			})
 		case message.BinaryContent:
 			result = append(result, sessionShowPart{
 				Type:     "binary",
@@ -665,6 +644,12 @@ func convertParts(parts []message.ContentPart) []sessionShowPart {
 				Type:   "finish",
 				Reason: string(p.Reason),
 				Time:   p.Time,
+			})
+		case message.CommandContent:
+			result = append(result, sessionShowPart{
+				Type:    "command",
+				Text:    p.Command,
+				Content: p.Output,
 			})
 		default:
 			result = append(result, sessionShowPart{

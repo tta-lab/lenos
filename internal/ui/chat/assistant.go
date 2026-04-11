@@ -187,7 +187,7 @@ func (a *AssistantMessageItem) renderThinking(thinking string, width int) string
 
 	var footer string
 	// if thinking is done add the thought for footer
-	if !a.message.IsThinking() || len(a.message.ToolCalls()) > 0 {
+	if !a.message.IsThinking() {
 		duration := a.message.ThinkingDuration()
 		if duration.String() != "0s" {
 			footer = a.sty.Chat.Message.ThinkingFooterTitle.Render("Thought for ") +
@@ -236,8 +236,7 @@ func (a *AssistantMessageItem) isSpinning() bool {
 	isThinking := a.message.IsThinking()
 	isFinished := a.message.IsFinished()
 	hasContent := strings.TrimSpace(a.message.Content().Text) != ""
-	hasToolCalls := len(a.message.ToolCalls()) > 0
-	return (isThinking || !isFinished) && !hasContent && !hasToolCalls
+	return (isThinking || !isFinished) && !hasContent
 }
 
 // SetMessage is used to update the underlying message.

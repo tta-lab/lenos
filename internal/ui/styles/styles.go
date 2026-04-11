@@ -104,10 +104,8 @@ type Styles struct {
 	FocusedMessageBorder lipgloss.Border
 
 	// Tool calls
-	ToolCallPending   lipgloss.Style
-	ToolCallError     lipgloss.Style
-	ToolCallSuccess   lipgloss.Style
-	ToolCallCancelled lipgloss.Style
+	ToolCallSuccess lipgloss.Style
+
 	EarlyStateMessage lipgloss.Style
 
 	// Text selection
@@ -239,9 +237,6 @@ type Styles struct {
 			ErrorTag         lipgloss.Style
 			ErrorTitle       lipgloss.Style
 			ErrorDetails     lipgloss.Style
-			ToolCallFocused  lipgloss.Style
-			ToolCallCompact  lipgloss.Style
-			ToolCallBlurred  lipgloss.Style
 			SectionHeader    lipgloss.Style
 			ResultBlock      lipgloss.Style
 			ResultHeader     lipgloss.Style // Command result header: $ <command>
@@ -1095,12 +1090,8 @@ func DefaultStyles() Styles {
 	// code line number
 	s.LineNumber = lipgloss.NewStyle().Foreground(fgMuted).Background(bgBase).PaddingRight(1).PaddingLeft(1)
 
-	// Tool calls
-	s.ToolCallPending = lipgloss.NewStyle().Foreground(greenDark).SetString(ToolPending)
-	s.ToolCallError = lipgloss.NewStyle().Foreground(redDark).SetString(ToolError)
+	// Tool call (success checkmark for configured model indicator)
 	s.ToolCallSuccess = lipgloss.NewStyle().Foreground(green).SetString(ToolSuccess)
-	// Cancelled uses muted tone but same glyph as pending
-	s.ToolCallCancelled = s.Muted.SetString(ToolPending)
 	s.EarlyStateMessage = s.Subtle.PaddingLeft(2)
 
 	// Tool rendering styles
@@ -1244,13 +1235,6 @@ func DefaultStyles() Styles {
 	s.Chat.Message.ErrorDetails = lipgloss.NewStyle().Foreground(fgSubtle)
 
 	// Message item styles
-	s.Chat.Message.ToolCallFocused = s.Muted.PaddingLeft(1).
-		BorderStyle(messageFocussedBorder).
-		BorderLeft(true).
-		BorderForeground(greenDark)
-	s.Chat.Message.ToolCallBlurred = s.Muted.PaddingLeft(2)
-	// No padding or border for compact tool calls within messages
-	s.Chat.Message.ToolCallCompact = s.Muted
 	s.Chat.Message.SectionHeader = s.Base.PaddingLeft(2)
 	s.Chat.Message.ResultBlock = lipgloss.NewStyle().
 		Foreground(fgSubtle)

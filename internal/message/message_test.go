@@ -123,41 +123,6 @@ func TestMarshalUnmarshalParts(t *testing.T) {
 		require.Equal(t, data, bc.Data)
 	})
 
-	t.Run("ToolCall", func(t *testing.T) {
-		t.Parallel()
-		parts := []ContentPart{
-			ToolCall{ID: "tool_1", Name: "Bash", Input: `{"command":"ls"}`, Finished: true},
-		}
-		data, err := marshalParts(parts)
-		require.NoError(t, err)
-		got, err := unmarshalParts(data)
-		require.NoError(t, err)
-		require.Len(t, got, 1)
-		tc, ok := got[0].(ToolCall)
-		require.True(t, ok)
-		require.Equal(t, "tool_1", tc.ID)
-		require.Equal(t, "Bash", tc.Name)
-		require.Equal(t, `{"command":"ls"}`, tc.Input)
-		require.True(t, tc.Finished)
-	})
-
-	t.Run("ToolResult", func(t *testing.T) {
-		t.Parallel()
-		parts := []ContentPart{
-			ToolResult{ToolCallID: "tool_1", Name: "Bash", Content: "file1.go\nfile2.go", Data: "", MIMEType: "text/plain"},
-		}
-		data, err := marshalParts(parts)
-		require.NoError(t, err)
-		got, err := unmarshalParts(data)
-		require.NoError(t, err)
-		require.Len(t, got, 1)
-		tr, ok := got[0].(ToolResult)
-		require.True(t, ok)
-		require.Equal(t, "tool_1", tr.ToolCallID)
-		require.Equal(t, "Bash", tr.Name)
-		require.Equal(t, "file1.go\nfile2.go", tr.Content)
-	})
-
 	t.Run("Finish", func(t *testing.T) {
 		t.Parallel()
 		parts := []ContentPart{Finish{Reason: FinishReasonEndTurn, Message: "done"}}
