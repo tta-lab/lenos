@@ -163,6 +163,23 @@ func expandPath(path string, store *config.ConfigStore) string {
 	return path
 }
 
+// getSkillList shells out to organon skill CLI. Binary-not-found and exit-127
+// are treated as "no skills available" (silently). Other errors are logged as
+// warnings. organon's own test suite covers skill discovery parsing and priority.
+func getSkillList(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, "skill", "list").Output()
+	if err == nil {
+		return strings.TrimSpace(string(out)), nil
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return "", nil
+	}
+	if ee := new(exec.ExitError); errors.As(err, &ee) && ee.ExitCode() == 127 {
+		return "", nil
+	}
+	return "", err
+}
+
 func (p *Prompt) promptData(ctx context.Context, provider, model string, store *config.ConfigStore) (PromptDat, error) {
 	workingDir := cmp.Or(p.workingDir, store.WorkingDir())
 	platform := cmp.Or(p.platform, runtime.GOOS)
@@ -184,17 +201,10 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		files[pathKey] = content
 	}
 
-	// Shell out to organon skill CLI for skill discovery.
 	// organon's test suite covers skill discovery, parsing, and priority order;
 	// see https://github.com/tta-lab/ttal-cli/tree/main/skills for the canonical tests.
-	var skillList string
-	if out, err := exec.CommandContext(ctx, "skill", "list").Output(); err == nil {
-		skillList = strings.TrimSpace(string(out))
-	} else if errors.Is(err, exec.ErrNotFound) {
-		// Binary not installed — not an error, just no skills available.
-	} else if ee := new(exec.ExitError); errors.As(err, &ee) && ee.ExitCode() == 127 {
-		// Binary exists but is not executable — not an error.
-	} else {
+	skillList, err := getSkillList(ctx)
+	if err != nil {
 		slog.Warn("skill list unavailable", "error", err)
 	}
 
