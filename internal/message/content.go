@@ -3,6 +3,7 @@ package message
 import (
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
+	"github.com/tta-lab/logos"
 )
 
 type MessageRole string
@@ -420,10 +422,7 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 		})
 	case Assistant:
 		var parts []fantasy.MessagePart
-		text := strings.TrimSpace(m.Content().Text)
-		if text != "" {
-			parts = append(parts, fantasy.TextPart{Text: text})
-		}
+		// Reasoning first (required for Anthropic extended thinking signature validation).
 		reasoning := m.ReasoningContent()
 		if reasoning.Thinking != "" {
 			reasoningPart := fantasy.ReasoningPart{Text: reasoning.Thinking, ProviderOptions: fantasy.ProviderOptions{}}
@@ -443,15 +442,38 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 			}
 			parts = append(parts, reasoningPart)
 		}
+		// Then text.
+		text := strings.TrimSpace(m.Content().Text)
+		if text != "" {
+			parts = append(parts, fantasy.TextPart{Text: text})
+		}
 		messages = append(messages, fantasy.Message{
 			Role:    fantasy.MessageRoleAssistant,
 			Content: parts,
 		})
 	case Result:
+		var results []logos.Result
+		hasParts := len(m.Parts) > 0
+		for _, part := range m.Parts {
+			cc, ok := part.(CommandContent)
+			if !ok || cc.Command == "" || cc.Pending {
+				continue
+			}
+			r := logos.Result{Command: cc.Command, Stdout: cc.Output}
+			if cc.ExitCode != nil {
+				r.ExitCode = *cc.ExitCode
+			}
+			results = append(results, r)
+		}
+		if len(results) == 0 && hasParts {
+			// Parts existed but none were completed commands — warn only in this case.
+			slog.Warn("Result message has no non-pending CommandContent parts")
+			break
+		}
 		messages = append(messages, fantasy.Message{
 			Role: fantasy.MessageRoleUser,
 			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: m.Content().String()},
+				fantasy.TextPart{Text: logos.FormatResults(results)},
 			},
 		})
 	}

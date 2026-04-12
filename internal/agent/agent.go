@@ -136,7 +136,19 @@ func NewSessionAgent(
 }
 
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*logos.RunResult, error) {
+	var currentAssistant *message.Message
+	var createdAssistantMsgs []*message.Message
+	var turnJustEnded bool
+	var pendingCommands map[string][]string
+
 runLoop:
+	// Reset closure state to prevent stale-message misalignment on queued turns.
+	currentAssistant = nil
+	createdAssistantMsgs = nil
+	turnJustEnded = false
+	// pendingCommands maps command text → ordered list of message IDs (FIFO queue).
+	pendingCommands = make(map[string][]string)
+
 	if call.Prompt == "" {
 		return nil, ErrEmptyPrompt
 	}
@@ -198,9 +210,6 @@ runLoop:
 	startTime := time.Now()
 	a.eventPromptSent(call.SessionID)
 
-	var currentAssistant *message.Message
-	// pendingCommands maps command text → ordered list of message IDs (FIFO queue).
-	pendingCommands := make(map[string][]string)
 	callbacks := logos.Callbacks{
 		OnDelta: func(text string) {
 			// Detect <cmd> block: logos emits the full <cmd>...</cmd> text as one chunk.
@@ -225,6 +234,10 @@ runLoop:
 				return
 			}
 
+			if turnJustEnded {
+				currentAssistant = nil
+				turnJustEnded = false
+			}
 			if currentAssistant == nil {
 				text = strings.TrimPrefix(text, "\n")
 				msg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
@@ -238,6 +251,7 @@ runLoop:
 					return
 				}
 				currentAssistant = &msg
+				createdAssistantMsgs = append(createdAssistantMsgs, currentAssistant)
 			}
 			currentAssistant.AppendContent(text)
 			if err := a.messages.Update(ctx, *currentAssistant); err != nil {
@@ -274,6 +288,7 @@ runLoop:
 			if err != nil {
 				slog.Warn("Failed to persist command result", "error", err)
 			}
+			turnJustEnded = true
 		},
 		OnRetry: func(reason string, step int) {
 			slog.Warn("Logos retry", "reason", reason, "step", step)
@@ -283,6 +298,8 @@ runLoop:
 	result, runErr := logos.Run(streamCtx, call.LogosCfg, history, call.Prompt, callbacks)
 
 	a.eventPromptResponded(call.SessionID, time.Since(startTime).Truncate(time.Second))
+
+	a.backfillReasoning(ctx, result, createdAssistantMsgs)
 
 	if runErr != nil {
 		isCancelErr := errors.Is(runErr, context.Canceled)
@@ -356,6 +373,39 @@ runLoop:
 	a.messageQueue.Set(call.SessionID, queuedMessages[1:])
 	call = nextCall
 	goto runLoop
+}
+
+func (a *sessionAgent) backfillReasoning(ctx context.Context, result *logos.RunResult, createdAssistantMsgs []*message.Message) {
+	if result == nil {
+		return
+	}
+	var assistantSteps []logos.StepMessage
+	for _, s := range result.Steps {
+		if s.Role == logos.StepRoleAssistant {
+			assistantSteps = append(assistantSteps, s)
+		}
+	}
+	n := min(len(assistantSteps), len(createdAssistantMsgs))
+	for i := 0; i < n; i++ {
+		s := assistantSteps[i]
+		if s.Reasoning == "" && s.ReasoningSignature == "" {
+			continue
+		}
+		msg := createdAssistantMsgs[i]
+		if s.Reasoning != "" {
+			msg.AppendReasoningContent(s.Reasoning)
+		}
+		if s.ReasoningSignature != "" {
+			msg.AppendReasoningSignature(s.ReasoningSignature)
+		}
+		if err := a.messages.Update(ctx, *msg); err != nil {
+			slog.Warn("reasoning backfill failed", "msg_id", msg.ID, "error", err)
+		}
+	}
+	if len(assistantSteps) != len(createdAssistantMsgs) {
+		slog.Warn("reasoning backfill: step count mismatch",
+			"assistant_steps", len(assistantSteps), "created_msgs", len(createdAssistantMsgs))
+	}
 }
 
 func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fantasy.ProviderOptions) error {
