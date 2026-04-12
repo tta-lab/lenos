@@ -50,10 +50,11 @@ func BenchmarkPromptWithTextAttachments(b *testing.B) {
 func TestToAIMessage_Result(t *testing.T) {
 	t.Parallel()
 
+	exitCode := 0
 	msg := Message{
 		Role: Result,
 		Parts: []ContentPart{
-			TextContent{Text: "command output text"},
+			CommandContent{Command: "ls -la", Output: "total 8\n-rw-r--  1 neil staff 256 Apr 12 test", ExitCode: &exitCode, Pending: false},
 		},
 	}
 	result := msg.ToAIMessage()
@@ -62,5 +63,28 @@ func TestToAIMessage_Result(t *testing.T) {
 	require.Len(t, result[0].Content, 1)
 	text, ok := result[0].Content[0].(fantasy.TextPart)
 	require.True(t, ok, "expected TextPart, got %T", result[0].Content[0])
-	require.Equal(t, "command output text", text.Text)
+	require.Contains(t, text.Text, "ls -la")
+	require.Contains(t, text.Text, "total 8")
+}
+
+func TestToAIMessage_ResultMultiCommand(t *testing.T) {
+	t.Parallel()
+
+	exit0, exit1 := 0, 1
+	msg := Message{
+		Role: Result,
+		Parts: []ContentPart{
+			CommandContent{Command: "ls", Output: `file1
+file2`, ExitCode: &exit0, Pending: false},
+			CommandContent{Command: "pwd", Output: "/home/user", ExitCode: &exit1, Pending: false},
+		},
+	}
+	result := msg.ToAIMessage()
+	require.Len(t, result, 1)
+	require.Equal(t, fantasy.MessageRoleUser, result[0].Role)
+	text, ok := result[0].Content[0].(fantasy.TextPart)
+	require.True(t, ok, "expected TextPart, got %T", result[0].Content[0])
+	// FormatResults should include both commands.
+	require.Contains(t, text.Text, "ls")
+	require.Contains(t, text.Text, "pwd")
 }
