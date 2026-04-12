@@ -154,7 +154,6 @@ func TestBackfillReasoning(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty assistant list logs mismatch warning without panic", func(t *testing.T) {
-		t.Parallel()
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Test Session")
 		require.NoError(t, err)
@@ -196,7 +195,6 @@ func TestBackfillReasoning(t *testing.T) {
 	})
 
 	t.Run("skipped step with empty reasoning still pairs correctly", func(t *testing.T) {
-		t.Parallel()
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Test Session")
 		require.NoError(t, err)
