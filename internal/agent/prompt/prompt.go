@@ -3,6 +3,7 @@ package prompt
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -184,11 +185,17 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	}
 
 	// Shell out to organon skill CLI for skill discovery.
+	// organon's test suite covers skill discovery, parsing, and priority order;
+	// see https://github.com/tta-lab/ttal-cli/tree/main/skills for the canonical tests.
 	var skillList string
 	if out, err := exec.CommandContext(ctx, "skill", "list").Output(); err == nil {
 		skillList = strings.TrimSpace(string(out))
+	} else if errors.Is(err, exec.ErrNotFound) {
+		// Binary not installed — not an error, just no skills available.
+	} else if ee := new(exec.ExitError); errors.As(err, &ee) && ee.ExitCode() == 127 {
+		// Binary exists but is not executable — not an error.
 	} else {
-		slog.Debug("skill list unavailable", "error", err)
+		slog.Warn("skill list unavailable", "error", err)
 	}
 
 	isGit := isGitRepo(store.WorkingDir())
