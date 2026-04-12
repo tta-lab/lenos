@@ -146,6 +146,7 @@ runLoop:
 	currentAssistant = nil
 	createdAssistantMsgs = nil
 	turnJustEnded = false
+	// pendingCommands maps command text → ordered list of message IDs (FIFO queue).
 	pendingCommands = make(map[string][]string)
 
 	if call.Prompt == "" {

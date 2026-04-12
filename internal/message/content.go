@@ -3,6 +3,7 @@ package message
 import (
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -452,6 +453,7 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 		})
 	case Result:
 		var results []logos.Result
+		hasParts := len(m.Parts) > 0
 		for _, part := range m.Parts {
 			cc, ok := part.(CommandContent)
 			if !ok || cc.Command == "" || cc.Pending {
@@ -463,7 +465,9 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 			}
 			results = append(results, r)
 		}
-		if len(results) == 0 {
+		if len(results) == 0 && hasParts {
+			// Parts existed but none were completed commands — warn only in this case.
+			slog.Warn("Result message has no non-pending CommandContent parts")
 			break
 		}
 		messages = append(messages, fantasy.Message{
