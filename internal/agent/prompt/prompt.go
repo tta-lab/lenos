@@ -15,7 +15,6 @@ import (
 
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/home"
-	"github.com/tta-lab/lenos/internal/skills"
 )
 
 // Prompt represents a template-based prompt generator.
@@ -29,17 +28,17 @@ type Prompt struct {
 }
 
 type PromptDat struct {
-	Provider      string
-	Model         string
-	Config        config.Config
-	WorkingDir    string
-	IsGitRepo     bool
-	Platform      string
-	Date          string
-	GitStatus     string
-	ContextFiles  []ContextFile
-	JobID         string
-	AvailSkillXML string
+	Provider     string
+	Model        string
+	Config       config.Config
+	WorkingDir   string
+	IsGitRepo    bool
+	Platform     string
+	Date         string
+	GitStatus    string
+	ContextFiles []ContextFile
+	JobID        string
+	SkillList    string
 }
 
 type ContextFile struct {
@@ -184,54 +183,25 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		files[pathKey] = content
 	}
 
-	// Discover and load skills metadata.
-	var availSkillXML string
-
-	// Start with builtin skills.
-	allSkills := skills.DiscoverBuiltin()
-	builtinNames := make(map[string]bool, len(allSkills))
-	for _, s := range allSkills {
-		builtinNames[s.Name] = true
-	}
-
-	// Discover user skills from configured paths.
-	if len(cfg.Options.SkillsPaths) > 0 {
-		expandedPaths := make([]string, 0, len(cfg.Options.SkillsPaths))
-		for _, pth := range cfg.Options.SkillsPaths {
-			expandedPaths = append(expandedPaths, expandPath(pth, store))
-		}
-		for _, userSkill := range skills.Discover(expandedPaths) {
-			if builtinNames[userSkill.Name] {
-				slog.Warn("User skill overrides builtin skill", "name", userSkill.Name)
-			}
-			allSkills = append(allSkills, userSkill)
-		}
-	}
-
-	// Discover ttal-registered skills (highest priority — overrides both builtins and user skills).
-	allSkills = append(allSkills, skills.DiscoverTTAL(ctx)...)
-
-	// Deduplicate: user skills override builtins with the same name.
-	allSkills = skills.Deduplicate(allSkills)
-
-	// Filter out disabled skills.
-	allSkills = skills.Filter(allSkills, cfg.Options.DisabledSkills)
-
-	if len(allSkills) > 0 {
-		availSkillXML = skills.ToPromptXML(allSkills)
+	// Shell out to organon skill CLI for skill discovery.
+	var skillList string
+	if out, err := exec.CommandContext(ctx, "skill", "list").Output(); err == nil {
+		skillList = strings.TrimSpace(string(out))
+	} else {
+		slog.Debug("skill list unavailable", "error", err)
 	}
 
 	isGit := isGitRepo(store.WorkingDir())
 	data := PromptDat{
-		Provider:      provider,
-		Model:         model,
-		Config:        *cfg,
-		WorkingDir:    filepath.ToSlash(workingDir),
-		IsGitRepo:     isGit,
-		Platform:      platform,
-		Date:          p.now().Format("1/2/2006"),
-		AvailSkillXML: availSkillXML,
-		JobID:         os.Getenv("TTAL_JOB_ID"),
+		Provider:   provider,
+		Model:      model,
+		Config:     *cfg,
+		WorkingDir: filepath.ToSlash(workingDir),
+		IsGitRepo:  isGit,
+		Platform:   platform,
+		Date:       p.now().Format("1/2/2006"),
+		SkillList:  skillList,
+		JobID:      os.Getenv("TTAL_JOB_ID"),
 	}
 	if isGit {
 		var err error

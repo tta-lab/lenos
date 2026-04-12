@@ -389,16 +389,6 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	slices.Sort(c.Options.ContextPaths)
 	c.Options.ContextPaths = slices.Compact(c.Options.ContextPaths)
 
-	// Add the default skills directories if not already present.
-	for _, dir := range GlobalSkillsDirs() {
-		if !slices.Contains(c.Options.SkillsPaths, dir) {
-			c.Options.SkillsPaths = append(c.Options.SkillsPaths, dir)
-		}
-	}
-
-	// Project specific skills dirs.
-	c.Options.SkillsPaths = append(c.Options.SkillsPaths, ProjectSkillsDir(workingDir)...)
-
 	// Add the default agent directories if not already present.
 	for _, dir := range GlobalAgentDirs() {
 		if !slices.Contains(c.Options.AgentPaths, dir) {
@@ -766,47 +756,6 @@ func isInsideWorktree() bool {
 		"--is-inside-work-tree",
 	).CombinedOutput()
 	return err == nil && strings.TrimSpace(string(bts)) == "true"
-}
-
-// GlobalSkillsDirs returns the default directories for Agent Skills.
-// Skills in these directories are auto-discovered and their files can be read
-// without permission prompts.
-func GlobalSkillsDirs() []string {
-	if lenosSkills := os.Getenv("LENOS_SKILLS_DIR"); lenosSkills != "" {
-		return []string{lenosSkills}
-	}
-
-	paths := []string{
-		filepath.Join(home.Config(), appName, "skills"),
-		filepath.Join(home.Config(), "agents", "skills"),
-	}
-
-	// On Windows, also load from app data on top of `$HOME/.config/lenos`.
-	// This is here mostly for backwards compatibility.
-	if runtime.GOOS == "windows" {
-		appData := cmp.Or(
-			os.Getenv("LOCALAPPDATA"),
-			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
-		)
-		paths = append(
-			paths,
-			filepath.Join(appData, appName, "skills"),
-			filepath.Join(appData, "agents", "skills"),
-		)
-	}
-
-	return paths
-}
-
-// ProjectSkillsDir returns the default project directories for which Lenos
-// will look for skills.
-func ProjectSkillsDir(workingDir string) []string {
-	return []string{
-		filepath.Join(workingDir, ".agents/skills"),
-		filepath.Join(workingDir, ".lenos/skills"),
-		filepath.Join(workingDir, ".claude/skills"),
-		filepath.Join(workingDir, ".cursor/skills"),
-	}
 }
 
 // GlobalAgentDirs returns the default directories for Agent identity files.

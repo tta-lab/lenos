@@ -214,10 +214,6 @@ definitions:
         type: boolean
       disable_provider_auto_update:
         type: boolean
-      disabled_skills:
-        items:
-          type: string
-        type: array
       disabled_tools:
         items:
           type: string
@@ -226,10 +222,8 @@ definitions:
         type: string
       progress:
         type: boolean
-      skills_paths:
-        items:
-          type: string
-        type: array
+      sandbox:
+        type: boolean
       tui:
         $ref: '#/definitions/config.TUIOptions'
     type: object
@@ -370,30 +364,6 @@ definitions:
   proto.Error:
     properties:
       message:
-        type: string
-    type: object
-  proto.File:
-    properties:
-      content:
-        type: string
-      created_at:
-        type: integer
-      id:
-        type: string
-      path:
-        type: string
-      session_id:
-        type: string
-      updated_at:
-        type: integer
-      version:
-        type: integer
-    type: object
-  proto.FileTrackerReadRequest:
-    properties:
-      path:
-        type: string
-      session_id:
         type: string
     type: object
   proto.ImportCopilotResponse:
@@ -1239,75 +1209,6 @@ paths:
       summary: Stream workspace events (SSE)
       tags:
       - workspaces
-  /workspaces/{id}/filetracker/lastread:
-    get:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Session ID
-        in: query
-        name: session_id
-        type: string
-      - description: File path
-        in: query
-        name: path
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Get last read time for file
-      tags:
-      - filetracker
-  /workspaces/{id}/filetracker/read:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: File tracker read request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.FileTrackerReadRequest'
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Record file read
-      tags:
-      - filetracker
   /workspaces/{id}/messages/user:
     get:
       parameters:
@@ -1573,72 +1474,6 @@ paths:
           schema:
             $ref: '#/definitions/proto.Error'
       summary: Update session
-      tags:
-      - sessions
-  /workspaces/{id}/sessions/{sid}/filetracker/files:
-    get:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Session ID
-        in: path
-        name: sid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              type: string
-            type: array
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: List tracked files for session
-      tags:
-      - filetracker
-  /workspaces/{id}/sessions/{sid}/history:
-    get:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Session ID
-        in: path
-        name: sid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/proto.File'
-            type: array
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Get session history
       tags:
       - sessions
   /workspaces/{id}/sessions/{sid}/messages:
