@@ -3,6 +3,7 @@ package prompt
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/home"
-	"github.com/tta-lab/lenos/internal/skills"
 )
 
 // Prompt represents a template-based prompt generator.
@@ -29,17 +29,17 @@ type Prompt struct {
 }
 
 type PromptDat struct {
-	Provider      string
-	Model         string
-	Config        config.Config
-	WorkingDir    string
-	IsGitRepo     bool
-	Platform      string
-	Date          string
-	GitStatus     string
-	ContextFiles  []ContextFile
-	JobID         string
-	AvailSkillXML string
+	Provider     string
+	Model        string
+	Config       config.Config
+	WorkingDir   string
+	IsGitRepo    bool
+	Platform     string
+	Date         string
+	GitStatus    string
+	ContextFiles []ContextFile
+	JobID        string
+	SkillList    string
 }
 
 type ContextFile struct {
@@ -163,6 +163,23 @@ func expandPath(path string, store *config.ConfigStore) string {
 	return path
 }
 
+// getSkillList shells out to organon skill CLI. Binary-not-found and exit-127
+// are treated as "no skills available" (silently). Other errors are logged as
+// warnings. organon's own test suite covers skill discovery parsing and priority.
+func getSkillList(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, "skill", "list").Output()
+	if err == nil {
+		return strings.TrimSpace(string(out)), nil
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return "", nil
+	}
+	if ee := new(exec.ExitError); errors.As(err, &ee) && ee.ExitCode() == 127 {
+		return "", nil
+	}
+	return "", err
+}
+
 func (p *Prompt) promptData(ctx context.Context, provider, model string, store *config.ConfigStore) (PromptDat, error) {
 	workingDir := cmp.Or(p.workingDir, store.WorkingDir())
 	platform := cmp.Or(p.platform, runtime.GOOS)
@@ -184,54 +201,24 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		files[pathKey] = content
 	}
 
-	// Discover and load skills metadata.
-	var availSkillXML string
-
-	// Start with builtin skills.
-	allSkills := skills.DiscoverBuiltin()
-	builtinNames := make(map[string]bool, len(allSkills))
-	for _, s := range allSkills {
-		builtinNames[s.Name] = true
-	}
-
-	// Discover user skills from configured paths.
-	if len(cfg.Options.SkillsPaths) > 0 {
-		expandedPaths := make([]string, 0, len(cfg.Options.SkillsPaths))
-		for _, pth := range cfg.Options.SkillsPaths {
-			expandedPaths = append(expandedPaths, expandPath(pth, store))
-		}
-		for _, userSkill := range skills.Discover(expandedPaths) {
-			if builtinNames[userSkill.Name] {
-				slog.Warn("User skill overrides builtin skill", "name", userSkill.Name)
-			}
-			allSkills = append(allSkills, userSkill)
-		}
-	}
-
-	// Discover ttal-registered skills (highest priority — overrides both builtins and user skills).
-	allSkills = append(allSkills, skills.DiscoverTTAL(ctx)...)
-
-	// Deduplicate: user skills override builtins with the same name.
-	allSkills = skills.Deduplicate(allSkills)
-
-	// Filter out disabled skills.
-	allSkills = skills.Filter(allSkills, cfg.Options.DisabledSkills)
-
-	if len(allSkills) > 0 {
-		availSkillXML = skills.ToPromptXML(allSkills)
+	// organon's test suite covers skill discovery, parsing, and priority order;
+	// see https://github.com/tta-lab/ttal-cli/tree/main/skills for the canonical tests.
+	skillList, err := getSkillList(ctx)
+	if err != nil {
+		slog.Warn("skill list unavailable", "error", err)
 	}
 
 	isGit := isGitRepo(store.WorkingDir())
 	data := PromptDat{
-		Provider:      provider,
-		Model:         model,
-		Config:        *cfg,
-		WorkingDir:    filepath.ToSlash(workingDir),
-		IsGitRepo:     isGit,
-		Platform:      platform,
-		Date:          p.now().Format("1/2/2006"),
-		AvailSkillXML: availSkillXML,
-		JobID:         os.Getenv("TTAL_JOB_ID"),
+		Provider:   provider,
+		Model:      model,
+		Config:     *cfg,
+		WorkingDir: filepath.ToSlash(workingDir),
+		IsGitRepo:  isGit,
+		Platform:   platform,
+		Date:       p.now().Format("1/2/2006"),
+		SkillList:  skillList,
+		JobID:      os.Getenv("TTAL_JOB_ID"),
 	}
 	if isGit {
 		var err error

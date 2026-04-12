@@ -228,7 +228,6 @@ func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 
 type Options struct {
 	ContextPaths              []string     `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=LENOS.md"`
-	SkillsPaths               []string     `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/lenos/skills,example=./skills"`
 	AgentPaths                []string     `json:"agent_paths,omitempty" jsonschema:"description=Paths to directories containing Agent identity files (agent.md files),example=~/.config/lenos/agents,example=./.lenos/agents"`
 	TUI                       *TUIOptions  `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
 	Debug                     bool         `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
@@ -243,7 +242,6 @@ type Options struct {
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
 	Sandbox                   *bool        `json:"sandbox,omitempty" jsonschema:"description=Enable sandbox isolation for command execution via temenos,default=true"`
 	DisableNotifications      bool         `json:"disable_notifications,omitempty" jsonschema:"description=Disable desktop notifications,default=false"`
-	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=lenos-config"`
 }
 
 type Agent struct {

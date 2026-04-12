@@ -171,8 +171,6 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	}
 
 	// Clear some fields to avoid issues with VCR cassette matching.
-	cfg.Config().Options.SkillsPaths = nil
-	cfg.Config().Options.DisabledSkills = []string{"lenos-config"}
 	cfg.Config().Options.ContextPaths = nil
 
 	systemPrompt, err := prompt.Build(context.TODO(), large.Provider(), large.Model(), cfg)
