@@ -151,8 +151,8 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 }
 
 func TestBackfillReasoning(t *testing.T) {
-	t.Parallel()
-
+	// goose.SetBaseFS/SetDialect are global state — subtests must not run
+	// in parallel with each other or with other testEnv callers (race detector).
 	t.Run("empty assistant list logs mismatch warning without panic", func(t *testing.T) {
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Test Session")
