@@ -30,6 +30,7 @@ type runState struct {
 	ctx       context.Context
 
 	currentAssistant *message.Message
+	lastAssistant    *message.Message // set by handleTurnEnd before currentAssistant is nil'd
 	pendingResult    *message.Message
 }
 
@@ -315,10 +316,10 @@ runLoop:
 		// Add user-facing error feedback to the assistant message.
 		// handleTurnEnd already set FinishReasonError with empty strings;
 		// AddFinish replaces it with the detailed message.
-		if state.currentAssistant != nil {
+		if state.lastAssistant != nil {
 			_, title, detail := errorFinishFor(runErr, call.LogosCfg.Model)
-			state.currentAssistant.AddFinish(message.FinishReasonError, title, detail)
-			if updateErr := a.messages.Update(ctx, *state.currentAssistant); updateErr != nil {
+			state.lastAssistant.AddFinish(message.FinishReasonError, title, detail)
+			if updateErr := a.messages.Update(ctx, *state.lastAssistant); updateErr != nil {
 				slog.Warn("Failed to update assistant message on error", "error", updateErr)
 			}
 		}
