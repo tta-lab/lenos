@@ -50,7 +50,8 @@ type SessionAgentCall struct {
 	// Provider.Name() here instead was a regression introduced in PR #19
 	// (commit 674ce747) — it caused "Unknown Model" in the UI footer for any
 	// provider where the config ID differs from the fantasy protocol (e.g.
-	// minimax-china, bedrock, hyper).
+	// minimax-china, bedrock, hyper). Set by the coordinator from
+	// model.ModelCfg.Provider.
 	ProviderID string
 }
 

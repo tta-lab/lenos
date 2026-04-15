@@ -181,7 +181,7 @@ func TestRunState_StepStart_UsesConfigProviderID_NotFantasyProtocolName(t *testi
 	assert.Equal(t, "minimax-china", state.currentAssistant.Provider,
 		"msg.Provider must be the config provider ID (from state.providerID), NOT the fantasy Provider.Name()")
 	assert.NotEqual(t, "anthropic", state.currentAssistant.Provider,
-		"msg.Provider must NOT be the fantasy protocol name — regression guard for PR #19")
+		"regression guard: Provider must NOT be the fantasy protocol name")
 }
 
 func TestRunState_HandleDelta_AppendsProse(t *testing.T) {

@@ -46,6 +46,9 @@ func buildHistory(msgs []message.Message) []fantasy.Message {
 
 func (state *runState) handleStepStart(_ int) {
 	state.currentAssistant = nil
+	if state.providerID == "" {
+		slog.Error("handleStepStart: providerID is empty — UI model lookups will fail")
+	}
 	msg, err := state.messages.Create(state.ctx, state.sessionID, message.CreateMessageParams{
 		Role:     message.Assistant,
 		Parts:    []message.ContentPart{message.TextContent{Text: ""}},
