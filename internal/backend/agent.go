@@ -3,7 +3,6 @@ package backend
 import (
 	"context"
 
-	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/proto"
 )
 
@@ -131,14 +130,4 @@ func (b *Backend) QueuedPromptsList(workspaceID, sessionID string) ([]string, er
 	}
 
 	return ws.AgentCoordinator.QueuedPromptsList(sessionID), nil
-}
-
-// GetDefaultSmallModel returns the default small model for a provider.
-func (b *Backend) GetDefaultSmallModel(workspaceID, providerID string) (config.SelectedModel, error) {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return config.SelectedModel{}, err
-	}
-
-	return ws.GetDefaultSmallModel(providerID), nil
 }

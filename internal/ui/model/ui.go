@@ -1142,14 +1142,13 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 				return util.ReportError(errors.New("configuration not found"))()
 			}
 
-			agentCfg, ok := cfg.Agents[config.AgentCoder]
-			if !ok {
-				return util.ReportError(errors.New("agent configuration not found"))()
+			if cfg.Model == nil {
+				return util.ReportError(errors.New("model not configured"))()
 			}
 
-			currentModel := cfg.Models[agentCfg.Model]
+			currentModel := *cfg.Model
 			currentModel.Think = !currentModel.Think
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
+			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, currentModel); err != nil {
 				return util.ReportError(err)()
 			}
 			m.com.Workspace.UpdateAgentModel(context.TODO())
@@ -1216,20 +1215,14 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 
 		if !isConfigured() || msg.ReAuthenticate {
 			m.dialog.CloseDialog(dialog.ModelsID)
-			if cmd := m.openAuthenticationDialog(msg.Provider, msg.Model, msg.ModelType); cmd != nil {
+			if cmd := m.openAuthenticationDialog(msg.Provider, msg.Model); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 			break
 		}
 
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
+		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, msg.Model); err != nil {
 			cmds = append(cmds, util.ReportError(err))
-		} else if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
-			// Ensure small model is set is unset.
-			smallModel := m.com.Workspace.GetDefaultSmallModel(providerID)
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, smallModel); err != nil {
-				cmds = append(cmds, util.ReportError(err))
-			}
 		}
 
 		cmds = append(cmds, func() tea.Msg {
@@ -1237,7 +1230,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 				return util.ReportError(err)
 			}
 
-			modelMsg := fmt.Sprintf("%s model changed to %s", msg.ModelType, msg.Model.Model)
+			modelMsg := fmt.Sprintf("model changed to %s", msg.Model.Model)
 
 			return util.NewInfoMsg(modelMsg)
 		})
@@ -1265,15 +1258,14 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			break
 		}
 
-		agentCfg, ok := cfg.Agents[config.AgentCoder]
-		if !ok {
-			cmds = append(cmds, util.ReportError(errors.New("agent configuration not found")))
+		if cfg.Model == nil {
+			cmds = append(cmds, util.ReportError(errors.New("model not configured")))
 			break
 		}
 
-		currentModel := cfg.Models[agentCfg.Model]
+		currentModel := *cfg.Model
 		currentModel.ReasoningEffort = msg.Effort
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
+		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, currentModel); err != nil {
 			cmds = append(cmds, util.ReportError(err))
 			break
 		}
@@ -1332,7 +1324,7 @@ func substituteArgs(content string, args map[string]string) string {
 	return content
 }
 
-func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.SelectedModel, modelType config.SelectedModelType) tea.Cmd {
+func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.SelectedModel) tea.Cmd {
 	var (
 		dlg dialog.Dialog
 		cmd tea.Cmd
@@ -1342,11 +1334,11 @@ func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.Se
 
 	switch provider.ID {
 	case "hyper":
-		dlg, cmd = dialog.NewOAuthHyper(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = dialog.NewOAuthHyper(m.com, isOnboarding, provider, model)
 	case catwalk.InferenceProviderCopilot:
-		dlg, cmd = dialog.NewOAuthCopilot(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = dialog.NewOAuthCopilot(m.com, isOnboarding, provider, model)
 	default:
-		dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model)
 	}
 
 	if m.dialog.ContainsDialog(dlg.ID()) {
@@ -2100,14 +2092,10 @@ func (m *UI) FullHelp() [][]key.Binding {
 
 func (m *UI) currentModelSupportsImages() bool {
 	cfg := m.com.Config()
-	if cfg == nil {
+	if cfg == nil || cfg.Model == nil {
 		return false
 	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
-	if !ok {
-		return false
-	}
-	model := cfg.GetModelByType(agentCfg.Model)
+	model := cfg.GetModel(cfg.Model.Provider, cfg.Model.Model)
 	return model != nil && model.SupportsImages
 }
 

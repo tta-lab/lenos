@@ -37,9 +37,8 @@ type APIKeyInput struct {
 	com          *common.Common
 	isOnboarding bool
 
-	provider  catwalk.Provider
-	model     config.SelectedModel
-	modelType config.SelectedModelType
+	provider catwalk.Provider
+	model    config.SelectedModel
 
 	width int
 	state APIKeyInputState
@@ -61,7 +60,6 @@ func NewAPIKeyInput(
 	isOnboarding bool,
 	provider catwalk.Provider,
 	model config.SelectedModel,
-	modelType config.SelectedModelType,
 ) (*APIKeyInput, tea.Cmd) {
 	t := com.Styles
 
@@ -70,7 +68,6 @@ func NewAPIKeyInput(
 	m.isOnboarding = isOnboarding
 	m.provider = provider
 	m.model = model
-	m.modelType = modelType
 	m.width = 60
 
 	innerWidth := m.width - t.Dialog.View.GetHorizontalFrameSize() - 2
@@ -314,8 +311,7 @@ func (m *APIKeyInput) saveKeyAndContinue() Action {
 	}
 
 	return ActionSelectModel{
-		Provider:  m.provider,
-		Model:     m.model,
-		ModelType: m.modelType,
+		Provider: m.provider,
+		Model:    m.model,
 	}
 }

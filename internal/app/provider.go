@@ -32,41 +32,28 @@ type modelMatch struct {
 	modelID  string
 }
 
-func findModels(providers map[string]config.ProviderConfig, largeModel, smallModel string) ([]modelMatch, []modelMatch, error) {
-	largeProviderFilter, largeModelID := parseModelStr(providers, largeModel)
-	smallProviderFilter, smallModelID := parseModelStr(providers, smallModel)
+func findModels(providers map[string]config.ProviderConfig, modelStr string) ([]modelMatch, error) {
+	providerFilter, modelID := parseModelStr(providers, modelStr)
 
-	// Validate provider filters exist.
-	for _, pf := range []struct {
-		filter, label string
-	}{
-		{largeProviderFilter, "large"},
-		{smallProviderFilter, "small"},
-	} {
-		if pf.filter != "" {
-			if _, ok := providers[pf.filter]; !ok {
-				return nil, nil, fmt.Errorf("%s model: provider %q not found in configuration. Use 'lenos models' to list available models", pf.label, pf.filter)
-			}
+	if providerFilter != "" {
+		if _, ok := providers[providerFilter]; !ok {
+			return nil, fmt.Errorf("model: provider %q not found in configuration. Use 'lenos models' to list available models", providerFilter)
 		}
 	}
 
-	// Find matching models in a single pass.
-	var largeMatches, smallMatches []modelMatch
+	var matches []modelMatch
 	for name, provider := range providers {
 		if provider.Disable {
 			continue
 		}
 		for _, m := range provider.Models {
-			if filter(largeModelID, largeProviderFilter, m.ID, name) {
-				largeMatches = append(largeMatches, modelMatch{provider: name, modelID: m.ID})
-			}
-			if filter(smallModelID, smallProviderFilter, m.ID, name) {
-				smallMatches = append(smallMatches, modelMatch{provider: name, modelID: m.ID})
+			if filter(modelID, providerFilter, m.ID, name) {
+				matches = append(matches, modelMatch{provider: name, modelID: m.ID})
 			}
 		}
 	}
 
-	return largeMatches, smallMatches, nil
+	return matches, nil
 }
 
 func filter(modelFilter, providerFilter, model, provider string) bool {

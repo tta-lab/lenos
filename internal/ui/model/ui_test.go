@@ -44,7 +44,7 @@ func TestCurrentModelSupportsImages(t *testing.T) {
 		cfg := &config.Config{
 			Providers: csync.NewMap[string, config.ProviderConfig](),
 			Agents: map[string]config.Agent{
-				config.AgentCoder: {Model: config.SelectedModelTypeLarge},
+				config.AgentCoder: {},
 			},
 		}
 		ui := newTestUIWithConfig(t, cfg)
@@ -63,15 +63,13 @@ func TestCurrentModelSupportsImages(t *testing.T) {
 		})
 
 		cfg := &config.Config{
-			Models: map[config.SelectedModelType]config.SelectedModel{
-				config.SelectedModelTypeLarge: {
-					Provider: "test-provider",
-					Model:    "test-model",
-				},
+			Model: &config.SelectedModel{
+				Provider: "test-provider",
+				Model:    "test-model",
 			},
 			Providers: providers,
 			Agents: map[string]config.Agent{
-				config.AgentCoder: {Model: config.SelectedModelTypeLarge},
+				config.AgentCoder: {},
 			},
 		}
 
