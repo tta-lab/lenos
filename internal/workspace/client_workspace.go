@@ -230,14 +230,6 @@ func (w *ClientWorkspace) InitCoderAgent(ctx context.Context) error {
 	return w.client.InitiateAgentProcessing(ctx, w.workspaceID())
 }
 
-func (w *ClientWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	model, err := w.client.GetDefaultSmallModel(context.Background(), w.workspaceID(), providerID)
-	if err != nil {
-		return config.SelectedModel{}
-	}
-	return *model
-}
-
 // -- Config (read-only) --
 
 func (w *ClientWorkspace) Config() *config.Config {
@@ -258,8 +250,8 @@ func (w *ClientWorkspace) AgentName() string {
 
 // -- Config mutations --
 
-func (w *ClientWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
-	err := w.client.UpdatePreferredModel(context.Background(), w.workspaceID(), scope, modelType, model)
+func (w *ClientWorkspace) UpdatePreferredModel(scope config.Scope, model config.SelectedModel) error {
+	err := w.client.UpdatePreferredModel(context.Background(), w.workspaceID(), scope, model)
 	if err == nil {
 		w.refreshWorkspace()
 	}

@@ -169,14 +169,14 @@ func (s *ConfigStore) RemoveConfigField(scope Scope, key string) error {
 	return nil
 }
 
-// UpdatePreferredModel updates the preferred model for the given type and
-// persists it to the config file at the given scope.
-func (s *ConfigStore) UpdatePreferredModel(scope Scope, modelType SelectedModelType, model SelectedModel) error {
-	s.config.Models[modelType] = model
-	if err := s.SetConfigField(scope, fmt.Sprintf("models.%s", modelType), model); err != nil {
+// UpdatePreferredModel updates the preferred model and persists it to the config
+// file at the given scope.
+func (s *ConfigStore) UpdatePreferredModel(scope Scope, model SelectedModel) error {
+	s.config.Model = &model
+	if err := s.SetConfigField(scope, "model", model); err != nil {
 		return fmt.Errorf("failed to update preferred model: %w", err)
 	}
-	if err := s.recordRecentModel(scope, modelType, model); err != nil {
+	if err := s.recordRecentModel(scope, model); err != nil {
 		return err
 	}
 	return nil
@@ -310,13 +310,13 @@ func (s *ConfigStore) RefreshOAuthToken(ctx context.Context, scope Scope, provid
 }
 
 // recordRecentModel records a model in the recent models list.
-func (s *ConfigStore) recordRecentModel(scope Scope, modelType SelectedModelType, model SelectedModel) error {
+func (s *ConfigStore) recordRecentModel(scope Scope, model SelectedModel) error {
 	if model.Provider == "" || model.Model == "" {
 		return nil
 	}
 
 	if s.config.RecentModels == nil {
-		s.config.RecentModels = make(map[SelectedModelType][]SelectedModel)
+		s.config.RecentModels = []SelectedModel{}
 	}
 
 	eq := func(a, b SelectedModel) bool {
@@ -328,23 +328,22 @@ func (s *ConfigStore) recordRecentModel(scope Scope, modelType SelectedModelType
 		Model:    model.Model,
 	}
 
-	current := s.config.RecentModels[modelType]
-	withoutCurrent := slices.DeleteFunc(slices.Clone(current), func(existing SelectedModel) bool {
+	withoutCurrent := slices.DeleteFunc(slices.Clone(s.config.RecentModels), func(existing SelectedModel) bool {
 		return eq(existing, entry)
 	})
 
 	updated := append([]SelectedModel{entry}, withoutCurrent...)
-	if len(updated) > maxRecentModelsPerType {
-		updated = updated[:maxRecentModelsPerType]
+	if len(updated) > maxRecentModels {
+		updated = updated[:maxRecentModels]
 	}
 
-	if slices.EqualFunc(current, updated, eq) {
+	if slices.EqualFunc(s.config.RecentModels, updated, eq) {
 		return nil
 	}
 
-	s.config.RecentModels[modelType] = updated
+	s.config.RecentModels = updated
 
-	if err := s.SetConfigField(scope, fmt.Sprintf("recent_models.%s", modelType), updated); err != nil {
+	if err := s.SetConfigField(scope, "recent_models", updated); err != nil {
 		return fmt.Errorf("failed to persist recent models: %w", err)
 	}
 

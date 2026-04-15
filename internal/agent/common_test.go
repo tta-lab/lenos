@@ -119,24 +119,16 @@ func testEnv(t *testing.T) fakeEnv {
 	}
 }
 
-func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPrompt string, tools ...fantasy.AgentTool) SessionAgent {
-	largeModel := Model{
-		Model: large,
-		CatwalkCfg: catwalk.Model{
-			ContextWindow:    200000,
-			DefaultMaxTokens: 10000,
-		},
-	}
-	smallModel := Model{
-		Model: small,
+func testSessionAgent(env fakeEnv, model fantasy.LanguageModel, systemPrompt string, tools ...fantasy.AgentTool) SessionAgent {
+	m := Model{
+		Model: model,
 		CatwalkCfg: catwalk.Model{
 			ContextWindow:    200000,
 			DefaultMaxTokens: 10000,
 		},
 	}
 	agent := NewSessionAgent(SessionAgentOptions{
-		LargeModel:   largeModel,
-		SmallModel:   smallModel,
+		Model:        m,
 		SystemPrompt: systemPrompt,
 		Sessions:     env.sessions,
 		Messages:     env.messages,
@@ -145,7 +137,7 @@ func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPro
 	return agent
 }
 
-func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel) (SessionAgent, error) {
+func coderAgent(r *vcr.Recorder, env fakeEnv, model fantasy.LanguageModel) (SessionAgent, error) {
 	fixedTime := func() time.Time {
 		t, _ := time.Parse("1/2/2006", "1/1/2025")
 		return t
@@ -173,13 +165,13 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	// Clear some fields to avoid issues with VCR cassette matching.
 	cfg.Config().Options.ContextPaths = nil
 
-	systemPrompt, err := prompt.Build(context.TODO(), large.Provider(), large.Model(), cfg)
+	systemPrompt, err := prompt.Build(context.TODO(), model.Provider(), model.Model(), cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	// No tools needed for test agents since the coordinator now uses logos directly.
-	return testSessionAgent(env, large, small, systemPrompt), nil
+	return testSessionAgent(env, model, systemPrompt), nil
 }
 
 // createSimpleGoProject creates a simple Go project structure in the given directory.

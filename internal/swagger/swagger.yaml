@@ -108,14 +108,6 @@ definitions:
       top_p:
         type: number
     type: object
-  config.SelectedModelType:
-    enum:
-    - large
-    - small
-    type: string
-    x-enum-varnames:
-    - SelectedModelTypeLarge
-    - SelectedModelTypeSmall
   config.TUIOptions:
     properties:
       compact_mode:
@@ -164,11 +156,10 @@ definitions:
     properties:
       $schema:
         type: string
-      models:
-        additionalProperties:
-          $ref: '#/definitions/config.SelectedModel'
-        description: We currently only support large/small as values here.
-        type: object
+      model:
+        allOf:
+        - $ref: '#/definitions/config.SelectedModel'
+        description: Model is the currently selected model.
       options:
         $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Options'
       permissions:
@@ -178,12 +169,11 @@ definitions:
         - $ref: '#/definitions/csync.Map-string-config_ProviderConfig'
         description: The providers that are configured
       recent_models:
-        additionalProperties:
-          items:
-            $ref: '#/definitions/config.SelectedModel'
-          type: array
-        description: Recently used models stored in the data directory config.
-        type: object
+        description: RecentModels stores recently used models in the data directory
+          config.
+        items:
+          $ref: '#/definitions/config.SelectedModel'
+        type: array
       tools:
         $ref: '#/definitions/config.Tools'
     type: object
@@ -326,8 +316,6 @@ definitions:
     properties:
       model:
         $ref: '#/definitions/config.SelectedModel'
-      model_type:
-        $ref: '#/definitions/config.SelectedModelType'
       scope:
         $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Scope'
     type: object
@@ -677,36 +665,6 @@ paths:
           schema:
             $ref: '#/definitions/proto.Error'
       summary: Send message to agent
-      tags:
-      - agent
-  /workspaces/{id}/agent/default-small-model:
-    get:
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Provider ID
-        in: query
-        name: provider_id
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Get default small model
       tags:
       - agent
   /workspaces/{id}/agent/init:

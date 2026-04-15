@@ -6,9 +6,9 @@ import (
 	"github.com/tta-lab/lenos/internal/workspace"
 )
 
-// selectedLargeModel returns the currently selected large language model from
+// selectedModel returns the currently selected large language model from
 // the agent coordinator, if one exists.
-func (m *UI) selectedLargeModel() *workspace.AgentModel {
+func (m *UI) selectedModel() *workspace.AgentModel {
 	if m.com.Workspace.AgentIsReady() {
 		model := m.com.Workspace.AgentModel()
 		return &model

@@ -97,7 +97,7 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 		return store, nil
 	}
 
-	if err := configureSelectedModels(store, store.knownProviders); err != nil {
+	if err := configureSelectedModels(store.config, store.knownProviders); err != nil {
 		return nil, fmt.Errorf("failed to configure selected models: %w", err)
 	}
 	store.SetupAgents()
@@ -378,11 +378,11 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	if c.Providers == nil {
 		c.Providers = csync.NewMap[string, ProviderConfig]()
 	}
-	if c.Models == nil {
-		c.Models = make(map[SelectedModelType]SelectedModel)
+	if c.Model == nil {
+		c.Model = &SelectedModel{}
 	}
 	if c.RecentModels == nil {
-		c.RecentModels = make(map[SelectedModelType][]SelectedModel)
+		c.RecentModels = []SelectedModel{}
 	}
 	// Add the default context paths if they are not already present
 	c.Options.ContextPaths = append(defaultContextPaths, c.Options.ContextPaths...)
@@ -427,10 +427,9 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	c.Options.InitializeAs = cmp.Or(c.Options.InitializeAs, defaultInitializeAs)
 }
 
-func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (largeModel SelectedModel, smallModel SelectedModel, err error) {
+func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (SelectedModel, error) {
 	if len(knownProviders) == 0 && c.Providers.Len() == 0 {
-		err = fmt.Errorf("no providers configured, please configure at least one provider")
-		return largeModel, smallModel, err
+		return SelectedModel{}, fmt.Errorf("no providers configured, please configure at least one provider")
 	}
 
 	// Use the first provider enabled based on the known providers order
@@ -440,30 +439,16 @@ func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (large
 		if !ok || providerConfig.Disable {
 			continue
 		}
-		defaultLargeModel := c.GetModel(string(p.ID), p.DefaultLargeModelID)
-		if defaultLargeModel == nil {
-			err = fmt.Errorf("default large model %s not found for provider %s", p.DefaultLargeModelID, p.ID)
-			return largeModel, smallModel, err
+		defaultModel := c.GetModel(string(p.ID), p.DefaultLargeModelID)
+		if defaultModel == nil {
+			return SelectedModel{}, fmt.Errorf("default model %s not found for provider %s", p.DefaultLargeModelID, p.ID)
 		}
-		largeModel = SelectedModel{
+		return SelectedModel{
 			Provider:        string(p.ID),
-			Model:           defaultLargeModel.ID,
-			MaxTokens:       defaultLargeModel.DefaultMaxTokens,
-			ReasoningEffort: defaultLargeModel.DefaultReasoningEffort,
-		}
-
-		defaultSmallModel := c.GetModel(string(p.ID), p.DefaultSmallModelID)
-		if defaultSmallModel == nil {
-			err = fmt.Errorf("default small model %s not found for provider %s", p.DefaultSmallModelID, p.ID)
-			return largeModel, smallModel, err
-		}
-		smallModel = SelectedModel{
-			Provider:        string(p.ID),
-			Model:           defaultSmallModel.ID,
-			MaxTokens:       defaultSmallModel.DefaultMaxTokens,
-			ReasoningEffort: defaultSmallModel.DefaultReasoningEffort,
-		}
-		return largeModel, smallModel, err
+			Model:           defaultModel.ID,
+			MaxTokens:       defaultModel.DefaultMaxTokens,
+			ReasoningEffort: defaultModel.DefaultReasoningEffort,
+		}, nil
 	}
 
 	enabledProviders := c.EnabledProviders()
@@ -472,127 +457,68 @@ func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (large
 	})
 
 	if len(enabledProviders) == 0 {
-		err = fmt.Errorf("no providers configured, please configure at least one provider")
-		return largeModel, smallModel, err
+		return SelectedModel{}, fmt.Errorf("no providers configured, please configure at least one provider")
 	}
 
 	providerConfig := enabledProviders[0]
 	if len(providerConfig.Models) == 0 {
-		err = fmt.Errorf("provider %s has no models configured", providerConfig.ID)
-		return largeModel, smallModel, err
+		return SelectedModel{}, fmt.Errorf("provider %s has no models configured", providerConfig.ID)
 	}
-	defaultLargeModel := c.GetModel(providerConfig.ID, providerConfig.Models[0].ID)
-	largeModel = SelectedModel{
+	defaultModel := c.GetModel(providerConfig.ID, providerConfig.Models[0].ID)
+	return SelectedModel{
 		Provider:  providerConfig.ID,
-		Model:     defaultLargeModel.ID,
-		MaxTokens: defaultLargeModel.DefaultMaxTokens,
-	}
-	defaultSmallModel := c.GetModel(providerConfig.ID, providerConfig.Models[0].ID)
-	smallModel = SelectedModel{
-		Provider:  providerConfig.ID,
-		Model:     defaultSmallModel.ID,
-		MaxTokens: defaultSmallModel.DefaultMaxTokens,
-	}
-	return largeModel, smallModel, err
+		Model:     defaultModel.ID,
+		MaxTokens: defaultModel.DefaultMaxTokens,
+	}, nil
 }
 
-func configureSelectedModels(store *ConfigStore, knownProviders []catwalk.Provider) error {
-	c := store.config
-	defaultLarge, defaultSmall, err := c.defaultModelSelection(knownProviders)
+func configureSelectedModels(c *Config, knownProviders []catwalk.Provider) error {
+	defaultModel, err := c.defaultModelSelection(knownProviders)
 	if err != nil {
-		return fmt.Errorf("failed to select default models: %w", err)
+		return fmt.Errorf("failed to select default model: %w", err)
 	}
-	large, small := defaultLarge, defaultSmall
 
-	largeModelSelected, largeModelConfigured := c.Models[SelectedModelTypeLarge]
-	if largeModelConfigured {
-		if largeModelSelected.Model != "" {
-			large.Model = largeModelSelected.Model
-		}
-		if largeModelSelected.Provider != "" {
-			large.Provider = largeModelSelected.Provider
-		}
-		model := c.GetModel(large.Provider, large.Model)
-		if model == nil {
-			large = defaultLarge
-			// override the model type to large
-			err := store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeLarge, large)
-			if err != nil {
-				return fmt.Errorf("failed to update preferred large model: %w", err)
-			}
-		} else {
-			if largeModelSelected.MaxTokens > 0 {
-				large.MaxTokens = largeModelSelected.MaxTokens
-			} else {
-				large.MaxTokens = model.DefaultMaxTokens
-			}
-			if largeModelSelected.ReasoningEffort != "" {
-				large.ReasoningEffort = largeModelSelected.ReasoningEffort
-			}
-			large.Think = largeModelSelected.Think
-			if largeModelSelected.Temperature != nil {
-				large.Temperature = largeModelSelected.Temperature
-			}
-			if largeModelSelected.TopP != nil {
-				large.TopP = largeModelSelected.TopP
-			}
-			if largeModelSelected.TopK != nil {
-				large.TopK = largeModelSelected.TopK
-			}
-			if largeModelSelected.FrequencyPenalty != nil {
-				large.FrequencyPenalty = largeModelSelected.FrequencyPenalty
-			}
-			if largeModelSelected.PresencePenalty != nil {
-				large.PresencePenalty = largeModelSelected.PresencePenalty
-			}
-		}
-	}
-	smallModelSelected, smallModelConfigured := c.Models[SelectedModelTypeSmall]
-	if smallModelConfigured {
-		if smallModelSelected.Model != "" {
-			small.Model = smallModelSelected.Model
-		}
-		if smallModelSelected.Provider != "" {
-			small.Provider = smallModelSelected.Provider
-		}
+	model := defaultModel
 
-		model := c.GetModel(small.Provider, small.Model)
-		if model == nil {
-			small = defaultSmall
-			// override the model type to small
-			err := store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeSmall, small)
-			if err != nil {
-				return fmt.Errorf("failed to update preferred small model: %w", err)
-			}
+	if c.Model != nil {
+		if c.Model.Model != "" {
+			model.Model = c.Model.Model
+		}
+		if c.Model.Provider != "" {
+			model.Provider = c.Model.Provider
+		}
+		catwalkModel := c.GetModel(model.Provider, model.Model)
+		if catwalkModel == nil {
+			model = defaultModel
 		} else {
-			if smallModelSelected.MaxTokens > 0 {
-				small.MaxTokens = smallModelSelected.MaxTokens
+			if c.Model.MaxTokens > 0 {
+				model.MaxTokens = c.Model.MaxTokens
 			} else {
-				small.MaxTokens = model.DefaultMaxTokens
+				model.MaxTokens = catwalkModel.DefaultMaxTokens
 			}
-			if smallModelSelected.ReasoningEffort != "" {
-				small.ReasoningEffort = smallModelSelected.ReasoningEffort
+			if c.Model.ReasoningEffort != "" {
+				model.ReasoningEffort = c.Model.ReasoningEffort
 			}
-			if smallModelSelected.Temperature != nil {
-				small.Temperature = smallModelSelected.Temperature
+			model.Think = c.Model.Think
+			if c.Model.Temperature != nil {
+				model.Temperature = c.Model.Temperature
 			}
-			if smallModelSelected.TopP != nil {
-				small.TopP = smallModelSelected.TopP
+			if c.Model.TopP != nil {
+				model.TopP = c.Model.TopP
 			}
-			if smallModelSelected.TopK != nil {
-				small.TopK = smallModelSelected.TopK
+			if c.Model.TopK != nil {
+				model.TopK = c.Model.TopK
 			}
-			if smallModelSelected.FrequencyPenalty != nil {
-				small.FrequencyPenalty = smallModelSelected.FrequencyPenalty
+			if c.Model.FrequencyPenalty != nil {
+				model.FrequencyPenalty = c.Model.FrequencyPenalty
 			}
-			if smallModelSelected.PresencePenalty != nil {
-				small.PresencePenalty = smallModelSelected.PresencePenalty
+			if c.Model.PresencePenalty != nil {
+				model.PresencePenalty = c.Model.PresencePenalty
 			}
-			small.Think = smallModelSelected.Think
 		}
 	}
-	c.Models[SelectedModelTypeLarge] = large
-	c.Models[SelectedModelTypeSmall] = small
+
+	c.Model = &model
 	return nil
 }
 
