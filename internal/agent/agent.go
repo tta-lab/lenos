@@ -44,6 +44,14 @@ type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
 	LogosCfg  logos.Config
+	// ProviderID is the config-side provider identifier (e.g. "minimax-china",
+	// "openrouter"), NOT the fantasy protocol name (e.g. "anthropic"). This is
+	// what the UI looks up via cfg.GetModel(providerID, modelID). Storing
+	// Provider.Name() here instead was a regression introduced in PR #19
+	// (commit 674ce747) — it caused "Unknown Model" in the UI footer for any
+	// provider where the config ID differs from the fantasy protocol (e.g.
+	// minimax-china, bedrock, hyper).
+	ProviderID string
 }
 
 type SessionAgent interface {

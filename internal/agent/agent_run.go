@@ -24,10 +24,11 @@ import (
 // runState holds mutable state for the duration of a single Run() call.
 // Each queued turn reinitializes these fields via the runLoop reset block.
 type runState struct {
-	sessionID string
-	logosCfg  logos.Config
-	messages  message.Service
-	ctx       context.Context
+	sessionID  string
+	providerID string // config provider ID (e.g. "minimax-china"), NOT fantasy protocol name
+	logosCfg   logos.Config
+	messages   message.Service
+	ctx        context.Context
 
 	currentAssistant *message.Message
 	pendingResult    *message.Message
@@ -45,15 +46,11 @@ func buildHistory(msgs []message.Message) []fantasy.Message {
 
 func (state *runState) handleStepStart(_ int) {
 	state.currentAssistant = nil
-	providerName := ""
-	if state.logosCfg.Provider != nil {
-		providerName = state.logosCfg.Provider.Name()
-	}
 	msg, err := state.messages.Create(state.ctx, state.sessionID, message.CreateMessageParams{
 		Role:     message.Assistant,
 		Parts:    []message.ContentPart{message.TextContent{Text: ""}},
 		Model:    state.logosCfg.Model,
-		Provider: providerName,
+		Provider: state.providerID,
 	})
 	if err != nil {
 		slog.Warn("handleStepStart: failed to create assistant message", "error", err)
@@ -239,10 +236,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*logos.R
 runLoop:
 	// Reset state to prevent stale-message misalignment on queued turns.
 	state = &runState{
-		sessionID: call.SessionID,
-		logosCfg:  call.LogosCfg,
-		messages:  a.messages,
-		ctx:       ctx,
+		sessionID:  call.SessionID,
+		providerID: call.ProviderID,
+		logosCfg:   call.LogosCfg,
+		messages:   a.messages,
+		ctx:        ctx,
 	}
 
 	if call.Prompt == "" {
