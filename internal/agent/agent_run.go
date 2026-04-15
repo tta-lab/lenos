@@ -24,27 +24,36 @@ import (
 // runState holds mutable state for the duration of a single Run() call.
 // Each queued turn reinitializes these fields via the runLoop reset block.
 type runState struct {
-	sessionID string
-	logosCfg  logos.Config
-	messages  message.Service
-	ctx       context.Context
+	sessionID  string
+	providerID string // config provider ID (e.g. "minimax-china"), NOT fantasy protocol name
+	logosCfg   logos.Config
+	messages   message.Service
+	ctx        context.Context
 
 	currentAssistant *message.Message
-	lastAssistant    *message.Message // set by handleTurnEnd before currentAssistant is nil'd
 	pendingResult    *message.Message
+}
+
+// buildHistory converts session messages to fantasy messages for logos.Run.
+// The prompt is NOT included — logos.Run appends it internally.
+func buildHistory(msgs []message.Message) []fantasy.Message {
+	history := make([]fantasy.Message, 0, len(msgs))
+	for _, m := range msgs {
+		history = append(history, m.ToAIMessage()...)
+	}
+	return history
 }
 
 func (state *runState) handleStepStart(_ int) {
 	state.currentAssistant = nil
-	providerName := ""
-	if state.logosCfg.Provider != nil {
-		providerName = state.logosCfg.Provider.Name()
+	if state.providerID == "" {
+		slog.Error("handleStepStart: providerID is empty — UI model lookups will fail")
 	}
 	msg, err := state.messages.Create(state.ctx, state.sessionID, message.CreateMessageParams{
 		Role:     message.Assistant,
 		Parts:    []message.ContentPart{message.TextContent{Text: ""}},
 		Model:    state.logosCfg.Model,
-		Provider: providerName,
+		Provider: state.providerID,
 	})
 	if err != nil {
 		slog.Warn("handleStepStart: failed to create assistant message", "error", err)
@@ -209,8 +218,6 @@ func (state *runState) handleTurnEnd(reason logos.StopReason) {
 		if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
 			slog.Warn("handleTurnEnd: failed to persist finish", "error", err)
 		}
-		state.lastAssistant = state.currentAssistant
-		state.currentAssistant = nil
 	}
 
 	// Abandon any pending result (cancel/error mid-cmd).
@@ -242,10 +249,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*logos.R
 runLoop:
 	// Reset state to prevent stale-message misalignment on queued turns.
 	state = &runState{
-		sessionID: call.SessionID,
-		logosCfg:  call.LogosCfg,
-		messages:  a.messages,
-		ctx:       ctx,
+		sessionID:  call.SessionID,
+		providerID: call.ProviderID,
+		logosCfg:   call.LogosCfg,
+		messages:   a.messages,
+		ctx:        ctx,
 	}
 
 	if call.Prompt == "" {
@@ -322,10 +330,10 @@ runLoop:
 		// Add user-facing error feedback to the assistant message.
 		// handleTurnEnd already set FinishReasonError with empty strings;
 		// AddFinish replaces it with the detailed message.
-		if state.lastAssistant != nil {
+		if state.currentAssistant != nil {
 			_, title, detail := errorFinishFor(runErr, call.LogosCfg.Model)
-			state.lastAssistant.AddFinish(message.FinishReasonError, title, detail)
-			if updateErr := a.messages.Update(ctx, *state.lastAssistant); updateErr != nil {
+			state.currentAssistant.AddFinish(message.FinishReasonError, title, detail)
+			if updateErr := a.messages.Update(ctx, *state.currentAssistant); updateErr != nil {
 				slog.Warn("Failed to update assistant message on error", "error", updateErr)
 			}
 		}
