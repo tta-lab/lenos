@@ -21,7 +21,13 @@ Read markdown files:
 
 ## Editing
 
-**Each `src edit` call performs exactly one text replacement.** The edit block uses `===BEFORE===` and `===AFTER===` as delimiters — each block must contain exactly one of each. To make multiple changes, issue separate `src edit` calls.
+Each `src edit` call performs exactly one text replacement. The edit block uses `===BEFORE===` and `===AFTER===` as **section headers** — think markdown `##` headings. Each one starts a new section and the previous ends implicitly. The heredoc `EOF` closes the entire block; do not add a second `===AFTER===` after the replacement text.
+
+`===BEFORE===` — starts the **match** section (text that must exist in the file)
+`===AFTER===` — starts the **replacement** section (text to substitute in)
+`EOF` — ends the heredoc. No closing marker needed.
+
+If you need two edits, call `src edit` twice — never put two `===BEFORE===`/`===AFTER===` pairs in one call.
 
 Targeted replacement within one symbol:
   src edit <file> --section <id> <<'EOF'
@@ -39,7 +45,7 @@ Global text replacement (any text anywhere in file):
   new text
   EOF
 
-**Single-edit example — the complete correct form:**
+Single-edit example:
   src edit some/file.go <<'EOF'
   ===BEFORE===
   func greet() {
@@ -51,10 +57,6 @@ Global text replacement (any text anywhere in file):
   }
   EOF
 
-- `===BEFORE===` marks the start of the text you want to match (the existing text in the file)
-- `===AFTER===` marks the start of the replacement text
-- If you need two edits, call `src edit` twice — never put two `===BEFORE===`/`===AFTER===` pairs in one call
-
 Replace entire symbol by ID (stdin-based):
   echo "func newImpl() {}" | src replace <file> -s <id>
 
@@ -64,6 +66,7 @@ Insert before/after a symbol:
 
 Delete a symbol or dead code:
   src delete <file> -s <id>
+
 ## src edit Matching
 
 `src edit` tries 4 matching passes in order — you usually don't need exact whitespace:
