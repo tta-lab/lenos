@@ -226,6 +226,16 @@ func (state *runState) handleTurnEnd(reason logos.StopReason) {
 	}
 }
 
+// buildHistory converts session messages to fantasy messages for logos.Run.
+// The prompt is NOT included — logos.Run appends it internally.
+func buildHistory(msgs []message.Message) []fantasy.Message {
+	history := make([]fantasy.Message, 0, len(msgs))
+	for _, m := range msgs {
+		history = append(history, m.ToAIMessage()...)
+	}
+	return history
+}
+
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*logos.RunResult, error) {
 	var state *runState
 
@@ -289,12 +299,7 @@ runLoop:
 	defer cancel()
 	defer a.activeRequests.Del(call.SessionID)
 
-	history := make([]fantasy.Message, 0, len(msgs))
-	for _, m := range msgs {
-		history = append(history, m.ToAIMessage()...)
-	}
-	// Add the user message to history so the LLM sees the full context.
-	history = append(history, fantasy.NewUserMessage(call.Prompt))
+	history := buildHistory(msgs)
 
 	startTime := time.Now()
 	a.eventPromptSent(call.SessionID)

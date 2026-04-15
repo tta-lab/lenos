@@ -595,3 +595,18 @@ func TestIntegration_RunState_MultiStepTurn(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildHistory_DoesNotIncludePrompt(t *testing.T) {
+	t.Parallel()
+	existing := []message.Message{
+		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "hello"}}},
+		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{message.TextContent{Text: "hi there"}}},
+	}
+	history := buildHistory(existing)
+	require.NotEmpty(t, history)
+	last := history[len(history)-1]
+	// The last element should NOT be a user message for the prompt.
+	// logos.Run appends the prompt internally; buildHistory must not duplicate it.
+	assert.NotEqual(t, fantasy.MessageRoleUser, last.Role, "buildHistory must not append the prompt as a user message")
+	assert.Equal(t, fantasy.MessageRoleAssistant, last.Role, "last element should be the assistant reply")
+}
