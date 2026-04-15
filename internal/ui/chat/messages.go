@@ -3,6 +3,7 @@ package chat
 import (
 	"fmt"
 	"image"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -240,7 +241,29 @@ func (a *AssistantInfoItem) renderContent(width int) string {
 	icon := a.sty.Chat.Message.AssistantInfoIcon.Render(styles.ModelIcon)
 	model := a.cfg.GetModel(a.message.Provider, a.message.Model)
 	if model == nil {
-		model = &catwalk.Model{Name: "Unknown Model"}
+		providerConfig, providerFound := a.cfg.Providers.Get(a.message.Provider)
+		var availableProviders []string
+		for p := range a.cfg.Providers.Seq() {
+			availableProviders = append(availableProviders, p.ID)
+		}
+		var modelIDsInProvider []string
+		if providerFound {
+			for _, m := range providerConfig.Models {
+				modelIDsInProvider = append(modelIDsInProvider, m.ID)
+			}
+		}
+		slog.Warn("AssistantInfoItem: GetModel returned nil",
+			"msg_provider", a.message.Provider,
+			"msg_model", a.message.Model,
+			"provider_found", providerFound,
+			"model_ids_in_provider", modelIDsInProvider,
+			"available_providers", availableProviders,
+		)
+		unknownModel := "Unknown Model"
+		if a.message.Provider != "" {
+			unknownModel = fmt.Sprintf("Unknown Model (provider=%s)", a.message.Provider)
+		}
+		model = &catwalk.Model{Name: unknownModel}
 	}
 	modelFormatted := a.sty.Chat.Message.AssistantInfoModel.Render(model.Name)
 	providerName := a.message.Provider
@@ -270,25 +293,9 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, showThinking 
 		)
 		return []MessageItem{NewUserMessageItem(sty, msg, r)}
 	case message.Assistant:
-		var items []MessageItem
-		if ShouldRenderAssistantMessage(msg) {
-			items = append(items, NewAssistantMessageItem(sty, msg, showThinking))
-		}
-		return items
+		return []MessageItem{NewAssistantMessageItem(sty, msg, showThinking)}
 	case message.Result:
 		return []MessageItem{NewResultMessageItem(sty, msg)}
 	}
 	return []MessageItem{}
-}
-
-// ShouldRenderAssistantMessage determines if an assistant message should be rendered
-//
-// In some cases the assistant message only has tools so we do not want to render an
-// empty message.
-func ShouldRenderAssistantMessage(msg *message.Message) bool {
-	content := strings.TrimSpace(msg.Content().Text)
-	thinking := strings.TrimSpace(msg.ReasoningContent().Thinking)
-	isError := msg.FinishReason() == message.FinishReasonError
-	isCancelled := msg.FinishReason() == message.FinishReasonCanceled
-	return content != "" || thinking != "" || msg.IsThinking() || isError || isCancelled
 }

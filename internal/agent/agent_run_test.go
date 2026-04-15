@@ -406,14 +406,38 @@ func TestRunState_HandleTurnEnd_OverridesFinishFromStopReason(t *testing.T) {
 
 			s.handleTurnEnd(tc.reason)
 
-			// currentAssistant should be cleared.
-			assert.Nil(t, s.currentAssistant)
+			// currentAssistant should persist.
+			assert.NotNil(t, s.currentAssistant, "currentAssistant should persist after handleTurnEnd — nil-ing was removed")
 			// The message was updated to the terminal reason.
 			updated, err := ms.Get(context.Background(), beforeID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, updated.FinishReason())
 		})
 	}
+}
+
+func TestRunState_HandleTurnEnd_LeavesCurrentAssistantAddressableForErrorFinish(t *testing.T) {
+	t.Parallel()
+	ms := newMockMessageService()
+	s := &runState{
+		sessionID: "s1",
+		messages:  ms,
+		ctx:       context.Background(),
+	}
+	s.handleStepStart(0)
+	s.handleDelta("thinking content")
+	s.handleStepEnd(0)
+
+	s.handleTurnEnd(logos.StopReasonError)
+
+	require.NotNil(t, s.currentAssistant, "currentAssistant must remain addressable after handleTurnEnd for the error path")
+	s.currentAssistant.AddFinish(message.FinishReasonError, "expired", "API key expired")
+	require.NoError(t, ms.Update(context.Background(), *s.currentAssistant))
+
+	updated, err := ms.Get(context.Background(), s.currentAssistant.ID)
+	require.NoError(t, err)
+	assert.Equal(t, message.FinishReasonError, updated.FinishReason())
+	assert.Equal(t, "expired", updated.FinishPart().Message)
 }
 
 func TestRunState_HandleTurnEnd_AbandonsPendingResultOnCancel(t *testing.T) {
@@ -438,6 +462,21 @@ func TestRunState_HandleTurnEnd_AbandonsPendingResultOnCancel(t *testing.T) {
 	require.NoError(t, err)
 	cmdContent := updated.CommandContent()
 	assert.Contains(t, cmdContent.Output, "canceled")
+}
+
+func TestBuildHistory_DoesNotIncludePrompt(t *testing.T) {
+	t.Parallel()
+	existing := []message.Message{
+		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "hello"}}},
+		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{message.TextContent{Text: "hi there"}}},
+	}
+	history := buildHistory(existing)
+	require.NotEmpty(t, history)
+	last := history[len(history)-1]
+	// The last element should NOT be a user message for the prompt.
+	// logos.Run appends the prompt internally; buildHistory must not duplicate it.
+	assert.NotEqual(t, fantasy.MessageRoleUser, last.Role, "buildHistory must not append the prompt as a user message")
+	assert.Equal(t, fantasy.MessageRoleAssistant, last.Role, "last element should be the assistant reply")
 }
 
 func TestRunState_ReasoningLivesInOwningStep(t *testing.T) {
@@ -539,7 +578,7 @@ func TestIntegration_RunState_MultiStepTurn(t *testing.T) {
 	state.handleDelta("Conclusion reached.")
 	state.handleStepEnd(2)
 	state.handleTurnEnd(logos.StopReasonFinal)
-	assert.Nil(t, state.currentAssistant)
+	assert.NotNil(t, state.currentAssistant, "currentAssistant should persist after handleTurnEnd")
 
 	// Verify: 3 assistant messages exist (order is deterministic via m.order).
 	var assistants []message.Message
