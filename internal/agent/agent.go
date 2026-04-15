@@ -242,7 +242,7 @@ runLoop:
 				text = strings.TrimPrefix(text, "\n")
 				msg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
 					Role:     message.Assistant,
-					Parts:    []message.ContentPart{},
+					Parts:    []message.ContentPart{message.TextContent{Text: text}},
 					Model:    call.LogosCfg.Model,
 					Provider: call.LogosCfg.Provider.Name(),
 				})
@@ -252,13 +252,15 @@ runLoop:
 				}
 				currentAssistant = &msg
 				createdAssistantMsgs = append(createdAssistantMsgs, currentAssistant)
+			} else {
+				currentAssistant.AppendContent(text)
 			}
-			currentAssistant.AppendContent(text)
 			if err := a.messages.Update(ctx, *currentAssistant); err != nil {
 				slog.Warn("Failed to update assistant message", "error", err)
 			}
 		},
 		OnCommandResult: func(command string, output string, exitCode int) {
+			turnJustEnded = true
 			// FIFO: pop the first message ID for this command.
 			if msgIDs, ok := pendingCommands[command]; ok && len(msgIDs) > 0 {
 				msgID := msgIDs[0]
@@ -288,7 +290,6 @@ runLoop:
 			if err != nil {
 				slog.Warn("Failed to persist command result", "error", err)
 			}
-			turnJustEnded = true
 		},
 		OnRetry: func(reason string, step int) {
 			slog.Warn("Logos retry", "reason", reason, "step", step)
