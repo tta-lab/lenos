@@ -30,8 +30,17 @@ type runState struct {
 	ctx       context.Context
 
 	currentAssistant *message.Message
-	lastAssistant    *message.Message // set by handleTurnEnd before currentAssistant is nil'd
 	pendingResult    *message.Message
+}
+
+// buildHistory converts session messages to fantasy messages for logos.Run.
+// The prompt is NOT included — logos.Run appends it internally.
+func buildHistory(msgs []message.Message) []fantasy.Message {
+	history := make([]fantasy.Message, 0, len(msgs))
+	for _, m := range msgs {
+		history = append(history, m.ToAIMessage()...)
+	}
+	return history
 }
 
 func (state *runState) handleStepStart(_ int) {
@@ -209,8 +218,6 @@ func (state *runState) handleTurnEnd(reason logos.StopReason) {
 		if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
 			slog.Warn("handleTurnEnd: failed to persist finish", "error", err)
 		}
-		state.lastAssistant = state.currentAssistant
-		state.currentAssistant = nil
 	}
 
 	// Abandon any pending result (cancel/error mid-cmd).
@@ -289,12 +296,7 @@ runLoop:
 	defer cancel()
 	defer a.activeRequests.Del(call.SessionID)
 
-	history := make([]fantasy.Message, 0, len(msgs))
-	for _, m := range msgs {
-		history = append(history, m.ToAIMessage()...)
-	}
-	// Add the user message to history so the LLM sees the full context.
-	history = append(history, fantasy.NewUserMessage(call.Prompt))
+	history := buildHistory(msgs)
 
 	startTime := time.Now()
 	a.eventPromptSent(call.SessionID)
@@ -317,10 +319,10 @@ runLoop:
 		// Add user-facing error feedback to the assistant message.
 		// handleTurnEnd already set FinishReasonError with empty strings;
 		// AddFinish replaces it with the detailed message.
-		if state.lastAssistant != nil {
+		if state.currentAssistant != nil {
 			_, title, detail := errorFinishFor(runErr, call.LogosCfg.Model)
-			state.lastAssistant.AddFinish(message.FinishReasonError, title, detail)
-			if updateErr := a.messages.Update(ctx, *state.lastAssistant); updateErr != nil {
+			state.currentAssistant.AddFinish(message.FinishReasonError, title, detail)
+			if updateErr := a.messages.Update(ctx, *state.currentAssistant); updateErr != nil {
 				slog.Warn("Failed to update assistant message on error", "error", updateErr)
 			}
 		}
