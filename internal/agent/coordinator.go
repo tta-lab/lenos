@@ -26,7 +26,7 @@ import (
 	"github.com/tta-lab/lenos/internal/project"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/logos"
+	"github.com/tta-lab/logos/v2"
 	"golang.org/x/sync/errgroup"
 
 	"charm.land/fantasy/providers/anthropic"

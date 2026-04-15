@@ -13,7 +13,7 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
-	"github.com/tta-lab/logos"
+	"github.com/tta-lab/logos/v2"
 )
 
 type MessageRole string

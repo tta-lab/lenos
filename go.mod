@@ -57,7 +57,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
-	github.com/tta-lab/logos v1.7.0
+	github.com/tta-lab/logos/v2 v2.0.0
 	github.com/tta-lab/temenos v0.7.0
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/goleak v1.3.0
@@ -199,3 +199,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/tta-lab/logos/v2 v2.0.0 => /Users/neil/Code/guion-opensource/logos
