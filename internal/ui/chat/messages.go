@@ -270,25 +270,9 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, showThinking 
 		)
 		return []MessageItem{NewUserMessageItem(sty, msg, r)}
 	case message.Assistant:
-		var items []MessageItem
-		if ShouldRenderAssistantMessage(msg) {
-			items = append(items, NewAssistantMessageItem(sty, msg, showThinking))
-		}
-		return items
+		return []MessageItem{NewAssistantMessageItem(sty, msg, showThinking)}
 	case message.Result:
 		return []MessageItem{NewResultMessageItem(sty, msg)}
 	}
 	return []MessageItem{}
-}
-
-// ShouldRenderAssistantMessage determines if an assistant message should be rendered
-//
-// In some cases the assistant message only has tools so we do not want to render an
-// empty message.
-func ShouldRenderAssistantMessage(msg *message.Message) bool {
-	content := strings.TrimSpace(msg.Content().Text)
-	thinking := strings.TrimSpace(msg.ReasoningContent().Thinking)
-	isError := msg.FinishReason() == message.FinishReasonError
-	isCancelled := msg.FinishReason() == message.FinishReasonCanceled
-	return content != "" || thinking != "" || msg.IsThinking() || isError || isCancelled
 }
