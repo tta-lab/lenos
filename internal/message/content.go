@@ -129,11 +129,15 @@ type Finish struct {
 func (Finish) isPart() {}
 
 type Message struct {
-	ID               string
-	Role             MessageRole
-	SessionID        string
-	Parts            []ContentPart
-	Model            string
+	ID        string
+	Role      MessageRole
+	SessionID string
+	Parts     []ContentPart
+	Model     string
+	// Provider is the config provider identifier (e.g. "minimax-china"). This
+	// value is looked up by the UI via cfg.GetModel(provider, model) to render
+	// the model display name in the footer. Must be a config-level provider ID,
+	// NOT a fantasy protocol family name (e.g. "anthropic").
 	Provider         string
 	CreatedAt        int64
 	UpdatedAt        int64

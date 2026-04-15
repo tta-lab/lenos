@@ -198,9 +198,10 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	}
 
 	call := SessionAgentCall{
-		SessionID: sessionID,
-		Prompt:    prompt,
-		LogosCfg:  logosCfg,
+		SessionID:  sessionID,
+		Prompt:     prompt,
+		LogosCfg:   logosCfg,
+		ProviderID: model.ModelCfg.Provider,
 	}
 
 	result, runErr := c.currentAgent.Run(ctx, call)

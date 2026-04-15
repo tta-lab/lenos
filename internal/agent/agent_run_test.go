@@ -123,10 +123,11 @@ func TestRunState_StepStart_CreatesPlaceholder(t *testing.T) {
 	t.Parallel()
 	ms := newMockMessageService()
 	state := &runState{
-		sessionID: "s1",
-		logosCfg:  logos.Config{Model: "test-model", Provider: &mockProvider{}},
-		messages:  ms,
-		ctx:       context.Background(),
+		sessionID:  "s1",
+		providerID: "test-provider-id",
+		logosCfg:   logos.Config{Model: "test-model", Provider: &mockProvider{}},
+		messages:   ms,
+		ctx:        context.Background(),
 	}
 
 	state.handleStepStart(0)
@@ -134,13 +135,53 @@ func TestRunState_StepStart_CreatesPlaceholder(t *testing.T) {
 	require.NotNil(t, state.currentAssistant)
 	assert.Equal(t, message.Assistant, state.currentAssistant.Role)
 	assert.Equal(t, "test-model", state.currentAssistant.Model)
-	assert.Equal(t, "test-provider", state.currentAssistant.Provider)
+	assert.Equal(t, "test-provider-id", state.currentAssistant.Provider)
 	// Placeholder has empty text part
 	parts := state.currentAssistant.Parts
 	require.Len(t, parts, 1)
 	tc, ok := parts[0].(message.TextContent)
 	require.True(t, ok)
 	assert.Equal(t, "", tc.Text)
+}
+
+// mockAnthropicProvider simulates a fantasy.Provider whose Name() returns the
+// protocol family ("anthropic") rather than the config provider ID. This is
+// the real-world minimax-china / bedrock / hyper situation.
+type mockAnthropicProvider struct{}
+
+func (p *mockAnthropicProvider) Name() string {
+	return "anthropic"
+}
+
+func (p *mockAnthropicProvider) LanguageModel(ctx context.Context, modelID string) (fantasy.LanguageModel, error) {
+	return &mockLanguageModel{}, nil
+}
+
+var _ fantasy.Provider = (*mockAnthropicProvider)(nil)
+
+// TestRunState_StepStart_UsesConfigProviderID_NotFantasyProtocolName locks in
+// the fix for the regression introduced in PR #19. The persisted message must
+// carry the config provider ID (e.g. "minimax-china"), NOT the fantasy
+// protocol name (e.g. "anthropic"). Without this, the UI's cfg.GetModel
+// lookup fails and the footer renders "Unknown Model".
+func TestRunState_StepStart_UsesConfigProviderID_NotFantasyProtocolName(t *testing.T) {
+	t.Parallel()
+	ms := newMockMessageService()
+	state := &runState{
+		sessionID:  "s1",
+		providerID: "minimax-china",
+		logosCfg:   logos.Config{Model: "MiniMax-M2.7-highspeed", Provider: &mockAnthropicProvider{}},
+		messages:   ms,
+		ctx:        context.Background(),
+	}
+
+	state.handleStepStart(0)
+
+	require.NotNil(t, state.currentAssistant)
+	assert.Equal(t, "minimax-china", state.currentAssistant.Provider,
+		"msg.Provider must be the config provider ID (from state.providerID), NOT the fantasy Provider.Name()")
+	assert.NotEqual(t, "anthropic", state.currentAssistant.Provider,
+		"regression guard: Provider must NOT be the fantasy protocol name")
 }
 
 func TestRunState_HandleDelta_AppendsProse(t *testing.T) {
