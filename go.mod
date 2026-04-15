@@ -200,3 +200,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
+replace github.com/tta-lab/logos/v2 v2.0.0 => github.com/tta-lab/logos/v2 v2.0.0

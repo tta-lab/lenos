@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -9,10 +11,13 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+	"charm.land/lipgloss/v2"
 
+	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
+	"github.com/tta-lab/lenos/internal/stringext"
 	"github.com/tta-lab/logos/v2"
 )
 
@@ -28,7 +33,7 @@ type runState struct {
 	pendingResult    *message.Message
 }
 
-func (state *runState) handleStepStart(stepIdx int) {
+func (state *runState) handleStepStart(_ int) {
 	state.currentAssistant = nil
 	providerName := ""
 	if state.logosCfg.Provider != nil {
@@ -47,7 +52,46 @@ func (state *runState) handleStepStart(stepIdx int) {
 	state.currentAssistant = &msg
 }
 
-func (state *runState) handleStepEnd(stepIdx int) {
+// extractCmdText parses the command text from a <cmd>...</cmd> chunk.
+// Returns the empty string if the block is empty or malformed.
+func extractCmdText(chunk string) string {
+	cmdText, _, _ := strings.Cut(chunk, "</cmd>")
+	cmdText = strings.TrimPrefix(cmdText, "<cmd>")
+	return strings.TrimSpace(cmdText)
+}
+
+// errorFinishFor returns an appropriate FinishReason and user-facing message for a
+// logos.Run error. This provides actionable feedback (e.g. "enable Copilot model",
+// "add credits") rather than opaque error strings.
+func errorFinishFor(runErr error, model string) (reason message.FinishReason, title, msg string) {
+	reason = message.FinishReasonError
+	const defaultTitle = "Provider Error"
+	linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6b8a5e")).Underline(true)
+
+	if errors.Is(runErr, hyper.ErrNoCredits) {
+		url := hyper.BaseURL()
+		link := linkStyle.Hyperlink(url, "id=hyper").Render(url)
+		return reason, "No credits", "You're out of credits. Add more at " + link
+	}
+
+	var fantasyErr *fantasy.Error
+	var providerErr *fantasy.ProviderError
+	if errors.As(runErr, &providerErr) {
+		if providerErr.Message == "The requested model is not supported." {
+			url := "https://github.com/settings/copilot/features"
+			link := linkStyle.Hyperlink(url, "id=copilot").Render(url)
+			return reason, "Copilot model not enabled",
+				fmt.Sprintf("%q is not enabled in Copilot. Go to the following page to enable it. Then, wait 5 minutes before trying again. %s", model, link)
+		}
+		return reason, cmp.Or(stringext.Capitalize(providerErr.Title), defaultTitle), providerErr.Message
+	}
+	if errors.As(runErr, &fantasyErr) {
+		return reason, cmp.Or(stringext.Capitalize(fantasyErr.Title), defaultTitle), fantasyErr.Message
+	}
+	return reason, defaultTitle, runErr.Error()
+}
+
+func (state *runState) handleStepEnd(_ int) {
 	if state.currentAssistant == nil {
 		return
 	}
@@ -61,7 +105,7 @@ func (state *runState) handleStepEnd(stepIdx int) {
 
 func (state *runState) handleDelta(text string) {
 	if state.currentAssistant == nil {
-		slog.Warn("handleDelta: no currentAssistant, creating placeholder", "text_prefix", text[:30])
+		slog.Warn("handleDelta: no currentAssistant, creating placeholder", "text_prefix", text[:min(len(text), 30)])
 		state.handleStepStart(0)
 		if state.currentAssistant == nil {
 			return
@@ -69,9 +113,7 @@ func (state *runState) handleDelta(text string) {
 	}
 
 	if strings.HasPrefix(text, "<cmd>") {
-		cmdText, _, _ := strings.Cut(text, "</cmd>")
-		cmdText = strings.TrimPrefix(cmdText, "<cmd>")
-		cmdText = strings.TrimSpace(cmdText)
+		cmdText := extractCmdText(text)
 		if cmdText == "" {
 			return
 		}
@@ -270,6 +312,17 @@ runLoop:
 	a.eventPromptResponded(call.SessionID, time.Since(startTime).Truncate(time.Second))
 
 	if runErr != nil {
+		// Add user-facing error feedback to the assistant message.
+		// handleTurnEnd already set FinishReasonError with empty strings;
+		// AddFinish replaces it with the detailed message.
+		if state.currentAssistant != nil {
+			_, title, detail := errorFinishFor(runErr, call.LogosCfg.Model)
+			state.currentAssistant.AddFinish(message.FinishReasonError, title, detail)
+			if updateErr := a.messages.Update(ctx, *state.currentAssistant); updateErr != nil {
+				slog.Warn("Failed to update assistant message on error", "error", updateErr)
+			}
+		}
+
 		// Queue next message before returning (non-recursive drain).
 		a.activeRequests.Del(call.SessionID)
 		cancel()

@@ -475,20 +475,7 @@ func TestRunState_ReasoningLivesInOwningStep(t *testing.T) {
 				ctx:       context.Background(),
 			}
 
-			for i, step := range tc.steps {
-				state.handleStepStart(i)
-				for _, r := range step.reasoning {
-					state.handleReasoningDelta(r)
-				}
-				for _, p := range step.prose {
-					state.handleDelta(p)
-				}
-				state.handleStepEnd(i)
-			}
-
-			// Verify reasoning lives in the owning step.
-			// createdAssistantMsgs was dropped in Step 5 (used only by backfillReasoning).
-			// We track assistant creation order via a local slice.
+			// Track assistant creation order in the first loop.
 			var assistantOrder []string
 			for i, step := range tc.steps {
 				state.handleStepStart(i)
