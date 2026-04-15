@@ -31,6 +31,7 @@ type runState struct {
 	ctx        context.Context
 
 	currentAssistant *message.Message
+	lastAssistant    *message.Message // set by handleTurnEnd before currentAssistant is nil'd
 	pendingResult    *message.Message
 }
 
@@ -218,6 +219,8 @@ func (state *runState) handleTurnEnd(reason logos.StopReason) {
 		if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
 			slog.Warn("handleTurnEnd: failed to persist finish", "error", err)
 		}
+		state.lastAssistant = state.currentAssistant
+		state.currentAssistant = nil
 	}
 
 	// Abandon any pending result (cancel/error mid-cmd).
@@ -231,16 +234,6 @@ func (state *runState) handleTurnEnd(reason logos.StopReason) {
 		}
 		state.pendingResult = nil
 	}
-}
-
-// buildHistory converts session messages to fantasy messages for logos.Run.
-// The prompt is NOT included — logos.Run appends it internally.
-func buildHistory(msgs []message.Message) []fantasy.Message {
-	history := make([]fantasy.Message, 0, len(msgs))
-	for _, m := range msgs {
-		history = append(history, m.ToAIMessage()...)
-	}
-	return history
 }
 
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*logos.RunResult, error) {
