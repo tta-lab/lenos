@@ -241,24 +241,29 @@ func (a *AssistantInfoItem) renderContent(width int) string {
 	icon := a.sty.Chat.Message.AssistantInfoIcon.Render(styles.ModelIcon)
 	model := a.cfg.GetModel(a.message.Provider, a.message.Model)
 	if model == nil {
+		providerConfig, providerFound := a.cfg.Providers.Get(a.message.Provider)
 		var availableProviders []string
 		for p := range a.cfg.Providers.Seq() {
 			availableProviders = append(availableProviders, p.ID)
 		}
 		var modelIDsInProvider []string
-		if pc, ok := a.cfg.Providers.Get(a.message.Provider); ok {
-			for _, m := range pc.Models {
+		if providerFound {
+			for _, m := range providerConfig.Models {
 				modelIDsInProvider = append(modelIDsInProvider, m.ID)
 			}
 		}
 		slog.Warn("AssistantInfoItem: GetModel returned nil",
 			"msg_provider", a.message.Provider,
 			"msg_model", a.message.Model,
-			"provider_found", len(modelIDsInProvider) > 0 || func() bool { _, ok := a.cfg.Providers.Get(a.message.Provider); return ok }(),
+			"provider_found", providerFound,
 			"model_ids_in_provider", modelIDsInProvider,
 			"available_providers", availableProviders,
 		)
-		model = &catwalk.Model{Name: "Unknown Model"}
+		unknownModel := "Unknown Model"
+		if a.message.Provider != "" {
+			unknownModel = fmt.Sprintf("Unknown Model (provider=%s)", a.message.Provider)
+		}
+		model = &catwalk.Model{Name: unknownModel}
 	}
 	modelFormatted := a.sty.Chat.Message.AssistantInfoModel.Render(model.Name)
 	providerName := a.message.Provider

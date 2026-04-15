@@ -475,7 +475,8 @@ func TestBuildHistory_DoesNotIncludePrompt(t *testing.T) {
 	last := history[len(history)-1]
 	// The last element should NOT be a user message for the prompt.
 	// logos.Run appends the prompt internally; buildHistory must not duplicate it.
-	assert.NotEqual(t, fantasy.Message{}.Role, last.Role)
+	assert.NotEqual(t, fantasy.MessageRoleUser, last.Role, "buildHistory must not append the prompt as a user message")
+	assert.Equal(t, fantasy.MessageRoleAssistant, last.Role, "last element should be the assistant reply")
 }
 
 func TestRunState_ReasoningLivesInOwningStep(t *testing.T) {

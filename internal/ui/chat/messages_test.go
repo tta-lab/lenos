@@ -10,6 +10,7 @@ import (
 )
 
 func TestExtractMessageItems_Assistant_EmptyContent(t *testing.T) {
+	t.Parallel()
 	sty := styles.DefaultStyles()
 	msg := &message.Message{
 		ID:    "test-empty-assistant",
