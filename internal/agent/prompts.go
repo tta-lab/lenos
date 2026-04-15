@@ -8,7 +8,7 @@ import (
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/logos"
+	"github.com/tta-lab/logos/v2"
 )
 
 //go:embed templates/coder.md.tpl

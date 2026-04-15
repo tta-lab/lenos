@@ -23,7 +23,9 @@ internal/
     load.go                        config.json loading and validation
     provider.go                    Provider configuration and model resolution
   agent/
-    agent.go                       SessionAgent: runs LLM conversations per session
+    agent.go                       Types, NewSessionAgent, package doc
+    agent_run.go                  Run + runState + logos v2.0 callbacks
+    agent_session.go              Session ops + helpers (Summarize, Cancel, etc.)
     coordinator.go                 Coordinator: manages named agents ("coder", "task")
     prompts.go                     Loads Go-template system prompts
     templates/                     System prompt templates (coder.md.tpl, task.md.tpl, etc.)

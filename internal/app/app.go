@@ -34,7 +34,7 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/update"
 	"github.com/tta-lab/lenos/internal/version"
-	"github.com/tta-lab/logos"
+	"github.com/tta-lab/logos/v2"
 )
 
 // UpdateAvailableMsg is sent when a new version is available.

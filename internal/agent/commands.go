@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/tta-lab/logos"
+	"github.com/tta-lab/logos/v2"
 )
 
 //go:embed cmd-*.md cmd-git.tpl
