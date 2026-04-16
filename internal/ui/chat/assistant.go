@@ -18,6 +18,7 @@ var cmdBlockRe = regexp.MustCompile(`(?s)<cmd>.*?</cmd>`)
 
 // stripCmdBlocks removes well-formed <cmd>...</cmd> blocks from content.
 // Partial/unclosed tags are left intact (safe for streaming).
+// The function is infallible: the regex is pre-compiled and has no panic path.
 func stripCmdBlocks(s string) string {
 	return strings.TrimSpace(cmdBlockRe.ReplaceAllString(s, ""))
 }

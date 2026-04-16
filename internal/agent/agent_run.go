@@ -330,12 +330,7 @@ runLoop:
 
 		// Still save usage on cancellation (result is non-nil for cancel).
 		if result != nil {
-			lm := a.largeModel.Get()
-			if s, err := a.sessions.Get(ctx, call.SessionID); err == nil {
-				a.updateSessionUsage(lm, &s, result.Usage, a.openrouterCost(result.ProviderMetadata))
-				if _, saveErr := a.sessions.Save(ctx, s); saveErr != nil {
-					slog.Warn("Failed to save session usage on cancellation", "error", saveErr)
-				}
+			if s, ok := a.saveSessionUsage(ctx, call.SessionID, result, "Failed to save session usage on cancellation"); ok {
 				currentSession = s
 			}
 		}
@@ -356,12 +351,7 @@ runLoop:
 
 	// Update session usage from logos result (context %, cost).
 	if result != nil {
-		lm := a.largeModel.Get()
-		if updatedSession, err := a.sessions.Get(ctx, call.SessionID); err == nil {
-			a.updateSessionUsage(lm, &updatedSession, result.Usage, a.openrouterCost(result.ProviderMetadata))
-			if _, saveErr := a.sessions.Save(ctx, updatedSession); saveErr != nil {
-				slog.Warn("Failed to save session usage", "error", saveErr)
-			}
+		if updatedSession, ok := a.saveSessionUsage(ctx, call.SessionID, result, "Failed to save session usage"); ok {
 			currentSession = updatedSession
 		}
 	}
