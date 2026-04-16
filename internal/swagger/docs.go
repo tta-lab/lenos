@@ -2342,7 +2342,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/v1",
 	Schemes:          []string{},
 	Title:            "Lenos API",
-	Description:      "Lenos is a terminal-based AI coding assistant and interactive runtime for the ttal ecosystem. This API is served over a Unix socket (or Windows named pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP, and more.",
+	Description:      "Lenos is a terminal-based AI coding assistant and interactive runtime for the ttal ecosystem. This API is served over a Unix socket (or Windows named pipe) and provides programmatic access to workspaces, sessions, agents, and more.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

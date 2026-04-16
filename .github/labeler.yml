@@ -13,10 +13,6 @@
   - "/(docs|documentation|readme)/i"
 "area: images":
   - "/image/i"
-"area: lsp":
-  - "/lsp/i"
-"area: mcp":
-  - "/mcp/i"
 "area: mouse":
   - "/(mouse|scroll)/i"
 "area: onboarding":
