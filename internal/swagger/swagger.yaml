@@ -471,8 +471,7 @@ info:
     url: https://github.com/tta-lab/lenos
   description: Lenos is a terminal-based AI coding assistant and interactive runtime
     for the ttal ecosystem. This API is served over a Unix socket (or Windows named
-    pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP,
-    and more.
+    pipe) and provides programmatic access to workspaces, sessions, agents, and more.
   license:
     name: FSL-1.1-MIT
     url: https://github.com/tta-lab/lenos/blob/main/LICENSE.md

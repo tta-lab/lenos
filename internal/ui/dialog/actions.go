@@ -66,15 +66,6 @@ type (
 		Arguments []commands.Argument
 		Args      map[string]string // Actual argument values
 	}
-	// ActionRunMCPPrompt is a message to run a custom command.
-	ActionRunMCPPrompt struct {
-		Title       string
-		Description string
-		PromptID    string
-		ClientID    string
-		Arguments   []commands.Argument
-		Args        map[string]string // Actual argument values
-	}
 )
 
 // Messages for API key input dialog.

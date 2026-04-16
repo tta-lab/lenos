@@ -212,13 +212,13 @@ func runNonInteractive(
 		}
 	}
 
-	// Wait for the agent to become ready (MCP init, etc).
+	// Wait for the agent to become ready.
 	if err := waitForAgent(ctx, c, ws.ID); err != nil {
 		stopSpinner()
 		return fmt.Errorf("agent not ready: %w", err)
 	}
 
-	// Force-update agent models so MCP tools are loaded.
+	// Force-update agent models after readiness.
 	if err := c.UpdateAgent(ctx, ws.ID); err != nil {
 		slog.Warn("Failed to update agent", "error", err)
 	}

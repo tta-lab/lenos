@@ -133,7 +133,6 @@ tool names to specific types:
 | --------------------- | ---------------------------------------------- |
 | `chat/bash.go`        | Bash, JobOutput, JobKill                       |
 | `chat/write.go`       | Write                                          |
-| `chat/mcp.go`         | MCP tools (`mcp_` prefix)                      |
 | `chat/generic.go`     | Fallback for unrecognized tools                |
 | `chat/assistant.go`   | Assistant messages (thinking, content, errors) |
 | `chat/user.go`        | User messages (input + attachments)            |

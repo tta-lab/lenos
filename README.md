@@ -2,14 +2,12 @@
 
 **A terminal-first AI assistant and interactive runtime for the [ttal](https://github.com/tta-lab) ecosystem.**
 
-Lenos is a bash-only interactive shell for ttal agents — multi-model, session-based, with LSP, MCP, and Charm ecosystem support. It runs directly in your terminal and gives AI agents the tools to read, write, and execute code in a sandboxed environment.
+Lenos is a bash-only interactive shell for ttal agents — multi-model, session-based, built on the Charm ecosystem. It runs directly in your terminal and gives AI agents the tools to read, write, and execute code in a sandboxed environment.
 
 ## Features
 
 - **Multi-model support** — Anthropic, OpenAI, Gemini, AWS Bedrock, GitHub Copilot, Hyper, and more
 - **Session-based conversations** — persistent, resumable AI sessions per project
-- **LSP integration** — code intelligence via Language Server Protocol
-- **MCP support** — extensible tooling via Model Context Protocol servers
 - **Agent skills** — composable skill system for customizing agent behavior
 - **Charm ecosystem** — built on Charmbracelet's terminal UI libraries
 - **ttal native** — designed for the ttal agent runtime and temenos sandbox
@@ -92,7 +90,7 @@ Lenos is licensed under the [Functional Source License, Version 1.1, MIT Future 
 
 Lenos is a fork of [Crush](https://github.com/charmbracelet/crush) by [Charmbracelet](https://charm.sh), originally created by [Kujtim Hoxha](https://github.com/kujtimiihoxha) and the Charmbracelet team.
 
-The original Crush project provided the foundation for Lenos: the terminal UI, multi-model architecture, LSP/MCP integration, and agent skill system. We are grateful to the original authors for their work.
+The original Crush project provided the foundation for Lenos: the terminal UI, multi-model architecture, and agent skill system. We are grateful to the original authors for their work.
 
 **Changes from upstream Crush:**
 - Module path: `github.com/charmbracelet/crush` → `github.com/tta-lab/lenos`

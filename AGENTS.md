@@ -6,8 +6,7 @@ Lenos is a terminal-based AI coding assistant and interactive runtime for the
 [ttal](https://github.com/tta-lab) ecosystem. Built in Go, it connects to LLMs
 and gives them tools to read, write, and execute code. It supports multiple
 providers (Anthropic, OpenAI, Gemini, Bedrock, Copilot, Hyper, MiniMax,
-Vercel, and more), integrates with LSPs for code intelligence, and supports
-extensibility via MCP servers and agent skills.
+Vercel, and more) and supports extensibility via agent skills.
 
 The module path is `github.com/tta-lab/lenos`.
 
@@ -16,7 +15,7 @@ The module path is `github.com/tta-lab/lenos`.
 ```
 main.go                            CLI entry point (cobra via internal/cmd)
 internal/
-  app/app.go                       Top-level wiring: DB, config, agents, LSP, MCP, events
+  app/app.go                       Top-level wiring: DB, config, agents, events
   cmd/                             CLI commands (root, run, login, models, stats, sessions)
   config/
     config.go                      Config struct, context file paths, agent definitions
@@ -30,13 +29,11 @@ internal/
     prompts.go                     Loads Go-template system prompts
     templates/                     System prompt templates (coder.md.tpl, task.md.tpl, etc.)
     tools/                         All built-in tools (bash, edit, view, grep, glob, etc.)
-      mcp/                         MCP client integration
   session/session.go               Session CRUD backed by SQLite
   message/                         Message model and content types
   db/                              SQLite via sqlc, with migrations
     sql/                           Raw SQL queries (consumed by sqlc)
     migrations/                    Schema migrations
-  lsp/                             LSP client manager, auto-discovery, on-demand startup
   ui/                              Bubble Tea v2 TUI (see internal/ui/AGENTS.md)
   permission/                      Tool permission checking and allow-lists
   event/                           Telemetry (PostHog)

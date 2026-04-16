@@ -109,7 +109,7 @@ func formatTokensAndCost(t *styles.Styles, tokens, contextWindow int64, cost flo
 	formattedPercentage := t.Muted.Render(fmt.Sprintf("%d%%", int(percentage)))
 	formattedTokens = fmt.Sprintf("%s %s", formattedPercentage, formattedTokens)
 	if percentage > 80 {
-		formattedTokens = fmt.Sprintf("%s %s", styles.LSPWarningIcon, formattedTokens)
+		formattedTokens = fmt.Sprintf("%s %s", styles.DiagnosticWarningIcon, formattedTokens)
 	}
 
 	return fmt.Sprintf("%s %s", formattedTokens, formattedCost)

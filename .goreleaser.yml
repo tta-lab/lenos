@@ -8,7 +8,7 @@ metadata:
   license: "FSL-1.1-MIT"
   homepage: "https://github.com/tta-lab/lenos"
   description: "A terminal-first AI assistant and interactive runtime for the ttal ecosystem."
-  full_description: "Lenos is a bash-only interactive shell for ttal agents — multi-model, session-based, with LSP, MCP, and Charm ecosystem support."
+  full_description: "Lenos is a bash-only interactive shell for ttal agents — multi-model, session-based, built on the Charm ecosystem."
   maintainers:
     - "tta-lab <team@tta-lab.com>"
 

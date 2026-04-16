@@ -201,8 +201,6 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		files[pathKey] = content
 	}
 
-	// organon's test suite covers skill discovery, parsing, and priority order;
-	// see https://github.com/tta-lab/ttal-cli/tree/main/skills for the canonical tests.
 	skillList, err := getSkillList(ctx)
 	if err != nil {
 		slog.Warn("skill list unavailable", "error", err)

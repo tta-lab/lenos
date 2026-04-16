@@ -252,7 +252,7 @@ func (m *APIKeyInput) inputView() string {
 		ts := t.TextInput
 		ts.Focused.Prompt = ts.Focused.Prompt.Foreground(lipgloss.Color("#c4647a"))
 
-		m.input.Prompt = styles.LSPErrorIcon + " "
+		m.input.Prompt = styles.DiagnosticErrorIcon + " "
 		m.input.SetStyles(ts)
 		m.input.Focus()
 	}
