@@ -37,7 +37,7 @@ type runState struct {
 	// where logos returned only the final-turn usage on RunResult. usageSeen
 	// gates the saveSessionUsage call (replaces the old `if result != nil`).
 	lastUsage fantasy.Usage
-	lastMeta  fantasy.ProviderMetadata
+	lastMeta  fantasy.ProviderMetadata // openrouterCost uses this for billing overrides.
 	usageSeen bool
 }
 
@@ -121,9 +121,13 @@ func (state *runState) handleStepEnd(_ int) {
 }
 
 // handleStepUsage captures per-step usage from logos. Last-step-wins —
-// matches the pre-v2.3 RunResult.Usage semantics for downstream cost/token
-// accounting in saveSessionUsage.
+// mirrors pre-logos-v2.3 behaviour where only final-turn totals were returned
+// on RunResult. Downstream cost/token accounting in saveSessionUsage relies on
+// this being called at least once per successful run.
 func (state *runState) handleStepUsage(_ int, usage fantasy.Usage, meta fantasy.ProviderMetadata) {
+	if usage.InputTokens == 0 && usage.OutputTokens == 0 {
+		slog.Debug("handleStepUsage: received zero usage", "provider", meta)
+	}
 	state.lastUsage = usage
 	state.lastMeta = meta
 	state.usageSeen = true
@@ -333,6 +337,14 @@ runLoop:
 
 	a.eventPromptResponded(call.SessionID, time.Since(startTime).Truncate(time.Second))
 
+	// Defensive invariant check: OnStepUsage must have fired if logos succeeded.
+	// If it silently stops being called (logos regression or API mismatch),
+	// token tracking breaks with no indication otherwise.
+	if runErr == nil && !state.usageSeen {
+		slog.Warn("logos.Run completed without OnStepUsage callback",
+			"session_id", call.SessionID, "model", call.LogosCfg.Model)
+	}
+
 	if runErr != nil {
 		// Add user-facing error feedback to the assistant message.
 		// handleTurnEnd already set FinishReasonError with empty strings;
@@ -345,7 +357,7 @@ runLoop:
 			}
 		}
 
-		// Still save usage on cancellation.
+		// Still save usage on cancellation — usage was already accumulated via OnStepUsage.
 		if state.usageSeen {
 			if s, ok := a.saveSessionUsage(ctx, call.SessionID, state.lastUsage, state.lastMeta, "Failed to save session usage on cancellation"); ok {
 				currentSession = s
