@@ -85,6 +85,8 @@ type Styles struct {
 		KeystrokeTip lipgloss.Style // Style for keystroke action text (e.g., "open", "close")
 		WorkingDir   lipgloss.Style // Style for current working directory
 		Separator    lipgloss.Style // Style for separator dots (•)
+		SandboxOn    lipgloss.Style // Style for sandbox enabled indicator (green)
+		SandboxOff   lipgloss.Style // Style for sandbox disabled indicator (red)
 	}
 
 	CompactDetails struct {
@@ -1078,6 +1080,8 @@ func DefaultStyles() Styles {
 	s.Header.KeystrokeTip = s.Subtle
 	s.Header.WorkingDir = s.Muted
 	s.Header.Separator = s.Subtle
+	s.Header.SandboxOn = lipgloss.NewStyle().Foreground(s.Green)
+	s.Header.SandboxOff = lipgloss.NewStyle().Foreground(s.Red)
 
 	s.CompactDetails.Title = s.Base
 	s.CompactDetails.View = s.Base.Padding(0, 1, 1, 1).Border(lipgloss.RoundedBorder()).BorderForeground(borderFocus)

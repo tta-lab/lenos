@@ -85,6 +85,7 @@ func (h *header) drawHeader(
 		session,
 		detailsOpen,
 		availDetailWidth,
+		h.com.Config().Options.Sandbox,
 	)
 
 	remainingWidth := width -
@@ -111,10 +112,19 @@ func renderHeaderDetails(
 	session *session.Session,
 	detailsOpen bool,
 	availWidth int,
+	sandbox *bool,
 ) string {
 	t := com.Styles
 
 	var parts []string
+
+	// Sandbox status indicator
+	sandboxEnabled := sandbox == nil || *sandbox // default true when nil
+	if sandboxEnabled {
+		parts = append(parts, t.Header.SandboxOn.Render("sandbox"))
+	} else {
+		parts = append(parts, t.Header.SandboxOff.Render("sandbox off"))
+	}
 
 	agentCfg := com.Config().Agents[config.AgentCoder]
 	model := com.Config().GetModelByType(agentCfg.Model)

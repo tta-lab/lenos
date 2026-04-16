@@ -56,12 +56,6 @@ import (
 // wheel event occurs.
 const MouseScrollThreshold = 5
 
-// Compact mode breakpoints.
-const (
-	compactModeWidthBreakpoint  = 120
-	compactModeHeightBreakpoint = 30
-)
-
 // If pasted text has more than 10 newlines, treat it as a file attachment.
 const pasteLinesThreshold = 10
 
@@ -197,23 +191,13 @@ type UI struct {
 		yesInitializeSelected bool
 	}
 
-	// sidebarLogo keeps a cached version of the sidebar sidebarLogo.
-	sidebarLogo string
-
 	// Notification state
 	notifyBackend       notification.Backend
 	notifyWindowFocused bool
 	// custom commands
 	customCommands []commands.CustomCommand
 
-	// forceCompactMode tracks whether compact mode is forced by user toggle
-	forceCompactMode bool
-
-	// isCompact tracks whether we're currently in compact layout mode (either
-	// by user toggle or auto-switch based on window size)
-	isCompact bool
-
-	// detailsOpen tracks whether the details panel is open (in compact mode)
+	// detailsOpen tracks whether the details panel is open
 	detailsOpen bool
 
 	// pills state
@@ -314,9 +298,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 	ui.randomizePlaceholders()
 	ui.textarea.Placeholder = ui.readyPlaceholder
 	ui.status = status
-
-	// Initialize compact mode from config
-	ui.forceCompactMode = com.Config().Options.TUI.CompactMode
 
 	// Initialize git worktree state
 	ui.gitWorktree = com.Workspace.IsGitWorktree(context.Background())
@@ -438,10 +419,6 @@ func (m *UI) shouldSendNotification() bool {
 
 // setState changes the UI state and focus.
 func (m *UI) setState(state uiState, focus uiFocusState) {
-	if state == uiLanding {
-		// Always turn off compact mode when going to landing
-		m.isCompact = false
-	}
 	m.state = state
 	m.focus = focus
 	// Changing the state may change layout, so update it.
@@ -490,21 +467,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleAgentNotification(msg.Payload); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	case loadSessionMsg:
-		if m.forceCompactMode {
-			m.isCompact = true
-		}
-		m.setState(uiChat, m.focus)
-		m.session = msg.session
-
-		msgs, err := m.com.Workspace.ListMessages(context.Background(), m.session.ID)
-		if err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		} else if cmd := m.setSessionMessages(msgs); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-
-		// Start taskwarrior subtask poller if TTAL_JOB_ID is set.
 		if jobID := os.Getenv("TTAL_JOB_ID"); jobID != "" {
 			if cmd := m.startTWTickPoll(jobID); cmd != nil {
 				cmds = append(cmds, cmd)
@@ -654,12 +616,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Adjust for chat area position
 			x -= m.layout.main.Min.X
 			y -= m.layout.main.Min.Y
-			if !image.Pt(msg.X, msg.Y).In(m.layout.sidebar) {
-				if handled, cmd := m.chat.HandleMouseDown(x, y); handled {
-					m.lastClickTime = time.Now()
-					if cmd != nil {
-						cmds = append(cmds, cmd)
-					}
+			if handled, cmd := m.chat.HandleMouseDown(x, y); handled {
+				m.lastClickTime = time.Now()
+				if cmd != nil {
+					cmds = append(cmds, cmd)
 				}
 			}
 		}
@@ -978,8 +938,6 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 	switch {
 	case m.state != uiChat:
 		return nil
-	case image.Pt(msg.X, msg.Y).In(m.layout.sidebar):
-		return nil
 	case m.focus != uiFocusEditor && image.Pt(msg.X, msg.Y).In(m.layout.editor):
 		m.focus = uiFocusEditor
 		cmd = m.textarea.Focus()
@@ -1125,9 +1083,6 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			break
 		}
 		cmds = append(cmds, m.openEditor(m.textarea.Value()))
-		m.dialog.CloseDialog(dialog.CommandsID)
-	case dialog.ActionToggleCompactMode:
-		cmds = append(cmds, m.toggleCompactMode())
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionTogglePills:
 		if cmd := m.togglePillsExpanded(); cmd != nil {
@@ -1381,7 +1336,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				cmds = append(cmds, cmd)
 			}
 			return true
-		case key.Matches(msg, m.keyMap.Chat.Details) && m.isCompact:
+		case key.Matches(msg, m.keyMap.Chat.Details):
 			m.detailsOpen = !m.detailsOpen
 			m.updateLayoutAndSize()
 			return true
@@ -1728,7 +1683,7 @@ func (m *UI) drawHeader(scr uv.Screen, area uv.Rectangle) {
 		scr,
 		area,
 		m.session,
-		m.isCompact,
+		true,
 		m.detailsOpen,
 		area.Dx(),
 	)
@@ -1768,26 +1723,18 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		editor.Draw(scr, layout.editor)
 
 	case uiChat:
-		if m.isCompact {
-			m.drawHeader(scr, layout.header)
-		} else {
-			m.drawSidebar(scr, layout.sidebar)
-		}
+		m.drawHeader(scr, layout.header)
 
 		m.chat.Draw(scr, layout.main)
 		if layout.pills.Dy() > 0 && m.pillsView != "" {
 			uv.NewStyledString(m.pillsView).Draw(scr, layout.pills)
 		}
 
-		editorWidth := scr.Bounds().Dx()
-		if !m.isCompact {
-			editorWidth -= layout.sidebar.Dx()
-		}
-		editor := uv.NewStyledString(m.renderEditorView(editorWidth))
+		editor := uv.NewStyledString(m.renderEditorView(scr.Bounds().Dx()))
 		editor.Draw(scr, layout.editor)
 
-		// Draw details overlay in compact mode when open
-		if m.isCompact && m.detailsOpen {
+		// Draw details overlay when open
+		if m.detailsOpen {
 			m.drawSessionDetails(scr, layout.sessionDetails)
 		}
 	}
@@ -1839,10 +1786,6 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	case uiFocusEditor:
 		if m.layout.editor.Dy() <= 0 {
 			// Don't show cursor if editor is not visible
-			return nil
-		}
-		if m.detailsOpen && m.isCompact {
-			// Don't show cursor if details overlay is open
 			return nil
 		}
 
@@ -2110,33 +2053,8 @@ func (m *UI) currentModelSupportsImages() bool {
 	return model != nil && model.SupportsImages
 }
 
-// toggleCompactMode toggles compact mode between uiChat and uiChatCompact states.
-func (m *UI) toggleCompactMode() tea.Cmd {
-	m.forceCompactMode = !m.forceCompactMode
-
-	err := m.com.Workspace.SetCompactMode(config.ScopeGlobal, m.forceCompactMode)
-	if err != nil {
-		return util.ReportError(err)
-	}
-
-	m.updateLayoutAndSize()
-
-	return nil
-}
-
 // updateLayoutAndSize updates the layout and sizes of UI components.
 func (m *UI) updateLayoutAndSize() {
-	// Determine if we should be in compact mode
-	if m.state == uiChat {
-		if m.forceCompactMode {
-			m.isCompact = true
-		} else if m.width < compactModeWidthBreakpoint || m.height < compactModeHeightBreakpoint {
-			m.isCompact = true
-		} else {
-			m.isCompact = false
-		}
-	}
-
 	// First pass sizes components from the current textarea height.
 	m.layout = m.generateLayout(m.width, m.height)
 	prevHeight := m.textarea.Height()
@@ -2194,14 +2112,6 @@ func (m *UI) updateSize() {
 	m.textarea.MaxHeight = TextareaMaxHeight
 	m.textarea.SetWidth(m.layout.editor.Dx())
 	m.renderPills()
-
-	// Handle different app states
-	switch m.state {
-	case uiChat:
-		if !m.isCompact {
-			m.cacheSidebarLogo(m.layout.sidebar.Dx())
-		}
-	}
 }
 
 // generateLayout calculates the layout rectangles for all UI components based
@@ -2214,8 +2124,6 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 	helpHeight := 1
 	// The editor height: textarea height + margin for attachments and bottom spacing.
 	editorHeight := m.textarea.Height() + editorHeightMargin
-	// The sidebar width
-	sidebarWidth := 30
 	// The header height
 	const landingHeaderHeight = 4
 
@@ -2280,68 +2188,38 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		uiLayout.editor = editorRect
 
 	case uiChat:
-		if m.isCompact {
-			// Layout
-			//
-			// compact-header
-			// ------
-			// main
-			// ------
-			// editor
-			// ------
-			// help
-			const compactHeaderHeight = 1
-			headerRect, mainRect := layout.SplitVertical(appRect, layout.Fixed(compactHeaderHeight))
-			detailsHeight := min(sessionDetailsMaxHeight, area.Dy()-1) // One row for the header
-			sessionDetailsArea, _ := layout.SplitVertical(appRect, layout.Fixed(detailsHeight))
-			uiLayout.sessionDetails = sessionDetailsArea
-			uiLayout.sessionDetails.Min.Y += compactHeaderHeight // adjust for header
-			// Add one line gap between header and main content
-			mainRect.Min.Y += 1
-			mainRect, editorRect := layout.SplitVertical(mainRect, layout.Fixed(mainRect.Dy()-editorHeight))
-			mainRect.Max.X -= 1 // Add padding right
-			uiLayout.header = headerRect
-			pillsHeight := m.pillsAreaHeight()
-			if pillsHeight > 0 {
-				pillsHeight = min(pillsHeight, mainRect.Dy())
-				chatRect, pillsRect := layout.SplitVertical(mainRect, layout.Fixed(mainRect.Dy()-pillsHeight))
-				uiLayout.main = chatRect
-				uiLayout.pills = pillsRect
-			} else {
-				uiLayout.main = mainRect
-			}
-			// Add bottom margin to main
-			uiLayout.main.Max.Y -= 1
-			uiLayout.editor = editorRect
+		// Layout
+		//
+		// header
+		// ------
+		// main
+		// ------
+		// editor
+		// ------
+		// help
+		const compactHeaderHeight = 1
+		headerRect, mainRect := layout.SplitVertical(appRect, layout.Fixed(compactHeaderHeight))
+		detailsHeight := min(sessionDetailsMaxHeight, area.Dy()-1) // One row for the header
+		sessionDetailsArea, _ := layout.SplitVertical(appRect, layout.Fixed(detailsHeight))
+		uiLayout.sessionDetails = sessionDetailsArea
+		uiLayout.sessionDetails.Min.Y += compactHeaderHeight // adjust for header
+		// Add one line gap between header and main content
+		mainRect.Min.Y += 1
+		mainRect, editorRect := layout.SplitVertical(mainRect, layout.Fixed(mainRect.Dy()-editorHeight))
+		mainRect.Max.X -= 1 // Add padding right
+		uiLayout.header = headerRect
+		pillsHeight := m.pillsAreaHeight()
+		if pillsHeight > 0 {
+			pillsHeight = min(pillsHeight, mainRect.Dy())
+			chatRect, pillsRect := layout.SplitVertical(mainRect, layout.Fixed(mainRect.Dy()-pillsHeight))
+			uiLayout.main = chatRect
+			uiLayout.pills = pillsRect
 		} else {
-			// Layout
-			//
-			// ------|---
-			// main  |
-			// ------| side
-			// editor|
-			// ----------
-			// help
-
-			mainRect, sideRect := layout.SplitHorizontal(appRect, layout.Fixed(appRect.Dx()-sidebarWidth))
-			// Add padding left
-			sideRect.Min.X += 1
-			mainRect, editorRect := layout.SplitVertical(mainRect, layout.Fixed(mainRect.Dy()-editorHeight))
-			mainRect.Max.X -= 1 // Add padding right
-			uiLayout.sidebar = sideRect
-			pillsHeight := m.pillsAreaHeight()
-			if pillsHeight > 0 {
-				pillsHeight = min(pillsHeight, mainRect.Dy())
-				chatRect, pillsRect := layout.SplitVertical(mainRect, layout.Fixed(mainRect.Dy()-pillsHeight))
-				uiLayout.main = chatRect
-				uiLayout.pills = pillsRect
-			} else {
-				uiLayout.main = mainRect
-			}
-			// Add bottom margin to main
-			uiLayout.main.Max.Y -= 1
-			uiLayout.editor = editorRect
+			uiLayout.main = mainRect
 		}
+		// Add bottom margin to main
+		uiLayout.main.Max.Y -= 1
+		uiLayout.editor = editorRect
 	}
 
 	return uiLayout
@@ -2353,8 +2231,7 @@ type uiLayout struct {
 	area uv.Rectangle
 
 	// header is the header shown in special cases
-	// e.x when the sidebar is collapsed
-	// or when in the landing page
+	// e.x when in the landing page
 	// or in init/config
 	header uv.Rectangle
 
@@ -2367,13 +2244,10 @@ type uiLayout struct {
 	// editor is the area for the editor pane.
 	editor uv.Rectangle
 
-	// sidebar is the area for the sidebar.
-	sidebar uv.Rectangle
-
 	// status is the area for the status view.
 	status uv.Rectangle
 
-	// session details is the area for the session details overlay in compact mode.
+	// session details is the area for the session details overlay.
 	sessionDetails uv.Rectangle
 }
 
@@ -2598,11 +2472,6 @@ func (m *UI) renderEditorView(width int) string {
 	}, "\n")
 }
 
-// cacheSidebarLogo renders and caches the sidebar logo at the specified width.
-func (m *UI) cacheSidebarLogo(width int) {
-	m.sidebarLogo = renderLogo(m.com.Styles, true, width)
-}
-
 // sendMessage sends a message with the given content and attachments.
 func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.Cmd {
 	if !m.com.Workspace.AgentIsReady() {
@@ -2614,9 +2483,6 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 		newSession, err := m.com.Workspace.CreateSession(context.Background(), "New Session")
 		if err != nil {
 			return util.ReportError(err)
-		}
-		if m.forceCompactMode {
-			m.isCompact = true
 		}
 		if newSession.ID != "" {
 			m.session = &newSession

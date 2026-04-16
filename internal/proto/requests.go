@@ -22,13 +22,6 @@ type ConfigModelRequest struct {
 	Model     config.SelectedModel     `json:"model"`
 }
 
-// ConfigCompactRequest represents a request to set compact mode.
-type ConfigCompactRequest struct {
-	Scope   config.Scope `json:"scope"`
-	Enabled bool         `json:"enabled"`
-}
-
-// ConfigProviderKeyRequest represents a request to set a provider API key.
 type ConfigProviderKeyRequest struct {
 	Scope      config.Scope `json:"scope"`
 	ProviderID string       `json:"provider_id"`

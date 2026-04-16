@@ -46,7 +46,6 @@ type ActionSelectModel struct {
 type (
 	ActionNewSession                  struct{}
 	ActionToggleHelp                  struct{}
-	ActionToggleCompactMode           struct{}
 	ActionToggleThinking              struct{}
 	ActionTogglePills                 struct{}
 	ActionExternalEditor              struct{}
