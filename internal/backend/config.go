@@ -28,14 +28,14 @@ func (b *Backend) RemoveConfigField(workspaceID string, scope config.Scope, key 
 	return ws.Cfg.RemoveConfigField(scope, key)
 }
 
-// UpdatePreferredModel updates the preferred model and persists it to the config file
-// at the given scope.
-func (b *Backend) UpdatePreferredModel(workspaceID string, scope config.Scope, model config.SelectedModel) error {
+// UpdatePreferredModel updates the preferred model for the given type
+// and persists it to the config file at the given scope.
+func (b *Backend) UpdatePreferredModel(workspaceID string, scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
-	return ws.Cfg.UpdatePreferredModel(scope, model)
+	return ws.Cfg.UpdatePreferredModel(scope, modelType, model)
 }
 
 // SetCompactMode sets the compact mode setting and persists it.

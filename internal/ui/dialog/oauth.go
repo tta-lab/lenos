@@ -46,6 +46,7 @@ type OAuth struct {
 
 	provider      catwalk.Provider
 	model         config.SelectedModel
+	modelType     config.SelectedModelType
 	oAuthProvider OAuthProvider
 
 	State OAuthState
@@ -76,6 +77,7 @@ func newOAuth(
 	isOnboarding bool,
 	provider catwalk.Provider,
 	model config.SelectedModel,
+	modelType config.SelectedModelType,
 	oAuthProvider OAuthProvider,
 ) (*OAuth, tea.Cmd) {
 	t := com.Styles
@@ -85,6 +87,7 @@ func newOAuth(
 	m.isOnboarding = isOnboarding
 	m.provider = provider
 	m.model = model
+	m.modelType = modelType
 	m.oAuthProvider = oAuthProvider
 	m.width = 60
 	m.State = OAuthStateInitializing
@@ -376,7 +379,8 @@ func (m *OAuth) saveKeyAndContinue() Action {
 	}
 
 	return ActionSelectModel{
-		Provider: m.provider,
-		Model:    m.model,
+		Provider:  m.provider,
+		Model:     m.model,
+		ModelType: m.modelType,
 	}
 }

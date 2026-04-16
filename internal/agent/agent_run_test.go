@@ -447,9 +447,8 @@ func TestRunState_HandleTurnEnd_OverridesFinishFromStopReason(t *testing.T) {
 
 			s.handleTurnEnd(tc.reason)
 
-			// currentAssistant is nil'd; lastAssistant holds the final assistant.
-			assert.Nil(t, s.currentAssistant)
-			assert.NotNil(t, s.lastAssistant)
+			// currentAssistant should persist.
+			assert.NotNil(t, s.currentAssistant, "currentAssistant should persist after handleTurnEnd — nil-ing was removed")
 			// The message was updated to the terminal reason.
 			updated, err := ms.Get(context.Background(), beforeID)
 			require.NoError(t, err)
@@ -458,7 +457,7 @@ func TestRunState_HandleTurnEnd_OverridesFinishFromStopReason(t *testing.T) {
 	}
 }
 
-func TestRunState_HandleTurnEnd_SetsLastAssistant(t *testing.T) {
+func TestRunState_HandleTurnEnd_LeavesCurrentAssistantAddressableForErrorFinish(t *testing.T) {
 	t.Parallel()
 	ms := newMockMessageService()
 	s := &runState{
@@ -472,12 +471,11 @@ func TestRunState_HandleTurnEnd_SetsLastAssistant(t *testing.T) {
 
 	s.handleTurnEnd(logos.StopReasonError)
 
-	require.Nil(t, s.currentAssistant)
-	require.NotNil(t, s.lastAssistant, "lastAssistant must be set after handleTurnEnd")
-	s.lastAssistant.AddFinish(message.FinishReasonError, "expired", "API key expired")
-	require.NoError(t, ms.Update(context.Background(), *s.lastAssistant))
+	require.NotNil(t, s.currentAssistant, "currentAssistant must remain addressable after handleTurnEnd for the error path")
+	s.currentAssistant.AddFinish(message.FinishReasonError, "expired", "API key expired")
+	require.NoError(t, ms.Update(context.Background(), *s.currentAssistant))
 
-	updated, err := ms.Get(context.Background(), s.lastAssistant.ID)
+	updated, err := ms.Get(context.Background(), s.currentAssistant.ID)
 	require.NoError(t, err)
 	assert.Equal(t, message.FinishReasonError, updated.FinishReason())
 	assert.Equal(t, "expired", updated.FinishPart().Message)
@@ -621,8 +619,7 @@ func TestIntegration_RunState_MultiStepTurn(t *testing.T) {
 	state.handleDelta("Conclusion reached.")
 	state.handleStepEnd(2)
 	state.handleTurnEnd(logos.StopReasonFinal)
-	assert.Nil(t, state.currentAssistant)
-	assert.NotNil(t, state.lastAssistant, "lastAssistant should be set after handleTurnEnd")
+	assert.NotNil(t, state.currentAssistant, "currentAssistant should persist after handleTurnEnd")
 
 	// Verify: 3 assistant messages exist (order is deterministic via m.order).
 	var assistants []message.Message

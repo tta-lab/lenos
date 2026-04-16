@@ -31,7 +31,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	}
 
 	// Copy mutable fields under lock to avoid races with SetModels.
-	model := a.model.Get()
+	largeModel := a.largeModel.Get()
 	systemPromptPrefix := a.systemPromptPrefix.Get()
 
 	currentSession, err := a.sessions.Get(ctx, sessionID)
@@ -54,8 +54,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 
 	summaryMessage, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
 		Role:             message.Assistant,
-		Model:            model.Model.Model(),
-		Provider:         model.Model.Provider(),
+		Model:            largeModel.Model.Model(),
+		Provider:         largeModel.Model.Provider(),
 		IsSummaryMessage: true,
 	})
 	if err != nil {
@@ -76,7 +76,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	prompt = append(prompt, history...)
 	prompt = append(prompt, fantasy.NewUserMessage(buildSummaryPrompt(ctx, os.Getenv("TTAL_JOB_ID"))))
 
-	stream, err := model.Model.Stream(genCtx, fantasy.Call{
+	stream, err := largeModel.Model.Stream(genCtx, fantasy.Call{
 		Prompt:          prompt,
 		ProviderOptions: opts,
 		UserAgent:       userAgent,
@@ -129,7 +129,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	}
 
 	openrouterCost := a.openrouterCost(providerMeta)
-	a.updateSessionUsage(model, &currentSession, totalUsage, openrouterCost)
+	a.updateSessionUsage(largeModel, &currentSession, totalUsage, openrouterCost)
 	currentSession.SummaryMessageID = summaryMessage.ID
 	currentSession.CompletionTokens = totalUsage.OutputTokens
 	currentSession.PromptTokens = 0
@@ -332,8 +332,9 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 	return prompts
 }
 
-func (a *sessionAgent) SetModel(model Model) {
-	a.model.Set(model)
+func (a *sessionAgent) SetModels(large Model, small Model) {
+	a.largeModel.Set(large)
+	a.smallModel.Set(small)
 }
 
 func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {
@@ -345,7 +346,7 @@ func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
 }
 
 func (a *sessionAgent) Model() Model {
-	return a.model.Get()
+	return a.largeModel.Get()
 }
 
 // formatSummaryPrompt formats the session summarization prompt from a todo list.

@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/sahilm/fuzzy"
+	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/list"
 	"github.com/tta-lab/lenos/internal/ui/styles"
@@ -218,14 +219,16 @@ func (r *Reasoning) FullHelp() [][]key.Binding {
 
 func (r *Reasoning) setReasoningItems() error {
 	cfg := r.com.Config()
-	if cfg.Model == nil {
-		return errors.New("model not configured")
+	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	if !ok {
+		return errors.New("agent configuration not found")
 	}
-	model := cfg.GetModel(cfg.Model.Provider, cfg.Model.Model)
+
+	selectedModel := cfg.Models[agentCfg.Model]
+	model := cfg.GetModelByType(agentCfg.Model)
 	if model == nil {
 		return errors.New("model configuration not found")
 	}
-	selectedModel := cfg.Model
 
 	if len(model.ReasoningLevels) == 0 {
 		return errors.New("no reasoning levels available")
