@@ -349,6 +349,14 @@ func (m *UI) Init() tea.Cmd {
 	if cmd := m.startGitPoll(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	// start taskwarrior subtask polling if running as a TW worker.
+	// TTAL_JOB_ID is set once at worker spawn and never changes, so the
+	// ticker runs for the UI lifetime with no session coupling.
+	if jobID := os.Getenv("TTAL_JOB_ID"); jobID != "" {
+		if cmd := m.startTWTickPoll(jobID); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
 	// send trigger message if one was provided at startup
 	if m.triggerMessage != "" {
 		cmds = append(cmds, m.waitAndTrigger())
@@ -467,25 +475,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleAgentNotification(msg.Payload); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		if jobID := os.Getenv("TTAL_JOB_ID"); jobID != "" {
-			if cmd := m.startTWTickPoll(jobID); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		} else {
-			// No TW job — stop any running poller and use session todos.
-			m.stopTWPoll()
-			if hasInProgressTodo(m.effectiveTodos()) {
-				if m.isAgentBusy() {
-					m.todoIsSpinning = true
-					cmds = append(cmds, m.todoSpinner.Tick)
-				}
-				m.updateLayoutAndSize()
-			}
-		}
-		// Reload prompt history for the new session.
-		m.historyReset()
-		cmds = append(cmds, m.loadPromptHistory())
-		m.updateLayoutAndSize()
 
 	case loadSessionMsg:
 		m.setState(uiChat, m.focus)
@@ -496,22 +485,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if cmd := m.setSessionMessages(msgs); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		// Start taskwarrior subtask poller if TTAL_JOB_ID is set.
-		if jobID := os.Getenv("TTAL_JOB_ID"); jobID != "" {
-			if cmd := m.startTWTickPoll(jobID); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		} else {
-			// No TW job — stop any running poller and use session todos.
-			m.stopTWPoll()
-			if hasInProgressTodo(m.effectiveTodos()) {
-				if m.isAgentBusy() {
-					m.todoIsSpinning = true
-					cmds = append(cmds, m.todoSpinner.Tick)
-				}
-				m.updateLayoutAndSize()
-			}
-		}
+		// Reload prompt history for the new session.
 		m.historyReset()
 		cmds = append(cmds, m.loadPromptHistory())
 		m.updateLayoutAndSize()
