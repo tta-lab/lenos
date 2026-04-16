@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,6 +13,15 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
+
+var cmdBlockRe = regexp.MustCompile(`(?s)<cmd>.*?</cmd>`)
+
+// stripCmdBlocks removes well-formed <cmd>...</cmd> blocks from content.
+// Partial/unclosed tags are left intact (safe for streaming).
+// The function is infallible: the regex is pre-compiled and has no panic path.
+func stripCmdBlocks(s string) string {
+	return strings.TrimSpace(cmdBlockRe.ReplaceAllString(s, ""))
+}
 
 // assistantMessageTruncateFormat is the text shown when an assistant message is
 // truncated.
@@ -132,7 +142,7 @@ func (a *AssistantMessageItem) Render(width int) string {
 func (a *AssistantMessageItem) renderMessageContent(width int) string {
 	var messageParts []string
 	thinking := strings.TrimSpace(a.message.ReasoningContent().Thinking)
-	content := strings.TrimSpace(a.message.Content().Text)
+	content := stripCmdBlocks(strings.TrimSpace(a.message.Content().Text))
 	// if the massage has reasoning content add that first
 	if thinking != "" && a.showThinking {
 		messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))

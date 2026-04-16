@@ -328,6 +328,13 @@ runLoop:
 			}
 		}
 
+		// Still save usage on cancellation (result is non-nil for cancel).
+		if result != nil {
+			if s, ok := a.saveSessionUsage(ctx, call.SessionID, result, "Failed to save session usage on cancellation"); ok {
+				currentSession = s
+			}
+		}
+
 		// Queue next message before returning (non-recursive drain).
 		a.activeRequests.Del(call.SessionID)
 		cancel()
@@ -340,6 +347,13 @@ runLoop:
 			goto runLoop
 		}
 		return nil, runErr
+	}
+
+	// Update session usage from logos result (context %, cost).
+	if result != nil {
+		if updatedSession, ok := a.saveSessionUsage(ctx, call.SessionID, result, "Failed to save session usage"); ok {
+			currentSession = updatedSession
+		}
 	}
 
 	// Send notification that agent has finished its turn.

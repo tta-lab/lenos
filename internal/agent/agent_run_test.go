@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/tta-lab/lenos/internal/pubsub"
 
@@ -674,4 +675,52 @@ func TestIntegration_RunState_MultiStepTurn(t *testing.T) {
 			require.NotEqual(t, "", asst.ReasoningContent().Thinking, "empty-text assistant must have reasoning")
 		}
 	}
+}
+
+// TestSaveSessionUsage_UpdatesTokenCounts is a regression guard for the
+// context-% fix: verifies that saveSessionUsage persists non-zero token
+// counts to the session store on both the success and cancellation paths.
+func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	// Create a session to update.
+	sess, err := env.sessions.Create(t.Context(), "test session")
+	require.NoError(t, err)
+	require.Equal(t, int64(0), sess.PromptTokens, "sanity: tokens start at zero")
+
+	// Build a minimal sessionAgent with a real session store.
+	lm := &mockLanguageModel{}
+	agent := testSessionAgent(env, lm, lm, "sys").(*sessionAgent)
+
+	// Override the largeModel with a non-zero cost config so updateSessionUsage
+	// has something to compute.
+	agent.largeModel.Set(Model{
+		Model: lm,
+		CatwalkCfg: catwalk.Model{
+			ContextWindow:    200000,
+			DefaultMaxTokens: 8096,
+			CostPer1MIn:      3.0,
+			CostPer1MOut:     15.0,
+		},
+	})
+
+	result := &logos.RunResult{
+		Usage: fantasy.Usage{
+			InputTokens:  1000,
+			OutputTokens: 500,
+		},
+	}
+
+	updated, ok := agent.saveSessionUsage(t.Context(), sess.ID, result, "save failed")
+	require.True(t, ok, "saveSessionUsage should succeed")
+	assert.Equal(t, int64(1000), updated.PromptTokens, "PromptTokens should reflect InputTokens")
+	assert.Equal(t, int64(500), updated.CompletionTokens, "CompletionTokens should reflect OutputTokens")
+	assert.Greater(t, updated.Cost, 0.0, "Cost should be non-zero")
+
+	// Confirm persisted to the store (not just in-memory).
+	persisted, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1000), persisted.PromptTokens)
+	assert.Equal(t, int64(500), persisted.CompletionTokens)
 }
