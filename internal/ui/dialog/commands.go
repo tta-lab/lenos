@@ -27,10 +27,6 @@ type CommandType uint
 func (c CommandType) String() string { return []string{"System", "User"}[c] }
 
 const (
-	sidebarCompactModeBreakpoint = 120
-)
-
-const (
 	SystemCommands CommandType = iota
 	UserCommands
 )
@@ -387,10 +383,6 @@ func (c *Commands) defaultCommands() []*CommandItem {
 				}))
 			}
 		}
-	}
-	// Only show toggle compact mode command if window width is larger than compact breakpoint (120)
-	if c.windowWidth >= sidebarCompactModeBreakpoint && c.hasSession {
-		commands = append(commands, NewCommandItem(c.com.Styles, "toggle_sidebar", "Toggle Sidebar", "", ActionToggleCompactMode{}))
 	}
 	if c.hasSession {
 		cfgPrime := c.com.Config()

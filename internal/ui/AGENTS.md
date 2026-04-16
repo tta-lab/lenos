@@ -27,7 +27,7 @@ The UI uses a **hybrid rendering** approach:
    `uv.ScreenBuffer`, and components draw into sub-regions using
    `uv.NewStyledString(str).Draw(scr, rect)`. Layout is rectangle-based via
    a `uiLayout` struct with fields like `layout.header`, `layout.main`,
-   `layout.editor`, `layout.sidebar`, `layout.pills`, `layout.status`.
+   `layout.editor`, `layout.pills`, `layout.status`.
 2. **String-based**: Sub-components like `list.List` and `completions` render
    to strings, which are painted onto the screen buffer.
 3. **`View()`** creates the screen buffer, calls `Draw()`, then
@@ -66,7 +66,6 @@ imperative methods that the main model calls directly:
 - **`Attachments`** and **`Completions`** have non-standard `Update`
   signatures (e.g., returning `bool` for "consumed") that act as guards, not
   as full Bubble Tea models.
-- **Sidebar** is not its own model: it's a `drawSidebar()` method on `UI`.
 
 When writing new components, follow this pattern:
 
@@ -162,7 +161,7 @@ through all components that need access to app state or styles.
 
 ## File Organization
 
-- `model/` — Main UI model and major sub-models (chat, sidebar, header,
+- `model/` — Main UI model and major sub-models (chat, header,
   status, pills, session, onboarding, keys, etc.)
 - `chat/` — Chat message item types and tool renderers
 - `dialog/` — Dialog implementations (models, sessions, commands,
@@ -191,3 +190,7 @@ through all components that need access to app state or styles.
 - Dialog messages are intercepted first in `Update` before other routing.
 - Focus state determines key event routing: `uiFocusEditor` sends keys to
   the textarea, `uiFocusMain` sends them to the chat list.
+
+**Note**: The layout is always compact. The compact header shows the sandbox
+status indicator (green when enabled, red when disabled), context usage
+percentage, and a toggle hint for the session details panel.

@@ -80,11 +80,16 @@ func (h *header) drawHeader(
 	b.WriteString(h.compactLogo)
 
 	availDetailWidth := width - leftPadding - rightPadding - lipgloss.Width(b.String()) - minHeaderDiags - diagToDetailsSpacing
+	var sandbox *bool
+	if opts := h.com.Config().Options; opts != nil {
+		sandbox = opts.Sandbox
+	}
 	details := renderHeaderDetails(
 		h.com,
 		session,
 		detailsOpen,
 		availDetailWidth,
+		sandbox,
 	)
 
 	remainingWidth := width -
@@ -111,10 +116,19 @@ func renderHeaderDetails(
 	session *session.Session,
 	detailsOpen bool,
 	availWidth int,
+	sandbox *bool, // nil means enabled (default true)
 ) string {
 	t := com.Styles
 
 	var parts []string
+
+	// Sandbox status indicator
+	sandboxEnabled := sandbox == nil || *sandbox // default true when nil
+	if sandboxEnabled {
+		parts = append(parts, t.Header.SandboxOn.Render("sandbox"))
+	} else {
+		parts = append(parts, t.Header.SandboxOff.Render("sandbox off"))
+	}
 
 	agentCfg := com.Config().Agents[config.AgentCoder]
 	model := com.Config().GetModelByType(agentCfg.Model)

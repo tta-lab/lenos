@@ -38,15 +38,6 @@ func (b *Backend) UpdatePreferredModel(workspaceID string, scope config.Scope, m
 	return ws.Cfg.UpdatePreferredModel(scope, modelType, model)
 }
 
-// SetCompactMode sets the compact mode setting and persists it.
-func (b *Backend) SetCompactMode(workspaceID string, scope config.Scope, enabled bool) error {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-	return ws.Cfg.SetCompactMode(scope, enabled)
-}
-
 // SetProviderAPIKey sets the API key for a provider and persists it.
 func (b *Backend) SetProviderAPIKey(workspaceID string, scope config.Scope, providerID string, apiKey any) error {
 	ws, err := b.GetWorkspace(workspaceID)

@@ -184,10 +184,6 @@ func (w *AppWorkspace) UpdatePreferredModel(scope config.Scope, modelType config
 	return w.store.UpdatePreferredModel(scope, modelType, model)
 }
 
-func (w *AppWorkspace) SetCompactMode(scope config.Scope, enabled bool) error {
-	return w.store.SetCompactMode(scope, enabled)
-}
-
 func (w *AppWorkspace) SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error {
 	return w.store.SetProviderAPIKey(scope, providerID, apiKey)
 }

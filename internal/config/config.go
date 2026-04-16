@@ -157,7 +157,6 @@ func (c *ProviderConfig) SetupGitHubCopilot() {
 }
 
 type TUIOptions struct {
-	CompactMode  bool        `json:"compact_mode,omitempty" jsonschema:"description=Enable compact mode for the TUI interface,default=false"`
 	DiffMode     string      `json:"diff_mode,omitempty" jsonschema:"description=Diff mode for the TUI interface,enum=unified,enum=split"`
 	ShowThinking *bool       `json:"show_thinking,omitempty" jsonschema:"description=Show thinking/reasoning content in the TUI,default=true"`
 	Completions  Completions `json:"completions,omitzero" jsonschema:"description=Completions UI options"`

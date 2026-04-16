@@ -60,22 +60,6 @@ func (c *Client) UpdatePreferredModel(ctx context.Context, id string, scope conf
 	return nil
 }
 
-// SetCompactMode sets compact mode on the server.
-func (c *Client) SetCompactMode(ctx context.Context, id string, scope config.Scope, enabled bool) error {
-	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/config/compact", id), nil, jsonBody(struct {
-		Scope   config.Scope `json:"scope"`
-		Enabled bool         `json:"enabled"`
-	}{Scope: scope, Enabled: enabled}), http.Header{"Content-Type": []string{"application/json"}})
-	if err != nil {
-		return fmt.Errorf("failed to set compact mode: %w", err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to set compact mode: status code %d", rsp.StatusCode)
-	}
-	return nil
-}
-
 // SetProviderAPIKey sets a provider API key on the server.
 func (c *Client) SetProviderAPIKey(ctx context.Context, id string, scope config.Scope, providerID string, apiKey any) error {
 	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/config/provider-key", id), nil, jsonBody(struct {
