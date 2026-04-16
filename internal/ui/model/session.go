@@ -137,18 +137,9 @@ func truncatePath(t *styles.Styles, path string, maxWidth int) string {
 	return t.Files.Path.Render(strings.Join(truncated, "/"))
 }
 
-// stopTWPoll stops the taskwarrior subtask poller and clears its state.
-func (m *UI) stopTWPoll() {
-	if m.twPollTicker != nil {
-		m.twPollTicker.Stop()
-		m.twPollTicker = nil
-	}
-	m.twJobID = ""
-	m.twTodos = nil
-}
-
 // waitNextTWTick returns a command that waits for the next ticker tick and
-// emits a twPollMsg. Guards against a nil ticker (stopped poller).
+// emits a twPollMsg. Guards against a nil ticker (poller not started — non-TW
+// workers).
 func (m *UI) waitNextTWTick() tea.Cmd {
 	if m.twPollTicker == nil || m.twJobID == "" {
 		return nil
@@ -156,10 +147,7 @@ func (m *UI) waitNextTWTick() tea.Cmd {
 	ticker := m.twPollTicker
 	jobID := m.twJobID
 	return func() tea.Msg {
-		_, ok := <-ticker.C
-		if !ok {
-			return twPollMsg{todos: nil}
-		}
+		<-ticker.C
 		todos, err := taskwarrior.PollSubtasks(context.Background(), jobID)
 		if err != nil {
 			slog.Warn("TW poll failed", "err", err, "jobID", jobID)
@@ -170,9 +158,9 @@ func (m *UI) waitNextTWTick() tea.Cmd {
 }
 
 // startTWTickPoll starts a 500ms ticker that polls taskwarrior subtasks
-// and sends twPollMsg when the results change.
+// for the worker's job. Called once from Init — the poller runs for the UI's
+// lifetime since TTAL_JOB_ID is stable per worker process.
 func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
-	m.stopTWPoll()
 	m.twPollTicker = time.NewTicker(500 * time.Millisecond)
 	m.twJobID = jobID
 
