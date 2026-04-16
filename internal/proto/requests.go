@@ -22,6 +22,7 @@ type ConfigModelRequest struct {
 	Model     config.SelectedModel     `json:"model"`
 }
 
+// ConfigProviderKeyRequest represents a request to set a provider API key.
 type ConfigProviderKeyRequest struct {
 	Scope      config.Scope `json:"scope"`
 	ProviderID string       `json:"provider_id"`

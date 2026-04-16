@@ -94,16 +94,18 @@ func (c *controllerV1) handlePostWorkspaceConfigModel(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusOK)
 }
 
-// @Summary		Set provider API key
-// @Tags			config
-// @Accept			json
-// @Param			id		path	string							true	"Workspace ID"
-// @Param			request	body	proto.ConfigProviderKeyRequest	true	"Config provider key request"
-// @Success		200
-// @Failure		400	{object}	proto.Error
-// @Failure		404	{object}	proto.Error
-// @Failure		500	{object}	proto.Error
-// @Router			/workspaces/{id}/config/provider-key [post]
+// handlePostWorkspaceConfigProviderKey sets a provider API key.
+//
+//	@Summary		Set provider API key
+//	@Tags			config
+//	@Accept			json
+//	@Param			id		path	string							true	"Workspace ID"
+//	@Param			request	body	proto.ConfigProviderKeyRequest	true	"Config provider key request"
+//	@Success		200
+//	@Failure		400	{object}	proto.Error
+//	@Failure		404	{object}	proto.Error
+//	@Failure		500	{object}	proto.Error
+//	@Router			/workspaces/{id}/config/provider-key [post]
 func (c *controllerV1) handlePostWorkspaceConfigProviderKey(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
