@@ -80,12 +80,16 @@ func (h *header) drawHeader(
 	b.WriteString(h.compactLogo)
 
 	availDetailWidth := width - leftPadding - rightPadding - lipgloss.Width(b.String()) - minHeaderDiags - diagToDetailsSpacing
+	var sandbox *bool
+	if opts := h.com.Config().Options; opts != nil {
+		sandbox = opts.Sandbox
+	}
 	details := renderHeaderDetails(
 		h.com,
 		session,
 		detailsOpen,
 		availDetailWidth,
-		h.com.Config().Options.Sandbox,
+		sandbox,
 	)
 
 	remainingWidth := width -
@@ -112,7 +116,7 @@ func renderHeaderDetails(
 	session *session.Session,
 	detailsOpen bool,
 	availWidth int,
-	sandbox *bool,
+	sandbox *bool, // nil means enabled (default true)
 ) string {
 	t := com.Styles
 

@@ -487,6 +487,35 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.loadPromptHistory())
 		m.updateLayoutAndSize()
 
+	case loadSessionMsg:
+		m.setState(uiChat, m.focus)
+		m.session = msg.session
+		msgs, err := m.com.Workspace.ListMessages(context.Background(), m.session.ID)
+		if err != nil {
+			cmds = append(cmds, util.ReportError(err))
+		} else if cmd := m.setSessionMessages(msgs); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		// Start taskwarrior subtask poller if TTAL_JOB_ID is set.
+		if jobID := os.Getenv("TTAL_JOB_ID"); jobID != "" {
+			if cmd := m.startTWTickPoll(jobID); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		} else {
+			// No TW job — stop any running poller and use session todos.
+			m.stopTWPoll()
+			if hasInProgressTodo(m.effectiveTodos()) {
+				if m.isAgentBusy() {
+					m.todoIsSpinning = true
+					cmds = append(cmds, m.todoSpinner.Tick)
+				}
+				m.updateLayoutAndSize()
+			}
+		}
+		m.historyReset()
+		cmds = append(cmds, m.loadPromptHistory())
+		m.updateLayoutAndSize()
+
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
 
@@ -2942,7 +2971,7 @@ func (m *UI) pasteIdx() int {
 	return result + 1
 }
 
-// drawSessionDetails draws the session details in compact mode.
+// drawSessionDetails draws the session details overlay panel.
 func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	if m.session == nil {
 		return
