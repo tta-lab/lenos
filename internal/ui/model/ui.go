@@ -2728,7 +2728,6 @@ func (m *UI) newSession() tea.Cmd {
 	m.session = nil
 	m.modifiedFiles = nil
 	m.sessionFileReads = nil
-	m.stopTWPoll()
 	m.setState(uiLanding, uiFocusEditor)
 	m.textarea.Focus()
 	m.chat.Blur()
