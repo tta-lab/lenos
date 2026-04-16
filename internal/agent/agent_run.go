@@ -328,6 +328,18 @@ runLoop:
 			}
 		}
 
+		// Still save usage on cancellation (result is non-nil for cancel).
+		if result != nil {
+			lm := a.largeModel.Get()
+			if s, err := a.sessions.Get(ctx, call.SessionID); err == nil {
+				a.updateSessionUsage(lm, &s, result.Usage, a.openrouterCost(result.ProviderMetadata))
+				if _, saveErr := a.sessions.Save(ctx, s); saveErr != nil {
+					slog.Warn("Failed to save session usage on cancellation", "error", saveErr)
+				}
+				currentSession = s
+			}
+		}
+
 		// Queue next message before returning (non-recursive drain).
 		a.activeRequests.Del(call.SessionID)
 		cancel()
@@ -340,6 +352,18 @@ runLoop:
 			goto runLoop
 		}
 		return nil, runErr
+	}
+
+	// Update session usage from logos result (context %, cost).
+	if result != nil {
+		lm := a.largeModel.Get()
+		if updatedSession, err := a.sessions.Get(ctx, call.SessionID); err == nil {
+			a.updateSessionUsage(lm, &updatedSession, result.Usage, a.openrouterCost(result.ProviderMetadata))
+			if _, saveErr := a.sessions.Save(ctx, updatedSession); saveErr != nil {
+				slog.Warn("Failed to save session usage", "error", saveErr)
+			}
+			currentSession = updatedSession
+		}
 	}
 
 	// Send notification that agent has finished its turn.
