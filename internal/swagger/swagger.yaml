@@ -118,7 +118,6 @@ definitions:
     - SelectedModelTypeSmall
   config.TUIOptions:
     properties:
-      compact_mode:
         type: boolean
       completions:
         $ref: '#/definitions/config.Completions'
@@ -314,13 +313,6 @@ definitions:
         type: string
       mime_type:
         type: string
-    type: object
-  proto.ConfigCompactRequest:
-    properties:
-      enabled:
-        type: boolean
-      scope:
-        $ref: '#/definitions/github_com_tta-lab_lenos_internal_config.Scope'
     type: object
   proto.ConfigModelRequest:
     properties:
@@ -955,40 +947,6 @@ paths:
       summary: Get workspace config
       tags:
       - workspaces
-  /workspaces/{id}/config/compact:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Workspace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Config compact request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/proto.ConfigCompactRequest'
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/proto.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/proto.Error'
-      summary: Set compact mode
-      tags:
-      - config
   /workspaces/{id}/config/import-copilot:
     post:
       parameters:

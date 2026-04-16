@@ -1805,10 +1805,7 @@ const docTemplate = `{
         "config.TUIOptions": {
             "type": "object",
             "properties": {
-                "compact_mode": {
-                    "type": "boolean"
-                },
-                "completions": {
+"completions": {
                     "$ref": "#/definitions/config.Completions"
                 },
                 "diff_mode": {
