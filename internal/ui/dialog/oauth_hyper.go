@@ -17,8 +17,9 @@ func NewOAuthHyper(
 	isOnboarding bool,
 	provider catwalk.Provider,
 	model config.SelectedModel,
+	modelType config.SelectedModelType,
 ) (*OAuth, tea.Cmd) {
-	return newOAuth(com, isOnboarding, provider, model, &OAuthHyper{})
+	return newOAuth(com, isOnboarding, provider, model, modelType, &OAuthHyper{})
 }
 
 type OAuthHyper struct {

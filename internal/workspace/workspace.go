@@ -54,6 +54,7 @@ type Workspace interface {
 	AgentSummarize(ctx context.Context, sessionID string) error
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
+	GetDefaultSmallModel(providerID string) config.SelectedModel
 
 	// Git
 	IsGitWorktree(ctx context.Context) bool
@@ -66,7 +67,7 @@ type Workspace interface {
 	AgentName() string
 
 	// Config mutations (proxied to server in client mode)
-	UpdatePreferredModel(scope config.Scope, model config.SelectedModel) error
+	UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error
 	SetCompactMode(scope config.Scope, enabled bool) error
 	SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error
 	SetConfigField(scope config.Scope, key string, value any) error

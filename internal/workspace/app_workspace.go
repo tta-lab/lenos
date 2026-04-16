@@ -160,6 +160,10 @@ func (w *AppWorkspace) InitCoderAgent(ctx context.Context) error {
 	return w.app.InitCoderAgent(ctx)
 }
 
+func (w *AppWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
+	return w.app.GetDefaultSmallModel(providerID)
+}
+
 // -- Config (read-only) --
 
 func (w *AppWorkspace) Config() *config.Config {
@@ -176,8 +180,8 @@ func (w *AppWorkspace) Resolver() config.VariableResolver {
 
 // -- Config mutations --
 
-func (w *AppWorkspace) UpdatePreferredModel(scope config.Scope, model config.SelectedModel) error {
-	return w.store.UpdatePreferredModel(scope, model)
+func (w *AppWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
+	return w.store.UpdatePreferredModel(scope, modelType, model)
 }
 
 func (w *AppWorkspace) SetCompactMode(scope config.Scope, enabled bool) error {

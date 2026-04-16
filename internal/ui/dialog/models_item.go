@@ -50,8 +50,9 @@ func (m *ModelGroup) Render(width int) string {
 
 // ModelItem represents a list item for a model type.
 type ModelItem struct {
-	prov  catwalk.Provider
-	model catwalk.Model
+	prov      catwalk.Provider
+	model     catwalk.Model
+	modelType ModelType
 
 	cache        map[int]string
 	t            *styles.Styles
@@ -70,13 +71,19 @@ func (m *ModelItem) SelectedModel() config.SelectedModel {
 	}
 }
 
+// SelectedModelType returns the type of model represented by this item.
+func (m *ModelItem) SelectedModelType() config.SelectedModelType {
+	return m.modelType.Config()
+}
+
 var _ ListItem = &ModelItem{}
 
 // NewModelItem creates a new ModelItem.
-func NewModelItem(t *styles.Styles, prov catwalk.Provider, model catwalk.Model, showProvider bool) *ModelItem {
+func NewModelItem(t *styles.Styles, prov catwalk.Provider, model catwalk.Model, typ ModelType, showProvider bool) *ModelItem {
 	return &ModelItem{
 		prov:         prov,
 		model:        model,
+		modelType:    typ,
 		t:            t,
 		cache:        make(map[int]string),
 		showProvider: showProvider,

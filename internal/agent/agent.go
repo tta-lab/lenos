@@ -57,7 +57,7 @@ type SessionAgentCall struct {
 
 type SessionAgent interface {
 	Run(context.Context, SessionAgentCall) (*logos.RunResult, error)
-	SetModel(model Model)
+	SetModels(large Model, small Model)
 	SetTools(tools []fantasy.AgentTool)
 	SetSystemPrompt(systemPrompt string)
 	Cancel(sessionID string)
@@ -78,7 +78,8 @@ type Model struct {
 }
 
 type sessionAgent struct {
-	model              *csync.Value[Model]
+	largeModel         *csync.Value[Model]
+	smallModel         *csync.Value[Model]
 	systemPromptPrefix *csync.Value[string]
 	systemPrompt       *csync.Value[string]
 	tools              *csync.Slice[fantasy.AgentTool]
@@ -94,7 +95,8 @@ type sessionAgent struct {
 }
 
 type SessionAgentOptions struct {
-	Model                Model
+	LargeModel           Model
+	SmallModel           Model
 	SystemPromptPrefix   string
 	SystemPrompt         string
 	IsSubAgent           bool
@@ -109,7 +111,8 @@ func NewSessionAgent(
 	opts SessionAgentOptions,
 ) SessionAgent {
 	return &sessionAgent{
-		model:                csync.NewValue(opts.Model),
+		largeModel:           csync.NewValue(opts.LargeModel),
+		smallModel:           csync.NewValue(opts.SmallModel),
 		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),
 		systemPrompt:         csync.NewValue(opts.SystemPrompt),
 		isSubAgent:           opts.IsSubAgent,

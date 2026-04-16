@@ -45,6 +45,18 @@ var defaultContextPaths = []string{
 	"Agents.md",
 }
 
+type SelectedModelType string
+
+// String returns the string representation of the [SelectedModelType].
+func (s SelectedModelType) String() string {
+	return string(s)
+}
+
+const (
+	SelectedModelTypeLarge SelectedModelType = "large"
+	SelectedModelTypeSmall SelectedModelType = "small"
+)
+
 const (
 	AgentCoder string = "coder"
 )
@@ -239,6 +251,8 @@ type Agent struct {
 	// This is the id of the system prompt used by the agent
 	Disabled bool `json:"disabled,omitempty"`
 
+	Model SelectedModelType `json:"model" jsonschema:"required,description=The model type to use for this agent,enum=large,enum=small,default=large"`
+
 	// Overrides the context paths for this agent
 	ContextPaths []string `json:"context_paths,omitempty"`
 }
@@ -271,11 +285,11 @@ func (t ToolGrep) GetTimeout() time.Duration {
 type Config struct {
 	Schema string `json:"$schema,omitempty"`
 
-	// Model is the currently selected model.
-	Model *SelectedModel `json:"model,omitempty" jsonschema:"description=Selected model configuration,example={\"model\":\"gpt-4o\",\"provider\":\"openai\"}"`
+	// We currently only support large/small as values here.
+	Models map[SelectedModelType]SelectedModel `json:"models,omitempty" jsonschema:"description=Model configurations for different model types,example={\"large\":{\"model\":\"gpt-4o\",\"provider\":\"openai\"}}"`
 
-	// RecentModels stores recently used models in the data directory config.
-	RecentModels []SelectedModel `json:"recent_models,omitempty" jsonschema:"-"`
+	// Recently used models stored in the data directory config.
+	RecentModels map[SelectedModelType][]SelectedModel `json:"recent_models,omitempty" jsonschema:"-"`
 
 	// The providers that are configured
 	Providers *csync.Map[string, ProviderConfig] `json:"providers,omitempty" jsonschema:"description=AI provider configurations"`
@@ -315,7 +329,42 @@ func (c *Config) GetModel(provider, model string) *catwalk.Model {
 	return nil
 }
 
-const maxRecentModels = 10
+func (c *Config) GetProviderForModel(modelType SelectedModelType) *ProviderConfig {
+	model, ok := c.Models[modelType]
+	if !ok {
+		return nil
+	}
+	if providerConfig, ok := c.Providers.Get(model.Provider); ok {
+		return &providerConfig
+	}
+	return nil
+}
+
+func (c *Config) GetModelByType(modelType SelectedModelType) *catwalk.Model {
+	model, ok := c.Models[modelType]
+	if !ok {
+		return nil
+	}
+	return c.GetModel(model.Provider, model.Model)
+}
+
+func (c *Config) LargeModel() *catwalk.Model {
+	model, ok := c.Models[SelectedModelTypeLarge]
+	if !ok {
+		return nil
+	}
+	return c.GetModel(model.Provider, model.Model)
+}
+
+func (c *Config) SmallModel() *catwalk.Model {
+	model, ok := c.Models[SelectedModelTypeSmall]
+	if !ok {
+		return nil
+	}
+	return c.GetModel(model.Provider, model.Model)
+}
+
+const maxRecentModelsPerType = 5
 
 func (c *Config) SetupAgents() {
 	agents := map[string]Agent{
@@ -323,6 +372,7 @@ func (c *Config) SetupAgents() {
 			ID:           AgentCoder,
 			Name:         "Coder",
 			Description:  "An agent that helps with executing coding tasks.",
+			Model:        SelectedModelTypeLarge,
 			ContextPaths: c.Options.ContextPaths,
 		},
 	}

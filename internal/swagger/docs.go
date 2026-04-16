@@ -320,6 +320,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{id}/agent/default-small-model": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent"
+                ],
+                "summary": "Get default small model",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Provider ID",
+                        "name": "provider_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/proto.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/proto.Error"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{id}/agent/init": {
             "post": {
                 "tags": [
@@ -1745,6 +1791,17 @@ const docTemplate = `{
                 }
             }
         },
+        "config.SelectedModelType": {
+            "type": "string",
+            "enum": [
+                "large",
+                "small"
+            ],
+            "x-enum-varnames": [
+                "SelectedModelTypeLarge",
+                "SelectedModelTypeSmall"
+            ]
+        },
         "config.TUIOptions": {
             "type": "object",
             "properties": {
@@ -1817,13 +1874,12 @@ const docTemplate = `{
                 "$schema": {
                     "type": "string"
                 },
-                "model": {
-                    "description": "Model is the currently selected model.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/config.SelectedModel"
-                        }
-                    ]
+                "models": {
+                    "description": "We currently only support large/small as values here.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/config.SelectedModel"
+                    }
                 },
                 "options": {
                     "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Options"
@@ -1840,10 +1896,13 @@ const docTemplate = `{
                     ]
                 },
                 "recent_models": {
-                    "description": "RecentModels stores recently used models in the data directory config.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/config.SelectedModel"
+                    "description": "Recently used models stored in the data directory config.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/config.SelectedModel"
+                        }
                     }
                 },
                 "tools": {
@@ -2060,6 +2119,9 @@ const docTemplate = `{
             "properties": {
                 "model": {
                     "$ref": "#/definitions/config.SelectedModel"
+                },
+                "model_type": {
+                    "$ref": "#/definitions/config.SelectedModelType"
                 },
                 "scope": {
                     "$ref": "#/definitions/github_com_tta-lab_lenos_internal_config.Scope"

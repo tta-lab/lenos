@@ -61,11 +61,12 @@ lenos run --continue "Follow up on your last response"
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var (
-			quiet, _     = cmd.Flags().GetBool("quiet")
-			verbose, _   = cmd.Flags().GetBool("verbose")
-			model, _     = cmd.Flags().GetString("model")
-			sessionID, _ = cmd.Flags().GetString("session")
-			useLast, _   = cmd.Flags().GetBool("continue")
+			quiet, _      = cmd.Flags().GetBool("quiet")
+			verbose, _    = cmd.Flags().GetBool("verbose")
+			largeModel, _ = cmd.Flags().GetString("model")
+			smallModel, _ = cmd.Flags().GetString("small-model")
+			sessionID, _  = cmd.Flags().GetString("session")
+			useLast, _    = cmd.Flags().GetBool("continue")
 		)
 
 		// Cancel on SIGINT or SIGTERM.
@@ -117,7 +118,7 @@ lenos run --continue "Follow up on your last response"
 				slog.SetDefault(slog.New(log.New(os.Stderr)))
 			}
 
-			return runNonInteractive(ctx, c, ws, prompt, model, quiet || verbose, sessionID, useLast)
+			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, quiet || verbose, sessionID, useLast)
 		}
 
 		ws, cleanup, err := setupLocalWorkspace(cmd, "", nil)
@@ -135,7 +136,7 @@ lenos run --continue "Follow up on your last response"
 		}
 
 		appWs := ws.(*workspace.AppWorkspace)
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, model, quiet || verbose, sessionID, useLast)
+		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, quiet || verbose, sessionID, useLast)
 	},
 }
 
@@ -143,6 +144,7 @@ func init() {
 	runCmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
 	runCmd.Flags().BoolP("verbose", "v", false, "Show logs")
 	runCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
+	runCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
 	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
@@ -154,7 +156,7 @@ func runNonInteractive(
 	ctx context.Context,
 	c *client.Client,
 	ws *proto.Workspace,
-	prompt, model string,
+	prompt, largeModel, smallModel string,
 	hideSpinner bool,
 	continueSessionID string,
 	useLast bool,
@@ -164,9 +166,9 @@ func runNonInteractive(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	if model != "" {
-		if err := overrideModel(ctx, c, ws, model); err != nil {
-			return fmt.Errorf("failed to override model: %w", err)
+	if largeModel != "" || smallModel != "" {
+		if err := overrideModels(ctx, c, ws, largeModel, smallModel); err != nil {
+			return fmt.Errorf("failed to override models: %w", err)
 		}
 	}
 
@@ -333,11 +335,11 @@ func waitForAgent(ctx context.Context, c *client.Client, wsID string) error {
 
 // overrideModels resolves model strings and updates the workspace
 // configuration via the server.
-func overrideModel(
+func overrideModels(
 	ctx context.Context,
 	c *client.Client,
 	ws *proto.Workspace,
-	model string,
+	largeModel, smallModel string,
 ) error {
 	cfg, err := c.GetConfig(ctx, ws.ID)
 	if err != nil {
@@ -346,19 +348,48 @@ func overrideModel(
 
 	providers := cfg.Providers.Copy()
 
-	matches := findModelMatches(providers, model)
+	largeMatches, smallMatches := findModelMatches(providers, largeModel, smallModel)
 
-	found, err := validateModelMatches(matches, model, "model")
-	if err != nil {
-		return err
+	var largeProviderID string
+
+	if largeModel != "" {
+		found, err := validateModelMatches(largeMatches, largeModel, "large")
+		if err != nil {
+			return err
+		}
+		largeProviderID = found.provider
+		slog.Info("Overriding large model", "provider", found.provider, "model", found.modelID)
+		if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeLarge, config.SelectedModel{
+			Provider: found.provider,
+			Model:    found.modelID,
+		}); err != nil {
+			return fmt.Errorf("failed to set large model: %w", err)
+		}
 	}
 
-	slog.Info("Overriding model", "provider", found.provider, "model", found.modelID)
-	if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModel{
-		Provider: found.provider,
-		Model:    found.modelID,
-	}); err != nil {
-		return fmt.Errorf("failed to set model: %w", err)
+	switch {
+	case smallModel != "":
+		found, err := validateModelMatches(smallMatches, smallModel, "small")
+		if err != nil {
+			return err
+		}
+		slog.Info("Overriding small model", "provider", found.provider, "model", found.modelID)
+		if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeSmall, config.SelectedModel{
+			Provider: found.provider,
+			Model:    found.modelID,
+		}); err != nil {
+			return fmt.Errorf("failed to set small model: %w", err)
+		}
+
+	case largeModel != "":
+		sm, err := c.GetDefaultSmallModel(ctx, ws.ID, largeProviderID)
+		if err != nil {
+			slog.Warn("Failed to get default small model", "error", err)
+		} else if sm != nil {
+			if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeSmall, *sm); err != nil {
+				return fmt.Errorf("failed to set small model: %w", err)
+			}
+		}
 	}
 
 	return c.UpdateAgent(ctx, ws.ID)
@@ -369,22 +400,27 @@ type modelMatch struct {
 	modelID  string
 }
 
-// findModelMatches searches providers for a matching model string.
-func findModelMatches(providers map[string]config.ProviderConfig, model string) []modelMatch {
-	filter, id := parseModelString(model)
+// findModelMatches searches providers for matching large/small model
+// strings.
+func findModelMatches(providers map[string]config.ProviderConfig, largeModel, smallModel string) ([]modelMatch, []modelMatch) {
+	largeFilter, largeID := parseModelString(largeModel)
+	smallFilter, smallID := parseModelString(smallModel)
 
-	var matches []modelMatch
+	var largeMatches, smallMatches []modelMatch
 	for name, provider := range providers {
 		if provider.Disable {
 			continue
 		}
 		for _, m := range provider.Models {
-			if matchesModel(id, filter, m.ID, name) {
-				matches = append(matches, modelMatch{provider: name, modelID: m.ID})
+			if matchesModel(largeID, largeFilter, m.ID, name) {
+				largeMatches = append(largeMatches, modelMatch{provider: name, modelID: m.ID})
+			}
+			if matchesModel(smallID, smallFilter, m.ID, name) {
+				smallMatches = append(smallMatches, modelMatch{provider: name, modelID: m.ID})
 			}
 		}
 	}
-	return matches
+	return largeMatches, smallMatches
 }
 
 // parseModelString splits "provider/model" into (provider, model) or

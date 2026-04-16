@@ -49,7 +49,7 @@ func TestConfig_setDefaults(t *testing.T) {
 	require.NotNil(t, cfg.Options.TUI)
 	require.NotNil(t, cfg.Options.ContextPaths)
 	require.NotNil(t, cfg.Providers)
-	require.NotNil(t, cfg.Model)
+	require.NotNil(t, cfg.Models)
 	require.Equal(t, filepath.Join("/tmp", ".lenos"), cfg.Options.DataDirectory)
 	require.Equal(t, "AGENTS.md", cfg.Options.InitializeAs)
 	for _, path := range defaultContextPaths {
@@ -801,19 +801,20 @@ func TestConfig_configureProvidersEnhancedCredentialValidation(t *testing.T) {
 }
 
 func TestConfig_defaultModelSelection(t *testing.T) {
-	t.Run("default behavior uses the default model for given provider", func(t *testing.T) {
+	t.Run("default behavior uses the default models for given provider", func(t *testing.T) {
 		knownProviders := []catwalk.Provider{
 			{
 				ID:                  "openai",
 				APIKey:              "abc",
-				DefaultLargeModelID: "default-model",
+				DefaultLargeModelID: "large-model",
+				DefaultSmallModelID: "small-model",
 				Models: []catwalk.Model{
 					{
-						ID:               "default-model",
+						ID:               "large-model",
 						DefaultMaxTokens: 1000,
 					},
 					{
-						ID:               "other-model",
+						ID:               "small-model",
 						DefaultMaxTokens: 500,
 					},
 				},
@@ -827,22 +828,30 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
 		require.NoError(t, err)
 
-		model, err := cfg.defaultModelSelection(knownProviders)
+		large, small, err := cfg.defaultModelSelection(knownProviders)
 		require.NoError(t, err)
-		require.Equal(t, "default-model", model.Model)
-		require.Equal(t, "openai", model.Provider)
-		require.Equal(t, int64(1000), model.MaxTokens)
+		require.Equal(t, "large-model", large.Model)
+		require.Equal(t, "openai", large.Provider)
+		require.Equal(t, int64(1000), large.MaxTokens)
+		require.Equal(t, "small-model", small.Model)
+		require.Equal(t, "openai", small.Provider)
+		require.Equal(t, int64(500), small.MaxTokens)
 	})
 	t.Run("should error if no providers configured", func(t *testing.T) {
 		knownProviders := []catwalk.Provider{
 			{
 				ID:                  "openai",
 				APIKey:              "$MISSING_KEY",
-				DefaultLargeModelID: "default-model",
+				DefaultLargeModelID: "large-model",
+				DefaultSmallModelID: "small-model",
 				Models: []catwalk.Model{
 					{
-						ID:               "default-model",
+						ID:               "large-model",
 						DefaultMaxTokens: 1000,
+					},
+					{
+						ID:               "small-model",
+						DefaultMaxTokens: 500,
 					},
 				},
 			},
@@ -855,7 +864,7 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
 		require.NoError(t, err)
 
-		_, err = cfg.defaultModelSelection(knownProviders)
+		_, _, err = cfg.defaultModelSelection(knownProviders)
 		require.Error(t, err)
 	})
 	t.Run("should error if model is missing", func(t *testing.T) {
@@ -863,11 +872,16 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 			{
 				ID:                  "openai",
 				APIKey:              "abc",
-				DefaultLargeModelID: "nonexistent-model",
+				DefaultLargeModelID: "large-model",
+				DefaultSmallModelID: "small-model",
 				Models: []catwalk.Model{
 					{
-						ID:               "actual-model",
+						ID:               "not-large-model",
 						DefaultMaxTokens: 1000,
+					},
+					{
+						ID:               "small-model",
+						DefaultMaxTokens: 500,
 					},
 				},
 			},
@@ -879,20 +893,25 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 		resolver := NewEnvironmentVariableResolver(env)
 		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
 		require.NoError(t, err)
-		_, err = cfg.defaultModelSelection(knownProviders)
+		_, _, err = cfg.defaultModelSelection(knownProviders)
 		require.Error(t, err)
 	})
 
-	t.Run("should configure the default model with a custom provider", func(t *testing.T) {
+	t.Run("should configure the default models with a custom provider", func(t *testing.T) {
 		knownProviders := []catwalk.Provider{
 			{
 				ID:                  "openai",
-				APIKey:              "$MISSING",
-				DefaultLargeModelID: "openai-model",
+				APIKey:              "$MISSING", // will not be included in the config
+				DefaultLargeModelID: "large-model",
+				DefaultSmallModelID: "small-model",
 				Models: []catwalk.Model{
 					{
-						ID:               "openai-model",
+						ID:               "not-large-model",
 						DefaultMaxTokens: 1000,
+					},
+					{
+						ID:               "small-model",
+						DefaultMaxTokens: 500,
 					},
 				},
 			},
@@ -917,23 +936,31 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 		resolver := NewEnvironmentVariableResolver(env)
 		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
 		require.NoError(t, err)
-		model, err := cfg.defaultModelSelection(knownProviders)
+		large, small, err := cfg.defaultModelSelection(knownProviders)
 		require.NoError(t, err)
-		require.Equal(t, "model", model.Model)
-		require.Equal(t, "custom", model.Provider)
-		require.Equal(t, int64(600), model.MaxTokens)
+		require.Equal(t, "model", large.Model)
+		require.Equal(t, "custom", large.Provider)
+		require.Equal(t, int64(600), large.MaxTokens)
+		require.Equal(t, "model", small.Model)
+		require.Equal(t, "custom", small.Provider)
+		require.Equal(t, int64(600), small.MaxTokens)
 	})
 
 	t.Run("should fail if no model configured", func(t *testing.T) {
 		knownProviders := []catwalk.Provider{
 			{
 				ID:                  "openai",
-				APIKey:              "$MISSING",
-				DefaultLargeModelID: "openai-model",
+				APIKey:              "$MISSING", // will not be included in the config
+				DefaultLargeModelID: "large-model",
+				DefaultSmallModelID: "small-model",
 				Models: []catwalk.Model{
 					{
-						ID:               "openai-model",
+						ID:               "not-large-model",
 						DefaultMaxTokens: 1000,
+					},
+					{
+						ID:               "small-model",
+						DefaultMaxTokens: 500,
 					},
 				},
 			},
@@ -953,7 +980,7 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 		resolver := NewEnvironmentVariableResolver(env)
 		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
 		require.NoError(t, err)
-		_, err = cfg.defaultModelSelection(knownProviders)
+		_, _, err = cfg.defaultModelSelection(knownProviders)
 		require.Error(t, err)
 	})
 	t.Run("should use the default provider first", func(t *testing.T) {
@@ -961,11 +988,16 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 			{
 				ID:                  "openai",
 				APIKey:              "set",
-				DefaultLargeModelID: "openai-model",
+				DefaultLargeModelID: "large-model",
+				DefaultSmallModelID: "small-model",
 				Models: []catwalk.Model{
 					{
-						ID:               "openai-model",
+						ID:               "large-model",
 						DefaultMaxTokens: 1000,
+					},
+					{
+						ID:               "small-model",
+						DefaultMaxTokens: 500,
 					},
 				},
 			},
@@ -978,8 +1010,8 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 					BaseURL: "https://api.custom.com/v1",
 					Models: []catwalk.Model{
 						{
-							ID:               "custom-model",
-							DefaultMaxTokens: 500,
+							ID:               "large-model",
+							DefaultMaxTokens: 1000,
 						},
 					},
 				},
@@ -990,11 +1022,14 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 		resolver := NewEnvironmentVariableResolver(env)
 		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
 		require.NoError(t, err)
-		model, err := cfg.defaultModelSelection(knownProviders)
+		large, small, err := cfg.defaultModelSelection(knownProviders)
 		require.NoError(t, err)
-		require.Equal(t, "openai-model", model.Model)
-		require.Equal(t, "openai", model.Provider)
-		require.Equal(t, int64(1000), model.MaxTokens)
+		require.Equal(t, "large-model", large.Model)
+		require.Equal(t, "openai", large.Provider)
+		require.Equal(t, int64(1000), large.MaxTokens)
+		require.Equal(t, "small-model", small.Model)
+		require.Equal(t, "openai", small.Provider)
+		require.Equal(t, int64(500), small.MaxTokens)
 	})
 }
 
@@ -1215,23 +1250,30 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 			{
 				ID:                  "openai",
 				APIKey:              "abc",
-				DefaultLargeModelID: "default-model",
+				DefaultLargeModelID: "large-model",
+				DefaultSmallModelID: "small-model",
 				Models: []catwalk.Model{
 					{
-						ID:               "default-model",
+						ID:               "larger-model",
+						DefaultMaxTokens: 2000,
+					},
+					{
+						ID:               "large-model",
 						DefaultMaxTokens: 1000,
 					},
 					{
-						ID:               "custom-model",
-						DefaultMaxTokens: 2000,
+						ID:               "small-model",
+						DefaultMaxTokens: 500,
 					},
 				},
 			},
 		}
 
 		cfg := &Config{
-			Model: &SelectedModel{
-				Model: "custom-model",
+			Models: map[SelectedModelType]SelectedModel{
+				"large": {
+					Model: "larger-model",
+				},
 			},
 		}
 		cfg.setDefaults("/tmp", "")
@@ -1240,31 +1282,105 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
 		require.NoError(t, err)
 
-		err = configureSelectedModels(cfg, knownProviders)
+		err = configureSelectedModels(testStore(cfg), knownProviders)
 		require.NoError(t, err)
-		require.NotNil(t, cfg.Model)
-		require.Equal(t, "custom-model", cfg.Model.Model)
-		require.Equal(t, "openai", cfg.Model.Provider)
-		require.Equal(t, int64(2000), cfg.Model.MaxTokens)
+		large := cfg.Models[SelectedModelTypeLarge]
+		small := cfg.Models[SelectedModelTypeSmall]
+		require.Equal(t, "larger-model", large.Model)
+		require.Equal(t, "openai", large.Provider)
+		require.Equal(t, int64(2000), large.MaxTokens)
+		require.Equal(t, "small-model", small.Model)
+		require.Equal(t, "openai", small.Provider)
+		require.Equal(t, int64(500), small.MaxTokens)
 	})
+	t.Run("should be possible to use multiple providers", func(t *testing.T) {
+		knownProviders := []catwalk.Provider{
+			{
+				ID:                  "openai",
+				APIKey:              "abc",
+				DefaultLargeModelID: "large-model",
+				DefaultSmallModelID: "small-model",
+				Models: []catwalk.Model{
+					{
+						ID:               "large-model",
+						DefaultMaxTokens: 1000,
+					},
+					{
+						ID:               "small-model",
+						DefaultMaxTokens: 500,
+					},
+				},
+			},
+			{
+				ID:                  "anthropic",
+				APIKey:              "abc",
+				DefaultLargeModelID: "a-large-model",
+				DefaultSmallModelID: "a-small-model",
+				Models: []catwalk.Model{
+					{
+						ID:               "a-large-model",
+						DefaultMaxTokens: 1000,
+					},
+					{
+						ID:               "a-small-model",
+						DefaultMaxTokens: 200,
+					},
+				},
+			},
+		}
+
+		cfg := &Config{
+			Models: map[SelectedModelType]SelectedModel{
+				"small": {
+					Model:     "a-small-model",
+					Provider:  "anthropic",
+					MaxTokens: 300,
+				},
+			},
+		}
+		cfg.setDefaults("/tmp", "")
+		env := env.NewFromMap(map[string]string{})
+		resolver := NewEnvironmentVariableResolver(env)
+		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
+		require.NoError(t, err)
+
+		err = configureSelectedModels(testStore(cfg), knownProviders)
+		require.NoError(t, err)
+		large := cfg.Models[SelectedModelTypeLarge]
+		small := cfg.Models[SelectedModelTypeSmall]
+		require.Equal(t, "large-model", large.Model)
+		require.Equal(t, "openai", large.Provider)
+		require.Equal(t, int64(1000), large.MaxTokens)
+		require.Equal(t, "a-small-model", small.Model)
+		require.Equal(t, "anthropic", small.Provider)
+		require.Equal(t, int64(300), small.MaxTokens)
+	})
+
 	t.Run("should override the max tokens only", func(t *testing.T) {
 		knownProviders := []catwalk.Provider{
 			{
 				ID:                  "openai",
 				APIKey:              "abc",
-				DefaultLargeModelID: "default-model",
+				DefaultLargeModelID: "large-model",
+				DefaultSmallModelID: "small-model",
 				Models: []catwalk.Model{
 					{
-						ID:               "default-model",
+						ID:               "large-model",
 						DefaultMaxTokens: 1000,
+					},
+					{
+						ID:               "small-model",
+						DefaultMaxTokens: 500,
 					},
 				},
 			},
 		}
 
 		cfg := &Config{
-			Model: &SelectedModel{
-				MaxTokens: 100,
+			Models: map[SelectedModelType]SelectedModel{
+				"large": {
+					MaxTokens: 100,
+				},
 			},
 		}
 		cfg.setDefaults("/tmp", "")
@@ -1273,44 +1389,11 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
 		require.NoError(t, err)
 
-		err = configureSelectedModels(cfg, knownProviders)
+		err = configureSelectedModels(testStore(cfg), knownProviders)
 		require.NoError(t, err)
-		require.NotNil(t, cfg.Model)
-		require.Equal(t, "default-model", cfg.Model.Model)
-		require.Equal(t, "openai", cfg.Model.Provider)
-		require.Equal(t, int64(100), cfg.Model.MaxTokens)
-	})
-	t.Run("should fall back to default when model not found", func(t *testing.T) {
-		knownProviders := []catwalk.Provider{
-			{
-				ID:                  "openai",
-				APIKey:              "abc",
-				DefaultLargeModelID: "default-model",
-				Models: []catwalk.Model{
-					{
-						ID:               "default-model",
-						DefaultMaxTokens: 1000,
-					},
-				},
-			},
-		}
-
-		cfg := &Config{
-			Model: &SelectedModel{
-				Model: "nonexistent-model",
-			},
-		}
-		cfg.setDefaults("/tmp", "")
-		env := env.NewFromMap(map[string]string{})
-		resolver := NewEnvironmentVariableResolver(env)
-		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
-		require.NoError(t, err)
-
-		err = configureSelectedModels(cfg, knownProviders)
-		require.NoError(t, err)
-		require.NotNil(t, cfg.Model)
-		require.Equal(t, "default-model", cfg.Model.Model)
-		require.Equal(t, "openai", cfg.Model.Provider)
-		require.Equal(t, int64(1000), cfg.Model.MaxTokens)
+		large := cfg.Models[SelectedModelTypeLarge]
+		require.Equal(t, "large-model", large.Model)
+		require.Equal(t, "openai", large.Provider)
+		require.Equal(t, int64(100), large.MaxTokens)
 	})
 }

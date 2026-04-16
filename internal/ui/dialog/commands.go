@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/tta-lab/lenos/internal/commands"
+	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/list"
 	"github.com/tta-lab/lenos/internal/ui/styles"
@@ -364,13 +365,16 @@ func (c *Commands) defaultCommands() []*CommandItem {
 
 	// Add reasoning toggle for models that support it
 	cfg := c.com.Config()
-	if cfg.Model != nil {
-		model := cfg.GetModel(cfg.Model.Provider, cfg.Model.Model)
-		if model != nil && model.CanReason {
+	if agentCfg, ok := cfg.Agents[config.AgentCoder]; ok {
+		providerCfg := cfg.GetProviderForModel(agentCfg.Model)
+		model := cfg.GetModelByType(agentCfg.Model)
+		if providerCfg != nil && model != nil && model.CanReason {
+			selectedModel := cfg.Models[agentCfg.Model]
+
 			// Anthropic models: thinking toggle
-			if len(model.ReasoningLevels) == 0 {
+			if model.CanReason && len(model.ReasoningLevels) == 0 {
 				status := "Enable"
-				if cfg.Model.Think {
+				if selectedModel.Think {
 					status = "Disable"
 				}
 				commands = append(commands, NewCommandItem(c.com.Styles, "toggle_thinking", status+" Thinking Mode", "", ActionToggleThinking{}))
@@ -390,13 +394,12 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	}
 	if c.hasSession {
 		cfgPrime := c.com.Config()
-		if cfgPrime.Model != nil {
-			model := cfgPrime.GetModel(cfgPrime.Model.Provider, cfgPrime.Model.Model)
-			if model != nil && model.SupportsImages {
-				commands = append(commands, NewCommandItem(c.com.Styles, "file_picker", "Open File Picker", "ctrl+f", ActionOpenDialog{
-					DialogID: FilePickerID,
-				}))
-			}
+		agentCfg := cfgPrime.Agents[config.AgentCoder]
+		model := cfgPrime.GetModelByType(agentCfg.Model)
+		if model != nil && model.SupportsImages {
+			commands = append(commands, NewCommandItem(c.com.Styles, "file_picker", "Open File Picker", "ctrl+f", ActionOpenDialog{
+				DialogID: FilePickerID,
+			}))
 		}
 	}
 

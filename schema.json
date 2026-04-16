@@ -56,9 +56,12 @@
         "$schema": {
           "type": "string"
         },
-        "model": {
-          "$ref": "#/$defs/SelectedModel",
-          "description": "Selected model configuration"
+        "models": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SelectedModel"
+          },
+          "type": "object",
+          "description": "Model configurations for different model types"
         },
         "providers": {
           "$ref": "#/$defs/Map[string,github.com/tta-lab/lenos/internal/config.ProviderConfig]",
