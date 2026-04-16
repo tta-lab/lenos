@@ -51,10 +51,8 @@ const (
 	ScrollbarThumb string = "┃"
 	ScrollbarTrack string = "│"
 
-	LSPErrorIcon   string = "E"
-	LSPWarningIcon string = "W"
-	LSPInfoIcon    string = "I"
-	LSPHintIcon    string = "H"
+	DiagnosticErrorIcon   string = "E"
+	DiagnosticWarningIcon string = "W"
 )
 
 const (
@@ -112,16 +110,6 @@ type Styles struct {
 
 	// Text selection
 	TextSelection lipgloss.Style
-
-	// LSP and MCP status indicators
-	ResourceGroupTitle     lipgloss.Style
-	ResourceOfflineIcon    lipgloss.Style
-	ResourceBusyIcon       lipgloss.Style
-	ResourceErrorIcon      lipgloss.Style
-	ResourceOnlineIcon     lipgloss.Style
-	ResourceName           lipgloss.Style
-	ResourceStatus         lipgloss.Style
-	ResourceAdditionalText lipgloss.Style
 
 	// Markdown & Chroma
 	Markdown      ansi.StyleConfig
@@ -209,14 +197,6 @@ type Styles struct {
 		Header  lipgloss.Style
 		Content lipgloss.Style
 		Accent  lipgloss.Style
-	}
-
-	// LSP
-	LSP struct {
-		ErrorDiagnostic   lipgloss.Style
-		WarningDiagnostic lipgloss.Style
-		HintDiagnostic    lipgloss.Style
-		InfoDiagnostic    lipgloss.Style
 	}
 
 	// Files
@@ -1195,22 +1175,6 @@ func DefaultStyles() Styles {
 	s.Initialize.Header = s.Base
 	s.Initialize.Content = s.Muted
 	s.Initialize.Accent = s.Base.Foreground(greenDark)
-
-	// LSP and MCP status.
-	s.ResourceGroupTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#a89d8a"))
-	s.ResourceOfflineIcon = lipgloss.NewStyle().Foreground(lipgloss.Color("#4a3e38")).SetString("●")
-	s.ResourceBusyIcon = s.ResourceOfflineIcon.Foreground(lipgloss.Color("#b8973e"))
-	s.ResourceErrorIcon = s.ResourceOfflineIcon.Foreground(lipgloss.Color("#c44f4f"))
-	s.ResourceOnlineIcon = s.ResourceOfflineIcon.Foreground(lipgloss.Color("#6b8a5e"))
-	s.ResourceName = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a7e6e"))
-	s.ResourceStatus = lipgloss.NewStyle().Foreground(lipgloss.Color("#a89d8a"))
-	s.ResourceAdditionalText = lipgloss.NewStyle().Foreground(lipgloss.Color("#a89d8a"))
-
-	// LSP
-	s.LSP.ErrorDiagnostic = s.Base.Foreground(redDark)
-	s.LSP.WarningDiagnostic = s.Base.Foreground(warning)
-	s.LSP.HintDiagnostic = s.Base.Foreground(fgHalfMuted)
-	s.LSP.InfoDiagnostic = s.Base.Foreground(info)
 
 	// Files
 	s.Files.Path = s.Muted
