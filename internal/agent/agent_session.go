@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tta-lab/logos/v2"
-
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/bedrock"
@@ -250,17 +248,17 @@ func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage
 	s.PromptTokens = usage.InputTokens + usage.CacheReadTokens
 }
 
-// saveSessionUsage fetches the session, updates usage metrics, saves it, and
-// returns the updated session. On any error the original session is returned
-// unchanged and a warning is logged.
-func (a *sessionAgent) saveSessionUsage(ctx context.Context, sessionID string, result *logos.RunResult, logMsg string) (session.Session, bool) {
+// saveSessionUsage fetches the session, updates usage metrics with the supplied
+// per-turn totals, saves it, and returns the updated session. On any error the
+// original session is returned unchanged and a warning is logged.
+func (a *sessionAgent) saveSessionUsage(ctx context.Context, sessionID string, usage fantasy.Usage, meta fantasy.ProviderMetadata, logMsg string) (session.Session, bool) {
 	lm := a.largeModel.Get()
 	s, err := a.sessions.Get(ctx, sessionID)
 	if err != nil {
 		slog.Warn("Failed to load session for usage update", "session_id", sessionID, "error", err)
 		return session.Session{}, false
 	}
-	a.updateSessionUsage(lm, &s, result.Usage, a.openrouterCost(result.ProviderMetadata))
+	a.updateSessionUsage(lm, &s, usage, a.openrouterCost(meta))
 	updated, saveErr := a.sessions.Save(ctx, s)
 	if saveErr != nil {
 		slog.Warn(logMsg, "session_id", sessionID, "error", saveErr)

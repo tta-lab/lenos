@@ -57,7 +57,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
-	github.com/tta-lab/logos/v2 v2.2.0
+	github.com/tta-lab/logos/v2 v2.3.0
 	github.com/tta-lab/temenos v0.7.0
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/goleak v1.3.0

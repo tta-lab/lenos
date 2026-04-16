@@ -32,6 +32,13 @@ type runState struct {
 
 	currentAssistant *message.Message
 	pendingResult    *message.Message
+
+	// Per-turn usage accumulator. Last-step-wins matches the prior behaviour
+	// where logos returned only the final-turn usage on RunResult. usageSeen
+	// gates the saveSessionUsage call (replaces the old `if result != nil`).
+	lastUsage fantasy.Usage
+	lastMeta  fantasy.ProviderMetadata
+	usageSeen bool
 }
 
 // buildHistory converts session messages to fantasy messages for logos.Run.
@@ -111,6 +118,15 @@ func (state *runState) handleStepEnd(_ int) {
 			slog.Warn("handleStepEnd: failed to persist finish", "error", err)
 		}
 	}
+}
+
+// handleStepUsage captures per-step usage from logos. Last-step-wins —
+// matches the pre-v2.3 RunResult.Usage semantics for downstream cost/token
+// accounting in saveSessionUsage.
+func (state *runState) handleStepUsage(_ int, usage fantasy.Usage, meta fantasy.ProviderMetadata) {
+	state.lastUsage = usage
+	state.lastMeta = meta
+	state.usageSeen = true
 }
 
 func (state *runState) handleDelta(text string) {
@@ -308,6 +324,7 @@ runLoop:
 		OnDelta:              state.handleDelta,
 		OnReasoningDelta:     state.handleReasoningDelta,
 		OnReasoningSignature: state.handleReasoningSignature,
+		OnStepUsage:          state.handleStepUsage,
 		OnCommandResult:      state.handleCommandResult,
 		OnTurnEnd:            state.handleTurnEnd,
 	}
@@ -328,9 +345,9 @@ runLoop:
 			}
 		}
 
-		// Still save usage on cancellation (result is non-nil for cancel).
-		if result != nil {
-			if s, ok := a.saveSessionUsage(ctx, call.SessionID, result, "Failed to save session usage on cancellation"); ok {
+		// Still save usage on cancellation.
+		if state.usageSeen {
+			if s, ok := a.saveSessionUsage(ctx, call.SessionID, state.lastUsage, state.lastMeta, "Failed to save session usage on cancellation"); ok {
 				currentSession = s
 			}
 		}
@@ -350,8 +367,8 @@ runLoop:
 	}
 
 	// Update session usage from logos result (context %, cost).
-	if result != nil {
-		if updatedSession, ok := a.saveSessionUsage(ctx, call.SessionID, result, "Failed to save session usage"); ok {
+	if state.usageSeen {
+		if updatedSession, ok := a.saveSessionUsage(ctx, call.SessionID, state.lastUsage, state.lastMeta, "Failed to save session usage"); ok {
 			currentSession = updatedSession
 		}
 	}

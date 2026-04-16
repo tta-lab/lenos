@@ -705,14 +705,12 @@ func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 		},
 	})
 
-	result := &logos.RunResult{
-		Usage: fantasy.Usage{
-			InputTokens:  1000,
-			OutputTokens: 500,
-		},
+	usage := fantasy.Usage{
+		InputTokens:  1000,
+		OutputTokens: 500,
 	}
 
-	updated, ok := agent.saveSessionUsage(t.Context(), sess.ID, result, "save failed")
+	updated, ok := agent.saveSessionUsage(t.Context(), sess.ID, usage, nil, "save failed")
 	require.True(t, ok, "saveSessionUsage should succeed")
 	assert.Equal(t, int64(1000), updated.PromptTokens, "PromptTokens should reflect InputTokens")
 	assert.Equal(t, int64(500), updated.CompletionTokens, "CompletionTokens should reflect OutputTokens")
@@ -723,4 +721,28 @@ func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1000), persisted.PromptTokens)
 	assert.Equal(t, int64(500), persisted.CompletionTokens)
+}
+
+func TestRunState_HandleStepUsage_CapturesAndGates(t *testing.T) {
+	t.Parallel()
+	state := &runState{sessionID: "s1"}
+
+	// Initial state: no usage seen.
+	assert.False(t, state.usageSeen, "usageSeen starts false before any step")
+	assert.Equal(t, fantasy.Usage{}, state.lastUsage, "lastUsage starts zero-valued")
+
+	// First call captures and flips the gate.
+	usage := fantasy.Usage{InputTokens: 100, OutputTokens: 50}
+	meta := fantasy.ProviderMetadata{"openai": nil}
+	state.handleStepUsage(0, usage, meta)
+	assert.Equal(t, usage, state.lastUsage)
+	assert.Equal(t, meta, state.lastMeta)
+	assert.True(t, state.usageSeen)
+
+	// Subsequent call overwrites — last-step-wins.
+	later := fantasy.Usage{InputTokens: 200, OutputTokens: 80}
+	state.handleStepUsage(1, later, nil)
+	assert.Equal(t, later, state.lastUsage, "second call overwrites first")
+	assert.Nil(t, state.lastMeta, "meta also overwritten — including nil")
+	assert.True(t, state.usageSeen)
 }
