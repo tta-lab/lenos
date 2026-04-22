@@ -70,7 +70,6 @@ See the [JSON schema](schema.json) for all available options.
 | `LENOS_DISABLE_PROVIDER_AUTO_UPDATE` | Disable automatic provider updates |
 | `LENOS_DISABLE_DEFAULT_PROVIDERS` | Ignore embedded default providers |
 | `LENOS_DISABLE_METRICS` | Disable telemetry |
-| `LENOS_CLIENT_SERVER` | Enable client/server mode |
 | `LENOS_PROFILE` | Enable pprof profiling |
 
 ## Agent Skills
