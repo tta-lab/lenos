@@ -13,11 +13,11 @@ import (
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 	hyperp "github.com/tta-lab/lenos/internal/agent/hyper"
-	"github.com/tta-lab/lenos/internal/client"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/oauth"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
 	"github.com/tta-lab/lenos/internal/oauth/hyper"
+	"github.com/tta-lab/lenos/internal/workspace"
 )
 
 var loginCmd = &cobra.Command{
@@ -42,13 +42,13 @@ lenos login copilot
 	},
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, ws, cleanup, err := connectToServer(cmd)
+		ws, cleanup, err := setupWorkspace(cmd, "", nil)
 		if err != nil {
 			return err
 		}
 		defer cleanup()
 
-		progressEnabled := ws.Config.Options.Progress == nil || *ws.Config.Options.Progress
+		progressEnabled := ws.Config().Options.Progress == nil || *ws.Config().Options.Progress
 		if progressEnabled && supportsProgressBar() {
 			_, _ = fmt.Fprintf(os.Stderr, ansi.SetIndeterminateProgressBar)
 			defer func() { _, _ = fmt.Fprintf(os.Stderr, ansi.ResetProgressBar) }()
@@ -60,16 +60,16 @@ lenos login copilot
 		}
 		switch provider {
 		case "hyper":
-			return loginHyper(c, ws.ID)
+			return loginHyper(ws)
 		case "copilot", "github", "github-copilot":
-			return loginCopilot(cmd.Context(), c, ws.ID)
+			return loginCopilot(cmd.Context(), ws)
 		default:
 			return fmt.Errorf("unknown platform: %s", args[0])
 		}
 	},
 }
 
-func loginHyper(c *client.Client, wsID string) error {
+func loginHyper(ws workspace.Workspace) error {
 	if !hyperp.Enabled() {
 		return fmt.Errorf("hyper not enabled")
 	}
@@ -120,8 +120,8 @@ func loginHyper(c *client.Client, wsID string) error {
 	}
 
 	if err := cmp.Or(
-		c.SetConfigField(ctx, wsID, config.ScopeGlobal, "providers.hyper.api_key", token.AccessToken),
-		c.SetConfigField(ctx, wsID, config.ScopeGlobal, "providers.hyper.oauth", token),
+		ws.SetConfigField(config.ScopeGlobal, "providers.hyper.api_key", token.AccessToken),
+		ws.SetConfigField(config.ScopeGlobal, "providers.hyper.oauth", token),
 	); err != nil {
 		return err
 	}
@@ -131,15 +131,13 @@ func loginHyper(c *client.Client, wsID string) error {
 	return nil
 }
 
-func loginCopilot(ctx context.Context, c *client.Client, wsID string) error {
+func loginCopilot(ctx context.Context, ws workspace.Workspace) error {
 	loginCtx := getLoginContext()
 
-	cfg, err := c.GetConfig(ctx, wsID)
-	if err == nil && cfg != nil {
-		if pc, ok := cfg.Providers.Get("copilot"); ok && pc.OAuthToken != nil {
-			fmt.Println("You are already logged in to GitHub Copilot.")
-			return nil
-		}
+	cfg := ws.Config()
+	if pc, ok := cfg.Providers.Get("copilot"); ok && pc.OAuthToken != nil {
+		fmt.Println("You are already logged in to GitHub Copilot.")
+		return nil
 	}
 
 	diskToken, hasDiskToken := copilot.RefreshTokenFromDisk()
@@ -188,8 +186,8 @@ func loginCopilot(ctx context.Context, c *client.Client, wsID string) error {
 	}
 
 	if err := cmp.Or(
-		c.SetConfigField(loginCtx, wsID, config.ScopeGlobal, "providers.copilot.api_key", token.AccessToken),
-		c.SetConfigField(loginCtx, wsID, config.ScopeGlobal, "providers.copilot.oauth", token),
+		ws.SetConfigField(config.ScopeGlobal, "providers.copilot.api_key", token.AccessToken),
+		ws.SetConfigField(config.ScopeGlobal, "providers.copilot.oauth", token),
 	); err != nil {
 		return err
 	}
