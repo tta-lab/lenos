@@ -20,8 +20,7 @@ import (
 )
 
 // AppWorkspace implements the Workspace interface by delegating
-// directly to an in-process [app.App] instance. This is the default
-// mode when the client/server architecture is not enabled.
+// directly to an in-process [app.App] instance.
 type AppWorkspace struct {
 	app   *app.App
 	store *config.ConfigStore
