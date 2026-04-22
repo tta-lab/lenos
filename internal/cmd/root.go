@@ -7,16 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	fang "charm.land/fang/v2"
@@ -28,13 +23,10 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/lenos/internal/app"
-	"github.com/tta-lab/lenos/internal/client"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/db"
 	"github.com/tta-lab/lenos/internal/event"
 	lenoslog "github.com/tta-lab/lenos/internal/log"
-	"github.com/tta-lab/lenos/internal/proto"
-	"github.com/tta-lab/lenos/internal/server"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	ui "github.com/tta-lab/lenos/internal/ui/model"
@@ -42,13 +34,10 @@ import (
 	"github.com/tta-lab/lenos/internal/workspace"
 )
 
-var clientHost string
-
 func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
 	rootCmd.PersistentFlags().StringP("data-dir", "D", "", "Custom lenos data directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
-	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific lenos server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
@@ -209,13 +198,6 @@ func supportsProgressBar() bool {
 	return isWindowsTerminal || strings.Contains(strings.ToLower(termProg), "ghostty")
 }
 
-// useClientServer returns true when the client/server architecture is
-// enabled via the LENOS_CLIENT_SERVER environment variable.
-func useClientServer() bool {
-	v, _ := strconv.ParseBool(os.Getenv("LENOS_CLIENT_SERVER"))
-	return v
-}
-
 // setupWorkspaceWithProgressBar wraps setupWorkspace with an optional
 // terminal progress bar shown during initialization.
 func setupWorkspaceWithProgressBar(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
@@ -233,20 +215,9 @@ func setupWorkspaceWithProgressBar(cmd *cobra.Command, agentName string, context
 	return ws, cleanup, err
 }
 
-// setupWorkspace returns a Workspace and cleanup function. When
-// LENOS_CLIENT_SERVER=1, it connects to a server process and returns a
-// ClientWorkspace. Otherwise it creates an in-process app.App and
-// returns an AppWorkspace.
-func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
-	if useClientServer() {
-		return setupClientServerWorkspace(cmd)
-	}
-	return setupLocalWorkspace(cmd, agentName, contextFiles)
-}
-
-// setupLocalWorkspace creates an in-process app.App and wraps it in an
+// setupWorkspace creates an in-process app.App and wraps it in an
 // AppWorkspace.
-func setupLocalWorkspace(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
+func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	ctx := cmd.Context()
@@ -318,220 +289,6 @@ func setupLocalWorkspace(cmd *cobra.Command, agentName string, contextFiles []st
 	ws := workspace.NewAppWorkspace(appInstance, store)
 	cleanup := func() { appInstance.Shutdown() }
 	return ws, cleanup, nil
-}
-
-// setupClientServerWorkspace connects to a server process and wraps the
-// result in a ClientWorkspace.
-func setupClientServerWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
-	c, protoWs, cleanupServer, err := connectToServer(cmd)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	clientWs := workspace.NewClientWorkspace(c, *protoWs)
-
-	if protoWs.Config.IsConfigured() {
-		if err := clientWs.InitCoderAgent(cmd.Context()); err != nil {
-			slog.Error("Failed to initialize coder agent", "error", err)
-		}
-	}
-
-	return clientWs, cleanupServer, nil
-}
-
-// connectToServer ensures the server is running, creates a client and
-// workspace, and returns a cleanup function that deletes the workspace.
-func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func(), error) {
-	hostURL, err := server.ParseHostURL(clientHost)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid host URL: %v", err)
-	}
-
-	if err := ensureServer(cmd, hostURL); err != nil {
-		return nil, nil, nil, err
-	}
-
-	debug, _ := cmd.Flags().GetBool("debug")
-	dataDir, _ := cmd.Flags().GetString("data-dir")
-	ctx := cmd.Context()
-
-	cwd, err := ResolveCwd(cmd)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	c, err := client.NewClient(cwd, hostURL.Scheme, hostURL.Host)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	wsReq := proto.Workspace{
-		Path:    cwd,
-		DataDir: dataDir,
-		Debug:   debug,
-		Version: version.Version,
-		Env:     os.Environ(),
-	}
-
-	ws, err := c.CreateWorkspace(ctx, wsReq)
-	if err != nil {
-		// The server socket may exist before the HTTP handler is ready.
-		// Retry a few times with a short backoff.
-		for range 5 {
-			select {
-			case <-ctx.Done():
-				return nil, nil, nil, ctx.Err()
-			case <-time.After(200 * time.Millisecond):
-			}
-			ws, err = c.CreateWorkspace(ctx, wsReq)
-			if err == nil {
-				break
-			}
-		}
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to create workspace: %v", err)
-		}
-	}
-
-	if shouldEnableMetrics(ws.Config) {
-		event.Init()
-	}
-
-	if ws.Config != nil {
-		logFile := filepath.Join(ws.Config.Options.DataDirectory, "logs", "lenos.log")
-		lenoslog.Setup(logFile, debug)
-	}
-
-	cleanup := func() { _ = c.DeleteWorkspace(context.Background(), ws.ID) }
-	return c, ws, cleanup, nil
-}
-
-// ensureServer auto-starts a detached server if the socket file does not
-// exist. When the socket exists, it verifies that the running server
-// version matches the client; on mismatch it shuts down the old server
-// and starts a fresh one.
-func ensureServer(cmd *cobra.Command, hostURL *url.URL) error {
-	switch hostURL.Scheme {
-	case "unix", "npipe":
-		needsStart := false
-		if _, err := os.Stat(hostURL.Host); err != nil && errors.Is(err, fs.ErrNotExist) {
-			needsStart = true
-		} else if err == nil {
-			if err := restartIfStale(cmd, hostURL); err != nil {
-				slog.Warn("Failed to check server version, restarting", "error", err)
-				needsStart = true
-			}
-		}
-
-		if needsStart {
-			if err := startDetachedServer(cmd); err != nil {
-				return err
-			}
-		}
-
-		var err error
-		for range 10 {
-			_, err = os.Stat(hostURL.Host)
-			if err == nil {
-				break
-			}
-			select {
-			case <-cmd.Context().Done():
-				return cmd.Context().Err()
-			case <-time.After(100 * time.Millisecond):
-			}
-		}
-		if err != nil {
-			return fmt.Errorf("failed to initialize lenos server: %v", err)
-		}
-	}
-
-	return nil
-}
-
-// restartIfStale checks whether the running server matches the current
-// client version. When they differ, it sends a shutdown command and
-// removes the stale socket so the caller can start a fresh server.
-func restartIfStale(cmd *cobra.Command, hostURL *url.URL) error {
-	c, err := client.NewClient("", hostURL.Scheme, hostURL.Host)
-	if err != nil {
-		return err
-	}
-	vi, err := c.VersionInfo(cmd.Context())
-	if err != nil {
-		return err
-	}
-	if vi.Version == version.Version {
-		return nil
-	}
-	slog.Info("Server version mismatch, restarting",
-		"server", vi.Version,
-		"client", version.Version,
-	)
-	_ = c.ShutdownServer(cmd.Context())
-	// Give the old process a moment to release the socket.
-	for range 20 {
-		if _, err := os.Stat(hostURL.Host); errors.Is(err, fs.ErrNotExist) {
-			break
-		}
-		select {
-		case <-cmd.Context().Done():
-			return cmd.Context().Err()
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-	// Force-remove if the socket is still lingering.
-	_ = os.Remove(hostURL.Host)
-	return nil
-}
-
-var safeNameRegexp = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
-
-func startDetachedServer(cmd *cobra.Command) error {
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %v", err)
-	}
-
-	safeClientHost := safeNameRegexp.ReplaceAllString(clientHost, "_")
-	chDir := filepath.Join(config.GlobalCacheDir(), "server-"+safeClientHost)
-	if err := os.MkdirAll(chDir, 0o700); err != nil {
-		return fmt.Errorf("failed to create server working directory: %v", err)
-	}
-
-	cmdArgs := []string{"server"}
-	if clientHost != server.DefaultHost() {
-		cmdArgs = append(cmdArgs, "--host", clientHost)
-	}
-
-	c := exec.CommandContext(cmd.Context(), exe, cmdArgs...)
-	stdoutPath := filepath.Join(chDir, "stdout.log")
-	stderrPath := filepath.Join(chDir, "stderr.log")
-	detachProcess(c)
-
-	stdout, err := os.Create(stdoutPath)
-	if err != nil {
-		return fmt.Errorf("failed to create stdout log file: %v", err)
-	}
-	defer stdout.Close()
-	c.Stdout = stdout
-
-	stderr, err := os.Create(stderrPath)
-	if err != nil {
-		return fmt.Errorf("failed to create stderr log file: %v", err)
-	}
-	defer stderr.Close()
-	c.Stderr = stderr
-
-	if err := c.Start(); err != nil {
-		return fmt.Errorf("failed to start lenos server: %v", err)
-	}
-
-	if err := c.Process.Release(); err != nil {
-		return fmt.Errorf("failed to detach lenos server process: %v", err)
-	}
-
-	return nil
 }
 
 func shouldEnableMetrics(cfg *config.Config) bool {
