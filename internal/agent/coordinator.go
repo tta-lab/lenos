@@ -26,7 +26,8 @@ import (
 	"github.com/tta-lab/lenos/internal/project"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/logos/v2"
+	"github.com/tta-lab/lenos/internal/transcript"
+	"github.com/tta-lab/temenos/client"
 	"golang.org/x/sync/errgroup"
 
 	"charm.land/fantasy/providers/anthropic"
@@ -56,7 +57,7 @@ var (
 type Coordinator interface {
 	// INFO: (kujtim) this is not used yet we will use this when we have multiple agents
 	// SetMainAgent(string)
-	Run(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) (*logos.RunResult, error)
+	Run(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error
 	Cancel(sessionID string)
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
@@ -74,6 +75,7 @@ type coordinator struct {
 	sessions     session.Service
 	messages     message.Service
 	notify       pubsub.Publisher[notify.Notification]
+	recorder     transcript.Recorder
 	currentAgent SessionAgent
 	systemPrompt string
 	readyWg      errgroup.Group
@@ -85,12 +87,17 @@ func NewCoordinator(
 	sessions session.Service,
 	messages message.Service,
 	notify pubsub.Publisher[notify.Notification],
+	recorder transcript.Recorder,
 ) (Coordinator, error) {
+	if recorder == nil {
+		recorder = transcript.NoopRecorder{}
+	}
 	c := &coordinator{
 		cfg:      cfg,
 		sessions: sessions,
 		messages: messages,
 		notify:   notify,
+		recorder: recorder,
 	}
 
 	large, small, err := c.buildAgentModels(ctx, false)
@@ -109,6 +116,7 @@ func NewCoordinator(
 		Messages:             messages,
 		Tools:                nil,
 		Notify:               notify,
+		Recorder:             recorder,
 	})
 
 	// Build system prompt: logos base (cmd block format, env, commands) + lenos post-template.
@@ -128,30 +136,84 @@ func NewCoordinator(
 }
 
 // Run implements Coordinator.
-func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) (*logos.RunResult, error) {
+func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) error {
 	if err := c.readyWg.Wait(); err != nil {
-		return nil, err
+		return err
 	}
 
-	// Note: attachments are currently not used in the logos path.
+	// Attachments are not surfaced in the bash-first loop yet. Phase 5
+	// (prompt corpus migration) will decide whether to inline file content
+	// in the user message or expose a `lenos attach` CLI inside the sandbox.
 	_ = attachments
 
 	model := c.currentAgent.Model()
-	maxTokens := model.CatwalkCfg.DefaultMaxTokens
-	if model.ModelCfg.MaxTokens != 0 {
-		maxTokens = model.ModelCfg.MaxTokens
-	}
 
 	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 	if !ok {
-		return nil, errModelProviderNotConfigured
+		return errModelProviderNotConfigured
 	}
 
-	prov, err := c.buildProvider(providerCfg, model.ModelCfg, false)
-	if err != nil {
-		return nil, fmt.Errorf("build provider: %w", err)
+	// Refresh OAuth token if expired before running.
+	if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
+		slog.Debug("OAuth token expired, refreshing", "provider", providerCfg.ID)
+		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
+			return err
+		}
+		freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+		if !ok {
+			return fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
+		}
+		providerCfg = freshCfg
+		// Rebuild provider so the new credentials take effect on the next
+		// fantasy.LanguageModel.Stream call. The current sessionAgent's model
+		// holds a reference to the provider — refresh it via UpdateModels.
+		if err := c.UpdateModels(ctx); err != nil {
+			return fmt.Errorf("rebuild model after token refresh: %w", err)
+		}
+		model = c.currentAgent.Model()
 	}
 
+	call := c.buildCall(ctx, sessionID, prompt, model, providerCfg)
+
+	runErr := c.currentAgent.Run(ctx, call)
+	if runErr == nil {
+		return nil
+	}
+
+	if c.isUnauthorized(runErr) {
+		slog.Debug("Received 401, attempting token refresh", "provider", providerCfg.ID)
+		switch {
+		case providerCfg.OAuthToken != nil:
+			if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
+				return fmt.Errorf("token refresh failed after 401: %w", err)
+			}
+		case strings.Contains(providerCfg.APIKeyTemplate, "$"):
+			if err := c.refreshApiKeyTemplate(ctx, providerCfg); err != nil {
+				return fmt.Errorf("API key refresh failed after 401: %w", err)
+			}
+		default:
+			return fmt.Errorf("agent.Run: %w", runErr)
+		}
+		if err := c.UpdateModels(ctx); err != nil {
+			return fmt.Errorf("rebuild model after refresh: %w", err)
+		}
+		freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+		if !ok {
+			return fmt.Errorf("provider %s not found after refresh", model.ModelCfg.Provider)
+		}
+		call = c.buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg)
+		if runErr := c.currentAgent.Run(ctx, call); runErr != nil {
+			return fmt.Errorf("agent.Run after refresh: %w", runErr)
+		}
+		return nil
+	}
+	return fmt.Errorf("agent.Run: %w", runErr)
+}
+
+// buildCall assembles the per-turn SessionAgentCall with sandbox env, allowed
+// paths, and provider options. Extracted so the OAuth/API-key refresh path
+// can rebuild a call with fresh credentials without duplicating wiring.
+func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, model Model, providerCfg config.ProviderConfig) SessionAgentCall {
 	sandboxEnv := make(map[string]string, len(os.Environ()))
 	for _, e := range os.Environ() {
 		if idx := strings.IndexByte(e, '='); idx >= 0 {
@@ -169,92 +231,23 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		}
 	}
 
-	logosCfg := logos.Config{
-		Provider:     prov,
-		Model:        model.ModelCfg.Model,
-		SystemPrompt: c.systemPrompt,
-		Sandbox:      resolveSandbox(c.cfg.Config().Options.Sandbox),
-		SandboxEnv:   sandboxEnv,
-		AllowedPaths: BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...),
-		MaxSteps:     200, // No hard limit pre-logos; 200 accommodates a coding agent that reads, edits, and runs tests.
-		MaxTokens:    int(maxTokens),
+	var sandboxClient *client.Client
+	useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
+	// Phase 1 keeps the temenos client construction out-of-scope: when the
+	// sandbox is enabled but no explicit client is wired in, the loop logs
+	// the fallback and runs LocalRunner. Phase 2/3 will provide a temenos
+	// client factory that the coordinator can pass through.
+
+	return SessionAgentCall{
+		SessionID:       sessionID,
+		Prompt:          prompt,
+		ProviderID:      model.ModelCfg.Provider,
+		ProviderOptions: getProviderOptions(model, providerCfg),
+		Sandbox:         useSandbox,
+		SandboxClient:   sandboxClient,
+		Env:             sandboxEnv,
+		AllowedPaths:    BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...),
 	}
-
-	// Refresh OAuth token if expired before running.
-	if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
-		slog.Debug("OAuth token expired, refreshing", "provider", providerCfg.ID)
-		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
-			return nil, err
-		}
-		freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-		if !ok {
-			return nil, fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
-		}
-		prov, err = c.buildProvider(freshCfg, model.ModelCfg, false)
-		if err != nil {
-			return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
-		}
-		logosCfg.Provider = prov
-	}
-
-	call := SessionAgentCall{
-		SessionID:  sessionID,
-		Prompt:     prompt,
-		LogosCfg:   logosCfg,
-		ProviderID: model.ModelCfg.Provider,
-	}
-
-	result, runErr := c.currentAgent.Run(ctx, call)
-
-	if runErr != nil {
-		if c.isUnauthorized(runErr) {
-			slog.Debug("Received 401, attempting token refresh", "provider", providerCfg.ID)
-			if providerCfg.OAuthToken != nil {
-				if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
-					return nil, fmt.Errorf("token refresh failed after 401: %w", err)
-				}
-				freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-				if !ok {
-					return nil, fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
-				}
-				freshProv, err := c.buildProvider(freshCfg, model.ModelCfg, false)
-				if err != nil {
-					return nil, fmt.Errorf("rebuild provider after token refresh: %w", err)
-				}
-				logosCfg.Provider = freshProv
-				call.LogosCfg = logosCfg
-				result, runErr = c.currentAgent.Run(ctx, call)
-				if runErr != nil {
-					return nil, fmt.Errorf("agent.Run after token refresh: %w", runErr)
-				}
-				return result, nil
-			}
-			if strings.Contains(providerCfg.APIKeyTemplate, "$") {
-				slog.Debug("Received 401, refreshing API key template", "provider", providerCfg.ID)
-				if err := c.refreshApiKeyTemplate(ctx, providerCfg); err != nil {
-					return nil, fmt.Errorf("API key refresh failed after 401: %w", err)
-				}
-				freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-				if !ok {
-					return nil, fmt.Errorf("provider %s not found after API key refresh", model.ModelCfg.Provider)
-				}
-				freshProv, err := c.buildProvider(freshCfg, model.ModelCfg, false)
-				if err != nil {
-					return nil, fmt.Errorf("rebuild provider after API key refresh: %w", err)
-				}
-				logosCfg.Provider = freshProv
-				call.LogosCfg = logosCfg
-				result, runErr = c.currentAgent.Run(ctx, call)
-				if runErr != nil {
-					return nil, fmt.Errorf("agent.Run after API key refresh: %w", runErr)
-				}
-				return result, nil
-			}
-		}
-		return nil, fmt.Errorf("agent.Run: %w", runErr)
-	}
-
-	return result, nil
 }
 
 func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.ProviderOptions {

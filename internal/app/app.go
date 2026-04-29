@@ -34,7 +34,6 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/update"
 	"github.com/tta-lab/lenos/internal/version"
-	"github.com/tta-lab/logos/v2"
 )
 
 // UpdateAvailableMsg is sent when a new version is available.
@@ -248,22 +247,19 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	_ = sess.ID // sess.ID available if permission system is re-enabled
 
 	type response struct {
-		result *logos.RunResult
-		err    error
+		err error
 	}
 	done := make(chan response, 1)
 
 	go func(ctx context.Context, sessionID, prompt string) {
-		result, err := app.AgentCoordinator.Run(ctx, sess.ID, prompt)
+		err := app.AgentCoordinator.Run(ctx, sess.ID, prompt)
 		if err != nil {
 			done <- response{
 				err: fmt.Errorf("failed to start agent processing stream: %w", err),
 			}
 			return
 		}
-		done <- response{
-			result: result,
-		}
+		done <- response{}
 	}(ctx, sess.ID, prompt)
 
 	messageEvents := app.Messages.Subscribe(ctx)
@@ -498,12 +494,16 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		return fmt.Errorf("coder agent configuration is missing")
 	}
 	var err error
+	// TODO(phase 2): inject the concrete MdRecorder once task 27a71aa5
+	// lands. Until then, the NoopRecorder default keeps the loop running
+	// without writing a .md transcript.
 	app.AgentCoordinator, err = agent.NewCoordinator(
 		ctx,
 		app.config,
 		app.Sessions,
 		app.Messages,
 		app.agentNotifications,
+		nil,
 	)
 	if err != nil {
 		slog.Error("Failed to create coder agent", "err", err)

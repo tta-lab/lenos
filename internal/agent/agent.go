@@ -14,6 +14,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
+	"github.com/tta-lab/temenos/client"
 
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/config"
@@ -21,8 +22,7 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/logos/v2"
-
+	"github.com/tta-lab/lenos/internal/transcript"
 	"github.com/tta-lab/lenos/internal/version"
 )
 
@@ -40,23 +40,43 @@ var userAgent = fmt.Sprintf("Lenos/%s (https://github.com/tta-lab/lenos)", versi
 //go:embed templates/summary.md
 var summaryPrompt []byte
 
+// SessionAgentCall carries one user-initiated turn through the agent loop.
+// LogosCfg is gone in the bash-first rewrite; the loop now needs the runtime
+// pieces it used to derive from logos.Config directly.
 type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
-	LogosCfg  logos.Config
-	// ProviderID is the config-side provider identifier (e.g. "minimax-china",
-	// "openrouter"), NOT the fantasy protocol name (e.g. "anthropic"). This is
-	// what the UI looks up via cfg.GetModel(providerID, modelID). Storing
-	// Provider.Name() here instead was a regression introduced in PR #19
-	// (commit 674ce747) — it caused "Unknown Model" in the UI footer for any
-	// provider where the config ID differs from the fantasy protocol (e.g.
-	// minimax-china, bedrock, hyper). Set by the coordinator from
-	// model.ModelCfg.Provider.
+
+	// ProviderID is the config-side provider identifier (e.g.
+	// "minimax-china", "openrouter"), NOT the fantasy protocol name (e.g.
+	// "anthropic"). This is what the UI looks up via cfg.GetModel; storing
+	// the fantasy Provider.Name() here was a regression that caused
+	// "Unknown Model" in the footer.
 	ProviderID string
+
+	// ProviderOptions are the per-provider streaming options merged from
+	// catwalk + provider config + model config (anthropic thinking, openai
+	// reasoning_effort, etc).
+	ProviderOptions fantasy.ProviderOptions
+
+	// Sandbox controls runner selection. When true and SandboxClient is set
+	// the loop runs each emit through temenos; otherwise it falls back to
+	// LocalRunner with a clear warning.
+	Sandbox       bool
+	SandboxClient *client.Client
+
+	// Env is the explicit environment overlay for each subprocess. The loop
+	// sets LENOS_SESSION_ID / LENOS_DATA_DIR on top of this so log CLI in
+	// Phase 3 can resolve the .md path.
+	Env map[string]string
+
+	// AllowedPaths is the read/write bound for the runner. The first entry
+	// also becomes the subprocess working directory.
+	AllowedPaths []client.AllowedPath
 }
 
 type SessionAgent interface {
-	Run(context.Context, SessionAgentCall) (*logos.RunResult, error)
+	Run(context.Context, SessionAgentCall) error
 	SetModels(large Model, small Model)
 	SetTools(tools []fantasy.AgentTool)
 	SetSystemPrompt(systemPrompt string)
@@ -89,6 +109,7 @@ type sessionAgent struct {
 	messages             message.Service
 	disableAutoSummarize bool
 	notify               pubsub.Publisher[notify.Notification]
+	recorder             transcript.Recorder
 
 	messageQueue   *csync.Map[string, []SessionAgentCall]
 	activeRequests *csync.Map[string, context.CancelFunc]
@@ -105,11 +126,19 @@ type SessionAgentOptions struct {
 	Messages             message.Service
 	Tools                []fantasy.AgentTool
 	Notify               pubsub.Publisher[notify.Notification]
+	// Recorder is the transcript seam (Phase 1) wired to the .md writer
+	// (Phase 2). When nil, the agent uses transcript.NoopRecorder so
+	// Phase 1 runs standalone.
+	Recorder transcript.Recorder
 }
 
 func NewSessionAgent(
 	opts SessionAgentOptions,
 ) SessionAgent {
+	rec := opts.Recorder
+	if rec == nil {
+		rec = transcript.NoopRecorder{}
+	}
 	return &sessionAgent{
 		largeModel:           csync.NewValue(opts.LargeModel),
 		smallModel:           csync.NewValue(opts.SmallModel),
@@ -121,6 +150,7 @@ func NewSessionAgent(
 		disableAutoSummarize: opts.DisableAutoSummarize,
 		tools:                csync.NewSliceFrom(opts.Tools),
 		notify:               opts.Notify,
+		recorder:             rec,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
 	}

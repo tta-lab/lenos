@@ -23,7 +23,12 @@ internal/
     provider.go                    Provider configuration and model resolution
   agent/
     agent.go                       Types, NewSessionAgent, package doc
-    agent_run.go                  Run + runState + logos v2.0 callbacks
+    agent_run.go                  Run + bash-first loop + transcript.Recorder integration
+    loop.go                       Bash-first agent loop (subprocess-per-call, exit intercept, step cap)
+    classify.go                   Emit classifier (exit/empty/invalid/banned/exec)
+    exec.go                       Runner interface + LocalRunner / SandboxRunner
+    prompt_runtime.go             Re-prompt strings for invalid emits
+    system_prompt.go              Bash-first base system-prompt builder + CommandDoc
     agent_session.go              Session ops + helpers (Summarize, Cancel, etc.)
     coordinator.go                 Coordinator: manages named agents ("coder", "task")
     prompts.go                     Loads Go-template system prompts

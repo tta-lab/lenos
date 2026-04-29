@@ -3,6 +3,7 @@ package message
 import (
 	"encoding/base64"
 	"fmt"
+	"html"
 	"log/slog"
 	"slices"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
-	"github.com/tta-lab/logos/v2"
 )
 
 type MessageRole string
@@ -456,18 +456,14 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 			Content: parts,
 		})
 	case Result:
-		var results []logos.Result
+		var results []CommandContent
 		hasParts := len(m.Parts) > 0
 		for _, part := range m.Parts {
 			cc, ok := part.(CommandContent)
 			if !ok || cc.Command == "" || cc.Pending {
 				continue
 			}
-			r := logos.Result{Command: cc.Command, Stdout: cc.Output}
-			if cc.ExitCode != nil {
-				r.ExitCode = *cc.ExitCode
-			}
-			results = append(results, r)
+			results = append(results, cc)
 		}
 		if len(results) == 0 && hasParts {
 			// Parts existed but none were completed commands — warn only in this case.
@@ -477,9 +473,36 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 		messages = append(messages, fantasy.Message{
 			Role: fantasy.MessageRoleUser,
 			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: logos.FormatResults(results)},
+				fantasy.TextPart{Text: FormatResults(results)},
 			},
 		})
 	}
 	return messages
+}
+
+// FormatResults renders a slice of completed CommandContent as the
+// `<result>...</result>` text the next-turn user message carries back to the
+// model. Mirrors the historic logos.formatOneResult shape so existing prompt
+// content / model expectations don't drift. Stdout/stderr are HTML-escaped
+// so a literal `</result>` inside output cannot close the wrapper early.
+func FormatResults(results []CommandContent) string {
+	if len(results) == 0 {
+		return ""
+	}
+	parts := make([]string, len(results))
+	for i, r := range results {
+		parts[i] = formatOneResult(r)
+	}
+	return "<result>\n" + strings.Join(parts, "\n") + "\n</result>"
+}
+
+func formatOneResult(r CommandContent) string {
+	output := html.EscapeString(r.Output)
+	if output == "" {
+		output = "(no output)"
+	}
+	if r.ExitCode != nil && *r.ExitCode != 0 && *r.ExitCode != -1 {
+		output += fmt.Sprintf("\n(exit code: %d)", *r.ExitCode)
+	}
+	return output
 }
