@@ -78,3 +78,60 @@ func (NoopRecorder) Close() error                              { return nil }
 var (
 	_ Recorder = (*NoopRecorder)(nil)
 )
+
+// MdRecorder is the concrete Recorder used by lenos main. It composes
+// the formatter and MdWriter to append session events to a .md file.
+type MdRecorder struct {
+	writer *MdWriter
+	now    func() time.Time // injectable clock for deterministic tests
+}
+
+// NewMdRecorder returns a configured MdRecorder for the given .md path.
+func NewMdRecorder(path string) *MdRecorder {
+	return &MdRecorder{
+		writer: NewMdWriter(path),
+		now:    time.Now,
+	}
+}
+
+func (r *MdRecorder) Open(_ context.Context, meta Meta) error {
+	return r.writer.Append([]byte(RenderFrontmatter(meta)))
+}
+
+func (r *MdRecorder) UserMessage(_ context.Context, _, text string) error {
+	return r.writer.Append([]byte(RenderUserMessage(text)))
+}
+
+func (r *MdRecorder) AgentBashAnnounce(_ context.Context, sessionID, bash string) (TrailerToken, error) {
+	startedAt := r.now()
+	return TrailerToken{sessionID: sessionID, startedAt: startedAt}, r.writer.Append([]byte(RenderBashBlock(bash)))
+}
+
+func (r *MdRecorder) BashResult(_ context.Context, tok TrailerToken, out []byte, exitCode int, dur time.Duration) error {
+	if exitCode == 0 {
+		return r.writer.Append([]byte(RenderTrailerSuccess(tok.startedAt, dur)))
+	}
+	// Atomic: output block + failure trailer together.
+	return r.writer.Append([]byte(RenderOutputBlock(out) + RenderTrailerFailure(tok.startedAt, dur, exitCode)))
+}
+
+func (r *MdRecorder) BashSkipped(_ context.Context, tok TrailerToken, sev Severity, desc string) error {
+	// Per spec: bash block already written by AgentBashAnnounce.
+	// BashSkipped writes the runtime-event blockquote; no output, no trailer.
+	return r.writer.Append([]byte(RenderRuntimeEvent(sev, desc)))
+}
+
+func (r *MdRecorder) RuntimeEvent(_ context.Context, _ string, sev Severity, desc string) error {
+	return r.writer.Append([]byte(RenderRuntimeEvent(sev, desc)))
+}
+
+func (r *MdRecorder) TurnEnd(_ context.Context, _ string) error {
+	return r.writer.Append([]byte(RenderTurnEnd()))
+}
+
+func (r *MdRecorder) Close() error {
+	return nil
+}
+
+// Compile-time interface check.
+var _ Recorder = (*MdRecorder)(nil)
