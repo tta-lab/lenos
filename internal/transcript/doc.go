@@ -7,7 +7,7 @@
 //     them without pulling in database or agent dependencies.
 //   - MdRecorder is the concrete Recorder consumed by lenos main (cmd/lenos via
 //     internal/agent, Phase 1) to write session events as they happen.
-//   - Writer.go provides a flock-guarded append writer for cross-process safety
+//   - writer.go provides a flock-guarded append writer for cross-process safety
 //     between lenos main and cmd/log.
 //   - NoopRecorder is the default for standalone agent-loop tests (Phase 1).
 //
