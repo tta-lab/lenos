@@ -494,9 +494,11 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		return fmt.Errorf("coder agent configuration is missing")
 	}
 	var err error
-	// TODO(phase 2): inject the concrete MdRecorder once task 27a71aa5
-	// lands. Until then, the NoopRecorder default keeps the loop running
-	// without writing a .md transcript.
+	// transcript.NewMdRecorder is per-session (writer is bound to a single
+	// .md path); the per-call Recorder wiring belongs with the
+	// LENOS_DATA_DIR / session-id resolution and is tracked as a follow-up
+	// integration task. NoopRecorder keeps the loop running today without
+	// writing a transcript artifact.
 	app.AgentCoordinator, err = agent.NewCoordinator(
 		ctx,
 		app.config,
