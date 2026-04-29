@@ -50,14 +50,14 @@ composition root (Phase 5 `cmd/lenos`) supplies `transcript.NewMdRecorder(path)`
 The agent loop also writes the same events to sqlite via `internal/db` — the
 two destinations serve different consumers (model context vs. human render).
 
-### Phase 3 — log CLI (`cmd/log/`)
+### Phase 3 — log CLI (`cmd/log/`) *(planned)*
 
 Import `transcript` for `RenderProse`, `RenderRuntimeEvent`, etc. Use
 `MdWriter.Append` directly to write prose to the same `.md` lenos main is
 writing to. The flock contract (see Concurrency model in `doc.go`) is what
 keeps the two processes from interleaving partial writes.
 
-### Phase 4 — TUI
+### Phase 4 — TUI *(planned)*
 
 The `.md` is append-only — tail it with `fsnotify` or polling. If the `.md`
 is missing or stale, Phase 4 re-renders the file from sqlite (sqlite is the

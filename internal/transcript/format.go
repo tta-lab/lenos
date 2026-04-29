@@ -39,8 +39,7 @@ func RenderBashBlock(bash string) string {
 // humanizeDuration formats a duration for display in trailers.
 //
 // Rules:
-//   - <100ms  → 3-decimal seconds (e.g. "0.050s")
-//   - 100ms..<1s → 1-decimal seconds (e.g. "0.4s")
+//   - <1s    → 3-decimal seconds (e.g. "50ms → 0.050s", "150ms → 0.150s")
 //   - 1s..<60s → integer seconds (e.g. "12s")
 //   - ≥60s     → <m>m<s>s (e.g. "1m5s")
 func humanizeDuration(d time.Duration) string {

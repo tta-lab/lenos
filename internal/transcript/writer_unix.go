@@ -3,6 +3,7 @@
 package transcript
 
 import (
+	"log/slog"
 	"os"
 	"syscall"
 )
@@ -14,12 +15,16 @@ func (w *MdWriter) flockExclusive(f *os.File) error {
 		if err == syscall.EWOULDBLOCK || err == syscall.EAGAIN {
 			return ErrConcurrentWrite
 		}
+		slog.Error("transcript: flock exclusive failed", "path", w.path, "err", err)
 		return err
 	}
 	return nil
 }
 
-// flockUnlock releases the advisory lock.
+// flockUnlock releases the advisory lock. Errors are logged but not returned
+// since the file is always closed immediately after.
 func (w *MdWriter) flockUnlock(f *os.File) {
-	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
+		slog.Warn("transcript: flock unlock failed", "path", w.path, "err", err)
+	}
 }

@@ -98,8 +98,11 @@ func TestHumanizeDuration(t *testing.T) {
 	}{
 		{0, "0.000s"},
 		{50 * time.Millisecond, "0.050s"},
+		{100 * time.Millisecond, "0.100s"},
 		{150 * time.Millisecond, "0.150s"},
+		{250 * time.Millisecond, "0.250s"},
 		{400 * time.Millisecond, "0.400s"},
+		{900 * time.Millisecond, "0.900s"},
 		{999 * time.Millisecond, "0.999s"},
 		{1 * time.Second, "1s"},
 		{12 * time.Second, "12s"},
@@ -156,6 +159,14 @@ func TestRenderTrailerFailure(t *testing.T) {
 		require.Contains(t, result, "killed")
 	})
 
+	t.Run("exit 143 SIGTERM", func(t *testing.T) {
+		t.Parallel()
+
+		result := RenderTrailerFailure(base, 5*time.Second, 143)
+		require.Contains(t, result, "exit 143")
+		require.Contains(t, result, "SIGTERM")
+	})
+
 	t.Run("exit 2 no context", func(t *testing.T) {
 		t.Parallel()
 
@@ -196,6 +207,20 @@ func TestRenderOutputBlock(t *testing.T) {
 
 func TestRenderRuntimeEvent(t *testing.T) {
 	t.Parallel()
+
+	// Explicitly assert severity prefixes to catch regressions.
+	t.Run("SevNormal prefix empty", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, "", SevNormal.String())
+	})
+	t.Run("SevWarn prefix emoji", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, "⚠️ ", SevWarn.String())
+	})
+	t.Run("SevError prefix emoji", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, "❌ ", SevError.String())
+	})
 
 	t.Run("normal", func(t *testing.T) {
 		t.Parallel()

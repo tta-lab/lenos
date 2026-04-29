@@ -12,8 +12,8 @@ import (
 var ErrConcurrentWrite = errors.New("transcript: concurrent .md writer detected")
 
 // MdWriter appends to a .md file with per-write open/close and advisory flock
-// for cross-process synchronization. Not safe for concurrent use from the same
-// process; use a mutex or channel if needed.
+// for cross-process synchronization. The mutex serializes calls within a single
+// process; flock serializes across processes.
 type MdWriter struct {
 	path string
 	mu   sync.Mutex // serializes writes within this process

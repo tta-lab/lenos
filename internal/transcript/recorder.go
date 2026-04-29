@@ -49,9 +49,8 @@ type Recorder interface {
 	Close() error
 }
 
-// NoopRecorder is the default Recorder that Phase 1's agent loop uses in
-// standalone tests where no .md output is needed. All methods return zero
-// values and nil errors.
+// NoopRecorder implements Recorder with no-op methods. It is the default Recorder
+// for Phase 1's agent loop in standalone tests where no .md output is needed.
 type NoopRecorder struct{}
 
 func (NoopRecorder) Open(_ context.Context, _ Meta) error             { return nil }
@@ -111,17 +110,24 @@ func (r *MdRecorder) BashResult(_ context.Context, tok TrailerToken, out []byte,
 	if exitCode == 0 {
 		return r.writer.Append([]byte(RenderTrailerSuccess(tok.startedAt, dur)))
 	}
-	// Atomic: output block + failure trailer together.
+	// Within-call atomic: output block + failure trailer written in one Append.
+	// Note: if AgentBashAnnounce previously failed under E8 (write error,
+	// bash block absent), the trailer appears with no preceding bash block —
+	// this is an inter-call invariant we don't enforce.
 	return r.writer.Append([]byte(RenderOutputBlock(out) + RenderTrailerFailure(tok.startedAt, dur, exitCode)))
 }
 
 func (r *MdRecorder) BashSkipped(_ context.Context, tok TrailerToken, sev Severity, desc string) error {
 	// Per spec: bash block already written by AgentBashAnnounce.
 	// BashSkipped writes the runtime-event blockquote; no output, no trailer.
-	return r.writer.Append([]byte(RenderRuntimeEvent(sev, desc)))
+	return r.writeRuntimeEvent(sev, desc)
 }
 
 func (r *MdRecorder) RuntimeEvent(_ context.Context, _ string, sev Severity, desc string) error {
+	return r.writeRuntimeEvent(sev, desc)
+}
+
+func (r *MdRecorder) writeRuntimeEvent(sev Severity, desc string) error {
 	return r.writer.Append([]byte(RenderRuntimeEvent(sev, desc)))
 }
 
