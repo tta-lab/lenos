@@ -29,7 +29,8 @@ internal/
     prompts.go                     Loads Go-template system prompts
     templates/                     System prompt templates (coder.md.tpl, task.md.tpl, etc.)
     tools/                         All built-in tools (bash, edit, view, grep, glob, etc.)
-  session/session.go               Session CRUD backed by SQLite
+  session/session.go               Session CRUD backed by SQLite (legacy logos service; superseded by transcript/ in bash-first rewrite, removed in Phase 5)
+  transcript/                      Bash-first session .md render artifact (Phase 2). Pure stdlib formatter + flock-guarded append writer + Recorder seam consumed by the agent loop
   message/                         Message model and content types
   db/                              SQLite via sqlc, with migrations
     sql/                           Raw SQL queries (consumed by sqlc)
