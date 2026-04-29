@@ -143,10 +143,16 @@ func (r *MdRecorder) Close() error {
 // Compile-time interface check.
 var _ Recorder = (*MdRecorder)(nil)
 
-// loggingRecorder wraps a Recorder and logs the first error from any method
-// at Warn level. Subsequent errors are silently dropped. This ensures a
+// NewLoggingRecorder wraps a Recorder so the first error from any method is
+// logged at Warn level; subsequent errors are silently dropped. This ensures a
 // disk-full or permission error on .md writes surfaces at least once without
 // halting the loop (per E8: recorder failures are non-halting).
+func NewLoggingRecorder(r Recorder) Recorder {
+	return &loggingRecorder{inner: r}
+}
+
+// loggingRecorder implements Recorder by delegating to an inner Recorder and
+// logging the first error from each method at Warn level.
 type loggingRecorder struct {
 	inner  Recorder
 	logged bool

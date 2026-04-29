@@ -17,6 +17,7 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/stringext"
+	"github.com/tta-lab/lenos/internal/transcript"
 )
 
 // buildHistory converts session messages to fantasy messages for the bash-first
@@ -141,7 +142,7 @@ runLoopReentry:
 		provOpts:   call.ProviderOptions,
 		messages:   a.messages,
 		runner:     resolveRunner(call),
-		recorder:   a.recorder,
+		recorder:   transcript.NewLoggingRecorder(a.recorder),
 		sessionID:  call.SessionID,
 		sysPrompt:  a.systemPrompt.Get(),
 		providerID: call.ProviderID,
