@@ -74,7 +74,6 @@ func NewStyles() Styles {
 //   - Italic + bold: terminal default attrs
 func MarkdownRenderer(width int) (*glamour.TermRenderer, error) {
 	return glamour.NewTermRenderer(
-		glamour.WithStandardStyle("auto"),
 		glamour.WithStyles(ansi.StyleConfig{
 			BlockQuote: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
