@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"context"
+	"log/slog"
 	"time"
 )
 
@@ -141,3 +142,76 @@ func (r *MdRecorder) Close() error {
 
 // Compile-time interface check.
 var _ Recorder = (*MdRecorder)(nil)
+
+// NewLoggingRecorder wraps a Recorder so the first error from any method is
+// logged at Warn level; subsequent errors are silently dropped. This ensures a
+// disk-full or permission error on .md writes surfaces at least once without
+// halting the loop (per E8: recorder failures are non-halting).
+func NewLoggingRecorder(r Recorder) Recorder {
+	return &loggingRecorder{inner: r}
+}
+
+// loggingRecorder implements Recorder by delegating to an inner Recorder and
+// logging the first error from each method at Warn level.
+type loggingRecorder struct {
+	inner  Recorder
+	logged bool
+}
+
+func (r *loggingRecorder) logErr(method string, err error) {
+	if !r.logged && err != nil {
+		slog.Warn("transcript recorder: first failure (subsequent failures silenced)",
+			"method", method, "error", err)
+		r.logged = true
+	}
+}
+
+func (r *loggingRecorder) Open(ctx context.Context, meta Meta) error {
+	err := r.inner.Open(ctx, meta)
+	r.logErr("Open", err)
+	return err
+}
+
+func (r *loggingRecorder) UserMessage(ctx context.Context, sessionID, text string) error {
+	err := r.inner.UserMessage(ctx, sessionID, text)
+	r.logErr("UserMessage", err)
+	return err
+}
+
+func (r *loggingRecorder) AgentBashAnnounce(ctx context.Context, sessionID, bash string) (TrailerToken, error) {
+	tok, err := r.inner.AgentBashAnnounce(ctx, sessionID, bash)
+	r.logErr("AgentBashAnnounce", err)
+	return tok, err
+}
+
+func (r *loggingRecorder) BashResult(ctx context.Context, tok TrailerToken, out []byte, exitCode int, dur time.Duration) error {
+	err := r.inner.BashResult(ctx, tok, out, exitCode, dur)
+	r.logErr("BashResult", err)
+	return err
+}
+
+func (r *loggingRecorder) BashSkipped(ctx context.Context, tok TrailerToken, sev Severity, desc string) error {
+	err := r.inner.BashSkipped(ctx, tok, sev, desc)
+	r.logErr("BashSkipped", err)
+	return err
+}
+
+func (r *loggingRecorder) RuntimeEvent(ctx context.Context, sessionID string, sev Severity, desc string) error {
+	err := r.inner.RuntimeEvent(ctx, sessionID, sev, desc)
+	r.logErr("RuntimeEvent", err)
+	return err
+}
+
+func (r *loggingRecorder) TurnEnd(ctx context.Context, sessionID string) error {
+	err := r.inner.TurnEnd(ctx, sessionID)
+	r.logErr("TurnEnd", err)
+	return err
+}
+
+func (r *loggingRecorder) Close() error {
+	err := r.inner.Close()
+	r.logErr("Close", err)
+	return err
+}
+
+var _ Recorder = (*loggingRecorder)(nil)

@@ -1,13 +1,16 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/temenos/client"
 )
 
 func TestBuildAllowedPaths(t *testing.T) {
@@ -119,4 +122,57 @@ func TestResolveGitCommonDir(t *testing.T) {
 		dir := resolveGitCommonDir(ctx, t.TempDir())
 		require.Equal(t, "", dir, "should return empty on context cancellation")
 	})
+}
+
+func TestResolveRunner(t *testing.T) {
+	cases := []struct {
+		name        string
+		call        SessionAgentCall
+		wantLocal   bool
+		wantSandbox bool
+	}{
+		{
+			name:        "sandbox=false → local",
+			call:        SessionAgentCall{Sandbox: false},
+			wantLocal:   true,
+			wantSandbox: false,
+		},
+		{
+			name:        "sandbox=true + nil client → local fallback with warn",
+			call:        SessionAgentCall{Sandbox: true, SandboxClient: nil},
+			wantLocal:   true,
+			wantSandbox: false,
+		},
+		{
+			name:        "sandbox=true + client → sandbox",
+			call:        SessionAgentCall{Sandbox: true, SandboxClient: &client.Client{}},
+			wantLocal:   false,
+			wantSandbox: true,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// Run sequentially: slog.SetDefault mutates the global logger.
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, nil))
+			origDefault := slog.Default()
+			slog.SetDefault(logger)
+
+			got := resolveRunner(tc.call)
+
+			slog.SetDefault(origDefault)
+
+			_, isLocal := got.(LocalRunner)
+			_, isSandbox := got.(SandboxRunner)
+			require.Equal(t, tc.wantLocal, isLocal, "LocalRunner mismatch")
+			require.Equal(t, tc.wantSandbox, isSandbox, "SandboxRunner mismatch")
+
+			if tc.name == "sandbox=true + nil client → local fallback with warn" {
+				require.Contains(t, buf.String(), "falling back to LocalRunner",
+					"warning should fire when temenos unreachable")
+			}
+		})
+	}
 }

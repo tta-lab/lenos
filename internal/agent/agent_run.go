@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,31 +17,12 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/stringext"
-	"github.com/tta-lab/logos/v2"
+	"github.com/tta-lab/lenos/internal/transcript"
 )
 
-// runState holds mutable state for the duration of a single Run() call.
-// Each queued turn reinitializes these fields via the runLoop reset block.
-type runState struct {
-	sessionID  string
-	providerID string // config provider ID (e.g. "minimax-china"), NOT fantasy protocol name
-	logosCfg   logos.Config
-	messages   message.Service
-	ctx        context.Context
-
-	currentAssistant *message.Message
-	pendingResult    *message.Message
-
-	// Per-turn usage accumulator. Last-step-wins matches the prior behaviour
-	// where logos returned only the final-turn usage on RunResult. usageSeen
-	// gates the saveSessionUsage call (replaces the old `if result != nil`).
-	lastUsage fantasy.Usage
-	lastMeta  fantasy.ProviderMetadata // openrouterCost uses this for billing overrides.
-	usageSeen bool
-}
-
-// buildHistory converts session messages to fantasy messages for logos.Run.
-// The prompt is NOT included — logos.Run appends it internally.
+// buildHistory converts session messages to fantasy messages for the bash-first
+// loop. The current-turn prompt is NOT included — runLoop appends it before
+// calling the model.
 func buildHistory(msgs []message.Message) []fantasy.Message {
 	history := make([]fantasy.Message, 0, len(msgs))
 	for _, m := range msgs {
@@ -51,35 +31,9 @@ func buildHistory(msgs []message.Message) []fantasy.Message {
 	return history
 }
 
-func (state *runState) handleStepStart(_ int) {
-	state.currentAssistant = nil
-	if state.providerID == "" {
-		slog.Error("handleStepStart: providerID is empty — UI model lookups will fail")
-	}
-	msg, err := state.messages.Create(state.ctx, state.sessionID, message.CreateMessageParams{
-		Role:     message.Assistant,
-		Parts:    []message.ContentPart{message.TextContent{Text: ""}},
-		Model:    state.logosCfg.Model,
-		Provider: state.providerID,
-	})
-	if err != nil {
-		slog.Warn("handleStepStart: failed to create assistant message", "error", err)
-		return
-	}
-	state.currentAssistant = &msg
-}
-
-// extractCmdText parses the command text from a <cmd>...</cmd> chunk.
-// Returns the empty string if the block is empty or malformed.
-func extractCmdText(chunk string) string {
-	cmdText, _, _ := strings.Cut(chunk, "</cmd>")
-	cmdText = strings.TrimPrefix(cmdText, "<cmd>")
-	return strings.TrimSpace(cmdText)
-}
-
-// errorFinishFor returns an appropriate FinishReason and user-facing message for a
-// logos.Run error. This provides actionable feedback (e.g. "enable Copilot model",
-// "add credits") rather than opaque error strings.
+// errorFinishFor returns an appropriate FinishReason and user-facing message
+// for a run error. This provides actionable feedback (e.g. "enable Copilot
+// model", "add credits") rather than opaque error strings.
 func errorFinishFor(runErr error, model string) (reason message.FinishReason, title, msg string) {
 	reason = message.FinishReasonError
 	const defaultTitle = "Provider Error"
@@ -108,172 +62,29 @@ func errorFinishFor(runErr error, model string) (reason message.FinishReason, ti
 	return reason, defaultTitle, runErr.Error()
 }
 
-func (state *runState) handleStepEnd(_ int) {
-	if state.currentAssistant == nil {
-		return
+// resolveRunner picks LocalRunner or SandboxRunner from the call context.
+// On fallback to LocalRunner it logs a clear warning so the operator sees the
+// security implication (subprocess inherits parent env including secrets).
+func resolveRunner(call SessionAgentCall) Runner {
+	if call.Sandbox && call.SandboxClient != nil {
+		return SandboxRunner{Client: call.SandboxClient}
 	}
-	if !state.currentAssistant.IsFinished() {
-		state.currentAssistant.AddFinish(message.FinishReasonToolUse, "", "")
-		if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
-			slog.Warn("handleStepEnd: failed to persist finish", "error", err)
-		}
+	if call.Sandbox && call.SandboxClient == nil {
+		slog.Warn("sandbox requested but client is nil; falling back to LocalRunner — bash subprocess inherits parent env including secrets",
+			"session_id", call.SessionID)
 	}
+	return LocalRunner{}
 }
 
-// handleStepUsage captures per-step usage from logos. Last-step-wins —
-// mirrors pre-logos-v2.3 behaviour where only final-turn totals were returned
-// on RunResult. Downstream cost/token accounting in saveSessionUsage relies on
-// this being called at least once per successful run.
-func (state *runState) handleStepUsage(_ int, usage fantasy.Usage, meta fantasy.ProviderMetadata) {
-	if usage.InputTokens == 0 && usage.OutputTokens == 0 {
-		slog.Debug("handleStepUsage: received zero usage", "provider", meta)
-	}
-	state.lastUsage = usage
-	state.lastMeta = meta
-	state.usageSeen = true
-}
-
-func (state *runState) handleDelta(text string) {
-	if state.currentAssistant == nil {
-		slog.Warn("handleDelta: no currentAssistant, creating placeholder", "text_prefix", text[:min(len(text), 30)])
-		state.handleStepStart(0)
-		if state.currentAssistant == nil {
-			return
-		}
-	}
-
-	if strings.HasPrefix(text, "<cmd>") {
-		cmdText := extractCmdText(text)
-		if cmdText == "" {
-			return
-		}
-		state.currentAssistant.AppendContent(text)
-		if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
-			slog.Warn("handleDelta: failed to persist cmd content", "error", err)
-		}
-		msg, err := state.messages.Create(state.ctx, state.sessionID, message.CreateMessageParams{
-			Role:  message.Result,
-			Parts: []message.ContentPart{message.CommandContent{Command: cmdText, Pending: true}},
-		})
-		if err != nil {
-			slog.Warn("handleDelta: failed to create pending command message", "error", err)
-		} else {
-			state.pendingResult = &msg
-		}
-		return
-	}
-
-	// Prose delta: check if transitioning from reasoning to prose.
-	if state.currentAssistant.ReasoningContent().Thinking != "" && state.currentAssistant.ReasoningContent().FinishedAt == 0 {
-		state.currentAssistant.FinishThinking()
-		if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
-			slog.Warn("handleDelta: failed to persist reasoning finish", "error", err)
-		}
-	}
-	state.currentAssistant.AppendContent(text)
-	if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
-		slog.Warn("handleDelta: failed to persist content", "error", err)
-	}
-}
-
-func (state *runState) handleReasoningDelta(text string) {
-	if state.currentAssistant == nil {
-		slog.Warn("handleReasoningDelta: no currentAssistant", "text_prefix", text[:min(len(text), 30)])
-		state.handleStepStart(0)
-		if state.currentAssistant == nil {
-			return
-		}
-	}
-	state.currentAssistant.AppendReasoningContent(text)
-	if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
-		slog.Warn("handleReasoningDelta: failed to persist reasoning", "error", err)
-	}
-}
-
-func (state *runState) handleReasoningSignature(sig string) {
-	if state.currentAssistant == nil {
-		return
-	}
-	state.currentAssistant.AppendReasoningSignature(sig)
-	state.currentAssistant.FinishThinking()
-	if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
-		slog.Warn("handleReasoningSignature: failed to persist", "error", err)
-	}
-}
-
-func (state *runState) handleCommandResult(command string, output string, exitCode int) {
-	if state.pendingResult != nil {
-		state.pendingResult.Parts = []message.ContentPart{
-			message.CommandContent{Command: command, Output: output, ExitCode: &exitCode, Pending: false},
-		}
-		if err := state.messages.Update(state.ctx, *state.pendingResult); err != nil {
-			slog.Warn("handleCommandResult: failed to update pending result", "error", err)
-		}
-		state.pendingResult = nil
-	} else {
-		// Defensive fallback: create a new result row.
-		_, err := state.messages.Create(state.ctx, state.sessionID, message.CreateMessageParams{
-			Role:  message.Result,
-			Parts: []message.ContentPart{message.CommandContent{Command: command, Output: output, ExitCode: &exitCode, Pending: false}},
-		})
-		if err != nil {
-			slog.Warn("handleCommandResult: failed to create fallback result", "error", err)
-		}
-	}
-}
-
-func (state *runState) handleTurnEnd(reason logos.StopReason) {
-	var finish message.FinishReason
-	switch reason {
-	case logos.StopReasonFinal:
-		finish = message.FinishReasonEndTurn
-	case logos.StopReasonCanceled:
-		finish = message.FinishReasonCanceled
-	case logos.StopReasonError, logos.StopReasonHallucinationLimit, logos.StopReasonMaxSteps:
-		finish = message.FinishReasonError
-	}
-
-	if state.currentAssistant != nil {
-		state.currentAssistant.AddFinish(finish, "", "")
-		if err := state.messages.Update(state.ctx, *state.currentAssistant); err != nil {
-			slog.Warn("handleTurnEnd: failed to persist finish", "error", err)
-		}
-	}
-
-	// Abandon any pending result (cancel/error mid-cmd).
-	if state.pendingResult != nil {
-		exitCode := -1
-		state.pendingResult.Parts = []message.ContentPart{
-			message.CommandContent{Command: "", Output: "canceled before result", ExitCode: &exitCode, Pending: false},
-		}
-		if err := state.messages.Update(state.ctx, *state.pendingResult); err != nil {
-			slog.Warn("handleTurnEnd: failed to abandon pending result", "error", err)
-		}
-		state.pendingResult = nil
-	}
-}
-
-func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*logos.RunResult, error) {
-	var state *runState
-
-runLoop:
-	// Reset state to prevent stale-message misalignment on queued turns.
-	state = &runState{
-		sessionID:  call.SessionID,
-		providerID: call.ProviderID,
-		logosCfg:   call.LogosCfg,
-		messages:   a.messages,
-		ctx:        ctx,
-	}
-
+func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) error {
+runLoopReentry:
 	if call.Prompt == "" {
-		return nil, ErrEmptyPrompt
+		return ErrEmptyPrompt
 	}
 	if call.SessionID == "" {
-		return nil, ErrSessionMissing
+		return ErrSessionMissing
 	}
 
-	// Queue the message if busy
 	if a.IsSessionBusy(call.SessionID) {
 		existing, ok := a.messageQueue.Get(call.SessionID)
 		if !ok {
@@ -281,29 +92,27 @@ runLoop:
 		}
 		existing = append(existing, call)
 		a.messageQueue.Set(call.SessionID, existing)
-		return nil, nil
+		return nil
 	}
 
 	currentSession, err := a.sessions.Get(ctx, call.SessionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get session: %w", err)
+		return fmt.Errorf("failed to get session: %w", err)
 	}
 
 	msgs, err := a.getSessionMessages(ctx, currentSession)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get session messages: %w", err)
+		return fmt.Errorf("failed to get session messages: %w", err)
 	}
 
-	// Persist the user message to the database so it appears in the session history.
 	if _, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
 		Role:  message.User,
 		Parts: []message.ContentPart{message.TextContent{Text: call.Prompt}},
 	}); err != nil {
-		return nil, fmt.Errorf("failed to create user message: %w", err)
+		return fmt.Errorf("failed to create user message: %w", err)
 	}
 
 	var wg sync.WaitGroup
-	// Generate title if first message.
 	if len(msgs) == 0 {
 		titleCtx := ctx
 		wg.Go(func() {
@@ -318,53 +127,55 @@ runLoop:
 	defer a.activeRequests.Del(call.SessionID)
 
 	history := buildHistory(msgs)
-
 	startTime := time.Now()
 	a.eventPromptSent(call.SessionID)
 
-	callbacks := logos.Callbacks{
-		OnStepStart:          state.handleStepStart,
-		OnStepEnd:            state.handleStepEnd,
-		OnDelta:              state.handleDelta,
-		OnReasoningDelta:     state.handleReasoningDelta,
-		OnReasoningSignature: state.handleReasoningSignature,
-		OnStepUsage:          state.handleStepUsage,
-		OnCommandResult:      state.handleCommandResult,
-		OnTurnEnd:            state.handleTurnEnd,
+	var (
+		lastUsage fantasy.Usage
+		lastMeta  fantasy.ProviderMetadata
+		usageSeen bool
+	)
+
+	largeModel := a.largeModel.Get()
+	deps := loopDeps{
+		model:      largeModel.Model,
+		provOpts:   call.ProviderOptions,
+		messages:   a.messages,
+		runner:     resolveRunner(call),
+		recorder:   transcript.NewLoggingRecorder(a.recorder),
+		sessionID:  call.SessionID,
+		sysPrompt:  a.systemPrompt.Get(),
+		providerID: call.ProviderID,
+		env:        call.Env,
+		paths:      call.AllowedPaths,
+		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
+			lastUsage = u
+			lastMeta = m
+			usageSeen = true
+		},
 	}
 
-	result, runErr := logos.Run(streamCtx, call.LogosCfg, history, call.Prompt, callbacks)
+	_, runErr := runLoop(streamCtx, deps, history, call.Prompt)
 
 	a.eventPromptResponded(call.SessionID, time.Since(startTime).Truncate(time.Second))
 
-	// Defensive invariant check: OnStepUsage must have fired if logos succeeded.
-	// If it silently stops being called (logos regression or API mismatch),
-	// token tracking breaks with no indication otherwise.
-	if runErr == nil && !state.usageSeen {
-		slog.Warn("logos.Run completed without OnStepUsage callback",
-			"session_id", call.SessionID, "model", call.LogosCfg.Model)
+	if runErr == nil && !usageSeen {
+		slog.Warn("agent loop completed without usage callback",
+			"session_id", call.SessionID, "model", largeModel.Model.Model())
 	}
 
 	if runErr != nil {
-		// Add user-facing error feedback to the assistant message.
-		// handleTurnEnd already set FinishReasonError with empty strings;
-		// AddFinish replaces it with the detailed message.
-		if state.currentAssistant != nil {
-			_, title, detail := errorFinishFor(runErr, call.LogosCfg.Model)
-			state.currentAssistant.AddFinish(message.FinishReasonError, title, detail)
-			if updateErr := a.messages.Update(ctx, *state.currentAssistant); updateErr != nil {
-				slog.Warn("Failed to update assistant message on error", "error", updateErr)
-			}
-		}
+		// Loop already persisted partial work; surface a user-facing finish
+		// on the most-recent assistant message so the UI shows actionable
+		// guidance (e.g. "Copilot model not enabled").
+		a.attachErrorFinish(ctx, call.SessionID, runErr, largeModel.Model.Model())
 
-		// Still save usage on cancellation — usage was already accumulated via OnStepUsage.
-		if state.usageSeen {
-			if s, ok := a.saveSessionUsage(ctx, call.SessionID, state.lastUsage, state.lastMeta, "Failed to save session usage on cancellation"); ok {
+		if usageSeen {
+			if s, ok := a.saveSessionUsage(ctx, call.SessionID, lastUsage, lastMeta, "Failed to save session usage on cancellation"); ok {
 				currentSession = s
 			}
 		}
 
-		// Queue next message before returning (non-recursive drain).
 		a.activeRequests.Del(call.SessionID)
 		cancel()
 
@@ -373,19 +184,17 @@ runLoop:
 			nextCall := queuedMessages[0]
 			a.messageQueue.Set(call.SessionID, queuedMessages[1:])
 			call = nextCall
-			goto runLoop
+			goto runLoopReentry
 		}
-		return nil, runErr
+		return runErr
 	}
 
-	// Update session usage from logos result (context %, cost).
-	if state.usageSeen {
-		if updatedSession, ok := a.saveSessionUsage(ctx, call.SessionID, state.lastUsage, state.lastMeta, "Failed to save session usage"); ok {
+	if usageSeen {
+		if updatedSession, ok := a.saveSessionUsage(ctx, call.SessionID, lastUsage, lastMeta, "Failed to save session usage"); ok {
 			currentSession = updatedSession
 		}
 	}
 
-	// Send notification that agent has finished its turn.
 	if a.notify != nil {
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID:    call.SessionID,
@@ -394,16 +203,40 @@ runLoop:
 		})
 	}
 
-	// Queue next message before returning (non-recursive drain).
 	a.activeRequests.Del(call.SessionID)
 	cancel()
 
 	queuedMessages, ok := a.messageQueue.Get(call.SessionID)
 	if !ok || len(queuedMessages) == 0 {
-		return result, nil
+		return nil
 	}
 	nextCall := queuedMessages[0]
 	a.messageQueue.Set(call.SessionID, queuedMessages[1:])
 	call = nextCall
-	goto runLoop
+	goto runLoopReentry
+}
+
+// attachErrorFinish updates the most-recent assistant message in the session
+// with a user-facing FinishReasonError + title + detail derived from the
+// loop's run error. The loop creates assistant rows as it streams; this
+// follow-up replaces any tool-use/end-turn finish on the LAST one with an
+// error-flavored finish so the UI banner makes sense.
+func (a *sessionAgent) attachErrorFinish(ctx context.Context, sessionID string, runErr error, model string) {
+	all, listErr := a.messages.List(ctx, sessionID)
+	if listErr != nil {
+		slog.Warn("attachErrorFinish: list messages", "error", listErr)
+		return
+	}
+	for i := len(all) - 1; i >= 0; i-- {
+		if all[i].Role != message.Assistant {
+			continue
+		}
+		latest := all[i]
+		_, title, detail := errorFinishFor(runErr, model)
+		latest.AddFinish(message.FinishReasonError, title, detail)
+		if updateErr := a.messages.Update(ctx, latest); updateErr != nil {
+			slog.Warn("attachErrorFinish: update", "error", updateErr)
+		}
+		return
+	}
 }
