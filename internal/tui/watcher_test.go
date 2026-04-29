@@ -1,0 +1,94 @@
+package tui
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestWatcher(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fsnotify behaviour differs on Windows")
+	}
+
+	t.Parallel()
+	tmp := t.TempDir()
+	mdPath := filepath.Join(tmp, "session.md")
+
+	// Write initial content.
+	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n"), 0o644))
+
+	initial, w, err := NewWatcher(mdPath, 5*time.Millisecond)
+	require.NoError(t, err)
+	t.Cleanup(func() { w.Close() })
+
+	assert.Equal(t, []byte("# Session\n"), initial)
+
+	// Append a bash block.
+	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n\n```bash\ngo build\n```\n"), 0o644))
+
+	msg := w.Listen()()
+	appendMsg, ok := msg.(MdAppendedMsg)
+	require.True(t, ok, "expected MdAppendedMsg, got %T", msg)
+	assert.Equal(t, []byte("\n```bash\ngo build\n```\n"), appendMsg.Bytes)
+
+	// Multiple writes within debounce window coalesce.
+	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n\n```bash\ngo build\n```\n\noutput\n"), 0o644))
+	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n\n```bash\ngo build\n```\n\noutput\nerror\n"), 0o644))
+
+	msg = w.Listen()()
+	appendMsg, ok = msg.(MdAppendedMsg)
+	require.True(t, ok)
+	// Should contain all new bytes since last offset.
+	assert.Contains(t, string(appendMsg.Bytes), "error")
+}
+
+func TestWatcherTruncation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fsnotify behaviour differs on Windows")
+	}
+
+	t.Parallel()
+	tmp := t.TempDir()
+	mdPath := filepath.Join(tmp, "session.md")
+
+	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\nhello\n"), 0o644))
+
+	_, w, err := NewWatcher(mdPath, 5*time.Millisecond)
+	require.NoError(t, err)
+	t.Cleanup(func() { w.Close() })
+
+	// Truncate the file.
+	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n"), 0o644))
+
+	msg := w.Listen()()
+	_, ok := msg.(MdTruncatedMsg)
+	assert.True(t, ok, "expected MdTruncatedMsg, got %T", msg)
+}
+
+func TestWatcherClose(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fsnotify behaviour differs on Windows")
+	}
+
+	tmp := t.TempDir()
+	mdPath := filepath.Join(tmp, "session.md")
+
+	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n"), 0o644))
+
+	_, w, err := NewWatcher(mdPath, 5*time.Millisecond)
+	require.NoError(t, err)
+
+	// Close should not panic.
+	err = w.Close()
+	assert.NoError(t, err)
+
+	// Second close should be safe.
+	err = w.Close()
+	assert.NoError(t, err)
+}
