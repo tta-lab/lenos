@@ -41,6 +41,12 @@ type Runner interface {
 // (os.Environ()) and overlays the explicit env map on top. This preserves
 // PATH/HOME/TMPDIR while letting the loop set LENOS_* and other per-call
 // values. If a key appears in both, the explicit map wins.
+//
+// Path restriction: allowedPaths[0].Path is used to set the subprocess working
+// directory (cmd.Dir) for relative-path ergonomics. LocalRunner does NOT
+// enforce read/write boundaries — the subprocess can access any path via
+// absolute paths or cd regardless of AllowedPaths. Use SandboxRunner for
+// actual sandboxing.
 type LocalRunner struct{}
 
 func (LocalRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []client.AllowedPath) ExecResult {

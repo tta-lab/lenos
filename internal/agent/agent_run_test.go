@@ -175,3 +175,64 @@ func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 	assert.Equal(t, int64(1000), persisted.PromptTokens)
 	assert.Equal(t, int64(500), persisted.CompletionTokens)
 }
+
+func TestRun_BusySession_QueuesPrompt(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "queue test")
+	require.NoError(t, err)
+
+	agent := testSessionAgent(env, nil, nil, "sys").(*sessionAgent)
+
+	// Manually register the session as busy (simulates what Run does when a
+	// goroutine starts processing a prompt). This avoids timing races with
+	// goroutine scheduling.
+	ctx, cancel := context.WithCancel(t.Context())
+	agent.activeRequests.Set(sess.ID, cancel)
+
+	// Verify the session is busy.
+	require.True(t, agent.IsSessionBusy(sess.ID), "session should be busy")
+
+	// Second call should queue silently and return nil.
+	err = agent.Run(ctx, SessionAgentCall{
+		SessionID:  sess.ID,
+		Prompt:     "second",
+		ProviderID: "test",
+	})
+	require.NoError(t, err, "queueing a prompt on a busy session should return nil")
+
+	// QueuedPrompts should reflect the queued call.
+	require.Equal(t, 1, agent.QueuedPrompts(sess.ID), "one prompt should be queued")
+
+	cancel()
+	agent.activeRequests.Del(sess.ID)
+}
+
+// blockingModel stalls on Run/Stream until the unblock channel closes.
+type blockingModel struct {
+	unblock chan struct{}
+}
+
+func (m *blockingModel) Model() string    { return "blocking-model" }
+func (m *blockingModel) Provider() string { return "test" }
+func (m *blockingModel) Generate(context.Context, fantasy.Call) (*fantasy.Response, error) {
+	<-m.unblock
+	return &fantasy.Response{}, nil
+}
+
+func (m *blockingModel) Stream(ctx context.Context, _ fantasy.Call) (fantasy.StreamResponse, error) {
+	select {
+	case <-m.unblock:
+	case <-ctx.Done():
+	}
+	return nil, ctx.Err()
+}
+
+func (m *blockingModel) GenerateObject(context.Context, fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
+	panic("not used")
+}
+
+func (m *blockingModel) StreamObject(context.Context, fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
+	panic("not used")
+}

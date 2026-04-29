@@ -422,3 +422,50 @@ func assistantsByOrder(ms *mockMessageService) []message.Message {
 func resultsByOrder(ms *mockMessageService) []message.Message {
 	return messagesByRole(ms, message.Result)
 }
+
+// TestRunLoop_NonCancelStreamError verifies that a provider-level stream error
+// (non-cancel, e.g. 500 / rate-limit) maps to stopError and propagates the
+// original error without treating it as cancellation.
+func TestRunLoop_NonCancelStreamError(t *testing.T) {
+	t.Parallel()
+
+	providerErr := errors.New("upstream error: 503 Service Unavailable")
+	model := &errorStreamModel{err: providerErr}
+	rec := new(recordingRecorder)
+
+	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
+	_, runErr := runLoop(t.Context(), deps, nil, "prompt")
+
+	require.Error(t, runErr, "runLoop should return an error for non-cancel stream error")
+	require.True(t, errors.Is(runErr, providerErr),
+		"original error should be preserved (not wrapped as cancel)")
+
+	// stopError is returned, not stopCanceled — confirm via error type.
+	require.NotEqual(t, context.Canceled, runErr,
+		"non-cancel error must not be coerced to Canceled")
+}
+
+// errorStreamModel always returns a fixed non-cancel error from Stream.
+type errorStreamModel struct {
+	err error
+}
+
+func (m *errorStreamModel) Model() string    { return "error-model" }
+func (m *errorStreamModel) Provider() string { return "test" }
+func (m *errorStreamModel) Generate(context.Context, fantasy.Call) (*fantasy.Response, error) {
+	panic("not used")
+}
+
+func (m *errorStreamModel) Stream(context.Context, fantasy.Call) (fantasy.StreamResponse, error) {
+	return nil, m.err
+}
+
+func (m *errorStreamModel) GenerateObject(context.Context, fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
+	panic("not used")
+}
+
+func (m *errorStreamModel) StreamObject(context.Context, fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
+	panic("not used")
+}
+
+var _ fantasy.LanguageModel = (*errorStreamModel)(nil)
