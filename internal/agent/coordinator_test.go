@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
+	"charm.land/fantasy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/config"
@@ -90,6 +92,49 @@ func TestCoordinator_Run_StopReasonMapping(t *testing.T) {
 			require.Error(t, got, "Run with runErr=%v should return an error", tc.runErr)
 			assert.Contains(t, got.Error(), tc.wantWrap,
 				"error should wrap the original cause")
+		})
+	}
+}
+
+// TestIsUnauthorized verifies that isUnauthorized correctly classifies
+// fantasy.ProviderError by status code. This is the gateway for the
+// OAuth/API-key refresh retry path in Coordinator.Run.
+func TestIsUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "401 fantasy.ProviderError → true",
+			err:  &fantasy.ProviderError{StatusCode: http.StatusUnauthorized},
+			want: true,
+		},
+		{
+			name: "500 fantasy.ProviderError → false",
+			err:  &fantasy.ProviderError{StatusCode: http.StatusInternalServerError},
+			want: false,
+		},
+		{
+			name: "generic error → false",
+			err:  errors.New("connection refused"),
+			want: false,
+		},
+		{
+			name: "nil → false",
+			err:  nil,
+			want: false,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := isUnauthorized(tc.err)
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }

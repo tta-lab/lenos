@@ -180,7 +180,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return nil
 	}
 
-	if c.isUnauthorized(runErr) {
+	if isUnauthorized(runErr) {
 		slog.Debug("Received 401, attempting token refresh", "provider", providerCfg.ID)
 		switch {
 		case providerCfg.OAuthToken != nil:
@@ -809,7 +809,9 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 	return c.currentAgent.Summarize(ctx, sessionID, getProviderOptions(c.currentAgent.Model(), providerCfg))
 }
 
-func (c *coordinator) isUnauthorized(err error) bool {
+// isUnauthorized reports whether err is a fantasy.ProviderError with a 401 status
+// code, signalling that OAuth/API-key credentials have expired.
+func isUnauthorized(err error) bool {
 	var providerErr *fantasy.ProviderError
 	return errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusUnauthorized
 }

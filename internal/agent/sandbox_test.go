@@ -157,9 +157,11 @@ func TestResolveRunner(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			// Use a per-test logger so slog.SetDefault doesn't race with other parallel subtests.
 			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, nil))
 			origDefault := slog.Default()
-			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+			slog.SetDefault(logger)
 
 			got := resolveRunner(tc.call)
 
