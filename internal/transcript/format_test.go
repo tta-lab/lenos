@@ -164,3 +164,102 @@ func TestRenderTrailerFailure(t *testing.T) {
 		require.NotContains(t, result, "(")
 	})
 }
+
+func TestRenderOutputBlock(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic output", func(t *testing.T) {
+		t.Parallel()
+
+		golden, err := os.ReadFile("testdata/output_block.md")
+		require.NoError(t, err)
+		out := []byte("expected: 2026-01-01\ngot:      2025-12-31\nFAIL TestAuthExpiry")
+		require.Equal(t, string(golden), RenderOutputBlock(out))
+	})
+
+	t.Run("empty output", func(t *testing.T) {
+		t.Parallel()
+
+		result := RenderOutputBlock(nil)
+		require.Equal(t, "```\n```\n\n", result)
+	})
+
+	t.Run("unicode and emoji preserved", func(t *testing.T) {
+		t.Parallel()
+
+		golden, err := os.ReadFile("testdata/output_block_unicode.md")
+		require.NoError(t, err)
+		out := []byte("❌ build failed\n⚠️ warning: deprecated API\nλ unicode 你好 👨‍🦰")
+		require.Equal(t, string(golden), RenderOutputBlock(out))
+	})
+}
+
+func TestRenderRuntimeEvent(t *testing.T) {
+	t.Parallel()
+
+	t.Run("normal", func(t *testing.T) {
+		t.Parallel()
+
+		golden, err := os.ReadFile("testdata/runtime_event_normal.md")
+		require.NoError(t, err)
+		require.Equal(t, string(golden), RenderRuntimeEvent(SevNormal, "blocked: sed -i not allowed; use src edit"))
+	})
+
+	t.Run("warn", func(t *testing.T) {
+		t.Parallel()
+
+		golden, err := os.ReadFile("testdata/runtime_event_warn.md")
+		require.NoError(t, err)
+		require.Equal(t, string(golden), RenderRuntimeEvent(SevWarn, "timeout after 120s; subprocess killed"))
+	})
+
+	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
+		golden, err := os.ReadFile("testdata/runtime_event_error.md")
+		require.NoError(t, err)
+		require.Equal(t, string(golden), RenderRuntimeEvent(SevError, "sqlite write failed: disk full"))
+	})
+
+	t.Run("long unicode description", func(t *testing.T) {
+		t.Parallel()
+
+		result := RenderRuntimeEvent(SevWarn, "测试长描述 with emoji 👨‍🦰⚠️")
+		require.Contains(t, result, "👨‍🦰⚠️")
+		require.Contains(t, result, "测试长描述")
+	})
+}
+
+func TestRenderTurnEnd(t *testing.T) {
+	t.Parallel()
+
+	golden, err := os.ReadFile("testdata/turn_end.md")
+	require.NoError(t, err)
+	require.Equal(t, string(golden), RenderTurnEnd())
+}
+
+func TestRenderProse(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic prose", func(t *testing.T) {
+		t.Parallel()
+
+		golden, err := os.ReadFile("testdata/prose.md")
+		require.NoError(t, err)
+		require.Equal(t, string(golden), RenderProse("expiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After"))
+	})
+
+	t.Run("trailing newlines trimmed", func(t *testing.T) {
+		t.Parallel()
+
+		result := RenderProse("hello world\n\n\n")
+		require.Equal(t, "hello world\n\n", result)
+	})
+
+	t.Run("multi-line with blank lines", func(t *testing.T) {
+		t.Parallel()
+
+		result := RenderProse("line one\n\nline two\n")
+		require.Equal(t, "line one\n\nline two\n\n", result)
+	})
+}

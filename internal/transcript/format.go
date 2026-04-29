@@ -86,3 +86,31 @@ func signalContext(code int) string {
 		return ""
 	}
 }
+
+// RenderOutputBlock renders a fenced plain output block with captured stdout/stderr.
+// Always includes a trailing blank line. Empty output renders an empty fenced block.
+func RenderOutputBlock(out []byte) string {
+	if len(out) == 0 {
+		return "```\n```\n\n"
+	}
+	return fmt.Sprintf("```\n%s\n```\n\n", string(out))
+}
+
+// RenderRuntimeEvent renders a severity-prefixed runtime-event blockquote.
+// Per spec 57a09f51 §Conventions.
+func RenderRuntimeEvent(sev Severity, description string) string {
+	return fmt.Sprintf("> *runtime: %s%s*\n\n", sev.String(), description)
+}
+
+// RenderTurnEnd renders the *(turn ended)* italic line.
+func RenderTurnEnd() string {
+	return "*(turn ended)*\n\n"
+}
+
+// RenderProse renders plain prose text (used by cmd/log for log info content).
+// Ensures a single trailing blank line; strips any existing trailing newlines
+// from the input first.
+func RenderProse(text string) string {
+	text = strings.TrimRight(text, "\n")
+	return text + "\n\n"
+}
