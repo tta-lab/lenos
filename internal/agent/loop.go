@@ -32,7 +32,12 @@ var ErrStepCap = errors.New("agent: step cap reached")
 // loopDeps wires the bash-first loop to its environment. Every field is
 // required except onUsage, which may be nil (no per-step usage callback).
 type loopDeps struct {
-	model      fantasy.LanguageModel
+	model fantasy.LanguageModel
+	// drainQueue pulls queued user prompts off the session queue. Called at
+	// every mid-loop step boundary so user followups ride the next model
+	// request alongside the bash-result observation. nil-safe: drainAndAppend
+	// treats nil as "no drain hook" and is a no-op.
+	drainQueue func() []string
 	provOpts   fantasy.ProviderOptions
 	messages   message.Service
 	runner     Runner
@@ -64,6 +69,9 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 	msgs := make([]fantasy.Message, 0, len(history)+2)
 	msgs = append(msgs, fantasy.NewSystemMessage(deps.sysPrompt))
 	msgs = append(msgs, history...)
+	if err := deps.recorder.UserMessage(ctx, deps.sessionID, prompt); err != nil {
+		slog.Warn("loop: record original user prompt", "error", err)
+	}
 	msgs = append(msgs, fantasy.NewUserMessage(prompt))
 
 	for step := 0; step < StepCap; step++ {
@@ -109,6 +117,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				slog.Warn("loop: persist empty re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyInvalidBash:
 			_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
@@ -122,6 +131,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				slog.Warn("loop: persist invalid-bash re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyBanned:
 			tok, _ := deps.recorder.AgentBashAnnounce(ctx, deps.sessionID, emit)
@@ -135,6 +145,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				slog.Warn("loop: persist banned re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyExec:
 			tok, _ := deps.recorder.AgentBashAnnounce(ctx, deps.sessionID, emit)
@@ -183,6 +194,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
 					slog.Warn("loop: persist timeout re-prompt", "error", obsErr)
 				}
+				msgs = drainAndAppend(ctx, deps, msgs)
 				continue
 			}
 
@@ -191,6 +203,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
+			msgs = drainAndAppend(ctx, deps, msgs)
 		}
 	}
 
@@ -396,4 +409,32 @@ func oneLine(s string) string {
 // context.Canceled). Used to map stream errors to stopCanceled vs stopError.
 func isCanceled(err error) bool {
 	return errors.Is(err, context.Canceled)
+}
+
+// drainAndAppend pulls any queued user prompts off the session queue,
+// persists each as a User-role message + transcript line, and appends them
+// as separate fantasy.NewUserMessage entries to msgs.
+//
+// Called after the bash result / re-prompt observation has already been
+// appended, so the model sees: bash result first, then user followups.
+//
+// Errors on persist / record are logged but never abort the loop.
+func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) []fantasy.Message {
+	if deps.drainQueue == nil {
+		return msgs
+	}
+	drained := deps.drainQueue()
+	for _, prompt := range drained {
+		if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
+			Role:  message.User,
+			Parts: []message.ContentPart{message.TextContent{Text: prompt}},
+		}); err != nil {
+			slog.Warn("loop: persist drained user msg", "error", err)
+		}
+		if err := deps.recorder.UserMessage(ctx, deps.sessionID, prompt); err != nil {
+			slog.Warn("loop: record drained user msg", "error", err)
+		}
+		msgs = append(msgs, fantasy.NewUserMessage(prompt))
+	}
+	return msgs
 }

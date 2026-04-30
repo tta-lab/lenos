@@ -157,6 +157,17 @@ runLoopReentry:
 			lastMeta = m
 			usageSeen = true
 		},
+		drainQueue: func() []string {
+			queued, ok := a.messageQueue.Take(call.SessionID)
+			if !ok || len(queued) == 0 {
+				return nil
+			}
+			prompts := make([]string, len(queued))
+			for i, q := range queued {
+				prompts[i] = q.Prompt
+			}
+			return prompts
+		},
 	}
 
 	_, runErr := runLoop(streamCtx, deps, history, call.Prompt)
