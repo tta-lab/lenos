@@ -34,8 +34,8 @@ func ptrBool(b bool) *bool { return &b }
 
 func TestInitSandboxClient(t *testing.T) {
 	t.Parallel()
-
 	t.Run("nil + healthy server returns client", func(t *testing.T) {
+		t.Parallel()
 		s := newHealthyServer(t)
 		defer s.Close()
 		c, err := initSandboxClient(context.Background(), &config.Options{SandboxEndpoint: s.URL})
@@ -44,6 +44,7 @@ func TestInitSandboxClient(t *testing.T) {
 	})
 
 	t.Run("nil + dead server returns nil client and nil error (soft fallback)", func(t *testing.T) {
+		t.Parallel()
 		s := newHealthyServer(t)
 		s.Close()
 		c, err := initSandboxClient(context.Background(), &config.Options{SandboxEndpoint: s.URL})
@@ -52,6 +53,7 @@ func TestInitSandboxClient(t *testing.T) {
 	})
 
 	t.Run("explicit true + healthy server returns client", func(t *testing.T) {
+		t.Parallel()
 		s := newHealthyServer(t)
 		defer s.Close()
 		c, err := initSandboxClient(context.Background(), &config.Options{
@@ -62,6 +64,7 @@ func TestInitSandboxClient(t *testing.T) {
 	})
 
 	t.Run("explicit true + dead server returns error", func(t *testing.T) {
+		t.Parallel()
 		s := newHealthyServer(t)
 		s.Close()
 		c, err := initSandboxClient(context.Background(), &config.Options{
@@ -73,6 +76,7 @@ func TestInitSandboxClient(t *testing.T) {
 	})
 
 	t.Run("explicit false skips probe entirely", func(t *testing.T) {
+		t.Parallel()
 		c, err := initSandboxClient(context.Background(), &config.Options{
 			Sandbox: ptrBool(false), SandboxEndpoint: "http://invalid.invalid:1",
 		})

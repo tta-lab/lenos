@@ -217,5 +217,5 @@ func TestIsUnauthorized(t *testing.T) {
 // exercises the full chain end-to-end.
 var _newCoordinatorSignatureLock = func() {
 	var sc *client.Client
-	_, _ = NewCoordinator(nil, nil, nil, nil, nil, nil, sc)
+	_, _ = NewCoordinator(context.TODO(), nil, nil, nil, nil, nil, sc)
 }
