@@ -45,7 +45,7 @@ func TestFormatImportsStdlibOnly(t *testing.T) {
 		isThirdParty := hasDotSlash || (len(path) > 3 && (path[:3] == "github" || path[:3] == "git"))
 
 		require.True(t, isStdlib || !isThirdParty,
-			"format.go imports non-stdlib package %q; format.go must be stdlib-only for cmd/log (Phase 3)", path)
+			"format.go imports non-stdlib package %q; format.go must be stdlib-only for cmd/narrate (Phase 3)", path)
 	}
 
 	// Verify we actually have imports (sanity check)
