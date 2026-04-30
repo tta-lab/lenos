@@ -1,0 +1,90 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/tta-lab/lenos/internal/transcript"
+)
+
+// resolveSessionPath returns the absolute .md path from env vars. Both must
+// be set and non-empty.
+func resolveSessionPath() (string, error) {
+	dataDir := os.Getenv("LENOS_DATA_DIR")
+	sessionID := os.Getenv("LENOS_SESSION_ID")
+	if dataDir == "" {
+		return "", errors.New("LENOS_DATA_DIR not set; this binary is for use inside a lenos session")
+	}
+	if sessionID == "" {
+		return "", errors.New("LENOS_SESSION_ID not set; this binary is for use inside a lenos session")
+	}
+	return filepath.Join(dataDir, "sessions", sessionID+".md"), nil
+}
+
+// resolveInput picks the message body from positional args first, falling
+// back to piped stdin only when no args are given. Args-first prevents
+// blocking on pueue/systemd-inherited unused stdin pipes (see ttal send's
+// resolveSendMessage for the same pattern).
+func resolveInput(args []string, stdin io.Reader) (string, error) {
+	if len(args) > 0 {
+		return strings.Join(args, " "), nil
+	}
+	piped, err := readStdinIfPiped(stdin)
+	if err != nil {
+		return "", fmt.Errorf("read stdin: %w", err)
+	}
+	if piped == "" {
+		return "", errors.New("content required (positional argument or piped stdin)")
+	}
+	return piped, nil
+}
+
+// readStdinIfPiped returns stdin contents IF stdin is a piped/redirected fd.
+// Returns "" with no error when stdin is a TTY (interactive shell). Mirrors
+// ttal send's pattern for handling inherited-but-unused pipes.
+func readStdinIfPiped(stdin io.Reader) (string, error) {
+	f, ok := stdin.(*os.File)
+	if !ok {
+		// Test injection — read whatever was passed.
+		b, err := io.ReadAll(stdin)
+		return string(b), err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	if (info.Mode() & os.ModeCharDevice) != 0 {
+		// TTY — don't block.
+		return "", nil
+	}
+	b, err := io.ReadAll(f)
+	return string(b), err
+}
+
+const (
+	appendMaxRetries = 3
+	appendRetryDelay = 10 * time.Millisecond
+)
+
+// appendWithRetry calls AppendStrict and retries up to appendMaxRetries times
+// on ErrConcurrentWrite, with appendRetryDelay backoff between attempts.
+// All other errors return immediately (no retry).
+func appendWithRetry(w *transcript.MdWriter, p []byte) error {
+	var err error
+	for i := 0; i < appendMaxRetries; i++ {
+		err = w.AppendStrict(p)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, transcript.ErrConcurrentWrite) {
+			return err
+		}
+		time.Sleep(appendRetryDelay)
+	}
+	return fmt.Errorf("lock contention after %d attempts: %w", appendMaxRetries, err)
+}
