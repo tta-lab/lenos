@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"sync"
 
 	"github.com/pressly/goose/v3"
 )
@@ -19,6 +20,10 @@ var pragmas = map[string]string{
 	"secure_delete": "ON",
 	"busy_timeout":  "30000",
 }
+
+// gooseMu serializes goose global state operations (SetDialect, Up) to avoid
+// data races in the goose library when tests run in parallel with -race.
+var gooseMu sync.Mutex
 
 // Connect opens a SQLite database connection and runs migrations.
 func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
@@ -38,6 +43,9 @@ func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
 	}
 
 	goose.SetBaseFS(FS)
+
+	gooseMu.Lock()
+	defer gooseMu.Unlock()
 
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		slog.Error("Failed to set dialect", "error", err)
