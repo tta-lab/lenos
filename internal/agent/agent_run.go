@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -194,11 +195,9 @@ runLoopReentry:
 		a.activeRequests.Del(call.SessionID)
 		cancel()
 
-		queuedMessages, ok := a.messageQueue.Get(call.SessionID)
+		queuedMessages, ok := a.messageQueue.Take(call.SessionID)
 		if ok && len(queuedMessages) > 0 {
-			nextCall := queuedMessages[0]
-			a.messageQueue.Set(call.SessionID, queuedMessages[1:])
-			call = nextCall
+			call = combineQueuedCalls(queuedMessages)
 			goto runLoopReentry
 		}
 		return runErr
@@ -221,13 +220,11 @@ runLoopReentry:
 	a.activeRequests.Del(call.SessionID)
 	cancel()
 
-	queuedMessages, ok := a.messageQueue.Get(call.SessionID)
+	queuedMessages, ok := a.messageQueue.Take(call.SessionID)
 	if !ok || len(queuedMessages) == 0 {
 		return nil
 	}
-	nextCall := queuedMessages[0]
-	a.messageQueue.Set(call.SessionID, queuedMessages[1:])
-	call = nextCall
+	call = combineQueuedCalls(queuedMessages)
 	goto runLoopReentry
 }
 
@@ -254,4 +251,22 @@ func (a *sessionAgent) attachErrorFinish(ctx context.Context, sessionID string, 
 		}
 		return
 	}
+}
+
+// combineQueuedCalls collapses N queued calls into one re-entry call.
+// Prompts join with "\n\n"; runtime fields take from the FIRST queued call.
+// Caller must check len(calls) > 0 before invoking.
+func combineQueuedCalls(calls []SessionAgentCall) SessionAgentCall {
+	first := calls[0]
+	if len(calls) == 1 {
+		return first
+	}
+	var sb strings.Builder
+	sb.WriteString(first.Prompt)
+	for _, c := range calls[1:] {
+		sb.WriteString("\n\n")
+		sb.WriteString(c.Prompt)
+	}
+	first.Prompt = sb.String()
+	return first
 }
