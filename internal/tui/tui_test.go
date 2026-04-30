@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testdataDir is the directory containing test fixtures.
-var testdataDir = filepath.Join("testdata")
+// testdataDir is the directory containing test fixtures (sibling internal/transcript/testdata).
+var testdataDir = filepath.Join("..", "transcript", "testdata")
 
 func init() {
 	// Ensure lipgloss runewidth is initialized in tests.

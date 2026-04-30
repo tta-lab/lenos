@@ -11,7 +11,7 @@ import (
 
 func TestParseFrontmatter(t *testing.T) {
 	t.Run("extracts fields from full session", func(t *testing.T) {
-		data, err := os.ReadFile("testdata/full_session.md")
+		data, err := os.ReadFile("../transcript/testdata/full_session.md")
 		require.NoError(t, err)
 
 		fm, body, err := ParseFrontmatter(data)
@@ -44,7 +44,7 @@ func TestParseFrontmatter(t *testing.T) {
 
 func TestRender(t *testing.T) {
 	t.Run("full session has two anchors", func(t *testing.T) {
-		data, err := os.ReadFile("testdata/full_session.md")
+		data, err := os.ReadFile("../transcript/testdata/full_session.md")
 		require.NoError(t, err)
 
 		r, err := Render(data, 100)
@@ -56,7 +56,7 @@ func TestRender(t *testing.T) {
 	})
 
 	t.Run("full session anchor ordering invariant", func(t *testing.T) {
-		data, err := os.ReadFile("testdata/full_session.md")
+		data, err := os.ReadFile("../transcript/testdata/full_session.md")
 		require.NoError(t, err)
 
 		r, err := Render(data, 100)
@@ -69,7 +69,7 @@ func TestRender(t *testing.T) {
 	})
 
 	t.Run("user message has one anchor", func(t *testing.T) {
-		data, err := os.ReadFile("testdata/user_message.md")
+		data, err := os.ReadFile("../transcript/testdata/user_message.md")
 		require.NoError(t, err)
 
 		r, err := Render(data, 100)
@@ -87,7 +87,7 @@ func TestRender(t *testing.T) {
 	})
 
 	t.Run("width 60 renders without panic", func(t *testing.T) {
-		data, err := os.ReadFile("testdata/full_session.md")
+		data, err := os.ReadFile("../transcript/testdata/full_session.md")
 		require.NoError(t, err)
 
 		r, err := Render(data, 60)
@@ -105,7 +105,7 @@ func TestRender(t *testing.T) {
 	})
 
 	t.Run("width 1 renders without panic", func(t *testing.T) {
-		data, err := os.ReadFile("testdata/full_session.md")
+		data, err := os.ReadFile("../transcript/testdata/full_session.md")
 		require.NoError(t, err)
 
 		r, err := Render(data, 1)
