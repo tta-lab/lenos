@@ -2,8 +2,6 @@ module github.com/tta-lab/lenos
 
 go 1.26.1
 
-replace charm.land/lipgloss/v2 => ./third_party/charm.land/lipgloss/v2
-
 require (
 	charm.land/bubbles/v2 v2.1.0
 	charm.land/bubbletea/v2 v2.0.2
@@ -44,6 +42,7 @@ require (
 	github.com/jordanella/go-ansi-paintbrush v0.0.0-20240728195301-b7ad996ecf3d
 	github.com/lucasb-eyer/go-colorful v1.4.0
 	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/go-runewidth v0.0.21
 	github.com/ncruces/go-sqlite3 v0.33.2
 	github.com/nxadm/tail v1.4.11
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
@@ -66,8 +65,8 @@ require (
 )
 
 require (
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	github.com/fsnotify/fsnotify v1.9.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -137,7 +136,6 @@ require (
 	github.com/kaptinlin/messageformat-go v0.4.18 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/mattn/go-runewidth v0.0.21 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect

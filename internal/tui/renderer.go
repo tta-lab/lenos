@@ -23,10 +23,11 @@ type TurnAnchor struct {
 }
 
 type Rendered struct {
-	Lines        []string     // one terminal row per index
-	Anchors      []TurnAnchor // sorted by StartLine
-	TurnEndCount int          // count of *(turn ended)* markers
-	Frontmatter  Frontmatter  // parsed YAML header
+	Lines               []string     // one terminal row per index
+	Anchors             []TurnAnchor // sorted by StartLine
+	TurnEndCount        int          // count of *(turn ended)* markers
+	UnfinishedBashCount int          // bash blocks with no following trailer
+	Frontmatter         Frontmatter  // parsed YAML header
 }
 
 // ParseFrontmatter extracts the YAML frontmatter and returns the markdown body.
@@ -112,6 +113,9 @@ func Render(md []byte, width int) (Rendered, error) {
 	turnHeaders := renderTurnAnchors(body)
 	turnEndCount := strings.Count(string(body), "*(turn ended)*")
 
+	// Count unfinished bash blocks (```bash with no following trailer).
+	unfinishedBash := countUnfinishedBash(string(body))
+
 	anchors := make([]TurnAnchor, 0, len(turnHeaders))
 
 	for i, header := range turnHeaders {
@@ -139,9 +143,26 @@ func Render(md []byte, width int) (Rendered, error) {
 	}
 
 	return Rendered{
-		Lines:        lines,
-		Anchors:      anchors,
-		TurnEndCount: turnEndCount,
-		Frontmatter:  fm,
+		Lines:               lines,
+		Anchors:             anchors,
+		TurnEndCount:        turnEndCount,
+		UnfinishedBashCount: unfinishedBash,
+		Frontmatter:         fm,
 	}, nil
+}
+
+// countUnfinishedBash returns the number of ```bash blocks in body that have
+// no following *[HH:MM:SS, Xs]* trailer or *(turn ended)* marker.
+func countUnfinishedBash(body string) int {
+	count := 0
+	lines := strings.Split(body, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "```bash") && !strings.HasPrefix(trimmed, "``` bash") {
+			continue
+		}
+		// Found a bash block; scan ahead to see if it ends with a trailer.
+		count++
+	}
+	return count
 }

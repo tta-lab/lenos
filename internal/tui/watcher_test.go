@@ -16,7 +16,7 @@ func TestWatcher(t *testing.T) {
 		t.Skip("fsnotify behaviour differs on Windows")
 	}
 
-	t.Parallel()
+	// fsnotify watcher is not safe to parallelize — disable to prevent races.
 	tmp := t.TempDir()
 	mdPath := filepath.Join(tmp, "session.md")
 
@@ -53,7 +53,7 @@ func TestWatcherTruncation(t *testing.T) {
 		t.Skip("fsnotify behaviour differs on Windows")
 	}
 
-	t.Parallel()
+	// fsnotify watcher is not safe to parallelize — disable to prevent races.
 	tmp := t.TempDir()
 	mdPath := filepath.Join(tmp, "session.md")
 

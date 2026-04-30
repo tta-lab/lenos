@@ -30,7 +30,6 @@ type UI struct {
 	styles  Styles
 
 	lastBashWallclock time.Time
-	quitting          bool
 }
 
 // New constructs a UI from the session ID and path to a session .md file.
@@ -98,12 +97,6 @@ func (ui *UI) renderContent(width int) {
 	ui.header.SetWidth(width)
 	ui.header.SetTurnCount(rendered.TurnEndCount)
 	ui.footer.SetWidth(width)
-
-	// Detect if a new bash block appeared by checking the number of anchors.
-	// If anchors grew, a new turn started — update lastBashWallclock.
-	if len(rendered.Anchors) > 0 {
-		ui.lastBashWallclock = time.Now()
-	}
 }
 
 // Init starts the file watcher and ticking.
@@ -124,10 +117,11 @@ func (ui *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return ui, nil
 
 	case MdAppendedMsg:
+		prevBashCount := ui.rendered.UnfinishedBashCount
 		ui.md = append(ui.md, m.Bytes...)
 		ui.renderContent(ui.width)
-		// If footer state is active, reset the wallclock for duration ticking.
-		if ui.footer.deriv.State == FooterStateActive {
+		// Only reset wallclock when a NEW unfinished bash block appeared.
+		if ui.rendered.UnfinishedBashCount > prevBashCount {
 			ui.lastBashWallclock = time.Now()
 		}
 		// Continue watching.
@@ -159,26 +153,37 @@ func (ui *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return ui, nil
 
-	case tea.QuitMsg:
-		ui.quitting = true
-		return ui, nil
-
 	case tea.KeyMsg:
 		km := ui.keys
 		switch {
 		case key.Matches(m, km.Quit):
-			ui.quitting = true
-			return ui, nil
+			return ui, tea.Quit
 		case key.Matches(m, km.Help):
 			// Help overlay deferred to v2 — no-op.
 			return ui, nil
-		case key.Matches(m, km.Down), key.Matches(m, km.HalfPageDown),
-			key.Matches(m, km.PageDown), key.Matches(m, km.End):
+		case key.Matches(m, km.Down):
 			ui.viewport.ScrollDown()
 			return ui, nil
-		case key.Matches(m, km.Up), key.Matches(m, km.HalfPageUp),
-			key.Matches(m, km.PageUp), key.Matches(m, km.Home):
+		case key.Matches(m, km.HalfPageDown):
+			ui.viewport.HalfPageDown()
+			return ui, nil
+		case key.Matches(m, km.PageDown):
+			ui.viewport.PageDown()
+			return ui, nil
+		case key.Matches(m, km.End):
+			ui.viewport.End()
+			return ui, nil
+		case key.Matches(m, km.Up):
 			ui.viewport.ScrollUp()
+			return ui, nil
+		case key.Matches(m, km.HalfPageUp):
+			ui.viewport.HalfPageUp()
+			return ui, nil
+		case key.Matches(m, km.PageUp):
+			ui.viewport.PageUp()
+			return ui, nil
+		case key.Matches(m, km.Home):
+			ui.viewport.Home()
 			return ui, nil
 		default:
 			return ui, nil
@@ -191,11 +196,6 @@ func (ui *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the full TUI layout: header, separator, viewport, footer.
 func (ui *UI) View() tea.View {
-	// On quit, render an empty screen so Bubble Tea can clean up cleanly.
-	if ui.quitting {
-		return tea.NewView("")
-	}
-
 	headerView := lipgloss.Place(ui.width, 1, lipgloss.Top, lipgloss.Left, ui.header.Render())
 	sep := lipgloss.Style{}.
 		Foreground(lipgloss.Color("245")).

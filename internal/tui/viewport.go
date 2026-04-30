@@ -128,6 +128,11 @@ func (v *Viewport) IsPinned() bool {
 	return v.pinned
 }
 
+// Offset returns the current scroll offset (top line index).
+func (v *Viewport) Offset() int {
+	return v.offset
+}
+
 // stickyTurn returns the TurnAnchor that should be shown as the sticky marker,
 // or nil if no sticky should be shown.
 func (v *Viewport) stickyTurn() *TurnAnchor {

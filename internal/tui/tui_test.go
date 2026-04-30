@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -22,23 +23,16 @@ func init() {
 // testKeyMsg is a test double for tea.KeyMsg.
 type testKeyMsg struct {
 	text string
-	code rune
 }
 
-func (t testKeyMsg) Key() tea.Key   { return tea.Key{Text: t.text, Code: t.code} }
+func (t testKeyMsg) Key() tea.Key   { return tea.Key{Text: t.text} }
 func (t testKeyMsg) String() string { return t.text }
 
-// keyPress returns a tea.KeyMsg for testing.
-func keyPress(keyStr string) tea.KeyMsg {
-	code := rune(keyStr[0])
-	if len(keyStr) == 1 {
-		code = rune(keyStr[0])
-	}
-	return testKeyMsg{text: keyStr, code: code}
-}
+// keyPress returns a tea.KeyMsg for testing, matching keys used in KeyMap bindings.
+func keyPress(keyStr string) tea.KeyMsg { return testKeyMsg{text: keyStr} }
 
 func TestNew(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
@@ -53,14 +47,14 @@ func TestNew(t *testing.T) {
 }
 
 func TestNewFileNotFound(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	_, err := New("nonexistent", "/does/not/exist.md")
 	require.Error(t, err)
 }
 
 func TestInitialState(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
@@ -75,7 +69,7 @@ func TestInitialState(t *testing.T) {
 }
 
 func TestWindowSizeResize(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
@@ -97,7 +91,7 @@ func TestWindowSizeResize(t *testing.T) {
 }
 
 func TestWindowSizeWhileScrolled(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
@@ -124,12 +118,15 @@ func TestWindowSizeWhileScrolled(t *testing.T) {
 }
 
 func TestScrollUpUnpin(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
 	require.NoError(t, err)
 	require.True(t, ui.viewport.IsPinned())
+	// Initially pinned at bottom: offset = totalLines - height.
+	initialOffset := ui.viewport.Offset()
+	require.Greater(t, initialOffset, 0, "pinned viewport should start at bottom")
 
 	// Scroll up (Home key).
 	m, _ := ui.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -138,10 +135,133 @@ func TestScrollUpUnpin(t *testing.T) {
 	ui = m.(*UI)
 
 	require.False(t, ui.viewport.IsPinned(), "viewport should be unpinned after Home")
+	require.Equal(t, 0, ui.viewport.Offset(), "g should jump to offset 0")
+}
+
+func TestHalfPageDown(t *testing.T) {
+	fixture := filepath.Join(testdataDir, "full_session.md")
+	ui, err := New("test-session", fixture)
+	require.NoError(t, err)
+
+	// Set a known viewport height and scroll position.
+	m, _ := ui.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	ui = m.(*UI)
+
+	// Jump to top first.
+	m, _ = ui.Update(keyPress("g"))
+	ui = m.(*UI)
+	initialOffset := ui.viewport.Offset()
+
+	// Press d (half page down) — offset should advance by roughly height/2 lines.
+	m, _ = ui.Update(keyPress("d"))
+	ui = m.(*UI)
+
+	require.Greater(t, ui.viewport.Offset(), initialOffset,
+		"d should advance offset beyond initial position")
+}
+
+func TestHalfPageUp(t *testing.T) {
+	fixture := filepath.Join(testdataDir, "full_session.md")
+	ui, err := New("test-session", fixture)
+	require.NoError(t, err)
+
+	// Set viewport height.
+	m, _ := ui.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	ui = m.(*UI)
+
+	// Jump to bottom, then scroll up.
+	m, _ = ui.Update(keyPress("G"))
+	ui = m.(*UI)
+	require.True(t, ui.viewport.IsPinned())
+
+	// Scroll back up with g.
+	m, _ = ui.Update(keyPress("g"))
+	ui = m.(*UI)
+	initialOffset := ui.viewport.Offset()
+	require.Equal(t, 0, initialOffset)
+
+	// Scroll down a bit.
+	m, _ = ui.Update(keyPress("d"))
+	ui = m.(*UI)
+	afterHalfDown := ui.viewport.Offset()
+
+	// Press u (half page up) — should go back toward zero.
+	m, _ = ui.Update(keyPress("u"))
+	ui = m.(*UI)
+
+	require.Less(t, ui.viewport.Offset(), afterHalfDown,
+		"u should reduce offset from half-page-down position")
+}
+
+func TestPageDown(t *testing.T) {
+	fixture := filepath.Join(testdataDir, "full_session.md")
+	ui, err := New("test-session", fixture)
+	require.NoError(t, err)
+
+	m, _ := ui.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	ui = m.(*UI)
+
+	// Jump to top.
+	m, _ = ui.Update(keyPress("g"))
+	ui = m.(*UI)
+	initialOffset := ui.viewport.Offset()
+
+	// Press f (page down) — should advance by a full page.
+	m, _ = ui.Update(keyPress("f"))
+	ui = m.(*UI)
+
+	require.Greater(t, ui.viewport.Offset(), initialOffset,
+		"f should advance offset beyond initial position")
+}
+
+func TestPageUp(t *testing.T) {
+	fixture := filepath.Join(testdataDir, "full_session.md")
+	ui, err := New("test-session", fixture)
+	require.NoError(t, err)
+
+	m, _ := ui.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	ui = m.(*UI)
+
+	// Jump to bottom.
+	m, _ = ui.Update(keyPress("G"))
+	ui = m.(*UI)
+	beforePageUp := ui.viewport.Offset()
+
+	// Page up — should go back.
+	m, _ = ui.Update(keyPress("b"))
+	ui = m.(*UI)
+
+	require.Less(t, ui.viewport.Offset(), beforePageUp,
+		"b should reduce offset from bottom position")
+}
+
+func TestEndJumpsToBottom(t *testing.T) {
+	fixture := filepath.Join(testdataDir, "full_session.md")
+	ui, err := New("test-session", fixture)
+	require.NoError(t, err)
+
+	m, _ := ui.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	ui = m.(*UI)
+
+	// Jump to top.
+	m, _ = ui.Update(keyPress("g"))
+	ui = m.(*UI)
+	require.Equal(t, 0, ui.viewport.Offset())
+	require.False(t, ui.viewport.IsPinned())
+
+	// G should jump to bottom and re-pin.
+	m, _ = ui.Update(keyPress("G"))
+	ui = m.(*UI)
+
+	totalLines := len(ui.viewport.rendered.Lines)
+	require.Equal(t, totalLines-ui.viewport.height, ui.viewport.Offset(),
+		"End should set offset to totalLines - height")
+	require.True(t, ui.viewport.IsPinned())
+	require.Equal(t, 0, ui.viewport.newSinceUnpin)
 }
 
 func TestEndRePin(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
@@ -163,7 +283,7 @@ func TestEndRePin(t *testing.T) {
 }
 
 func TestFooterActiveOnBashAppend(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
@@ -171,6 +291,8 @@ func TestFooterActiveOnBashAppend(t *testing.T) {
 
 	// Simulate receiving a bash block append.
 	bashBlock := []byte("\n\n```bash\nls\n```\n\n")
+	prevWallclock := ui.lastBashWallclock
+
 	m, cmd := ui.Update(MdAppendedMsg{Bytes: bashBlock})
 	ui = m.(*UI)
 
@@ -181,10 +303,38 @@ func TestFooterActiveOnBashAppend(t *testing.T) {
 	deriv := DeriveFooter(ui.md)
 	require.Equal(t, FooterStateActive, deriv.State,
 		"footer should be active after a bash block append")
+
+	// Wallclock should have been reset since a new bash block appeared.
+	require.NotEqual(t, prevWallclock, ui.lastBashWallclock,
+		"wallclock should reset when new unfinished bash block appears")
+}
+
+func TestRuntimeEventDoesNotResetWallclock(t *testing.T) {
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
+
+	fixture := filepath.Join(testdataDir, "full_session.md")
+	ui, err := New("test-session", fixture)
+	require.NoError(t, err)
+
+	// Transition to active state.
+	bashBlock := []byte("\n\n```bash\ngo build\n```\n")
+	m, _ := ui.Update(MdAppendedMsg{Bytes: bashBlock})
+	ui = m.(*UI)
+	require.Equal(t, FooterStateActive, ui.footer.deriv.State)
+
+	// Now append a runtime-event blockquote while in active state.
+	prevWallclock := ui.lastBashWallclock
+	runtimeEvent := []byte("\n> *runtime: blocked: sed -i not allowed*\n")
+	m, _ = ui.Update(MdAppendedMsg{Bytes: runtimeEvent})
+	ui = m.(*UI)
+
+	// Wallclock must NOT reset on a runtime-event append.
+	require.Equal(t, prevWallclock, ui.lastBashWallclock,
+		"wallclock should NOT reset on runtime-event blockquote append")
 }
 
 func TestFooterIdleAfterTrailer(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
@@ -206,7 +356,7 @@ func TestFooterIdleAfterTrailer(t *testing.T) {
 }
 
 func TestTickWhileActive(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
@@ -231,7 +381,7 @@ func TestTickWhileActive(t *testing.T) {
 }
 
 func TestMdTruncated(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
@@ -254,30 +404,25 @@ func TestMdTruncated(t *testing.T) {
 }
 
 func TestQuit(t *testing.T) {
-	t.Parallel()
-
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
 	require.NoError(t, err)
 
-	// Verify we are not quitting initially.
-	require.False(t, ui.quitting, "should not be quitting initially")
-
-	// Send a tea.QuitMsg directly — the key-matching path requires real
-	// tea.KeyPressMsg with correct rune values which are hard to construct
-	// in tests; send the raw quit message instead.
-	m, cmd := ui.Update(tea.QuitMsg{})
+	// Simulate the ctrl+c key press — Quit key binding triggers tea.Quit.
+	m, cmd := ui.Update(keyPress("ctrl+c"))
 	ui = m.(*UI)
-	require.True(t, ui.quitting, "QuitMsg should set quitting=true")
-	require.Nil(t, cmd, "QuitMsg should not return a command")
-
-	// View should render empty when quitting.
-	view := ui.View()
-	require.Equal(t, "", view.Content, "View should return empty when quitting")
+	// Both are func() Msg. Use reflect to compare function pointers.
+	require.Equal(t, reflect.ValueOf(tea.Quit).Pointer(), reflect.ValueOf(cmd).Pointer(),
+		"ctrl+c should return tea.Quit command")
+	// Also verify invoking the cmd produces a QuitMsg.
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	require.True(t, ok, "cmd() should return tea.QuitMsg")
+	_ = ui
 }
 
 func TestHelpNoOp(t *testing.T) {
-	t.Parallel()
+	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
 	fixture := filepath.Join(testdataDir, "full_session.md")
 	ui, err := New("test-session", fixture)
