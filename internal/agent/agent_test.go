@@ -147,3 +147,33 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		assert.Equal(t, longDesc[:100], updated.Title)
 	})
 }
+
+func TestShouldAutoCompact(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		cw   int64
+		used int64
+		want bool
+	}{
+		{"zero context window guarded", 0, 100, false},
+		{"negative context window guarded", -1, 100, false},
+		{"large window, well under buffer", 200_001, 100_000, false},
+		{"large window, just above buffer (remaining 20_001)", 200_001, 180_000, false},
+		{"large window, exactly at buffer (remaining 20_000)", 200_001, 180_001, true},
+		{"large window, over buffer", 200_001, 195_000, true},
+		{"small window, well under ratio", 100_000, 50_000, false},
+		{"small window, just above ratio (remaining 20_001)", 100_000, 79_999, false},
+		{"small window, exactly at ratio (remaining 20_000)", 100_000, 80_000, true},
+		{"small window, over ratio", 100_000, 95_000, true},
+		{"boundary cw == largeContextWindowThreshold uses ratio path", 200_000, 159_999, false},
+		{"boundary cw == largeContextWindowThreshold uses ratio path (over)", 200_000, 160_000, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := shouldAutoCompact(tc.cw, tc.used)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

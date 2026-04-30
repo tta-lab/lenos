@@ -47,7 +47,7 @@ type loopDeps struct {
 	providerID string // config provider ID (for assistant message Provider field)
 	env        map[string]string
 	paths      []client.AllowedPath
-	onUsage    func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
+	onUsage    func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool
 }
 
 // stopReason explains why runLoop returned. The caller maps it to the right
@@ -55,10 +55,11 @@ type loopDeps struct {
 type stopReason int
 
 const (
-	stopExit     stopReason = iota // model emitted `exit`
-	stopStepCap                    // 500 emissions without exit
-	stopError                      // unrecoverable error (provider, persistence)
-	stopCanceled                   // ctx canceled mid-stream or mid-exec
+	stopExit            stopReason = iota // model emitted `exit`
+	stopStepCap                           // 500 emissions without exit
+	stopError                             // unrecoverable error (provider, persistence)
+	stopCanceled                          // ctx canceled mid-stream or mid-exec
+	stopShouldSummarize                   // onUsage callback requested mid-turn auto-compact
 )
 
 // runLoop drives one turn of the bash-first agent: stream → classify → exec
@@ -93,7 +94,13 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			return stopError, streamErr
 		}
 		if deps.onUsage != nil {
-			deps.onUsage(step, usage, meta)
+			if deps.onUsage(step, usage, meta) {
+				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonEndTurn)
+				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
+					"auto-compact: context window threshold reached; summarizing")
+				_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
+				return stopShouldSummarize, nil
+			}
 		}
 
 		cls, bashErr := classify(ctx, emit)

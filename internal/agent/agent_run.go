@@ -133,12 +133,6 @@ runLoopReentry:
 	startTime := time.Now()
 	a.eventPromptSent(call.SessionID)
 
-	var (
-		lastUsage fantasy.Usage
-		lastMeta  fantasy.ProviderMetadata
-		usageSeen bool
-	)
-
 	largeModel := a.largeModel.Get()
 	rec := call.Recorder
 	if rec == nil {
@@ -155,10 +149,17 @@ runLoopReentry:
 		providerID: call.ProviderID,
 		env:        call.Env,
 		paths:      call.AllowedPaths,
-		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
-			lastUsage = u
-			lastMeta = m
-			usageSeen = true
+		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) bool {
+			s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
+			if !ok {
+				return false
+			}
+			currentSession = s
+			if a.disableAutoSummarize {
+				return false
+			}
+			used := s.PromptTokens + s.CompletionTokens
+			return shouldAutoCompact(int64(largeModel.CatwalkCfg.ContextWindow), used)
 		},
 		drainQueue: func() []string {
 			queued, ok := a.messageQueue.Take(call.SessionID)
@@ -173,13 +174,23 @@ runLoopReentry:
 		},
 	}
 
-	_, runErr := runLoop(streamCtx, deps, history, call.Prompt)
+	stop, runErr := runLoop(streamCtx, deps, history, call.Prompt)
 
 	a.eventPromptResponded(call.SessionID, time.Since(startTime).Truncate(time.Second))
 
-	if runErr == nil && !usageSeen {
-		slog.Warn("agent loop completed without usage callback",
-			"session_id", call.SessionID, "model", largeModel.Model.Model())
+	if runErr == nil && stop == stopShouldSummarize {
+		// Release the runLoop context and remove from activeRequests so Summarize
+		// can use IsSessionBusy guard (Summarize sets its own entry).
+		cancel()
+		a.activeRequests.Del(call.SessionID)
+		if summarizeErr := a.Summarize(ctx, call.SessionID, call.ProviderOptions); summarizeErr != nil {
+			return summarizeErr
+		}
+		call.Prompt = fmt.Sprintf(
+			"The previous session was interrupted because it got too long, the initial user request was: `%s`",
+			call.Prompt,
+		)
+		goto runLoopReentry
 	}
 
 	if runErr != nil {
@@ -188,23 +199,11 @@ runLoopReentry:
 		// guidance (e.g. "Copilot model not enabled").
 		a.attachErrorFinish(ctx, call.SessionID, runErr, largeModel.Model.Model())
 
-		if usageSeen {
-			if s, ok := a.saveSessionUsage(ctx, call.SessionID, lastUsage, lastMeta, "Failed to save session usage on cancellation"); ok {
-				currentSession = s
-			}
-		}
-
 		if newCall, ok := a.tryReenter(call, cancel); ok {
 			call = newCall
 			goto runLoopReentry
 		}
 		return runErr
-	}
-
-	if usageSeen {
-		if updatedSession, ok := a.saveSessionUsage(ctx, call.SessionID, lastUsage, lastMeta, "Failed to save session usage"); ok {
-			currentSession = updatedSession
-		}
 	}
 
 	if a.notify != nil {

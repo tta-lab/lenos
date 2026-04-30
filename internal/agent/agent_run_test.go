@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -301,4 +302,87 @@ func TestRun_PostLoopDrainAllQueued(t *testing.T) {
 	require.Equal(t, 0, agent.QueuedPrompts(sess.ID))
 
 	agent.activeRequests.Del(sess.ID)
+}
+
+func TestRun_AutoCompactFiresAndReentersWithPrefix(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "auto-compact e2e test")
+	require.NoError(t, err)
+
+	model := &scriptedModel{
+		emits: []string{"do nothing", "summary text", "exit"},
+		usages: []fantasy.Usage{
+			{InputTokens: 200_000, OutputTokens: 0},
+			{InputTokens: 0, OutputTokens: 0},
+			{InputTokens: 0, OutputTokens: 0},
+		},
+	}
+
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+	agent.largeModel.Set(Model{
+		Model: model,
+		CatwalkCfg: catwalk.Model{
+			ContextWindow:    200_001,
+			DefaultMaxTokens: 1024,
+		},
+	})
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID:  sess.ID,
+		Prompt:     "go",
+		ProviderID: "test",
+	})
+	require.NoError(t, err)
+
+	persisted, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	assert.NotEmpty(t, persisted.SummaryMessageID, "auto-compact should have set SummaryMessageID")
+
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	var sawPrefix bool
+	for _, m := range msgs {
+		if m.Role != message.User {
+			continue
+		}
+		if strings.Contains(m.Content().Text, "previous session was interrupted because it got too long") {
+			sawPrefix = true
+			break
+		}
+	}
+	assert.True(t, sawPrefix, "post-compact re-entry should record the interruption-prefixed user prompt")
+}
+
+func TestRun_AutoCompactSummarizeErrorPropagates(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "auto-compact summarize-fail test")
+	require.NoError(t, err)
+
+	model := &scriptedModel{
+		emits: []string{"trigger compact", "summary"},
+		usages: []fantasy.Usage{
+			{InputTokens: 200_000, OutputTokens: 0},
+			{InputTokens: 0, OutputTokens: 0},
+		},
+		errOn: []int{1},
+	}
+
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+	agent.largeModel.Set(Model{
+		Model:      model,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200_001, DefaultMaxTokens: 1024},
+	})
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID:  sess.ID,
+		Prompt:     "go",
+		ProviderID: "test",
+	})
+	require.Error(t, err, "Summarize failure must propagate from Run (parity with pre-bash-first behavior)")
+
+	persisted, gerr := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, gerr)
+	assert.Empty(t, persisted.SummaryMessageID, "no summary should be set on Summarize failure")
 }
