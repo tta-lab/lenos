@@ -240,6 +240,7 @@ type Options struct {
 	InitializeAs              string       `json:"initialize_as,omitempty" jsonschema:"description=Name of the context file to create/update during project initialization,default=AGENTS.md,example=AGENTS.md,example=LENOS.md,example=CLAUDE.md,example=docs/LLMs.md"`
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
 	Sandbox                   *bool        `json:"sandbox,omitempty" jsonschema:"description=Enable sandbox isolation for command execution via temenos,default=true"`
+	SandboxEndpoint           string       `json:"sandbox_endpoint,omitempty" jsonschema:"description=temenos daemon address (unix socket path or http URL); empty resolves via TEMENOS_LISTEN_ADDR/TEMENOS_SOCKET_PATH/env then default socket,example=/tmp/temenos.sock,example=http://127.0.0.1:8081"`
 	DisableNotifications      bool         `json:"disable_notifications,omitempty" jsonschema:"description=Disable desktop notifications,default=false"`
 }
 

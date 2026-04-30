@@ -227,7 +227,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	}
 
 	// force update of agent models before running
-	app.AgentCoordinator.UpdateModels(ctx)
+	_ = app.AgentCoordinator.UpdateModels(ctx) // best-effort; model list refresh failure is non-fatal
 
 	defer stopSpinner()
 
@@ -493,7 +493,10 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 	if coderAgentCfg.ID == "" {
 		return fmt.Errorf("coder agent configuration is missing")
 	}
-	var err error
+	sandboxClient, err := initSandboxClient(ctx, app.config.Config().Options)
+	if err != nil {
+		return fmt.Errorf("init sandbox client: %w", err)
+	}
 	// Coordinator constructs per-session MdRecorders internally; no app-level recorder needed.
 	app.AgentCoordinator, err = agent.NewCoordinator(
 		ctx,
@@ -502,6 +505,7 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		app.Messages,
 		app.agentNotifications,
 		nil,
+		sandboxClient,
 	)
 	if err != nil {
 		slog.Error("Failed to create coder agent", "err", err)
