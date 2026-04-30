@@ -28,9 +28,11 @@ var _ = transcript.SevNormal
 // scriptedModel returns a sequence of canned emits via Stream(). Each call
 // to Stream consumes one entry; missing entries panic the test.
 type scriptedModel struct {
-	mu    sync.Mutex
-	emits []string
-	calls int
+	mu     sync.Mutex
+	emits  []string
+	usages []fantasy.Usage // optional: per-emit usage override; default Usage{1,1}
+	errOn  []int           // call indices (pre-increment) where Stream yields an error
+	calls  int
 }
 
 func (m *scriptedModel) Model() string    { return "test-model" }
@@ -46,13 +48,27 @@ func (m *scriptedModel) Stream(_ context.Context, _ fantasy.Call) (fantasy.Strea
 	if m.calls >= len(m.emits) {
 		panic("scriptedModel: ran out of canned emits")
 	}
+	// Check for error injection
+	for _, errIdx := range m.errOn {
+		if m.calls == errIdx {
+			m.calls++
+			seq := iter.Seq[fantasy.StreamPart](func(yield func(fantasy.StreamPart) bool) {
+				yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeError, Error: errors.New("scripted error")})
+			})
+			return seq, nil
+		}
+	}
 	out := m.emits[m.calls]
+	u := fantasy.Usage{InputTokens: 1, OutputTokens: 1}
+	if m.calls < len(m.usages) {
+		u = m.usages[m.calls]
+	}
 	m.calls++
 	seq := iter.Seq[fantasy.StreamPart](func(yield func(fantasy.StreamPart) bool) {
 		if !yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextDelta, Delta: out}) {
 			return
 		}
-		if !yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeFinish, Usage: fantasy.Usage{InputTokens: 1, OutputTokens: 1}}) {
+		if !yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeFinish, Usage: u}) {
 			return
 		}
 	})
@@ -652,3 +668,39 @@ func (m *errorStreamModel) StreamObject(context.Context, fantasy.ObjectCall) (fa
 }
 
 var _ fantasy.LanguageModel = (*errorStreamModel)(nil)
+
+func TestRunLoop_OnUsageStopReturnsShouldSummarize(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"echo a", "echo b"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("a\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+	var calls int
+	deps.onUsage = func(_ int, _ fantasy.Usage, _ fantasy.ProviderMetadata) bool {
+		calls++
+		return calls >= 2 // request compact on second step
+	}
+
+	stop, err := runLoop(context.Background(), deps, nil, "do work")
+	require.NoError(t, err)
+	assert.Equal(t, stopShouldSummarize, stop)
+	assert.Equal(t, 2, calls, "onUsage should fire once per emit, including the triggering one")
+
+	assistants := assistantsByOrder(ms)
+	require.NotEmpty(t, assistants)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[len(assistants)-1].FinishReason())
+
+	var sawTurnEnd, sawAutoCompactEvent bool
+	for _, c := range rec.calls {
+		if c == "TurnEnd" {
+			sawTurnEnd = true
+		}
+		if strings.HasPrefix(c, "RuntimeEvent:warn:auto-compact:") {
+			sawAutoCompactEvent = true
+		}
+	}
+	assert.True(t, sawTurnEnd, "expected recorder.TurnEnd on auto-compact stop")
+	assert.True(t, sawAutoCompactEvent, "expected recorder.RuntimeEvent for auto-compact")
+}

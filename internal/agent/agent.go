@@ -34,6 +34,25 @@ const (
 	smallContextWindowRatio     = 0.2
 )
 
+// shouldAutoCompact returns true when the session has approached the
+// auto-summarization threshold. Uses a fixed remaining-token buffer for
+// large context windows (>200k tokens) and a 20% ratio for smaller windows.
+// Restored for the bash-first loop in 090d8794; formula matches the
+// pre-bash-first auto-summarize logic from commit 632ba621.
+func shouldAutoCompact(contextWindow, used int64) bool {
+	if contextWindow <= 0 {
+		return false
+	}
+	remaining := contextWindow - used
+	var threshold int64
+	if contextWindow > largeContextWindowThreshold {
+		threshold = largeContextWindowBuffer
+	} else {
+		threshold = int64(float64(contextWindow) * smallContextWindowRatio)
+	}
+	return remaining <= threshold
+}
+
 var userAgent = fmt.Sprintf("Lenos/%s (https://github.com/tta-lab/lenos)", version.Version)
 
 //go:embed templates/summary.md
