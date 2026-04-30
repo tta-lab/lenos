@@ -74,14 +74,15 @@ type Coordinator interface {
 }
 
 type coordinator struct {
-	cfg          *config.ConfigStore
-	sessions     session.Service
-	messages     message.Service
-	notify       pubsub.Publisher[notify.Notification]
-	recorder     transcript.Recorder
-	currentAgent SessionAgent
-	systemPrompt string
-	readyWg      errgroup.Group
+	cfg           *config.ConfigStore
+	sessions      session.Service
+	messages      message.Service
+	notify        pubsub.Publisher[notify.Notification]
+	recorder      transcript.Recorder
+	sandboxClient *client.Client
+	currentAgent  SessionAgent
+	systemPrompt  string
+	readyWg       errgroup.Group
 
 	dataDir   string
 	recorders *csync.Map[string, transcript.Recorder]
@@ -94,6 +95,7 @@ func NewCoordinator(
 	messages message.Service,
 	notify pubsub.Publisher[notify.Notification],
 	recorder transcript.Recorder,
+	sandboxClient *client.Client,
 ) (Coordinator, error) {
 	if recorder == nil {
 		recorder = transcript.NoopRecorder{}
@@ -104,13 +106,14 @@ func NewCoordinator(
 	}
 
 	c := &coordinator{
-		cfg:       cfg,
-		sessions:  sessions,
-		messages:  messages,
-		notify:    notify,
-		recorder:  recorder,
-		dataDir:   absDataDir,
-		recorders: csync.NewMap[string, transcript.Recorder](),
+		cfg:           cfg,
+		sessions:      sessions,
+		messages:      messages,
+		notify:        notify,
+		recorder:      recorder,
+		sandboxClient: sandboxClient,
+		dataDir:       absDataDir,
+		recorders:     csync.NewMap[string, transcript.Recorder](),
 	}
 
 	large, small, err := c.buildAgentModels(ctx, false)
@@ -271,12 +274,12 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		}
 	}
 
-	var sandboxClient *client.Client
 	useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
-	// SandboxClient is not yet constructed: when the sandbox flag is set
-	// but no client is wired, the loop logs the fallback and runs
-	// LocalRunner. Wiring a temenos client factory is task 354e3e12
-	// (lenos: wire temenos client factory into coordinator).
+	// sandboxClient is wired at startup by app.InitCoderAgent. When nil,
+	// resolveRunner falls back to LocalRunner with a per-call warning
+	// (see agent_run.go). The app-side three-state policy (default/explicit/
+	// disabled) decides whether nil here is acceptable.
+	sandboxClient := c.sandboxClient
 
 	return SessionAgentCall{
 		SessionID:       sessionID,

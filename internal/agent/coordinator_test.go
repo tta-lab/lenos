@@ -15,6 +15,7 @@ import (
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/transcript"
+	"github.com/tta-lab/temenos/client"
 )
 
 // stubAgent implements SessionAgent for testing without a real coordinator setup.
@@ -204,4 +205,17 @@ func TestIsUnauthorized(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// _newCoordinatorSignatureLock is a compile-time guard. It is never executed —
+// passing nil for cfg would crash NewCoordinator at runtime — but the closure
+// body must type-check, which forces NewCoordinator's 7th positional argument
+// to accept *client.Client. If someone reverts the wiring (e.g. drops the
+// parameter), the next `go build` fails. Add a unit test only if you also
+// want runtime coverage; the existing TestResolveRunner already covers the
+// non-nil-client → SandboxRunner path, and subtask 4's integration test
+// exercises the full chain end-to-end.
+var _newCoordinatorSignatureLock = func() {
+	var sc *client.Client
+	_, _ = NewCoordinator(nil, nil, nil, nil, nil, nil, sc)
 }

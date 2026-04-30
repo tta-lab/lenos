@@ -502,6 +502,7 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		app.Messages,
 		app.agentNotifications,
 		nil,
+		nil, // sandboxClient — wired in next subtask
 	)
 	if err != nil {
 		slog.Error("Failed to create coder agent", "err", err)
