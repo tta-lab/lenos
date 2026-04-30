@@ -30,6 +30,15 @@ func buildNarrateBinary(t *testing.T, tmp string) string {
 	return bin
 }
 
+// assertStderrPrefix checks that cmd exited non-zero and its stderr begins with
+// the "narrate:" prefix, confirming E14 fail-loud message formatting.
+func assertStderrPrefix(t *testing.T, out []byte, err error, contains string) {
+	t.Helper()
+	require.Error(t, err, "expected non-zero exit")
+	require.Contains(t, string(out), "narrate:", "stderr should be prefixed with 'narrate:'")
+	require.Contains(t, string(out), contains)
+}
+
 func TestNarrateBinary_EndToEnd(t *testing.T) {
 	tmp := t.TempDir()
 	sessionsDir := filepath.Join(tmp, "sessions")
@@ -57,9 +66,8 @@ func TestNarrateBinary_EndToEnd(t *testing.T) {
 	out, err = pipe.CombinedOutput()
 	require.NoError(t, err, "narrate pipe: %s", out)
 
-	// Invoke narrate with markdown blockquote via stdin (the visual-emphasis
-	// pattern documented in spec 57a09f51 — proves single-mode supports
-	// emphasis without severity subcommands).
+	// Invoke narrate with a markdown blockquote via stdin — confirms single-mode
+	// doesn't corrupt markdown formatting from stdin.
 	bq := exec.Command(bin)
 	bq.Env = env
 	bq.Stdin = bytes.NewBufferString("> ⚠️ markdown blockquote\n")
@@ -82,9 +90,7 @@ func TestNarrateBinary_FailsWithoutEnv(t *testing.T) {
 	cmd := exec.Command(bin, "hello")
 	cmd.Env = []string{} // no env at all
 	out, err := cmd.CombinedOutput()
-	require.Error(t, err, "expected non-zero exit; got nil")
-	require.Contains(t, string(out), "narrate:", "stderr should be prefixed with 'narrate:'")
-	require.Contains(t, string(out), "LENOS_DATA_DIR", "should mention missing env var")
+	assertStderrPrefix(t, out, err, "LENOS_DATA_DIR")
 }
 
 func TestNarrateBinary_FailsOnEmptyStdin(t *testing.T) {
@@ -102,7 +108,5 @@ func TestNarrateBinary_FailsOnEmptyStdin(t *testing.T) {
 	)
 	cmd.Stdin = bytes.NewBufferString("") // empty pipe
 	out, err := cmd.CombinedOutput()
-	require.Error(t, err, "expected non-zero exit on empty stdin")
-	require.Contains(t, string(out), "narrate:", "stderr should be prefixed with 'narrate:'")
-	require.Contains(t, string(out), "content required", "should mention empty content")
+	assertStderrPrefix(t, out, err, "content required")
 }
