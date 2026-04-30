@@ -20,12 +20,14 @@ type MdWatchErrMsg struct{ Err error }
 
 // Watcher tails a .md file and emits tea.Msg on changes.
 type Watcher struct {
-	path    string
-	offset  int64
-	watcher *fsnotify.Watcher
-	events  chan event
-	mu      sync.Mutex
-	running bool
+	path     string
+	offset   int64
+	watcher  *fsnotify.Watcher
+	events   chan event
+	closeSig chan struct{}
+	mu       sync.Mutex
+	closed   bool
+	timer    *time.Timer // stored for Close to stop it
 }
 
 // event is the internal event type.
@@ -61,11 +63,11 @@ func NewWatcher(path string, debounce time.Duration) (initial []byte, w *Watcher
 	}
 
 	w = &Watcher{
-		path:    path,
-		offset:  int64(len(content)),
-		watcher: watcher,
-		events:  make(chan event, 32),
-		running: true,
+		path:     path,
+		offset:   int64(len(content)),
+		watcher:  watcher,
+		events:   make(chan event, 32),
+		closeSig: make(chan struct{}),
 	}
 
 	// Start the background tail loop.
@@ -76,13 +78,23 @@ func NewWatcher(path string, debounce time.Duration) (initial []byte, w *Watcher
 
 // tailLoop watches for fsnotify events and coalesces writes within debounce window.
 func (w *Watcher) tailLoop(debounce time.Duration) {
-	var timer *time.Timer
-	for w.running {
+	for {
 		select {
 		case err := <-w.watcher.Errors:
 			w.events <- event{err: err}
 
+		case <-w.closeSig:
+			// Watcher closed (via Close()); exit cleanly.
+			return
+
 		case e := <-w.watcher.Events:
+			w.mu.Lock()
+			closed := w.closed
+			w.mu.Unlock()
+			if closed {
+				continue
+			}
+
 			if e.Has(fsnotify.Remove) || e.Has(fsnotify.Rename) {
 				// File was deleted or moved; re-watch if it reappears.
 				w.watcher.Remove(w.path)
@@ -96,12 +108,14 @@ func (w *Watcher) tailLoop(debounce time.Duration) {
 			}
 			if e.Has(fsnotify.Write) {
 				// Debounce: reset timer on each write event.
-				if timer != nil {
-					timer.Stop()
+				w.mu.Lock()
+				if w.timer != nil {
+					w.timer.Stop()
 				}
-				timer = time.AfterFunc(debounce, func() {
+				w.timer = time.AfterFunc(debounce, func() {
 					w.readAppend()
 				})
+				w.mu.Unlock()
 			}
 		}
 	}
@@ -178,10 +192,22 @@ func (w *Watcher) Listen() func() tea.Msg {
 	}
 }
 
-// Close releases fsnotify resources.
+// Close releases fsnotify resources and stops the background goroutine promptly.
+// Safe to call multiple times.
 func (w *Watcher) Close() error {
 	w.mu.Lock()
-	w.running = false
+	if w.closed {
+		w.mu.Unlock()
+		return nil
+	}
+	w.closed = true
+	if w.timer != nil {
+		w.timer.Stop()
+	}
+	// Capture channel reference while holding the lock; close outside.
+	closeSig := w.closeSig
+	watcher := w.watcher
 	w.mu.Unlock()
-	return w.watcher.Close()
+	close(closeSig)
+	return watcher.Close()
 }

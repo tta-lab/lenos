@@ -25,7 +25,6 @@ func TestWatcher(t *testing.T) {
 
 	initial, w, err := NewWatcher(mdPath, 5*time.Millisecond)
 	require.NoError(t, err)
-	t.Cleanup(func() { w.Close() })
 
 	assert.Equal(t, []byte("# Session\n"), initial)
 
@@ -46,6 +45,8 @@ func TestWatcher(t *testing.T) {
 	require.True(t, ok)
 	// Should contain all new bytes since last offset.
 	assert.Contains(t, string(appendMsg.Bytes), "error")
+
+	w.Close()
 }
 
 func TestWatcherTruncation(t *testing.T) {
@@ -61,7 +62,6 @@ func TestWatcherTruncation(t *testing.T) {
 
 	_, w, err := NewWatcher(mdPath, 5*time.Millisecond)
 	require.NoError(t, err)
-	t.Cleanup(func() { w.Close() })
 
 	// Truncate the file.
 	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n"), 0o644))
@@ -69,6 +69,8 @@ func TestWatcherTruncation(t *testing.T) {
 	msg := w.Listen()()
 	_, ok := msg.(MdTruncatedMsg)
 	assert.True(t, ok, "expected MdTruncatedMsg, got %T", msg)
+
+	w.Close()
 }
 
 func TestWatcherClose(t *testing.T) {
