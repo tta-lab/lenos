@@ -132,6 +132,37 @@ func TestCoordinator_recorderFor_cachesPerSession(t *testing.T) {
 	assert.NotSame(t, r1a, r2, "different sessionIDs should return different recorders")
 }
 
+// TestBuildCall_SetsLenosEnvVars verifies that buildCall injects
+// LENOS_SESSION_ID + LENOS_DATA_DIR (absolute) into the subprocess env so
+// narrate (cmd/narrate) can resolve the session .md path.
+func TestBuildCall_SetsLenosEnvVars(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	cfg, err := config.Init(tmp, "", false)
+	require.NoError(t, err)
+
+	c := &coordinator{
+		cfg:          cfg,
+		dataDir:      tmp,
+		recorders:    csync.NewMap[string, transcript.Recorder](),
+		currentAgent: &stubAgent{modelName: "test-model"},
+	}
+
+	// Pre-create the session file so recorderFor's Open guard skips Open
+	// (which would deref a nil fantasy model on the stub agent).
+	sessionsDir := filepath.Join(tmp, "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sessionsDir, "sess-123.md"), nil, 0o644))
+
+	call := c.buildCall(context.Background(), "sess-123", "hi", Model{}, config.ProviderConfig{})
+
+	assert.Equal(t, "sess-123", call.Env["LENOS_SESSION_ID"])
+	assert.Equal(t, tmp, call.Env["LENOS_DATA_DIR"])
+	assert.True(t, filepath.IsAbs(call.Env["LENOS_DATA_DIR"]),
+		"LENOS_DATA_DIR must be absolute")
+}
+
 // TestIsUnauthorized verifies that isUnauthorized correctly classifies
 // fantasy.ProviderError by status code. This is the gateway for the
 // OAuth/API-key refresh retry path in Coordinator.Run.

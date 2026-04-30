@@ -254,6 +254,13 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		}
 	}
 
+	// narrate (cmd/narrate) reads these to resolve the session .md path.
+	// Set explicitly so subprocess invocations get the right file regardless
+	// of inherited env or any mid-session cd. c.dataDir is absolute (resolved
+	// at coordinator init).
+	sandboxEnv["LENOS_SESSION_ID"] = sessionID
+	sandboxEnv["LENOS_DATA_DIR"] = c.dataDir
+
 	cwd := c.cfg.WorkingDir()
 	var additionalReadOnlyPaths []string
 	if projects, err := project.List(ctx); err == nil {
