@@ -119,7 +119,7 @@ func testEnv(t *testing.T) fakeEnv {
 	}
 }
 
-func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPrompt string, tools ...fantasy.AgentTool) SessionAgent {
+func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPrompt string) SessionAgent {
 	largeModel := Model{
 		Model: large,
 		CatwalkCfg: catwalk.Model{
@@ -140,7 +140,6 @@ func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPro
 		SystemPrompt: systemPrompt,
 		Sessions:     env.sessions,
 		Messages:     env.messages,
-		Tools:        tools,
 	})
 	return agent
 }
@@ -178,8 +177,6 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 		return nil, err
 	}
 
-	// No tools needed for test agents — bash-first agents emit raw bash; tool
-	// plumbing is dead code on its way out.
 	return testSessionAgent(env, large, small, systemPrompt), nil
 }
 

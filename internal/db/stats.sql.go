@@ -114,45 +114,6 @@ func (q *Queries) GetRecentActivity(ctx context.Context) ([]GetRecentActivityRow
 	return items, nil
 }
 
-const getToolUsage = `-- name: GetToolUsage :many
-SELECT
-    json_extract(value, '$.data.name') as tool_name,
-    COUNT(*) as call_count
-FROM messages, json_each(parts)
-WHERE json_extract(value, '$.type') = 'tool_call'
-  AND json_extract(value, '$.data.name') IS NOT NULL
-GROUP BY tool_name
-ORDER BY call_count DESC
-`
-
-type GetToolUsageRow struct {
-	ToolName  interface{} `json:"tool_name"`
-	CallCount int64       `json:"call_count"`
-}
-
-func (q *Queries) GetToolUsage(ctx context.Context) ([]GetToolUsageRow, error) {
-	rows, err := q.query(ctx, q.getToolUsageStmt, getToolUsage)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetToolUsageRow{}
-	for rows.Next() {
-		var i GetToolUsageRow
-		if err := rows.Scan(&i.ToolName, &i.CallCount); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getTotalStats = `-- name: GetTotalStats :one
 SELECT
     COUNT(*) as total_sessions,

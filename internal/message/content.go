@@ -22,7 +22,6 @@ const (
 	Assistant MessageRole = "assistant"
 	User      MessageRole = "user"
 	System    MessageRole = "system"
-	Tool      MessageRole = "tool"
 	Result    MessageRole = "result"
 )
 

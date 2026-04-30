@@ -75,7 +75,6 @@ type SessionAgentCall struct {
 type SessionAgent interface {
 	Run(context.Context, SessionAgentCall) error
 	SetModels(large Model, small Model)
-	SetTools(tools []fantasy.AgentTool)
 	SetSystemPrompt(systemPrompt string)
 	Cancel(sessionID string)
 	CancelAll()
@@ -99,7 +98,6 @@ type sessionAgent struct {
 	smallModel         *csync.Value[Model]
 	systemPromptPrefix *csync.Value[string]
 	systemPrompt       *csync.Value[string]
-	tools              *csync.Slice[fantasy.AgentTool]
 
 	isSubAgent           bool
 	sessions             session.Service
@@ -121,7 +119,6 @@ type SessionAgentOptions struct {
 	DisableAutoSummarize bool
 	Sessions             session.Service
 	Messages             message.Service
-	Tools                []fantasy.AgentTool
 	Notify               pubsub.Publisher[notify.Notification]
 	// Recorder is the transcript seam (Phase 1) wired to the .md writer
 	// (Phase 2). When nil, the agent uses transcript.NoopRecorder so
@@ -145,7 +142,6 @@ func NewSessionAgent(
 		sessions:             opts.Sessions,
 		messages:             opts.Messages,
 		disableAutoSummarize: opts.DisableAutoSummarize,
-		tools:                csync.NewSliceFrom(opts.Tools),
 		notify:               opts.Notify,
 		recorder:             rec,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),

@@ -114,7 +114,6 @@ func NewCoordinator(
 		DisableAutoSummarize: cfg.Config().Options.DisableAutoSummarize,
 		Sessions:             sessions,
 		Messages:             messages,
-		Tools:                nil,
 		Notify:               notify,
 		Recorder:             recorder,
 	})

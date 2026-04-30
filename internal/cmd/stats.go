@@ -59,7 +59,6 @@ type Stats struct {
 	UsageByDayOfWeek  []DayOfWeekUsage   `json:"usage_by_day_of_week"`
 	RecentActivity    []DailyActivity    `json:"recent_activity"`
 	AvgResponseTimeMs float64            `json:"avg_response_time_ms"`
-	ToolUsage         []ToolUsage        `json:"tool_usage"`
 	HourDayHeatmap    []HourDayHeatmapPt `json:"hour_day_heatmap"`
 }
 
@@ -107,11 +106,6 @@ type DailyActivity struct {
 	SessionCount int64   `json:"session_count"`
 	TotalTokens  int64   `json:"total_tokens"`
 	Cost         float64 `json:"cost"`
-}
-
-type ToolUsage struct {
-	ToolName  string `json:"tool_name"`
-	CallCount int64  `json:"call_count"`
 }
 
 type HourDayHeatmapPt struct {
@@ -276,20 +270,6 @@ func gatherStats(ctx context.Context, conn *sql.DB) (*Stats, error) {
 		return nil, fmt.Errorf("get average response time: %w", err)
 	}
 	stats.AvgResponseTimeMs = toFloat64(avgResp) * 1000
-
-	// Tool usage.
-	toolUsage, err := queries.GetToolUsage(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get tool usage: %w", err)
-	}
-	for _, t := range toolUsage {
-		if name, ok := t.ToolName.(string); ok && name != "" {
-			stats.ToolUsage = append(stats.ToolUsage, ToolUsage{
-				ToolName:  name,
-				CallCount: t.CallCount,
-			})
-		}
-	}
 
 	// Hour/day heatmap.
 	heatmap, err := queries.GetHourDayHeatmap(ctx)

@@ -356,10 +356,6 @@ func (a *sessionAgent) SetModels(large Model, small Model) {
 	a.smallModel.Set(small)
 }
 
-func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {
-	a.tools.SetSlice(tools)
-}
-
 func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
 	a.systemPrompt.Set(systemPrompt)
 }
