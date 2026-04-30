@@ -81,5 +81,30 @@ func TestNarrateBinary_FailsWithoutEnv(t *testing.T) {
 	cmd.Env = []string{} // no env at all
 	out, err = cmd.CombinedOutput()
 	require.Error(t, err, "expected non-zero exit; got nil")
+	require.Contains(t, string(out), "narrate:", "stderr should be prefixed with 'narrate:'")
 	require.Contains(t, string(out), "LENOS_DATA_DIR", "should mention missing env var")
+}
+
+func TestNarrateBinary_FailsOnEmptyStdin(t *testing.T) {
+	tmp := t.TempDir()
+	sessionsDir := filepath.Join(tmp, "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	sessionID := "test-session"
+
+	bin := filepath.Join(tmp, "narrate")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/narrate")
+	build.Dir = repoRoot(t)
+	out, err := build.CombinedOutput()
+	require.NoError(t, err, "go build: %s", out)
+
+	cmd := exec.Command(bin)
+	cmd.Env = append(os.Environ(),
+		"LENOS_SESSION_ID="+sessionID,
+		"LENOS_DATA_DIR="+tmp,
+	)
+	cmd.Stdin = bytes.NewBufferString("") // empty pipe
+	out, err = cmd.CombinedOutput()
+	require.Error(t, err, "expected non-zero exit on empty stdin")
+	require.Contains(t, string(out), "narrate:", "stderr should be prefixed with 'narrate:'")
+	require.Contains(t, string(out), "content required", "should mention empty content")
 }

@@ -40,6 +40,7 @@ Thumbs.db
 
 # Binary
 /lenos
+/narrate
 
 # Local environment variables
 .env
