@@ -117,7 +117,6 @@ func (ui *UI) Init() tea.Cmd {
 // Update handles messages and routes them to sub-components.
 func (ui *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
-
 	case tea.WindowSizeMsg:
 		ui.width = m.Width
 		ui.height = m.Height
