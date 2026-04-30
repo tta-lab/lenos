@@ -284,7 +284,7 @@ After significant changes:
 - Read files before editing
 - Always use absolute paths for file operations (editing, reading, writing)
 - Run tools in parallel when safe (no dependencies)
-- When making multiple independent <cmd> blocks, send them in a single message with multiple tool calls for parallel execution
+- Each response is one bash command. To run independent steps in one response, chain with `&&` (stop on first failure), `||` (run on failure), or `;` (always continue). There are no parallel tool calls in this runtime.
 - Summarize tool output for user (they don't see it)
 - Never use `curl` — use `web fetch` instead.
 - Only use the tools you know exist.

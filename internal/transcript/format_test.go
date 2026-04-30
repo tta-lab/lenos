@@ -77,7 +77,7 @@ func TestRenderBashBlock(t *testing.T) {
 
 		golden, err := os.ReadFile("testdata/bash_block_unicode.md")
 		require.NoError(t, err)
-		require.Equal(t, string(golden), RenderBashBlock(`log warn "❌ ⚠️ λ unicode test: 你好 👨‍🦰"`))
+		require.Equal(t, string(golden), RenderBashBlock(`narrate "❌ ⚠️ λ unicode test: 你好 👨‍🦰"`))
 	})
 
 	t.Run("multi-line heredoc preserved", func(t *testing.T) {

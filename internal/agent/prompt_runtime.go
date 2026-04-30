@@ -11,7 +11,7 @@ import "fmt"
 
 // rePromptEmpty is the next-observation text after an empty/whitespace emit.
 func rePromptEmpty() string {
-	return `[runtime] your last response was empty. emit a bash command, a comment (# ...), a log call (e.g. log info "msg"), or "exit" to end the turn.`
+	return `[runtime] your last response was empty. emit a bash command, a comment (# ...), narrate "message", or "exit" to end the turn.`
 }
 
 // rePromptInvalidBash is the next-observation text after `bash -n` rejected
@@ -21,8 +21,8 @@ func rePromptInvalidBash(bashErr string) string {
   %s
 
 if you wanted to say something, use:
-  - log info "message"     (visible to owner, plain text)
-  - # comment text         (a bash comment, no side effect)
+  - narrate "message"        (voiceover prose for the human; not a sink for command output)
+  - # comment text           (a bash comment, no side effect)
 
 if you wanted to run a command, ensure it's valid bash.`, bashErr)
 }

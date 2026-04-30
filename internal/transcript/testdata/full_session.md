@@ -20,7 +20,7 @@ FAIL TestAuthExpiry
 *[10:30:05, 0.120s]* — ❌ **exit 1**
 
 ```bash
-log info <<EOF
+narrate <<EOF
 expiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After
 EOF
 ```
@@ -36,7 +36,7 @@ sed -i 's/Before/After/' src/auth.go
 > *runtime: ⚠️ blocked: sed -i not allowed; use src edit*
 
 ```bash
-log info "switching approach — using src edit"
+narrate "switching approach — using src edit"
 ```
 
 switching approach — using src edit
