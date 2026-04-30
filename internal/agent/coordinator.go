@@ -11,8 +11,10 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
@@ -20,6 +22,7 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
@@ -79,6 +82,9 @@ type coordinator struct {
 	currentAgent SessionAgent
 	systemPrompt string
 	readyWg      errgroup.Group
+
+	dataDir   string
+	recorders *csync.Map[string, transcript.Recorder]
 }
 
 func NewCoordinator(
@@ -92,12 +98,19 @@ func NewCoordinator(
 	if recorder == nil {
 		recorder = transcript.NoopRecorder{}
 	}
+	absDataDir, err := filepath.Abs(cfg.Config().Options.DataDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("resolve data dir: %w", err)
+	}
+
 	c := &coordinator{
-		cfg:      cfg,
-		sessions: sessions,
-		messages: messages,
-		notify:   notify,
-		recorder: recorder,
+		cfg:       cfg,
+		sessions:  sessions,
+		messages:  messages,
+		notify:    notify,
+		recorder:  recorder,
+		dataDir:   absDataDir,
+		recorders: csync.NewMap[string, transcript.Recorder](),
 	}
 
 	large, small, err := c.buildAgentModels(ctx, false)
@@ -114,12 +127,11 @@ func NewCoordinator(
 		DisableAutoSummarize: cfg.Config().Options.DisableAutoSummarize,
 		Sessions:             sessions,
 		Messages:             messages,
-		Tools:                nil,
 		Notify:               notify,
 		Recorder:             recorder,
 	})
 
-	// Build system prompt: logos base (cmd block format, env, commands) + lenos post-template.
+	// Build system prompt: bash-first base (env + output protocol + available commands) + cmd-git.tpl (git status + attribution) + coder post-template (lenos style and conventions).
 	c.systemPrompt, err = SystemPrompt(
 		ctx,
 		c.cfg.WorkingDir(),
@@ -141,9 +153,9 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return err
 	}
 
-	// Attachments are not surfaced in the bash-first loop yet. Phase 5
-	// (prompt corpus migration) will decide whether to inline file content
-	// in the user message or expose a `lenos attach` CLI inside the sandbox.
+	// Attachments are not surfaced in the bash-first loop. See task
+	// 8f7c6086 (lenos: wire attachments into bash-first loop, decide
+	// option A inline vs option B `lenos attach` CLI).
 	_ = attachments
 
 	model := c.currentAgent.Model()
@@ -210,6 +222,27 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	return fmt.Errorf("agent.Run: %w", runErr)
 }
 
+// recorderFor returns a session-scoped MdRecorder, lazily constructed and
+// cached on first call. The returned recorder is bound to
+// ${dataDir}/sessions/${sessionID}.md. Open is non-idempotent (it appends a
+// fresh frontmatter via writer.Append), so we guard against double-open by
+// stat-ing the path first.
+func (c *coordinator) recorderFor(sessionID string) transcript.Recorder {
+	return c.recorders.GetOrSet(sessionID, func() transcript.Recorder {
+		path := filepath.Join(c.dataDir, "sessions", sessionID+".md")
+		r := transcript.NewMdRecorder(path)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			_ = r.Open(context.Background(), transcript.Meta{
+				SessionID: sessionID,
+				Agent:     "lenos",
+				Model:     c.currentAgent.Model().Model.Model(),
+				StartedAt: time.Now().UTC(),
+			})
+		}
+		return r
+	})
+}
+
 // buildCall assembles the per-turn SessionAgentCall with sandbox env, allowed
 // paths, and provider options. Extracted so the OAuth/API-key refresh path
 // can rebuild a call with fresh credentials without duplicating wiring.
@@ -220,6 +253,13 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 			sandboxEnv[e[:idx]] = e[idx+1:]
 		}
 	}
+
+	// narrate (cmd/narrate) reads these to resolve the session .md path.
+	// Set explicitly so subprocess invocations get the right file regardless
+	// of inherited env or any mid-session cd. c.dataDir is absolute (resolved
+	// at coordinator init).
+	sandboxEnv["LENOS_SESSION_ID"] = sessionID
+	sandboxEnv["LENOS_DATA_DIR"] = c.dataDir
 
 	cwd := c.cfg.WorkingDir()
 	var additionalReadOnlyPaths []string
@@ -233,10 +273,10 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 
 	var sandboxClient *client.Client
 	useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
-	// Phase 1 keeps the temenos client construction out-of-scope: when the
-	// sandbox is enabled but no explicit client is wired in, the loop logs
-	// the fallback and runs LocalRunner. Phase 2/3 will provide a temenos
-	// client factory that the coordinator can pass through.
+	// SandboxClient is not yet constructed: when the sandbox flag is set
+	// but no client is wired, the loop logs the fallback and runs
+	// LocalRunner. Wiring a temenos client factory is task 354e3e12
+	// (lenos: wire temenos client factory into coordinator).
 
 	return SessionAgentCall{
 		SessionID:       sessionID,
@@ -247,6 +287,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		SandboxClient:   sandboxClient,
 		Env:             sandboxEnv,
 		AllowedPaths:    BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...),
+		Recorder:        c.recorderFor(sessionID),
 	}
 }
 

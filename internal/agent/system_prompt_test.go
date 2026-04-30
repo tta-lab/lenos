@@ -26,13 +26,30 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	// Bash-first protocol is described.
 	assert.Contains(t, got, "raw bash")
 	assert.Contains(t, got, "exit")
-	assert.Contains(t, got, "log info")
+	assert.Contains(t, got, "narrate")
+	assert.Contains(t, got, `narrate "message"`)
 
 	// MUST NOT mention the legacy <cmd> markup — that's the whole point.
 	assert.False(t, strings.Contains(got, "<cmd>"),
 		"base prompt must not reference legacy <cmd> markup")
 	assert.False(t, strings.Contains(got, "</cmd>"),
 		"base prompt must not reference legacy </cmd> markup")
+
+	// MUST NOT mention the legacy log CLI — narrate replaced it.
+	assert.False(t, strings.Contains(got, "log info"),
+		"base prompt must not reference legacy log info CLI")
+	assert.False(t, strings.Contains(got, "log warn"),
+		"base prompt must not reference legacy log warn CLI")
+	assert.False(t, strings.Contains(got, "log error"),
+		"base prompt must not reference legacy log error CLI")
+
+	// narrate is single-mode — no severity variants.
+	assert.False(t, strings.Contains(got, "narrate info"),
+		"narrate is single-mode; no severity variants")
+	assert.False(t, strings.Contains(got, "narrate warn"),
+		"narrate is single-mode; no severity variants")
+	assert.False(t, strings.Contains(got, "narrate error"),
+		"narrate is single-mode; no severity variants")
 }
 
 func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {

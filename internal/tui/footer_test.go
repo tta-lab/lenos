@@ -36,10 +36,10 @@ func TestDeriveFooter(t *testing.T) {
 	})
 
 	t.Run("bash with heredoc", func(t *testing.T) {
-		md := []byte("---\n---\n\n```bash\nlog info <<EOF\nsome text\nEOF\n```\n")
+		md := []byte("---\n---\n\n```bash\nnarrate <<EOF\nsome text\nEOF\n```\n")
 		d := DeriveFooter(md)
 		assert.Equal(t, FooterStateActive, d.State)
-		assert.Equal(t, "log info <<EOF", d.LatestBashCmd)
+		assert.Equal(t, "narrate <<EOF", d.LatestBashCmd)
 	})
 
 	t.Run("idle after trailer", func(t *testing.T) {

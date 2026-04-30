@@ -1,10 +1,9 @@
 // Package agent is the core orchestration layer for Lenos AI agents.
 //
 // It provides session-based AI agent functionality for managing
-// conversations, tool execution, and message handling. It coordinates
-// interactions between language models, messages, sessions, and tools while
-// handling features like automatic summarization, queuing, and token
-// management.
+// conversations and message handling. It coordinates interactions between
+// language models, messages, and sessions while handling features like
+// automatic summarization, queuing, and token management.
 package agent
 
 import (
@@ -41,8 +40,8 @@ var userAgent = fmt.Sprintf("Lenos/%s (https://github.com/tta-lab/lenos)", versi
 var summaryPrompt []byte
 
 // SessionAgentCall carries one user-initiated turn through the agent loop.
-// LogosCfg is gone in the bash-first rewrite; the loop now needs the runtime
-// pieces it used to derive from logos.Config directly.
+// It bundles the session ID, prompt, and per-turn runtime context (provider
+// options, sandbox env, allowed paths).
 type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
@@ -65,20 +64,25 @@ type SessionAgentCall struct {
 	Sandbox       bool
 	SandboxClient *client.Client
 
-	// Env is the explicit environment overlay for each subprocess. The loop
-	// sets LENOS_SESSION_ID / LENOS_DATA_DIR on top of this so log CLI in
-	// Phase 3 can resolve the .md path.
+	// Env is the explicit environment overlay for each subprocess. The
+	// coordinator sets LENOS_SESSION_ID + LENOS_DATA_DIR (absolute) so
+	// narrate (cmd/narrate) can resolve the session .md path: the loop
+	// does not need to add them.
 	Env map[string]string
 
 	// AllowedPaths is the read/write bound for the runner. The first entry
 	// also becomes the subprocess working directory.
 	AllowedPaths []client.AllowedPath
+
+	// Recorder is the per-session transcript recorder. When non-nil, the
+	// agent loop uses it instead of the agent-wide recorder so each session
+	// writes to its own .md file.
+	Recorder transcript.Recorder
 }
 
 type SessionAgent interface {
 	Run(context.Context, SessionAgentCall) error
 	SetModels(large Model, small Model)
-	SetTools(tools []fantasy.AgentTool)
 	SetSystemPrompt(systemPrompt string)
 	Cancel(sessionID string)
 	CancelAll()
@@ -102,7 +106,6 @@ type sessionAgent struct {
 	smallModel         *csync.Value[Model]
 	systemPromptPrefix *csync.Value[string]
 	systemPrompt       *csync.Value[string]
-	tools              *csync.Slice[fantasy.AgentTool]
 
 	isSubAgent           bool
 	sessions             session.Service
@@ -124,11 +127,10 @@ type SessionAgentOptions struct {
 	DisableAutoSummarize bool
 	Sessions             session.Service
 	Messages             message.Service
-	Tools                []fantasy.AgentTool
 	Notify               pubsub.Publisher[notify.Notification]
-	// Recorder is the transcript seam (Phase 1) wired to the .md writer
-	// (Phase 2). When nil, the agent uses transcript.NoopRecorder so
-	// Phase 1 runs standalone.
+	// Recorder is the transcript seam wired to the .md writer. When nil,
+	// the agent uses transcript.NoopRecorder so standalone tests run
+	// without writing a transcript artifact.
 	Recorder transcript.Recorder
 }
 
@@ -148,7 +150,6 @@ func NewSessionAgent(
 		sessions:             opts.Sessions,
 		messages:             opts.Messages,
 		disableAutoSummarize: opts.DisableAutoSummarize,
-		tools:                csync.NewSliceFrom(opts.Tools),
 		notify:               opts.Notify,
 		recorder:             rec,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),

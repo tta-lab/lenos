@@ -137,12 +137,16 @@ runLoopReentry:
 	)
 
 	largeModel := a.largeModel.Get()
+	rec := call.Recorder
+	if rec == nil {
+		rec = a.recorder
+	}
 	deps := loopDeps{
 		model:      largeModel.Model,
 		provOpts:   call.ProviderOptions,
 		messages:   a.messages,
 		runner:     resolveRunner(call),
-		recorder:   transcript.NewLoggingRecorder(a.recorder),
+		recorder:   transcript.NewLoggingRecorder(rec),
 		sessionID:  call.SessionID,
 		sysPrompt:  a.systemPrompt.Get(),
 		providerID: call.ProviderID,

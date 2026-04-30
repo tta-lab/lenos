@@ -13,7 +13,7 @@ func TestRePromptEmpty(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got, "[runtime] "), "must start with [runtime] tag")
 	assert.Contains(t, got, "your last response was empty")
 	assert.Contains(t, got, `"exit"`)
-	assert.Contains(t, got, "log info")
+	assert.Contains(t, got, "narrate")
 	assert.Contains(t, got, "# ...")
 }
 
@@ -24,7 +24,7 @@ func TestRePromptInvalidBash(t *testing.T) {
 	assert.Contains(t, got, "not valid bash")
 	assert.Contains(t, got, "bash -n said:")
 	assert.Contains(t, got, "syntax error near token `then'")
-	assert.Contains(t, got, `log info "message"`)
+	assert.Contains(t, got, `narrate "message"`)
 	assert.Contains(t, got, "# comment text")
 }
 

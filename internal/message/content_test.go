@@ -84,7 +84,8 @@ file2`, ExitCode: &exit0, Pending: false},
 	require.Equal(t, fantasy.MessageRoleUser, result[0].Role)
 	text, ok := result[0].Content[0].(fantasy.TextPart)
 	require.True(t, ok, "expected TextPart, got %T", result[0].Content[0])
-	// logos v2.1.0 drops command echo from result blocks — only output is included.
+	// result blocks carry only output, not the originating command — verify
+	// output content directly.
 	require.Contains(t, text.Text, "file1")
 	require.Contains(t, text.Text, "/home/user")
 }
@@ -120,7 +121,8 @@ func TestToAIMessage_Result_MixedPendingAndCompleted(t *testing.T) {
 	require.Len(t, result, 1)
 	text, ok := result[0].Content[0].(fantasy.TextPart)
 	require.True(t, ok, "expected TextPart, got %T", result[0].Content[0])
-	// logos v2.1.0 drops command echo — check output content instead.
+	// result blocks carry only output, not the originating command — verify
+	// output content directly.
 	require.Contains(t, text.Text, "file1")
 	require.Contains(t, text.Text, "file2")
 }

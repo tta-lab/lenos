@@ -64,11 +64,10 @@ SSOT). That re-render path lives in Phase 4, not in this package.
 
 ## Relationship to `internal/session/`
 
-`internal/session/` is the OLD logos-based session service (sqlite CRUD via
-`session.Service`, used pre-bash-first). `internal/transcript/` is the NEW
-bash-first `.md` render artifact. They coexist until Phase 5 deletes the old
-service. Don't confuse them: the new agent loop writes structural state via
-`internal/db` directly and renders `.md` via `transcript.Recorder`.
+`internal/session/` holds the SQLite session + Todo CRUD service consumed by
+both the agent loop and the chat UI. `internal/transcript/` is the
+human-facing `.md` render artifact written by lenos main + cmd/narrate. The
+two have non-overlapping responsibilities and both stay.
 
 ## Spec references
 

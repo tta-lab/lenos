@@ -33,9 +33,9 @@ func TestMdRecorder_FullSession(t *testing.T) {
 	r := NewMdRecorder(path)
 	r.now = fakeClock(t, []time.Time{
 		base.Add(5 * time.Second),  // announce 1 — go test fail
-		base.Add(30 * time.Second), // announce 2 — log info diagnosis
+		base.Add(30 * time.Second), // announce 2 — narrate diagnosis
 		base.Add(31 * time.Second), // announce 3 — sed -i banned
-		base.Add(31 * time.Second), // announce 4 — log info switching
+		base.Add(31 * time.Second), // announce 4 — narrate switching
 		base.Add(45 * time.Second), // announce 5 — src edit
 		base.Add(60 * time.Second), // announce 6 — go test success
 	})
@@ -58,7 +58,7 @@ func TestMdRecorder_FullSession(t *testing.T) {
 		1, 120*time.Millisecond))
 
 	tok2, err := r.AgentBashAnnounce(ctx, sid,
-		"log info <<EOF\nexpiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After\nEOF")
+		"narrate <<EOF\nexpiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After\nEOF")
 	require.NoError(t, err)
 	// narrate prose written by cmd/narrate directly via RenderProse — simulate it.
 	require.NoError(t, r.writer.Append([]byte(RenderProse(
@@ -69,7 +69,7 @@ func TestMdRecorder_FullSession(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, r.BashSkipped(ctx, tok3, SevWarn, "blocked: sed -i not allowed; use src edit"))
 
-	tok4, err := r.AgentBashAnnounce(ctx, sid, `log info "switching approach — using src edit"`)
+	tok4, err := r.AgentBashAnnounce(ctx, sid, `narrate "switching approach — using src edit"`)
 	require.NoError(t, err)
 	require.NoError(t, r.writer.Append([]byte(RenderProse("switching approach — using src edit"))))
 	require.NoError(t, r.BashResult(ctx, tok4, nil, 0, 1*time.Millisecond))

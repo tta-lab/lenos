@@ -1,4 +1,4 @@
 ```bash
-log warn "❌ ⚠️ λ unicode test: 你好 👨‍🦰"
+narrate "❌ ⚠️ λ unicode test: 你好 👨‍🦰"
 ```
 

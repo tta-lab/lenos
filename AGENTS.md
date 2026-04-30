@@ -34,9 +34,8 @@ internal/
     agent_session.go              Session ops + helpers (Summarize, Cancel, etc.)
     coordinator.go                 Coordinator: manages named agents ("coder", "task")
     prompts.go                     Loads Go-template system prompts
-    templates/                     System prompt templates (coder.md.tpl, task.md.tpl, etc.)
-    tools/                         All built-in tools (bash, edit, view, grep, glob, etc.)
-  session/session.go               Session CRUD backed by SQLite (legacy logos service; superseded by transcript/ in bash-first rewrite, removed in Phase 5)
+    templates/                     System prompt templates (coder.md.tpl, system_prompt.tpl, initialize.md.tpl, summary.md, cmd-git.tpl)
+  session/session.go               Session CRUD + Todo persistence backed by SQLite (model SSOT per bash-first orientation 7015e7aa §4)
   transcript/                      Bash-first session .md render artifact. Pure stdlib formatter, flock-guarded append writer (consumed by lenos main and cmd/narrate via AppendStrict), Recorder seam consumed by the agent loop
   message/                         Message model and content types
   db/                              SQLite via sqlc, with migrations

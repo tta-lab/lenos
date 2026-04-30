@@ -275,11 +275,10 @@ func streamOne(
 	return assistantMsg.Content().Text, usage, meta, nil
 }
 
-// formatResultForModel renders the next-turn observation text for an exec.
-// Mirrors the historic logos.formatOneResult shape so providers that learned
-// to read `<result>...</result>` from older sessions don't re-train. Stdout
-// and stderr are HTML-escaped to keep `</result>` inside output from closing
-// the wrapper early.
+// formatResultForModel renders the next-turn observation text. Stdout and
+// stderr are HTML-escaped so a literal `</result>` inside output cannot close
+// the wrapper early. The `<result>...</result>` envelope is preserved so
+// providers cached on older sessions don't re-train.
 func formatResultForModel(_ string, stdout, stderr string, exitCode int) string {
 	body := html.EscapeString(stdout)
 	if stderr != "" {
