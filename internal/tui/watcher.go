@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"fmt"
-	"io"
 	"os"
 	"sync"
 	"time"
@@ -43,6 +41,12 @@ type event struct {
 // Returns the initial bytes (everything in the file at construction time)
 // plus a Watcher whose Listen() method returns a tea.Cmd for Bubble Tea.
 func NewWatcher(path string, debounce time.Duration) (initial []byte, w *Watcher, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, err
@@ -74,12 +78,6 @@ func NewWatcher(path string, debounce time.Duration) (initial []byte, w *Watcher
 
 // tailLoop watches for fsnotify events and coalesces writes within debounce window.
 func (w *Watcher) tailLoop(debounce time.Duration) {
-	defer func() {
-		if r := recover(); r != nil {
-			w.events <- event{err: fmt.Errorf("tailLoop panic: %v", r)}
-			_ = w.Close()
-		}
-	}()
 	for {
 		select {
 		case err := <-w.watcher.Errors:
@@ -149,7 +147,7 @@ func (w *Watcher) readAppend() {
 			return
 		}
 		// Read everything from the start.
-		content, err := io.ReadAll(f)
+		content, err := os.ReadFile(w.path)
 		if err != nil {
 			w.events <- event{err: err}
 			return
@@ -180,22 +178,21 @@ func (w *Watcher) readAppend() {
 	w.events <- event{appended: newBytes[:n]}
 }
 
-// Listen returns a tea.Cmd that waits for and dispatches watcher events.
-func (w *Watcher) Listen() tea.Cmd {
+// Listen returns a tea.Cmd that blocks until the next file event.
+func (w *Watcher) Listen() func() tea.Msg {
 	return func() tea.Msg {
 		e := <-w.events
-		switch {
-		case e.err != nil:
+		if e.err != nil {
 			return MdWatchErrMsg{Err: e.err}
-		case e.truncated:
-			return MdTruncatedMsg{}
-		default:
-			return MdAppendedMsg{Bytes: e.appended}
 		}
+		if e.truncated {
+			return MdTruncatedMsg{}
+		}
+		return MdAppendedMsg{Bytes: e.appended}
 	}
 }
 
-// Close stops the watcher and releases resources.
+// Close releases fsnotify resources and stops the background goroutine promptly.
 func (w *Watcher) Close() error {
 	w.mu.Lock()
 	if w.closed {
@@ -206,8 +203,11 @@ func (w *Watcher) Close() error {
 	if w.timer != nil {
 		w.timer.Stop()
 	}
+	// Capture references while holding the lock.
+	closeSig := w.closeSig
+	watcher := w.watcher
 	w.mu.Unlock()
 
-	close(w.closeSig)
-	return w.watcher.Close()
+	close(closeSig)
+	return watcher.Close()
 }
