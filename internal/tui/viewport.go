@@ -2,6 +2,7 @@ package tui
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -175,7 +176,7 @@ func (v *Viewport) Render() string {
 		if len(headerText) > v.width-10 {
 			headerText = headerText[:v.width-13] + "…"
 		}
-		turnLabel := "turn " + itoa(sticky.Number) + " " + GlyphArrowUp
+		turnLabel := "turn " + strconv.Itoa(sticky.Number) + " " + GlyphArrowUp
 		right := v.styles.StickyTurnRight.Render(turnLabel)
 		padding := strings.Repeat(" ", max(0, v.width-lipgloss.Width(headerText)-lipgloss.Width(turnLabel)))
 		out.WriteString(v.styles.StickyLambda.Render(GlyphLambda + " " + headerText))
@@ -197,7 +198,7 @@ func (v *Viewport) Render() string {
 	// New indicator.
 	if !v.pinned && v.newSinceUnpin > 0 {
 		// Fill to right with spaces, then write indicator.
-		indicator := GlyphArrowDown + " " + itoa(v.newSinceUnpin) + " new " + GlyphArrowEndDown
+		indicator := GlyphArrowDown + " " + strconv.Itoa(v.newSinceUnpin) + " new " + GlyphArrowEndDown
 		indicatorStyled := v.styles.NewIndicator.Render(indicator)
 		spaces := strings.Repeat(" ", max(0, v.width-lipgloss.Width(indicator)))
 		out.WriteString(spaces)
@@ -214,17 +215,4 @@ func min(a, b int) int {
 		return a
 	}
 	return b
-}
-
-// itoa converts an integer to a string.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for n > 0 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-		n /= 10
-	}
-	return string(b)
 }

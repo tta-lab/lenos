@@ -70,7 +70,7 @@ func TestFooterRender(t *testing.T) {
 			LatestBashCmd: "go test ./...",
 		}, t0)
 
-		out := f.Render(time.Now())
+		out := f.Render(time.Now(), time.Now())
 		assert.Contains(t, out, "agent working")
 		assert.Contains(t, out, "go test")
 		assert.Contains(t, out, "running")
@@ -84,7 +84,7 @@ func TestFooterRender(t *testing.T) {
 			LastDuration: 12 * time.Second,
 		}, time.Time{})
 
-		out := f.Render(time.Now())
+		out := f.Render(time.Now(), time.Now())
 		assert.Contains(t, out, "idle")
 		assert.Contains(t, out, "12s")
 	})
@@ -98,7 +98,7 @@ func TestFooterRender(t *testing.T) {
 			TurnNumber:   1,
 		}, time.Time{})
 
-		out := f.Render(time.Now())
+		out := f.Render(time.Now(), time.Now())
 		assert.Contains(t, out, "turn 1 ended")
 		assert.Contains(t, out, "30s")
 	})
@@ -111,7 +111,7 @@ func TestFooterRender(t *testing.T) {
 			LatestBashCmd: "this-is-a-very-long-command-that-definitely-exceeds-the-available-width-for-the-left-side",
 		}, time.Now().Add(-5*time.Second))
 
-		out := f.Render(time.Now())
+		out := f.Render(time.Now(), time.Now())
 		// Output should contain both the active state prefix and the hints.
 		assert.Contains(t, out, "agent working")
 		assert.Contains(t, out, "ctrl+c quit")

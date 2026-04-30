@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,7 @@ func TestViewportScroll(t *testing.T) {
 		Lines: make([]string, 20),
 	}
 	for i := range r.Lines {
-		r.Lines[i] = "line " + itoa(i)
+		r.Lines[i] = "line " + strconv.Itoa(i)
 	}
 
 	t.Run("SetRendered while pinned scrolls to bottom", func(t *testing.T) {
@@ -56,7 +57,7 @@ func TestViewportUnpinned(t *testing.T) {
 
 	r := Rendered{Lines: make([]string, 20)}
 	for i := range r.Lines {
-		r.Lines[i] = "line " + itoa(i)
+		r.Lines[i] = "line " + strconv.Itoa(i)
 	}
 
 	// Simulate user reading mid-file.
@@ -68,7 +69,7 @@ func TestViewportUnpinned(t *testing.T) {
 	// More content arrives.
 	r2 := Rendered{Lines: make([]string, 30)}
 	for i := range r2.Lines {
-		r2.Lines[i] = "line " + itoa(i)
+		r2.Lines[i] = "line " + strconv.Itoa(i)
 	}
 	v.SetRendered(r2)
 
@@ -89,7 +90,7 @@ func TestViewportSticky(t *testing.T) {
 		},
 	}
 	for i := range r.Lines {
-		r.Lines[i] = "line " + itoa(i)
+		r.Lines[i] = "line " + strconv.Itoa(i)
 	}
 	v.SetRendered(r)
 
@@ -125,7 +126,7 @@ func TestViewportSetSize(t *testing.T) {
 
 	r := Rendered{Lines: make([]string, 30)}
 	for i := range r.Lines {
-		r.Lines[i] = "line " + itoa(i)
+		r.Lines[i] = "line " + strconv.Itoa(i)
 	}
 	v.SetRendered(r)
 

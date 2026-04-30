@@ -25,10 +25,9 @@ type UI struct {
 	footer   *Footer
 	viewport *Viewport
 
-	watcher *Watcher
-	keys    KeyMap
-	styles  Styles
-
+	watcher           *Watcher
+	keys              KeyMap
+	styles            Styles
 	lastBashWallclock time.Time
 }
 
@@ -131,6 +130,7 @@ func (ui *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Re-read the entire file from disk; reset state.
 		md, err := os.ReadFile(ui.mdPath)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to re-read session file after truncation: %v\n", err)
 			return ui, tea.Quit
 		}
 		ui.md = md
@@ -209,7 +209,7 @@ func (ui *UI) View() tea.View {
 	ui.viewport.height = viewportHeight
 	viewportView := lipgloss.Place(ui.width, viewportHeight, lipgloss.Top, lipgloss.Left, ui.viewport.Render())
 
-	footerView := lipgloss.Place(ui.width, 1, lipgloss.Top, lipgloss.Left, ui.footer.Render(time.Now()))
+	footerView := lipgloss.Place(ui.width, 1, lipgloss.Top, lipgloss.Left, ui.footer.Render(time.Now(), ui.lastBashWallclock))
 
 	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, headerView, sep, viewportView, footerView))
 }

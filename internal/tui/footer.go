@@ -205,9 +205,9 @@ func countTurnEndsBefore(sections []section, idx int) int {
 // Footer renders the 1-row footer line.
 type Footer struct {
 	deriv             FooterDerivation
-	lastBashWallclock time.Time
 	width             int
 	styles            Styles
+	lastBashWallclock time.Time
 }
 
 // NewFooter creates a footer with the given styles.
@@ -227,7 +227,9 @@ func (f *Footer) SetWidth(w int) {
 }
 
 // Render returns the 1-row footer string.
-func (f *Footer) Render(now time.Time) string {
+// wallclock is the time of the most recent unfinished bash block appearance
+// (used to compute running duration in active state).
+func (f *Footer) Render(now, wallclock time.Time) string {
 	hints := "ctrl+g help  ctrl+c quit"
 
 	var leftStr string
@@ -235,7 +237,7 @@ func (f *Footer) Render(now time.Time) string {
 	switch f.deriv.State {
 	case FooterStateActive:
 		cmd := f.deriv.LatestBashCmd
-		elapsed := int(now.Sub(f.lastBashWallclock).Round(time.Second).Seconds())
+		elapsed := int(now.Sub(wallclock).Round(time.Second).Seconds())
 		leftStr = "agent working — " + cmd + " · running " + strconv.Itoa(elapsed) + "s"
 		leftStyle = f.styles.FooterActive
 

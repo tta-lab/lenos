@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -151,18 +152,45 @@ func Render(md []byte, width int) (Rendered, error) {
 	}, nil
 }
 
+var trailerRx = lazyTrailerRegex()
+
+func lazyTrailerRegex() *regexp.Regexp {
+	// Matches *[HH:MM:SS, Xs]* or *[HH:MM:SS, Xs]* — ❌ **exit N**
+	return regexp.MustCompile(`\*\[\d{2}:\d{2}:\d{2}, *[\d.]+s\]\*( — ❌ \*\*exit \d+\*\*)?`)
+}
+
 // countUnfinishedBash returns the number of ```bash blocks in body that have
-// no following *[HH:MM:SS, Xs]* trailer or *(turn ended)* marker.
+// no following trailer or *(turn ended)* marker.
 func countUnfinishedBash(body string) int {
-	count := 0
 	lines := strings.Split(body, "\n")
+	inBash := false
+	bashNoTrailer := 0
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "```bash") && !strings.HasPrefix(trimmed, "``` bash") {
+		// Detect bash block open.
+		if strings.HasPrefix(trimmed, "```bash") || strings.HasPrefix(trimmed, "``` bash") {
+			inBash = true
 			continue
 		}
-		// Found a bash block; scan ahead to see if it ends with a trailer.
-		count++
+		// Detect bash block close.
+		if trimmed == "```" && inBash {
+			// Closed bash block with no trailer seen yet — count it.
+			bashNoTrailer++
+			inBash = false
+			continue
+		}
+		if !inBash {
+			continue
+		}
+		// Inside a bash block: check for trailer or turn-end marker.
+		if strings.HasPrefix(trimmed, "*(turn ended)*") || trailerRx.MatchString(trimmed) {
+			// This bash block has a trailer — not unfinished.
+			inBash = false
+		}
 	}
-	return count
+	// If we exit with inBash still true, the last bash block has no trailer.
+	if inBash {
+		bashNoTrailer++
+	}
+	return bashNoTrailer
 }
