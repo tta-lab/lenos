@@ -92,7 +92,9 @@ func (errorReader) Read([]byte) (int, error) {
 	return 0, errors.New("stdin should not be consumed")
 }
 
-func TestAppendWithRetry(t *testing.T) {
+func TestAppendWithRetry_Success(t *testing.T) {
+	t.Parallel()
+
 	t.Run("success first try", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
@@ -125,34 +127,6 @@ func TestAppendWithRetry(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	// Exhaustion must NOT be parallel — the goroutine must hold the lock before
-	// appendWithRetry is called. Does not call t from the goroutine (avoids
-	// deadlock with t.Parallel mutex).
-	t.Run("exhaustion", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "session.md")
-		w := transcript.NewMdWriter(path)
-
-		started := make(chan struct{})
-		go func() {
-			f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
-			if err != nil {
-				return
-			}
-			// Acquire exclusive flock before signalling; kernel guarantees visibility.
-			flock(f, true)
-			close(started)
-			time.Sleep(50 * time.Millisecond)
-			funlock(f)
-			f.Close()
-		}()
-
-		<-started // ensure goroutine has the lock before we try
-		err := appendWithRetry(w, []byte("blocked\n"))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "lock contention")
-	})
-
 	t.Run("non retryable error returns immediately", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
@@ -174,7 +148,34 @@ func TestAppendWithRetry(t *testing.T) {
 	})
 }
 
+// Exhaustion must NOT be parallel — the goroutine must hold the lock before
+// appendWithRetry is called.
+func TestAppendWithRetry_Exhaustion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.md")
+	w := transcript.NewMdWriter(path)
+
+	started := make(chan struct{})
+	go func() {
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
+		if err != nil {
+			return
+		}
+		flock(f, true)
+		close(started)
+		time.Sleep(50 * time.Millisecond)
+		funlock(f)
+		f.Close()
+	}()
+
+	<-started
+	err := appendWithRetry(w, []byte("blocked\n"))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "lock contention")
+}
+
 func TestReadStdinIfPiped(t *testing.T) {
+	t.Parallel()
 	t.Run("pipes content through", func(t *testing.T) {
 		t.Parallel()
 		got, err := readStdinIfPiped(strings.NewReader("hello\nworld\n"))
