@@ -60,7 +60,7 @@ func TestMdRecorder_FullSession(t *testing.T) {
 	tok2, err := r.AgentBashAnnounce(ctx, sid,
 		"log info <<EOF\nexpiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After\nEOF")
 	require.NoError(t, err)
-	// log info prose written by cmd/log directly via RenderProse — simulate it.
+	// narrate prose written by cmd/narrate directly via RenderProse — simulate it.
 	require.NoError(t, r.writer.Append([]byte(RenderProse(
 		"expiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After"))))
 	require.NoError(t, r.BashResult(ctx, tok2, nil, 0, 1*time.Millisecond))

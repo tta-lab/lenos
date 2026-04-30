@@ -1,5 +1,5 @@
-// STDLIB ONLY — this file is imported by cmd/log (Phase 3) and must not pull
-// in db/sqlite/agent dependencies.
+// STDLIB ONLY — this file is imported by cmd/narrate (Phase 3) and must not
+// pull in db/sqlite/agent dependencies.
 
 package transcript
 
@@ -106,7 +106,7 @@ func RenderTurnEnd() string {
 	return "*(turn ended)*\n\n"
 }
 
-// RenderProse renders plain prose text (used by cmd/log for log info content).
+// RenderProse renders plain prose text (used by cmd/narrate for prose content).
 // Ensures a single trailing blank line; strips any existing trailing newlines
 // from the input first.
 func RenderProse(text string) string {

@@ -6,15 +6,14 @@ to a human-readable `.md` file as they happen.
 ## What's in here
 
 - **`format.go`** — pure render functions (stdlib-only). Imported by Phase 3
-  `cmd/log` to write prose without pulling in db/agent dependencies. Covers
-  frontmatter, user message, bash block, output block, success/failure
+  `cmd/narrate` to write prose without pulling in db/agent dependencies.
+  Covers frontmatter, user message, bash block, output block, success/failure
   trailers, runtime-event blockquote, prose, and turn-end.
 - **`writer.go`** + `writer_unix.go` / `writer_windows.go` — `MdWriter`
   appends to the `.md` with per-call open → flock → write → fsync → close.
-  Cross-process serialization between lenos main and `cmd/log` is via
-  exclusive advisory `flock(2)`. Returns `ErrConcurrentWrite` on lock
-  contention; `.md` write failures are logged via `slog.Warn` and return
-  nil (E8: render failure is non-halting).
+  Cross-process serialization between lenos main and `cmd/narrate` is via
+  exclusive advisory `flock(2)`. `AppendStrict` returns errors honestly for
+  cmd/narrate (E14); `Append` applies E8 swallow for lenos main.
 - **`recorder.go`** — the `Recorder` interface (the Phase 1 ↔ Phase 2 seam),
   `NoopRecorder` (zero-state default for standalone tests), and
   `MdRecorder` (concrete impl wiring formatter + writer).
@@ -50,12 +49,12 @@ composition root (Phase 5 `cmd/lenos`) supplies `transcript.NewMdRecorder(path)`
 The agent loop also writes the same events to sqlite via `internal/db` — the
 two destinations serve different consumers (model context vs. human render).
 
-### Phase 3 — log CLI (`cmd/log/`) *(planned)*
+### Phase 3 — narrate CLI (`cmd/narrate/`)
 
 Import `transcript` for `RenderProse`, `RenderRuntimeEvent`, etc. Use
-`MdWriter.Append` directly to write prose to the same `.md` lenos main is
-writing to. The flock contract (see Concurrency model in `doc.go`) is what
-keeps the two processes from interleaving partial writes.
+`MdWriter.AppendStrict` to write prose to the same `.md` lenos main is
+writing to. AppendStrict returns errors honestly (E14 fail-loud); the flock
+contract keeps the two processes from interleaving partial writes.
 
 ### Phase 4 — TUI *(planned)*
 

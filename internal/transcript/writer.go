@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -14,6 +15,13 @@ var ErrConcurrentWrite = errors.New("transcript: concurrent .md writer detected"
 // MdWriter appends to a .md file with per-write open/close and advisory flock
 // for cross-process synchronization. The mutex serializes calls within a single
 // process; flock serializes across processes.
+//
+// Two error policies:
+//
+//   - AppendStrict returns all I/O errors honestly. Callers that must not lose
+//     errors (e.g. cmd/narrate, E14) use this.
+//   - Append calls AppendStrict and applies E8: non-ErrConcurrentWrite errors are
+//     logged via slog.Warn and returned as nil. Lenos main uses Append.
 type MdWriter struct {
 	path string
 	mu   sync.Mutex // serializes writes within this process
@@ -24,18 +32,17 @@ func NewMdWriter(path string) *MdWriter {
 	return &MdWriter{path: path}
 }
 
-// Append opens the file with O_APPEND, acquires an exclusive advisory flock,
-// writes p, fsyncs, unlocks, and closes. On EWOULDBLOCK (concurrent holder),
-// returns ErrConcurrentWrite. On write error, logs to slog and returns nil
-// (E8: render failure is non-halting for the agent loop).
-func (w *MdWriter) Append(p []byte) error {
+// AppendStrict opens the file with O_APPEND, acquires an exclusive advisory flock,
+// writes p, fsyncs, unlocks, and closes. Returns all errors honestly:
+// os.OpenFile failure, ErrConcurrentWrite, write error, fsync error. Callers
+// that must not silently swallow errors use this (e.g. cmd/narrate, E14).
+func (w *MdWriter) AppendStrict(p []byte) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
-		slog.Warn("transcript: OpenFile failed", "path", w.path, "err", err)
-		return nil // E8: non-halting
+		return fmt.Errorf("open %s: %w", w.path, err)
 	}
 	defer f.Close()
 
@@ -45,14 +52,27 @@ func (w *MdWriter) Append(p []byte) error {
 	defer w.flockUnlock(f)
 
 	if _, err := f.Write(p); err != nil {
-		slog.Warn("transcript: write failed", "path", w.path, "err", err)
-		return nil // E8: non-halting
+		return fmt.Errorf("write %s: %w", w.path, err)
 	}
 
 	if err := f.Sync(); err != nil {
-		slog.Warn("transcript: fsync failed", "path", w.path, "err", err)
-		// Non-fatal: Sync is best-effort
+		return fmt.Errorf("fsync %s: %w", w.path, err)
 	}
 
+	return nil
+}
+
+// Append calls AppendStrict and applies E8: non-ErrConcurrentWrite errors are
+// logged via slog.Warn and returned as nil. Lenos main uses this for the
+// non-halting render contract.
+func (w *MdWriter) Append(p []byte) error {
+	err := w.AppendStrict(p)
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, ErrConcurrentWrite) {
+		return err
+	}
+	slog.Warn("transcript: append failed (non-halting)", "path", w.path, "err", err)
 	return nil
 }
