@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"charm.land/fantasy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/transcript"
 )
 
 // stubAgent implements SessionAgent for testing without a real coordinator setup.
@@ -94,6 +98,38 @@ func TestCoordinator_Run_StopReasonMapping(t *testing.T) {
 				"error should wrap the original cause")
 		})
 	}
+}
+
+// TestCoordinator_recorderFor_cachesPerSession verifies that calling
+// recorderFor with the same sessionID returns the same recorder (cached) and
+// different sessionIDs produce different recorders. Pre-creates the .md files
+// so the os.Stat guard skips Open (which would call into a nil fantasy model
+// on the stub agent).
+func TestCoordinator_recorderFor_cachesPerSession(t *testing.T) {
+	t.Parallel()
+
+	dataDir := filepath.Join(t.TempDir(), ".lenos")
+	sessionsDir := filepath.Join(dataDir, "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	for _, sid := range []string{"session-a", "session-b"} {
+		path := filepath.Join(sessionsDir, sid+".md")
+		require.NoError(t, os.WriteFile(path, nil, 0o644))
+	}
+
+	c := &coordinator{
+		dataDir:      dataDir,
+		recorders:    csync.NewMap[string, transcript.Recorder](),
+		currentAgent: &stubAgent{modelName: "test-model"},
+	}
+
+	r1a := c.recorderFor("session-a")
+	r1b := c.recorderFor("session-a")
+	r2 := c.recorderFor("session-b")
+
+	require.NotNil(t, r1a)
+	require.NotNil(t, r2)
+	assert.Same(t, r1a, r1b, "same sessionID should return cached recorder")
+	assert.NotSame(t, r1a, r2, "different sessionIDs should return different recorders")
 }
 
 // TestIsUnauthorized verifies that isUnauthorized correctly classifies

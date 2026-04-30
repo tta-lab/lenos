@@ -70,6 +70,11 @@ type SessionAgentCall struct {
 	// AllowedPaths is the read/write bound for the runner. The first entry
 	// also becomes the subprocess working directory.
 	AllowedPaths []client.AllowedPath
+
+	// Recorder is the per-session transcript recorder. When non-nil, the
+	// agent loop uses it instead of the agent-wide recorder so each session
+	// writes to its own .md file.
+	Recorder transcript.Recorder
 }
 
 type SessionAgent interface {
