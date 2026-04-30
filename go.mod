@@ -2,6 +2,8 @@ module github.com/tta-lab/lenos
 
 go 1.26.1
 
+replace charm.land/lipgloss/v2 => ./third_party/charm.land/lipgloss/v2
+
 require (
 	charm.land/bubbles/v2 v2.1.0
 	charm.land/bubbletea/v2 v2.0.2
