@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,8 @@ func buildHistory(msgs []message.Message) []fantasy.Message {
 	}
 	return history
 }
+
+const queuedPromptSep = "\n\n"
 
 // errorFinishFor returns an appropriate FinishReason and user-facing message
 // for a run error. This provides actionable feedback (e.g. "enable Copilot
@@ -157,6 +160,17 @@ runLoopReentry:
 			lastMeta = m
 			usageSeen = true
 		},
+		drainQueue: func() []string {
+			queued, ok := a.messageQueue.Take(call.SessionID)
+			if !ok || len(queued) == 0 {
+				return nil
+			}
+			prompts := make([]string, len(queued))
+			for i, q := range queued {
+				prompts[i] = q.Prompt
+			}
+			return prompts
+		},
 	}
 
 	_, runErr := runLoop(streamCtx, deps, history, call.Prompt)
@@ -180,14 +194,8 @@ runLoopReentry:
 			}
 		}
 
-		a.activeRequests.Del(call.SessionID)
-		cancel()
-
-		queuedMessages, ok := a.messageQueue.Get(call.SessionID)
-		if ok && len(queuedMessages) > 0 {
-			nextCall := queuedMessages[0]
-			a.messageQueue.Set(call.SessionID, queuedMessages[1:])
-			call = nextCall
+		if newCall, ok := a.tryReenter(call, cancel); ok {
+			call = newCall
 			goto runLoopReentry
 		}
 		return runErr
@@ -207,17 +215,11 @@ runLoopReentry:
 		})
 	}
 
-	a.activeRequests.Del(call.SessionID)
-	cancel()
-
-	queuedMessages, ok := a.messageQueue.Get(call.SessionID)
-	if !ok || len(queuedMessages) == 0 {
-		return nil
+	if newCall, ok := a.tryReenter(call, cancel); ok {
+		call = newCall
+		goto runLoopReentry
 	}
-	nextCall := queuedMessages[0]
-	a.messageQueue.Set(call.SessionID, queuedMessages[1:])
-	call = nextCall
-	goto runLoopReentry
+	return nil
 }
 
 // attachErrorFinish updates the most-recent assistant message in the session
@@ -243,4 +245,39 @@ func (a *sessionAgent) attachErrorFinish(ctx context.Context, sessionID string, 
 		}
 		return
 	}
+}
+
+// combineQueuedCalls collapses N queued calls into one re-entry call.
+// Prompts join with "\n\n"; runtime fields take from the FIRST queued call.
+// Caller must check len(calls) > 0 before invoking.
+func combineQueuedCalls(calls []SessionAgentCall) SessionAgentCall {
+	if len(calls) == 0 {
+		panic("combineQueuedCalls: calls must be non-empty")
+	}
+	first := calls[0]
+	if len(calls) == 1 {
+		return first
+	}
+	var sb strings.Builder
+	sb.WriteString(first.Prompt)
+	for _, c := range calls[1:] {
+		sb.WriteString(queuedPromptSep)
+		sb.WriteString(c.Prompt)
+	}
+	first.Prompt = sb.String()
+	return first
+}
+
+// tryReenter clears the session from activeRequests, cancels the streaming
+// context, and attempts to drain the message queue. Returns the re-entry call
+// and true if a re-entry should happen; returns (call, false) if the queue is
+// empty or absent so the caller can return/continue as appropriate.
+func (a *sessionAgent) tryReenter(call SessionAgentCall, cancel context.CancelFunc) (SessionAgentCall, bool) {
+	a.activeRequests.Del(call.SessionID)
+	cancel()
+	queued, ok := a.messageQueue.Take(call.SessionID)
+	if !ok || len(queued) == 0 {
+		return call, false
+	}
+	return combineQueuedCalls(queued), true
 }

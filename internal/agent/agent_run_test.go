@@ -236,3 +236,69 @@ func (m *blockingModel) GenerateObject(context.Context, fantasy.ObjectCall) (*fa
 func (m *blockingModel) StreamObject(context.Context, fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
 	panic("not used")
 }
+
+func TestCombineQueuedCalls_SingleCall(t *testing.T) {
+	t.Parallel()
+	calls := []SessionAgentCall{{
+		SessionID:  "s1",
+		Prompt:     "hello",
+		ProviderID: "test",
+	}}
+	out := combineQueuedCalls(calls)
+	require.Equal(t, "hello", out.Prompt)
+	require.Equal(t, "s1", out.SessionID)
+	require.Equal(t, "test", out.ProviderID)
+}
+
+func TestCombineQueuedCalls_ManyCallsJoinedWithSeparator(t *testing.T) {
+	t.Parallel()
+	calls := []SessionAgentCall{
+		{SessionID: "s1", Prompt: "first", ProviderID: "p1"},
+		{SessionID: "s1", Prompt: "second", ProviderID: "p2"},
+		{SessionID: "s1", Prompt: "third", ProviderID: "p3"},
+	}
+	out := combineQueuedCalls(calls)
+	require.Equal(t, "first\n\nsecond\n\nthird", out.Prompt)
+	require.Equal(t, "p1", out.ProviderID, "first call provider preserved")
+	require.Equal(t, "s1", out.SessionID)
+}
+
+func TestCombineQueuedCalls_EmptyPrecondition(t *testing.T) {
+	t.Parallel()
+	assert.Panics(t, func() {
+		_ = combineQueuedCalls(nil)
+	})
+}
+
+func TestRun_PostLoopDrainAllQueued(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "drain test")
+	require.NoError(t, err)
+
+	unblock := make(chan struct{})
+	bm := &blockingModel{unblock: unblock}
+	agent := testSessionAgent(env, bm, bm, "sys").(*sessionAgent)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	agent.activeRequests.Set(sess.ID, cancel)
+
+	for _, prompt := range []string{"q1", "q2", "q3"} {
+		err := agent.Run(ctx, SessionAgentCall{SessionID: sess.ID, Prompt: prompt, ProviderID: "test"})
+		require.NoError(t, err)
+	}
+	require.Equal(t, 3, agent.QueuedPrompts(sess.ID), "3 prompts should queue")
+
+	queued, ok := agent.messageQueue.Take(sess.ID)
+	require.True(t, ok)
+	require.Len(t, queued, 3)
+
+	combined := combineQueuedCalls(queued)
+	require.Equal(t, "q1\n\nq2\n\nq3", combined.Prompt)
+	require.Equal(t, sess.ID, combined.SessionID)
+
+	require.Equal(t, 0, agent.QueuedPrompts(sess.ID))
+
+	agent.activeRequests.Del(sess.ID)
+}

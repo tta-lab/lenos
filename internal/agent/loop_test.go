@@ -105,8 +105,8 @@ func (r *recordingRecorder) record(s string) {
 
 func (r *recordingRecorder) Open(context.Context, transcript.Meta) error { return nil }
 
-func (r *recordingRecorder) UserMessage(_ context.Context, _, _ string) error {
-	r.record("UserMessage")
+func (r *recordingRecorder) UserMessage(_ context.Context, _, text string) error {
+	r.record("UserMessage:" + truncate(text, 30))
 	return nil
 }
 
@@ -184,6 +184,10 @@ func intString(i int) string {
 // --- Helpers ---
 
 func newDeps(t *testing.T, model fantasy.LanguageModel, runner Runner, rec transcript.Recorder) (loopDeps, *mockMessageService) {
+	return newDepsWithDrain(t, model, runner, rec, nil)
+}
+
+func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, rec transcript.Recorder, drain func() []string) (loopDeps, *mockMessageService) {
 	t.Helper()
 	ms := newMockMessageService()
 	return loopDeps{
@@ -194,7 +198,20 @@ func newDeps(t *testing.T, model fantasy.LanguageModel, runner Runner, rec trans
 		sessionID:  "s-test",
 		sysPrompt:  "you are a test",
 		providerID: "test-provider-id",
+		drainQueue: drain,
 	}, ms
+}
+
+func cannedDrainer(rounds ...[]string) func() []string {
+	i := 0
+	return func() []string {
+		if i >= len(rounds) {
+			return nil
+		}
+		out := rounds[i]
+		i++
+		return out
+	}
 }
 
 // --- Tests ---
@@ -208,7 +225,7 @@ func TestRunLoop_BareExit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "do nothing")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{"TurnEnd"}, rec.calls)
+	assert.Equal(t, []string{"UserMessage:do nothing", "TurnEnd"}, rec.calls)
 
 	// One assistant row, finished EndTurn.
 	assistants := assistantsByOrder(ms)
@@ -230,8 +247,9 @@ func TestRunLoop_ExecThenExit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Recorder saw announce → result → turn-end.
+	// Recorder saw original prompt → announce → result → turn-end.
 	assert.Equal(t, []string{
+		"UserMessage:say hi",
 		"AgentBashAnnounce:echo hi",
 		"BashResult:hi\n:exit=0",
 		"TurnEnd",
@@ -252,8 +270,8 @@ func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// First call is the runtime event; final is TurnEnd.
-	require.Contains(t, rec.calls[0], "RuntimeEvent:normal:empty emit")
+	// Second call is the runtime event (first is original prompt); final is TurnEnd.
+	require.Contains(t, rec.calls[1], "RuntimeEvent:normal:empty emit")
 	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
 
 	// Observation persisted as User row.
@@ -272,8 +290,8 @@ func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// First call is the warn-level runtime event.
-	require.Contains(t, rec.calls[0], "RuntimeEvent:warn:invalid bash")
+	// Second call is the warn-level runtime event (first is original prompt).
+	require.Contains(t, rec.calls[1], "RuntimeEvent:warn:invalid bash")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
 	assert.Contains(t, users[0].Content().Text, "[runtime] your last response was not valid bash")
@@ -289,10 +307,10 @@ func TestRunLoop_BannedPatternIsAnnouncedAndSkipped(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Order: announce → skipped → … → turn-end.
-	require.Greater(t, len(rec.calls), 2)
-	assert.Contains(t, rec.calls[0], "AgentBashAnnounce:sed -i")
-	assert.Contains(t, rec.calls[1], "BashSkipped:warn:")
+	// Order: original prompt → announce → skipped → … → turn-end.
+	require.Greater(t, len(rec.calls), 3)
+	assert.Contains(t, rec.calls[1], "AgentBashAnnounce:sed -i")
+	assert.Contains(t, rec.calls[2], "BashSkipped:warn:")
 	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
 }
 
@@ -462,6 +480,171 @@ func (m *errorStreamModel) Stream(context.Context, fantasy.Call) (fantasy.Stream
 
 func (m *errorStreamModel) GenerateObject(context.Context, fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
 	panic("not used")
+}
+
+func TestRunLoop_OriginalPromptFiresUserMessage(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"exit"}}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "hello world")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	// Original prompt must be recorded before any model interaction.
+	assert.Equal(t, []string{"UserMessage:hello world", "TurnEnd"}, rec.calls)
+}
+
+func TestRunLoop_DrainQueueEmpty_NoOp(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"echo hi", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("hi\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, runner, rec, cannedDrainer())
+
+	stop, err := runLoop(context.Background(), deps, nil, "test prompt")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{
+		"UserMessage:test prompt",
+		"AgentBashAnnounce:echo hi",
+		"BashResult:hi\n:exit=0",
+		"TurnEnd",
+	}, rec.calls)
+	// No drained rows: original prompt is recorded but not persisted by runLoop.
+	assert.Empty(t, messagesByRole(ms, message.User))
+}
+
+func TestRunLoop_DrainOneOnExec(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"echo hi", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("hi\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, runner, rec, cannedDrainer([]string{"follow up"}))
+
+	stop, err := runLoop(context.Background(), deps, nil, "original")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{
+		"UserMessage:original",
+		"AgentBashAnnounce:echo hi",
+		"BashResult:hi\n:exit=0",
+		"UserMessage:follow up",
+		"TurnEnd",
+	}, rec.calls)
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	assert.Equal(t, "follow up", users[0].Content().Text)
+}
+
+func TestRunLoop_DrainManyPreservesOrder(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"echo hi", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("hi\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, runner, rec, cannedDrainer([]string{"m1", "m2", "m3"}))
+
+	stop, err := runLoop(context.Background(), deps, nil, "original")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{
+		"UserMessage:original",
+		"AgentBashAnnounce:echo hi",
+		"BashResult:hi\n:exit=0",
+		"UserMessage:m1",
+		"UserMessage:m2",
+		"UserMessage:m3",
+		"TurnEnd",
+	}, rec.calls)
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 3)
+	assert.Equal(t, "m1", users[0].Content().Text)
+	assert.Equal(t, "m2", users[1].Content().Text)
+	assert.Equal(t, "m3", users[2].Content().Text)
+}
+
+func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"   ", "exit"}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
+
+	stop, err := runLoop(context.Background(), deps, nil, "noop")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	// order: original prompt, runtime event, drained followup, turn-end.
+	require.Contains(t, rec.calls[1], "RuntimeEvent:normal:empty emit")
+	require.Contains(t, rec.calls[2], "UserMessage:q1")
+	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 2)
+	assert.True(t, strings.HasPrefix(users[0].Content().Text, "[runtime]"))
+	assert.Equal(t, "q1", users[1].Content().Text)
+}
+
+func TestRunLoop_DrainOnInvalidBash(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"if true then", "exit"}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	require.Contains(t, rec.calls[1], "RuntimeEvent:warn:invalid bash")
+	require.Contains(t, rec.calls[2], "UserMessage:q1")
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 2)
+	assert.Contains(t, users[0].Content().Text, "[runtime]")
+	assert.Equal(t, "q1", users[1].Content().Text)
+}
+
+func TestRunLoop_DrainOnBanned(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{`sed -i "s/a/b/" f.txt`, "exit"}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	// order: original prompt, announce, skipped, drained, turn-end.
+	require.Contains(t, rec.calls[1], "AgentBashAnnounce:sed -i")
+	require.Contains(t, rec.calls[2], "BashSkipped:warn:")
+	require.Contains(t, rec.calls[3], "UserMessage:q1")
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 2)
+	assert.Contains(t, users[0].Content().Text, "[runtime]")
+	assert.Equal(t, "q1", users[1].Content().Text)
+}
+
+func TestRunLoop_DrainOnTimeout(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"sleep 5", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Err: context.DeadlineExceeded, Duration: time.Second * 120},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, runner, rec, cannedDrainer([]string{"q1"}))
+
+	stop, err := runLoop(context.Background(), deps, nil, "run slow")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	// order: original prompt, announce, bash result, timeout event, drained, turn-end.
+	require.Contains(t, rec.calls[1], "AgentBashAnnounce:sleep 5")
+	require.Contains(t, rec.calls[2], "BashResult:")
+	require.Contains(t, rec.calls[3], "RuntimeEvent:warn:timeout")
+	require.Contains(t, rec.calls[4], "UserMessage:q1")
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 2)
+	assert.Contains(t, users[0].Content().Text, "[runtime]")
+	assert.Equal(t, "q1", users[1].Content().Text)
 }
 
 func (m *errorStreamModel) StreamObject(context.Context, fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
