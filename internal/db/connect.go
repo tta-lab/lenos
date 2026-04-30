@@ -21,9 +21,13 @@ var pragmas = map[string]string{
 	"busy_timeout":  "30000",
 }
 
-// gooseMu serializes goose global state operations (SetDialect, Up) to avoid
-// data races in the goose library when tests run in parallel with -race.
+// gooseMu serializes goose global state operations to avoid data races in the
+// goose library when tests run in parallel with -race. goose uses package-level
+// globals for table creation and dialect state.
 var gooseMu sync.Mutex
+
+// gooseInitMu ensures goose is only initialized once.
+var gooseInitMu sync.Once
 
 // Connect opens a SQLite database connection and runs migrations.
 func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
@@ -42,10 +46,12 @@ func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	goose.SetBaseFS(FS)
-
 	gooseMu.Lock()
 	defer gooseMu.Unlock()
+
+	gooseInitMu.Do(func() {
+		goose.SetBaseFS(FS)
+	})
 
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		slog.Error("Failed to set dialect", "error", err)
