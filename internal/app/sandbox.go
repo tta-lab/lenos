@@ -22,6 +22,7 @@ const sandboxHealthProbeTimeout = 1 * time.Second
 // TEMENOS_SOCKET_PATH → ~/.temenos/daemon.sock).
 func initSandboxClient(ctx context.Context, opts *config.Options) (*client.Client, error) {
 	if opts == nil {
+		slog.Warn("sandbox config unavailable; falling back to LocalRunner")
 		return nil, nil
 	}
 	if opts.Sandbox != nil && !*opts.Sandbox {

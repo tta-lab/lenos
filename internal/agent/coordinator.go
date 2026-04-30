@@ -275,7 +275,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 	}
 
 	useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
-	// sandboxClient is wired at startup by app.InitCoderAgent. When nil,
+	// sandboxClient is wired at startup by app.initSandboxClient. When nil,
 	// resolveRunner falls back to LocalRunner with a per-call warning
 	// (see agent_run.go). The app-side three-state policy (default/explicit/
 	// disabled) decides whether nil here is acceptable.

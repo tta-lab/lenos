@@ -69,4 +69,15 @@ func TestSandboxIntegration_PathEnforcement(t *testing.T) {
 			"sandbox MUST block out-of-bounds read; got exit=0 stdout=%q — this means sandbox isolation is BROKEN",
 			resp.Stdout)
 	})
+
+	t.Run("write escaping AllowedPaths fails", func(t *testing.T) {
+		resp, err := c.Run(runCtx, client.RunRequest{
+			Command:      "echo secret > /tmp/sandbox_test_escape_marker",
+			AllowedPaths: []client.AllowedPath{{Path: tmp, ReadOnly: false}},
+			Timeout:      5,
+		})
+		require.NoError(t, err, "client.Run roundtrip should succeed")
+		require.NotEqual(t, 0, resp.ExitCode,
+			"sandbox MUST block write outside AllowedPaths; got exit=0 — isolation is BROKEN")
+	})
 }

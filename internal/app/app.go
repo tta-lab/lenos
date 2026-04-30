@@ -227,7 +227,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	}
 
 	// force update of agent models before running
-	app.AgentCoordinator.UpdateModels(ctx)
+	_ = app.AgentCoordinator.UpdateModels(ctx) // best-effort; model list refresh failure is non-fatal
 
 	defer stopSpinner()
 
