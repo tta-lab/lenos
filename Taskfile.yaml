@@ -40,20 +40,35 @@ tasks:
     env:
       GOEXPERIMENT: null
 
+  build:narrate:
+    desc: Build the narrate CLI binary
+    cmds:
+      - "go build -v -o narrate{{exeExt}} ./cmd/narrate"
+    sources:
+      - cmd/narrate/**/*.go
+      - internal/transcript/**/*.go
+      - go.mod
+    generates:
+      - narrate{{exeExt}}
+
   build:
     desc: Run build
     vars:
       LDFLAGS: '{{if .VERSION}}-ldflags="-X github.com/tta-lab/lenos/internal/version.Version={{.VERSION}}"{{end}}'
     cmds:
       - "go build -v {{if .RACE}}-race{{end}} {{.LDFLAGS}} ."
+      - task: build:narrate
     sources:
       - ./**/*.go
       - go.mod
       - internal/agent/**/*.md
       - internal/agent/**/*.md.tpl
       - internal/agent/hyper/provider.json
+      - cmd/narrate/**/*.go
+      - internal/transcript/**/*.go
     generates:
       - lenos{{exeExt}}
+      - narrate{{exeExt}}
 
   run:
     desc: Run build
@@ -120,12 +135,20 @@ tasks:
     cmds:
       - task: fetch-tags
       - go install {{.LDFLAGS}} -v .
+      - go install -v ./cmd/narrate
     sources:
       - ./**/*.go
       - go.mod
       - internal/agent/**/*.md
       - internal/agent/**/*.md.tpl
       - internal/agent/hyper/provider.json
+      - cmd/narrate/**/*.go
+      - internal/transcript/**/*.go
+
+  test:integration:
+    desc: Run integration tests (requires task build:narrate)
+    cmds:
+      - go test -v -tags=integration ./cmd/narrate/...
 
   profile:cpu:
     desc: 10s CPU profile

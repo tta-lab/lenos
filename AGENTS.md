@@ -14,6 +14,8 @@ The module path is `github.com/tta-lab/lenos`.
 
 ```
 main.go                            CLI entry point (cobra via internal/cmd)
+cmd/
+  narrate/                         narrate CLI binary — bash subprocesses use this to append prose to the session .md transcript (Phase 3, bash-first agent loop)
 internal/
   app/app.go                       Top-level wiring: DB, config, agents, events
   cmd/                             CLI commands (root, run, login, models, stats, sessions)
@@ -35,7 +37,7 @@ internal/
     templates/                     System prompt templates (coder.md.tpl, task.md.tpl, etc.)
     tools/                         All built-in tools (bash, edit, view, grep, glob, etc.)
   session/session.go               Session CRUD backed by SQLite (legacy logos service; superseded by transcript/ in bash-first rewrite, removed in Phase 5)
-  transcript/                      Bash-first session .md render artifact (Phase 2). Pure stdlib formatter + flock-guarded append writer + Recorder seam consumed by the agent loop
+  transcript/                      Bash-first session .md render artifact. Pure stdlib formatter, flock-guarded append writer (consumed by lenos main and cmd/narrate via AppendStrict), Recorder seam consumed by the agent loop
   message/                         Message model and content types
   db/                              SQLite via sqlc, with migrations
     sql/                           Raw SQL queries (consumed by sqlc)
