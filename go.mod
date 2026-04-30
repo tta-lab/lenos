@@ -42,6 +42,7 @@ require (
 	github.com/jordanella/go-ansi-paintbrush v0.0.0-20240728195301-b7ad996ecf3d
 	github.com/lucasb-eyer/go-colorful v1.4.0
 	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/go-runewidth v0.0.21
 	github.com/ncruces/go-sqlite3 v0.33.2
 	github.com/nxadm/tail v1.4.11
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
@@ -61,6 +62,11 @@ require (
 	golang.org/x/text v0.35.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	modernc.org/sqlite v1.48.0
+)
+
+require (
+	github.com/fsnotify/fsnotify v1.9.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -101,7 +107,6 @@ require (
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/esiqveland/notify v0.13.3 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.8.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
@@ -131,7 +136,6 @@ require (
 	github.com/kaptinlin/messageformat-go v0.4.18 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/mattn/go-runewidth v0.0.21 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
@@ -181,7 +185,6 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
