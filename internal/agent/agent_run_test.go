@@ -386,3 +386,78 @@ func TestRun_AutoCompactSummarizeErrorPropagates(t *testing.T) {
 	require.NoError(t, gerr)
 	assert.Empty(t, persisted.SummaryMessageID, "no summary should be set on Summarize failure")
 }
+
+func TestRun_AutoCompactSummarizeSucceedsButReentryFails(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "auto-compact reentry-fail test")
+	require.NoError(t, err)
+
+	// Call sequence:
+	// [0] "trigger" — onUsage fires, returns true → runLoop returns stopShouldSummarize
+	// [1] "summary" — consumed by Summarize()
+	// [2] "do work" — re-entry: onUsage fires again (200k), returns true, runLoop returns
+	// [3] "err" — re-entry: errOn=[3] causes Stream to yield error
+	model := &scriptedModel{
+		emits: []string{"trigger", "summary", "do work", "err"},
+		usages: []fantasy.Usage{
+			{InputTokens: 200_000, OutputTokens: 0},
+			{InputTokens: 0, OutputTokens: 0},
+			{InputTokens: 200_000, OutputTokens: 0},
+			{InputTokens: 0, OutputTokens: 0},
+		},
+		errOn: []int{3}, // error on 4th stream call (re-entry compact-trigger's next step)
+	}
+
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+	agent.largeModel.Set(Model{
+		Model:      model,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200_001, DefaultMaxTokens: 1024},
+	})
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID:  sess.ID,
+		Prompt:     "go",
+		ProviderID: "test",
+	})
+	// Re-entry's second onUsage fire → runLoop returns → second compact attempt.
+	// But errOn=[3] causes Stream error on the step after that trigger.
+	require.Error(t, err, "re-entry stream error should propagate from Run")
+
+	persisted, gerr := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, gerr)
+	assert.NotEmpty(t, persisted.SummaryMessageID, "summary should be set before re-entry error")
+}
+
+func TestRun_DisableAutoSummarizePreventsCompact(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "disable auto-summarize test")
+	require.NoError(t, err)
+
+	model := &scriptedModel{
+		emits: []string{"exit"},
+		usages: []fantasy.Usage{
+			{InputTokens: 200_000, OutputTokens: 0},
+		},
+	}
+
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+	agent.largeModel.Set(Model{
+		Model:      model,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200_001, DefaultMaxTokens: 1024},
+	})
+	// Disable auto-summarize even though token count would trigger it.
+	agent.disableAutoSummarize = true
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID:  sess.ID,
+		Prompt:     "go",
+		ProviderID: "test",
+	})
+	require.NoError(t, err)
+
+	persisted, gerr := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, gerr)
+	assert.Empty(t, persisted.SummaryMessageID, "no summary should be set when disableAutoSummarize is true")
+}

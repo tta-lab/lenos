@@ -47,7 +47,9 @@ type loopDeps struct {
 	providerID string // config provider ID (for assistant message Provider field)
 	env        map[string]string
 	paths      []client.AllowedPath
-	onUsage    func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool
+	// onUsage is called after each step with usage metrics.
+	// Return true to request an early stop with stopShouldSummarize.
+	onUsage func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool
 }
 
 // stopReason explains why runLoop returned. The caller maps it to the right
