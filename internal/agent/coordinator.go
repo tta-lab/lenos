@@ -153,9 +153,9 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return err
 	}
 
-	// Attachments are not surfaced in the bash-first loop yet. Phase 5
-	// (prompt corpus migration) will decide whether to inline file content
-	// in the user message or expose a `lenos attach` CLI inside the sandbox.
+	// Attachments are not surfaced in the bash-first loop. See task
+	// 8f7c6086 (lenos: wire attachments into bash-first loop, decide
+	// option A inline vs option B `lenos attach` CLI).
 	_ = attachments
 
 	model := c.currentAgent.Model()
@@ -273,10 +273,10 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 
 	var sandboxClient *client.Client
 	useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
-	// Phase 1 keeps the temenos client construction out-of-scope: when the
-	// sandbox is enabled but no explicit client is wired in, the loop logs
-	// the fallback and runs LocalRunner. Phase 2/3 will provide a temenos
-	// client factory that the coordinator can pass through.
+	// SandboxClient is not yet constructed: when the sandbox flag is set
+	// but no client is wired, the loop logs the fallback and runs
+	// LocalRunner. Wiring a temenos client factory is task 354e3e12
+	// (lenos: wire temenos client factory into coordinator).
 
 	return SessionAgentCall{
 		SessionID:       sessionID,

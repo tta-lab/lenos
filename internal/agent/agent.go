@@ -128,9 +128,9 @@ type SessionAgentOptions struct {
 	Sessions             session.Service
 	Messages             message.Service
 	Notify               pubsub.Publisher[notify.Notification]
-	// Recorder is the transcript seam (Phase 1) wired to the .md writer
-	// (Phase 2). When nil, the agent uses transcript.NoopRecorder so
-	// Phase 1 runs standalone.
+	// Recorder is the transcript seam wired to the .md writer. When nil,
+	// the agent uses transcript.NoopRecorder so standalone tests run
+	// without writing a transcript artifact.
 	Recorder transcript.Recorder
 }
 
