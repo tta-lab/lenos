@@ -25,9 +25,9 @@ const (
 // classify() trims the input first and only this regex is applied.
 var exitRe = regexp.MustCompile(`^\s*exit(\s+-?\d+)?\s*$`)
 
-// blockedCmdPatterns mirrors logos validate.go (sed -i / perl -i guards).
-// CC native sandbox is the dominant defense; this is a thin nudge to push
-// agents toward `src edit` for in-place file modifications.
+// blockedCmdPatterns guards in-place file edits (sed -i / perl -i). CC native
+// sandbox is the dominant defense; this is a thin nudge to push agents toward
+// `src edit` for in-place file modifications.
 var blockedCmdPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?m)(?:^|&&|\|\||;|\|)\s*sed\s+(?:-[a-zA-Z]*i|--in-place)`),
 	regexp.MustCompile(`(?m)(?:^|&&|\|\||;|\|)\s*perl\s+(?:-[a-zA-Z]*i)`),

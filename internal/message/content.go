@@ -482,9 +482,9 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 
 // FormatResults renders a slice of completed CommandContent as the
 // `<result>...</result>` text the next-turn user message carries back to the
-// model. Mirrors the historic logos.formatOneResult shape so existing prompt
-// content / model expectations don't drift. Stdout/stderr are HTML-escaped
-// so a literal `</result>` inside output cannot close the wrapper early.
+// model. Stdout and stderr are HTML-escaped so a literal `</result>` inside
+// output cannot close the wrapper early. The envelope is preserved so
+// providers cached on older sessions don't re-train.
 func FormatResults(results []CommandContent) string {
 	if len(results) == 0 {
 		return ""

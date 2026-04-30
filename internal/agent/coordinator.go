@@ -119,7 +119,7 @@ func NewCoordinator(
 		Recorder:             recorder,
 	})
 
-	// Build system prompt: logos base (cmd block format, env, commands) + lenos post-template.
+	// Build system prompt: bash-first base (env + output protocol + available commands) + cmd-git.tpl (git status + attribution) + coder post-template (lenos style and conventions).
 	c.systemPrompt, err = SystemPrompt(
 		ctx,
 		c.cfg.WorkingDir(),

@@ -34,8 +34,7 @@ package transcript
 
 // Relationship to internal/session/
 //
-// internal/session/ is the OLD logos-based session service (sqlite CRUD via
-// session.Service interface, used pre-bashfirst). internal/transcript/ is the
-// NEW bash-first .md render artifact. They coexist until Phase 5 deletes the
-// old one. The agent loop (Phase 1) writes to BOTH — sqlite directly via
-// internal/db, and .md via transcript.Recorder.
+// internal/session/ holds the SQLite session + Todo CRUD service consumed by
+// both the agent loop and the chat UI. internal/transcript/ is the human-facing
+// .md render artifact written by lenos main + cmd/narrate. The two have
+// non-overlapping responsibilities and both stay.

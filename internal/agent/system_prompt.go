@@ -13,9 +13,9 @@ var systemPromptTemplate string
 // systemPromptTmpl is parsed once at init so syntax errors surface at startup.
 var systemPromptTmpl = template.Must(template.New("system").Parse(systemPromptTemplate))
 
-// CommandDoc describes a command available to the agent. The fields mirror
-// the legacy logos.CommandDoc layout so existing cmd-*.md content renders
-// unchanged.
+// CommandDoc describes a command available to the agent. Filename convention
+// cmd-<name>.md → CommandDoc.Name = "<name>". Field names mirror the cmd-*.md
+// format (name, summary, help).
 type CommandDoc struct {
 	Name    string // command name, e.g. "url", "web", "src"
 	Summary string // one-line description

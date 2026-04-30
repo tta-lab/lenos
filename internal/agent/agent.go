@@ -1,10 +1,9 @@
 // Package agent is the core orchestration layer for Lenos AI agents.
 //
 // It provides session-based AI agent functionality for managing
-// conversations, tool execution, and message handling. It coordinates
-// interactions between language models, messages, sessions, and tools while
-// handling features like automatic summarization, queuing, and token
-// management.
+// conversations and message handling. It coordinates interactions between
+// language models, messages, and sessions while handling features like
+// automatic summarization, queuing, and token management.
 package agent
 
 import (
@@ -41,8 +40,8 @@ var userAgent = fmt.Sprintf("Lenos/%s (https://github.com/tta-lab/lenos)", versi
 var summaryPrompt []byte
 
 // SessionAgentCall carries one user-initiated turn through the agent loop.
-// LogosCfg is gone in the bash-first rewrite; the loop now needs the runtime
-// pieces it used to derive from logos.Config directly.
+// It bundles the session ID, prompt, and per-turn runtime context (provider
+// options, sandbox env, allowed paths).
 type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
@@ -65,9 +64,7 @@ type SessionAgentCall struct {
 	Sandbox       bool
 	SandboxClient *client.Client
 
-	// Env is the explicit environment overlay for each subprocess. The loop
-	// sets LENOS_SESSION_ID / LENOS_DATA_DIR on top of this so log CLI in
-	// Phase 3 can resolve the .md path.
+	// Env is the explicit environment overlay for each subprocess.
 	Env map[string]string
 
 	// AllowedPaths is the read/write bound for the runner. The first entry
