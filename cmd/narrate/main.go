@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/lenos/internal/transcript"
 )
 
 var rootCmd = &cobra.Command{
@@ -35,6 +36,22 @@ For visual emphasis, emit markdown directly:
 	Args:          cobra.ArbitraryArgs,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := resolveSessionPath()
+		if err != nil {
+			return err
+		}
+		text, err := resolveInput(args, cmd.InOrStdin())
+		if err != nil {
+			return err
+		}
+		rendered := transcript.RenderProse(text)
+		w := transcript.NewMdWriter(path)
+		if err := appendWithRetry(w, []byte(rendered)); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+		return nil
+	},
 }
 
 func main() {
