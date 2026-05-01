@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -47,6 +48,9 @@ type App struct {
 	twPoller  *TwPoller
 	gitPoller *GitPoller
 	notify    *NotificationDispatcher
+
+	help        help.Model
+	helpVisible bool
 
 	width, height     int
 	keys              KeyMap
@@ -93,6 +97,7 @@ func New(com *common.Common, sessionID string, continueLast bool, triggerMessage
 		styles:         styles,
 		keys:           DefaultKeyMap(),
 		viewport:       NewViewport(100, 100, styles),
+		help:           help.New(),
 		triggerMessage: triggerMessage,
 	}
 
@@ -323,13 +328,14 @@ func (a *App) handleKey(m tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.watchErr = nil
 		a.renderContent(a.width)
 		return a, a.watcher.Listen()
-	case isCtrlD(m):
+	case key.Matches(m, km.HeaderToggle):
 		a.header.Toggle()
 		return a, nil
-	case isCtrlT(m):
+	case key.Matches(m, km.BottomToggle):
 		a.bottomBar.Toggle()
 		return a, nil
 	case key.Matches(m, km.Help):
+		a.helpVisible = !a.helpVisible
 		return a, nil
 	case key.Matches(m, km.Down):
 		a.viewport.ScrollDown()
@@ -362,9 +368,6 @@ func (a *App) handleKey(m tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	return a, nil
 }
-
-func isCtrlD(m tea.KeyMsg) bool { return m.String() == "ctrl+d" }
-func isCtrlT(m tea.KeyMsg) bool { return m.String() == "ctrl+t" }
 
 // refreshQueue reads the current queue state from the workspace and pushes
 // it into the BottomBar. Called from the Tick handler — the workspace call
@@ -413,6 +416,10 @@ func (a *App) View() tea.View {
 	rows := []string{topRow, sep, viewportView}
 	if br := a.bottomBar.Render(); br != "" {
 		rows = append(rows, br)
+	}
+	if a.helpVisible {
+		a.help.SetWidth(a.width)
+		rows = append(rows, a.help.FullHelpView(a.keys.FullHelp()))
 	}
 	rows = append(rows, footerView)
 	if ip := a.input.Render(); ip != "" {
