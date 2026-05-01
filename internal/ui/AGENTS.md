@@ -1,9 +1,4 @@
-# UI Library Instructions
-
-`internal/ui/` is a **library of reusable TUI primitives** consumed by the
-composition root in `internal/tui/`. The old `model/` composition root has
-been deleted as of 680e5b5d Step 13; the packages here remain because the
-new `tui.App` imports them.
+# UI Development Instructions
 
 ## General Guidelines
 
@@ -16,48 +11,61 @@ new `tui.App` imports them.
   the state in the main `Update` loop.
 - Use the `github.com/charmbracelet/x/ansi` package for any string
   manipulation that might involve ANSI codes. Do not manipulate ANSI strings
-  at byte level. Some useful functions: `ansi.Cut`, `ansi.StringWidth`,
-  `ansi.Strip`, `ansi.Truncate`.
+  at byte level! Some useful functions:
+  - `ansi.Cut`
+  - `ansi.StringWidth`
+  - `ansi.Strip`
+  - `ansi.Truncate`
 
 ## Architecture
 
-### Library role
+### Rendering Pipeline
 
-`internal/tui` is the only Bubble Tea model in the binary. The packages in
-this tree (`dialog/`, `completions/`, `chat/`, `attachments/`, `image/`,
-`notification/`, `styles/`, `anim/`, `util/`, `common/`, `logo/`,
-`diffview/`, `list/`) expose stateful renderers and helpers that the
-composition root composes:
+The UI uses a **hybrid rendering** approach:
 
-- **Dialog stack** (`dialog/`) — overlay system for command palette,
-  session/model/filepicker pickers, OAuth flows, quit confirmation.
-- **Completions** (`completions/`) — slash-command + @-mention popup.
-- **Chat items** (`chat/messages.go`, `chat/user.go`, `chat/generic.go`,
-  `chat/assistant.go`) — `MessageItem` implementations consumed by
-  `chat.ExtractMessageItems` (used by `lenos session show`) and by future
-  inline rendering.
-- **Attachments** (`attachments/`) — chip row above the input editor.
-- **Image** (`image/`) — terminal image rendering (Kitty graphics).
-- **Notification** (`notification/`) — `Backend` interface +
-  `NativeBackend` (beeep) and `NoopBackend` implementations. Wrapped by
-  `tui.NotificationDispatcher`.
-- **Styles** (`styles/`) — central `Styles` struct passed via
-  `*common.Common`.
-- **Common** (`common/`) — `Common` struct holds `Workspace` + `Styles`;
-  threaded through library components.
+1. **Screen-based (Ultraviolet)**: The top-level `UI` model creates a
+   `uv.ScreenBuffer`, and components draw into sub-regions using
+   `uv.NewStyledString(str).Draw(scr, rect)`. Layout is rectangle-based via
+   a `uiLayout` struct with fields like `layout.header`, `layout.main`,
+   `layout.editor`, `layout.pills`, `layout.status`.
+2. **String-based**: Sub-components like `list.List` and `completions` render
+   to strings, which are painted onto the screen buffer.
+3. **`View()`** creates the screen buffer, calls `Draw()`, then
+   `canvas.Render()` flattens it to a string for Bubble Tea.
 
-### Centralized message handling
+### Main Model (`model/ui.go`)
 
-Sub-components do not participate in the standard Elm architecture message
-loop. They are stateful structs with imperative methods that the main
-model calls directly:
+The `UI` struct is the top-level Bubble Tea model. Key fields:
 
-- **`list.List`** has no `Update` method at all. The composition root
+- `width`, `height` — terminal dimensions
+- `layout uiLayout` — computed layout rectangles
+- `state uiState` — `uiOnboarding | uiInitialize | uiLanding | uiChat`
+- `focus uiFocusState` — `uiFocusNone | uiFocusEditor | uiFocusMain`
+- `chat *Chat` — wraps `list.List` for the message view
+- `textarea textarea.Model` — the input editor
+- `dialog *dialog.Overlay` — stacked dialog system
+- `completions`, `attachments` — sub-components
+
+Keep most logic and state here. This is where:
+
+- Message routing happens (giant `switch msg.(type)` in `Update`)
+- Focus and UI state is managed
+- Layout calculations are performed
+- Dialogs are orchestrated
+
+### Centralized Message Handling
+
+The `UI` model is the **sole Bubble Tea model**. Sub-components (`Chat`,
+`List`, `Attachments`, `Completions`, etc.) do not participate in the
+standard Elm architecture message loop. They are stateful structs with
+imperative methods that the main model calls directly:
+
+- **`Chat`** and **`List`** have no `Update` method at all. The main model
   calls targeted methods like `HandleMouseDown()`, `ScrollBy()`,
   `SetMessages()`, `Animate()`.
 - **`Attachments`** and **`Completions`** have non-standard `Update`
-  signatures (e.g., returning `bool` for "consumed") that act as guards,
-  not as full Bubble Tea models.
+  signatures (e.g., returning `bool` for "consumed") that act as guards, not
+  as full Bubble Tea models.
 
 When writing new components, follow this pattern:
 
@@ -65,6 +73,23 @@ When writing new components, follow this pattern:
 - Return `tea.Cmd` from methods when side effects are needed.
 - Handle rendering via `Render(width int) string` or
   `Draw(scr uv.Screen, area uv.Rectangle)`.
+- Let the main `UI.Update()` decide when and how to call into the component.
+
+### Chat View (`model/chat.go`)
+
+The `Chat` struct wraps a `list.List` with an ID-to-index map, mouse
+tracking (drag, double/triple click), animation management, and a `follow`
+flag for auto-scroll. It bridges screen-based and string-based rendering:
+
+```go
+func (m *Chat) Draw(scr uv.Screen, area uv.Rectangle) {
+    uv.NewStyledString(m.list.Render()).Draw(scr, area)
+}
+```
+
+Individual chat items in `chat/` should be simple renderers that cache their
+output and invalidate when data changes (see `cachedMessageItem` in
+`chat/messages.go`).
 
 ## Key Patterns
 
@@ -94,20 +119,27 @@ Key interface locations:
 
 ### Tool Renderers
 
-Each tool has a dedicated renderer in `chat/`. `NewToolMessageItem` in
-`chat/tools.go` is the central factory that routes tool names to specific
-types:
+Each tool has a dedicated renderer in `chat/`. The `ToolRenderer` interface
+requires:
+
+```go
+RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string
+```
+
+`NewToolMessageItem` in `chat/tools.go` is the central factory that routes
+tool names to specific types:
 
 | File                  | Tools rendered                                 |
 | --------------------- | ---------------------------------------------- |
 | `chat/bash.go`        | Bash, JobOutput, JobKill                       |
 | `chat/write.go`       | Write                                          |
 | `chat/generic.go`     | Fallback for unrecognized tools                |
+| `chat/assistant.go`   | Assistant messages (thinking, content, errors) |
 | `chat/user.go`        | User messages (input + attachments)            |
 
 ### Styling
 
-- All styles are defined in `styles/styles.go` (large `Styles` struct with
+- All styles are defined in `styles/styles.go` (massive `Styles` struct with
   nested groups for Header, Pills, Dialog, Help, etc.).
 - Access styles via `*common.Common` passed to components.
 - Use semantic color fields rather than hardcoded colors.
@@ -123,11 +155,13 @@ types:
 
 ### Shared Context
 
-The `common.Common` struct holds `Workspace` and `*styles.Styles`. Thread
-it through all components that need access to workspace state or styles.
+The `common.Common` struct holds `*app.App` and `*styles.Styles`. Thread it
+through all components that need access to app state or styles.
 
 ## File Organization
 
+- `model/` — Main UI model and major sub-models (chat, header,
+  status, pills, session, onboarding, keys, etc.)
 - `chat/` — Chat message item types and tool renderers
 - `dialog/` — Dialog implementations (models, sessions, commands,
   permissions, API key, OAuth, filepicker, reasoning, quit)
@@ -138,19 +172,24 @@ it through all components that need access to workspace state or styles.
 - `attachments/` — File attachment management
 - `styles/` — All style definitions, color tokens, icons
 - `diffview/` — Unified and split diff rendering with syntax highlighting
-- `anim/` — Animated spinner
+- `anim/` — Animated spinnner
 - `image/` — Terminal image rendering (Kitty graphics)
 - `logo/` — Logo rendering
-- `notification/` — Desktop notification backends
 - `util/` — Small shared utilities and message types
 
 ## Common Gotchas
 
 - Always account for padding/borders in width calculations.
 - Use `tea.Batch()` when returning multiple commands.
-- Pass `*common.Common` to components that need styles or workspace access.
-- When writing `tea.Cmd`s, prefer creating methods on the consumer model
-  rather than inline closures so behavior is testable.
-- `list.List` only renders visible items (lazy). No render cache exists
+- Pass `*common.Common` to components that need styles or app access.
+- When writing tea.Cmd's prefer creating methods in the model instead of writing inline functions.
+- The `list.List` only renders visible items (lazy). No render cache exists
   at the list level — items should cache internally if rendering is
   expensive.
+- Dialog messages are intercepted first in `Update` before other routing.
+- Focus state determines key event routing: `uiFocusEditor` sends keys to
+  the textarea, `uiFocusMain` sends them to the chat list.
+
+**Note**: The layout is always compact. The compact header shows the sandbox
+status indicator (green when enabled, red when disabled), context usage
+percentage, and a toggle hint for the session details panel.

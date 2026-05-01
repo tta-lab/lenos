@@ -1,25 +1,18 @@
-// Package tui is the composition root for the interactive lenos TUI.
+// Package tui is a pure-.md-viewer Bubble Tea TUI for bash-first sessions.
 //
-// App owns the chrome — header, viewport, bottom bar, footer, help overlay,
-// and input pane — plus the lifecycle coordinators: a fsnotify Watcher over
-// the session transcript, TwPoller for taskwarrior subtasks, GitPoller for
-// modified files, and NotificationDispatcher for agent-finished desktop
-// notifications. App.Update routes pubsub.Event[notify.Notification],
-// pubsub.Event[session.Session], and tea.FocusMsg/BlurMsg into the right
-// sub-component.
+// It watches the session transcript (.md) via fsnotify, renders it with
+// Glamour, and provides three UI concerns:
 //
-// Rendering primitives (dialogs, completions, chat items, attachments,
-// styles, image, notification backends, util, common, logo, diffview, list)
-// are reused as a library from internal/ui/* — App composes them; the legacy
-// composition root has been deleted.
+//   - Header: 1-row session status from .md frontmatter + turn count
+//   - Viewport: virtual-scroll content area with bottom-pin contract
+//   - Footer: 1-row status derived purely from .md tail (no pubsub, no state
+//     machine)
 //
-// The .md transcript is the source of truth for rendered content. The TUI
-// is a window plus an input shell that submits prompts via Workspace.AgentRun.
+// The .md is the source of truth. The TUI is a window.
 //
 // Reference flicknotes:
-//   - 24d493dd — TUI audit + decision log (parent for 680e5b5d)
-//   - 7015e7aa — orientation
+//   - 7015e7aa — orientation (parent)
 //   - 57a09f51 — render format spec
-//   - 8fbf143f — sage's design (visual reference)
+//   - 8fbf143f — sage's design (visual language reference)
 //   - 5a17f0c9 — implementation plan (this package implements)
 package tui

@@ -28,8 +28,8 @@ import (
 	"github.com/tta-lab/lenos/internal/event"
 	lenoslog "github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/lenos/internal/tui"
 	"github.com/tta-lab/lenos/internal/ui/common"
+	ui "github.com/tta-lab/lenos/internal/ui/model"
 	"github.com/tta-lab/lenos/internal/version"
 	"github.com/tta-lab/lenos/internal/workspace"
 )
@@ -124,13 +124,14 @@ lenos --continue
 		event.AppInitialized()
 
 		com := common.DefaultCommon(ws)
-		model := tui.New(com, sessionID, continueLast, triggerMessage)
+		model := ui.New(com, sessionID, continueLast, triggerMessage)
 
 		var env uv.Environ = os.Environ()
 		program := tea.NewProgram(
 			model,
 			tea.WithEnvironment(env),
 			tea.WithContext(cmd.Context()),
+			tea.WithFilter(ui.MouseEventFilter),
 		)
 		go ws.Subscribe(program)
 
