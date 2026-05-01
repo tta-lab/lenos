@@ -240,6 +240,18 @@ func (w *AppWorkspace) AgentName() string {
 	return w.store.Overrides().AgentName
 }
 
+func (w *AppWorkspace) AgentSandboxState() string {
+	cfg := w.store.Config()
+	useSandbox := cfg.Options != nil && cfg.Options.Sandbox != nil && *cfg.Options.Sandbox
+	if !useSandbox {
+		return "off"
+	}
+	if w.app.SandboxClientConnected() {
+		return "on"
+	}
+	return "degraded"
+}
+
 // -- Git --
 
 func (w *AppWorkspace) IsGitWorktree(ctx context.Context) bool {

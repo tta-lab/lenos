@@ -34,6 +34,7 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/update"
 	"github.com/tta-lab/lenos/internal/version"
+	"github.com/tta-lab/temenos/client"
 )
 
 // UpdateAvailableMsg is sent when a new version is available.
@@ -48,7 +49,8 @@ type App struct {
 	Messages         message.Service
 	AgentCoordinator agent.Coordinator
 
-	config *config.ConfigStore
+	config        *config.ConfigStore
+	sandboxClient *client.Client
 
 	serviceEventsWG *sync.WaitGroup
 	eventsCtx       context.Context
@@ -497,6 +499,7 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("init sandbox client: %w", err)
 	}
+	app.sandboxClient = sandboxClient
 	// Coordinator constructs per-session MdRecorders internally; no app-level recorder needed.
 	app.AgentCoordinator, err = agent.NewCoordinator(
 		ctx,
@@ -544,6 +547,11 @@ func (app *App) Subscribe(program *tea.Program) {
 			program.Send(msg)
 		}
 	}
+}
+
+// SandboxClientConnected returns true if the sandbox client is initialized.
+func (app *App) SandboxClientConnected() bool {
+	return app.sandboxClient != nil
 }
 
 // Shutdown performs a graceful shutdown of the application.
