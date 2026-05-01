@@ -15,6 +15,7 @@ type KeyMap struct {
 	Cancel       key.Binding
 	Help         key.Binding
 	Quit         key.Binding
+	Retry        key.Binding
 }
 
 // DefaultKeyMap returns the standard key bindings.
@@ -31,5 +32,6 @@ func DefaultKeyMap() KeyMap {
 		Cancel:       key.NewBinding(key.WithKeys("esc", "alt+esc"), key.WithHelp("esc", "cancel")),
 		Help:         key.NewBinding(key.WithKeys("ctrl+g"), key.WithHelp("ctrl+g", "help")),
 		Quit:         key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit")),
+		Retry:        key.NewBinding(key.WithKeys("r")),
 	}
 }

@@ -38,6 +38,7 @@ type Styles struct {
 	Brand           lipgloss.Style // bold cyan
 	Keystroke       lipgloss.Style // dim
 	KeystrokeTip    lipgloss.Style // dim slate
+	WatchErr        lipgloss.Style // bold crimson — recoverable watch error
 }
 
 // NewStyles returns the resolved style set.
@@ -91,6 +92,10 @@ func NewStyles() Styles {
 
 		KeystrokeTip: lipgloss.NewStyle().
 			Foreground(AccentSlate),
+
+		WatchErr: lipgloss.NewStyle().
+			Foreground(AccentCrimson).
+			Bold(true),
 	}
 }
 

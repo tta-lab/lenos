@@ -26,6 +26,7 @@ type UI struct {
 	viewport *Viewport
 
 	watcher           *Watcher
+	watchErr          error
 	keys              KeyMap
 	styles            Styles
 	lastBashWallclock time.Time
@@ -139,8 +140,8 @@ func (ui *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return ui, ui.watcher.Listen()
 
 	case MdWatchErrMsg:
-		fmt.Fprintf(os.Stderr, "watch error: %v\n", m.Err)
-		return ui, tea.Quit
+		ui.watchErr = m.Err
+		return ui, nil
 
 	case TickMsg:
 		// Re-derive footer state from the latest markdown.
@@ -158,6 +159,17 @@ func (ui *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(m, km.Quit):
 			return ui, tea.Quit
+		case ui.watchErr != nil && key.Matches(m, km.Retry):
+			initial, watcher, err := NewWatcher(ui.mdPath, 5*time.Millisecond)
+			if err != nil {
+				ui.watchErr = err
+				return ui, nil
+			}
+			ui.md = initial
+			ui.watcher = watcher
+			ui.watchErr = nil
+			ui.renderContent(ui.width)
+			return ui, ui.watcher.Listen()
 		case key.Matches(m, km.Help):
 			// Help overlay deferred to v2 — no-op.
 			return ui, nil
@@ -195,8 +207,16 @@ func (ui *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the full TUI layout: header, separator, viewport, footer.
+// When ui.watchErr is non-nil, a recoverable 1-row error overlay replaces the
+// header — `r` retries, `ctrl+c` quits.
 func (ui *UI) View() tea.View {
-	headerView := lipgloss.Place(ui.width, 1, lipgloss.Top, lipgloss.Left, ui.header.Render())
+	var topRow string
+	if ui.watchErr != nil {
+		topRow = lipgloss.Place(ui.width, 1, lipgloss.Top, lipgloss.Left,
+			ui.styles.WatchErr.Render(fmt.Sprintf("watch error: %v; r retry · ctrl+c quit", ui.watchErr)))
+	} else {
+		topRow = lipgloss.Place(ui.width, 1, lipgloss.Top, lipgloss.Left, ui.header.Render())
+	}
 	sep := lipgloss.Style{}.
 		Foreground(lipgloss.Color("245")).
 		Render(strings.Repeat("─", maxInt(0, ui.width)))
@@ -211,7 +231,7 @@ func (ui *UI) View() tea.View {
 
 	footerView := lipgloss.Place(ui.width, 1, lipgloss.Top, lipgloss.Left, ui.footer.Render(time.Now(), ui.lastBashWallclock))
 
-	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, headerView, sep, viewportView, footerView))
+	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, topRow, sep, viewportView, footerView))
 }
 
 // maxInt returns the larger of two integers.

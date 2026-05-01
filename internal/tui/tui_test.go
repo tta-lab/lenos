@@ -421,6 +421,44 @@ func TestQuit(t *testing.T) {
 	_ = ui
 }
 
+func TestWatchErr_DoesNotQuit(t *testing.T) {
+	fixture := filepath.Join(testdataDir, "full_session.md")
+	ui, err := New("test-session", fixture)
+	require.NoError(t, err)
+
+	m, cmd := ui.Update(MdWatchErrMsg{Err: fmt.Errorf("simulated watcher failure")})
+	ui = m.(*UI)
+	require.Nil(t, cmd, "watch error must not return tea.Quit")
+	require.NotNil(t, ui.watchErr, "watchErr is captured for the View overlay")
+
+	// Width has to be > 0 for View() to render the overlay.
+	ui.width = 80
+	ui.height = 10
+	view := ui.View()
+	require.Contains(t, view.Content, "watch error", "View overlays the recoverable error")
+	require.Contains(t, view.Content, "r retry", "View hints the retry keystroke")
+}
+
+func TestWatchErr_RetryClearsErrAndReAttaches(t *testing.T) {
+	fixture := filepath.Join(testdataDir, "full_session.md")
+	ui, err := New("test-session", fixture)
+	require.NoError(t, err)
+
+	prevWatcher := ui.watcher
+
+	// Inject an error to enter the recoverable state.
+	m, _ := ui.Update(MdWatchErrMsg{Err: fmt.Errorf("simulated")})
+	ui = m.(*UI)
+	require.NotNil(t, ui.watchErr)
+
+	m, cmd := ui.Update(keyPress("r"))
+	ui = m.(*UI)
+	require.Nil(t, ui.watchErr, "successful retry clears watchErr")
+	require.NotNil(t, ui.watcher, "retry re-attaches a watcher")
+	require.NotSame(t, prevWatcher, ui.watcher, "retry installs a fresh watcher")
+	require.NotNil(t, cmd, "retry schedules the next Listen")
+}
+
 func TestHelpNoOp(t *testing.T) {
 	// Parallel tests disabled — fsnotify watcher is not goroutine-safe for parallel execution.
 
