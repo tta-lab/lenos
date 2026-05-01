@@ -230,14 +230,12 @@ type UI struct {
 		draft    string
 	}
 
-	// .md transcript viewer (680e5b5d). Replaces the legacy chat-list-as-
-	// content-renderer; the agent writes the .md, watcher tails it, viewer
-	// renders. mdPath is the absolute resolved path; nil watcher means the
-	// session has not been loaded yet (uiLanding state).
+	// .md transcript watcher (680e5b5d). Items are rebuilt from mdContent
+	// via tui.SplitBlocks → chat.MdBlockItem on every Md*Msg event. mdPath
+	// is the absolute resolved path; nil watcher means the session has not
+	// been loaded yet (uiLanding state).
 	mdPath     string
 	mdContent  []byte
-	mdRendered tui.Rendered
-	mdStyles   tui.Styles
 	mdWatcher  *tui.Watcher
 	mdWatchErr error
 }
@@ -256,9 +254,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 	ta.Focus()
 
 	ch := NewChat(com)
-	mdStyles := tui.NewStyles()
-	mdViewport := tui.NewViewport(80, 20, mdStyles)
-	ch.SetMdViewport(mdViewport)
 
 	keyMap := DefaultKeyMap()
 
@@ -306,7 +301,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 		initialSessionID:    initialSessionID,
 		continueLastSession: continueLast,
 		triggerMessage:      triggerMessage,
-		mdStyles:            mdStyles,
 	}
 
 	status := NewStatus(com, ui)
@@ -496,15 +490,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadSessionMsg:
 		m.setState(uiChat, m.focus)
 		m.session = msg.session
-		msgs, err := m.com.Workspace.ListMessages(context.Background(), m.session.ID)
-		if err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		} else if cmd := m.setSessionMessages(msgs); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		// Attach .md watcher (680e5b5d): the chat panel renders the session
-		// transcript directly from .md instead of from in-memory message
-		// items, so we tail it via fsnotify.
+		// 680e5b5d: chat list items come from the session .md transcript
+		// (parsed into blocks), not from the in-memory message stream.
+		// attachMdView rebuilds the list from the on-disk content.
 		if cmd := m.attachMdView(m.session.ID); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -515,7 +503,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tui.MdAppendedMsg:
 		m.mdContent = append(m.mdContent, msg.Bytes...)
-		m.renderMdView()
+		m.rebuildMdBlocks()
 		if m.chat.Follow() {
 			m.chat.ScrollToBottom()
 		}
@@ -527,7 +515,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if data, err := os.ReadFile(m.mdPath); err == nil {
 			m.mdContent = data
 		}
-		m.renderMdView()
+		m.rebuildMdBlocks()
 		m.chat.ScrollToBottom()
 		if m.mdWatcher != nil {
 			cmds = append(cmds, m.mdWatcher.Listen())
@@ -602,14 +590,11 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Logos doesn't use child sessions — foreign messages are ignored.
 			break
 		}
-		switch msg.Type {
-		case pubsub.CreatedEvent:
-			cmds = append(cmds, m.appendSessionMessage(msg.Payload))
-		case pubsub.UpdatedEvent:
-			cmds = append(cmds, m.updateSessionMessage(msg.Payload))
-		case pubsub.DeletedEvent:
-			m.chat.RemoveMessage(msg.Payload.ID)
-		}
+		// 680e5b5d: message-event payloads no longer drive the chat list
+		// (the .md watcher does). Spinner / pill / agent-busy side effects
+		// below still need this branch to fire on every event, so the
+		// switch-on-Type stays as a side-effect-only no-op.
+		_ = msg.Type
 		// start the spinner if there is a new message
 		if hasInProgressTodo(m.effectiveTodos()) && m.isAgentBusy() && !m.todoIsSpinning {
 			m.todoIsSpinning = true
@@ -2159,9 +2144,9 @@ func (m *UI) updateSize() {
 	m.status.SetWidth(m.layout.status.Dx())
 
 	m.chat.SetSize(m.layout.main.Dx(), m.layout.main.Dy())
-	// Re-render the .md transcript at the new width — Glamour wraps to width.
+	// Width changed → re-render blocks at new width (Glamour wraps to width).
 	if m.mdContent != nil {
-		m.renderMdView()
+		m.rebuildMdBlocks()
 	}
 	m.textarea.MaxHeight = TextareaMaxHeight
 	m.textarea.SetWidth(m.layout.editor.Dx())

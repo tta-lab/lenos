@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/clipperhouse/displaywidth"
 	"github.com/clipperhouse/uax29/v2/words"
-	"github.com/tta-lab/lenos/internal/tui"
 	"github.com/tta-lab/lenos/internal/ui/anim"
 	"github.com/tta-lab/lenos/internal/ui/chat"
 	"github.com/tta-lab/lenos/internal/ui/common"
@@ -34,20 +33,14 @@ type DelayedClickMsg struct {
 // Chat represents the chat UI model that handles chat interactions and
 // messages.
 //
-// Per the 680e5b5d audit, the visible content is rendered from the session
-// .md transcript via mdViewport — mdViewport is the source of truth for what
-// the user sees in the main panel. The legacy list (and its mouse / selection
-// / animation state) is kept around so code paths that touch m.chat.* keep
-// compiling and don't introduce regressions in the surrounding UX wiring; it
-// just isn't drawn.
+// Per the 680e5b5d audit, items are sourced from the session .md transcript
+// (via tui.SplitBlocks → chat.MdBlockItem) instead of pubsub message
+// events. The list infrastructure stays unchanged: each block is one
+// navigable / focusable / highlightable / copyable item.
 type Chat struct {
 	com      *common.Common
 	list     *list.List
 	idInxMap map[string]int // Map of message IDs to their indices in the list
-
-	// mdViewport renders the .md transcript. It is the visible content of
-	// the chat panel; nil before a session is loaded.
-	mdViewport *tui.Viewport
 
 	// Animation visibility optimization: track animations paused due to items
 	// being scrolled out of view. When items become visible again, their
@@ -95,40 +88,19 @@ func NewChat(com *common.Common) *Chat {
 	return c
 }
 
-// SetMdViewport installs the .md viewport — the actual visible content
-// renderer. Called once per session by UI.New / UI.loadSession.
-func (m *Chat) SetMdViewport(v *tui.Viewport) {
-	m.mdViewport = v
-}
-
-// MdViewport returns the .md viewport, primarily for the UI to update its
-// rendered state after watcher events.
-func (m *Chat) MdViewport() *tui.Viewport {
-	return m.mdViewport
-}
-
 // Height returns the height of the chat view port.
 func (m *Chat) Height() int {
 	return m.list.Height()
 }
 
-// Draw renders the chat UI component to the screen and the given area. When
-// the .md viewport is wired (post-680e5b5d), it renders that instead of the
-// legacy list.
+// Draw renders the chat UI component to the screen and the given area.
 func (m *Chat) Draw(scr uv.Screen, area uv.Rectangle) {
-	if m.mdViewport != nil {
-		uv.NewStyledString(m.mdViewport.Render()).Draw(scr, area)
-		return
-	}
 	uv.NewStyledString(m.list.Render()).Draw(scr, area)
 }
 
 // SetSize sets the size of the chat view port.
 func (m *Chat) SetSize(width, height int) {
 	m.list.SetSize(width, height)
-	if m.mdViewport != nil {
-		m.mdViewport.SetSize(width, height)
-	}
 	// Anchor to bottom if we were at the bottom.
 	if m.AtBottom() {
 		m.ScrollToBottom()
@@ -242,9 +214,6 @@ func (m *Chat) Blur() {
 
 // AtBottom returns whether the chat list is currently scrolled to the bottom.
 func (m *Chat) AtBottom() bool {
-	if m.mdViewport != nil {
-		return m.mdViewport.IsPinned()
-	}
 	return m.list.AtBottom()
 }
 
@@ -257,38 +226,18 @@ func (m *Chat) Follow() bool {
 // ScrollToBottom scrolls the chat view to the bottom.
 func (m *Chat) ScrollToBottom() {
 	m.list.ScrollToBottom()
-	if m.mdViewport != nil {
-		m.mdViewport.End()
-	}
 	m.follow = true // Enable follow mode when user scrolls to bottom
 }
 
 // ScrollToTop scrolls the chat view to the top.
 func (m *Chat) ScrollToTop() {
 	m.list.ScrollToTop()
-	if m.mdViewport != nil {
-		m.mdViewport.Home()
-	}
 	m.follow = false // Disable follow mode when user scrolls up
 }
 
 // ScrollBy scrolls the chat view by the given number of line deltas.
 func (m *Chat) ScrollBy(lines int) {
 	m.list.ScrollBy(lines)
-	if m.mdViewport != nil {
-		switch {
-		case lines == 0:
-			// nothing
-		case lines > 0:
-			for range lines {
-				m.mdViewport.ScrollDown()
-			}
-		default:
-			for range -lines {
-				m.mdViewport.ScrollUp()
-			}
-		}
-	}
 	m.follow = lines > 0 && m.AtBottom() // Disable follow mode if user scrolls up
 }
 
