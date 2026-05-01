@@ -6,7 +6,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	uistyles "github.com/tta-lab/lenos/internal/ui/styles"
 )
+
+func bottomBarTestStyles() *uistyles.Styles {
+	s := uistyles.DefaultStyles()
+	return &s
+}
 
 func TestDeriveFooter(t *testing.T) {
 	t.Run("file ending with only runtime-event blockquotes", func(t *testing.T) {
@@ -123,6 +129,58 @@ func TestTick(t *testing.T) {
 	msg := cmd()
 	_, ok := msg.(TickMsg)
 	assert.True(t, ok, "Tick should return a TickMsg")
+}
+
+func TestBottomBar_HiddenWhenQueueZero(t *testing.T) {
+	b := NewBottomBar(NewStyles(), bottomBarTestStyles())
+	b.SetWidth(80)
+	b.SetQueue(0, nil)
+	assert.Equal(t, "", b.Render(), "empty queue renders nothing")
+}
+
+func TestBottomBar_CompactRendersNQueued(t *testing.T) {
+	b := NewBottomBar(NewStyles(), bottomBarTestStyles())
+	b.SetWidth(80)
+	b.SetQueue(3, []string{"a", "b", "c"})
+	out := b.Render()
+	assert.Contains(t, out, "3 Queued", "compact row shows count")
+	assert.Contains(t, out, "ctrl+t", "compact row shows toggle hint")
+	// The bordered pill itself is 3 visual lines; what matters is that the
+	// expanded list rows aren't appended in compact mode.
+	assert.NotContains(t, out, "a\n", "compact row does not include queue items")
+	assert.NotContains(t, out, "b\n", "compact row does not include queue items")
+}
+
+func TestBottomBar_ExpandedRendersFullList(t *testing.T) {
+	b := NewBottomBar(NewStyles(), bottomBarTestStyles())
+	b.SetWidth(80)
+	b.SetQueue(2, []string{"first", "second"})
+	b.Toggle()
+	assert.False(t, b.IsCompact())
+
+	out := b.Render()
+	assert.Contains(t, out, "2 Queued", "expanded still shows count")
+	assert.Contains(t, out, "first", "expanded shows queue item 1")
+	assert.Contains(t, out, "second", "expanded shows queue item 2")
+	assert.GreaterOrEqual(t, strings.Count(out, "\n"), 2, "expanded spans multiple rows")
+}
+
+func TestBottomBar_ToggleTransitionRoundTrip(t *testing.T) {
+	b := NewBottomBar(NewStyles(), bottomBarTestStyles())
+	b.SetWidth(80)
+	b.SetQueue(2, []string{"x", "y"})
+
+	compact := b.Render()
+	assert.True(t, b.IsCompact())
+
+	b.Toggle()
+	expanded := b.Render()
+	assert.False(t, b.IsCompact())
+	assert.NotEqual(t, compact, expanded, "expanded differs from compact")
+
+	b.Toggle()
+	assert.True(t, b.IsCompact())
+	assert.Equal(t, compact, b.Render(), "compact restored after round trip")
 }
 
 func TestParseTrailerDuration(t *testing.T) {

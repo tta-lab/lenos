@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -8,6 +9,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	uistyles "github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 // FooterState is one of three derivation outcomes from inspecting the .md tail.
@@ -294,4 +297,76 @@ func Tick() tea.Cmd {
 	return func() tea.Msg {
 		return TickMsg(time.Now())
 	}
+}
+
+// BottomBar renders the queue indicator (compact) and full queue items list
+// (expanded) below the viewport. Hidden entirely when the queue is empty.
+type BottomBar struct {
+	queueDepth int
+	queueItems []string
+	width      int
+	tuiStyles  Styles
+	pillStyles *uistyles.Styles
+	compact    bool
+}
+
+// NewBottomBar constructs a BottomBar in compact mode.
+func NewBottomBar(tuiStyles Styles, pillStyles *uistyles.Styles) *BottomBar {
+	return &BottomBar{
+		tuiStyles:  tuiStyles,
+		pillStyles: pillStyles,
+		compact:    true,
+	}
+}
+
+// Toggle flips the bar between compact and expanded.
+func (b *BottomBar) Toggle() { b.compact = !b.compact }
+
+// IsCompact reports whether the bar is in compact mode.
+func (b *BottomBar) IsCompact() bool { return b.compact }
+
+// SetWidth sets the available width for truncation.
+func (b *BottomBar) SetWidth(w int) { b.width = w }
+
+// SetQueue updates the queue depth and items list.
+func (b *BottomBar) SetQueue(depth int, items []string) {
+	b.queueDepth = depth
+	b.queueItems = items
+}
+
+// Render returns "" when queueDepth is 0, a 1-row pill when compact, and a
+// pill plus item list when expanded.
+func (b *BottomBar) Render() string {
+	if b.queueDepth <= 0 {
+		return ""
+	}
+
+	row := b.compactRow()
+	if b.compact {
+		return row
+	}
+
+	list := queueList(b.queueItems, b.pillStyles)
+	if list == "" {
+		return row
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, row, list)
+}
+
+func (b *BottomBar) compactRow() string {
+	pill := queuePill(b.queueDepth, b.compact /*focused*/, !b.compact /*panelFocused*/, b.pillStyles)
+	hint := b.tuiStyles.KeystrokeTip.Render(fmt.Sprintf("ctrl+t %s", b.toggleHint()))
+
+	row := pill + " " + hint
+	if b.width > 0 && lipgloss.Width(row) > b.width {
+		row = truncateToWidth(row, b.width)
+	}
+	return row
+}
+
+func (b *BottomBar) toggleHint() string {
+	if b.compact {
+		return "open"
+	}
+	return "close"
 }
