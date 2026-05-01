@@ -14,6 +14,9 @@ type Frontmatter struct {
 	Agent     string `yaml:"agent"`
 	Model     string `yaml:"model"`
 	StartedAt string `yaml:"started_at"`
+	Sandbox   string `yaml:"sandbox"`
+	Title     string `yaml:"title"`
+	Cwd       string `yaml:"cwd"`
 }
 
 // TurnAnchor identifies one user-message boundary in the rendered transcript.

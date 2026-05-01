@@ -24,6 +24,32 @@ func TestParseFrontmatter(t *testing.T) {
 		assert.True(t, strings.HasPrefix(string(body), "\n**λ** Find"))
 	})
 
+	t.Run("extracts new fields (sandbox, title, cwd)", func(t *testing.T) {
+		data, err := os.ReadFile("testdata/frontmatter_full.md")
+		require.NoError(t, err)
+
+		fm, _, err := ParseFrontmatter(data)
+		require.NoError(t, err)
+		assert.Equal(t, "test-session-1234", fm.SessionID)
+		assert.Equal(t, "kestrel", fm.Agent)
+		assert.Equal(t, "claude-sonnet-4-6", fm.Model)
+		assert.Equal(t, "2026-04-28T10:30:00Z", fm.StartedAt)
+		assert.Equal(t, "on", fm.Sandbox)
+		assert.Equal(t, "My Test Task", fm.Title)
+		assert.Equal(t, "/Users/test/project", fm.Cwd)
+	})
+
+	t.Run("new fields default to empty when not present", func(t *testing.T) {
+		data, err := os.ReadFile("../transcript/testdata/full_session.md")
+		require.NoError(t, err)
+
+		fm, _, err := ParseFrontmatter(data)
+		require.NoError(t, err)
+		assert.Equal(t, "", fm.Sandbox)
+		assert.Equal(t, "", fm.Title)
+		assert.Equal(t, "", fm.Cwd)
+	})
+
 	t.Run("no frontmatter returns empty and original input", func(t *testing.T) {
 		data := []byte("**λ** hello\n")
 		fm, body, err := ParseFrontmatter(data)
