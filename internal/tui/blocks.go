@@ -40,7 +40,7 @@ type Block struct {
 // (rare but possible: empty fences) don't collide.
 func (b Block) ID() string {
 	h := xxh3.New()
-	_, _ = h.WriteString(fmt.Sprintf("%d|", b.Kind))
+	_, _ = fmt.Fprintf(h, "%d|", b.Kind)
 	_, _ = h.WriteString(b.Source)
 	return fmt.Sprintf("blk-%016x", h.Sum64())
 }
