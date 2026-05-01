@@ -11,20 +11,39 @@ import "fmt"
 
 // rePromptEmpty is the next-observation text after an empty/whitespace emit.
 func rePromptEmpty() string {
-	return `[runtime] your last response was empty. emit a bash command, a comment (# ...), narrate "message", or "exit" to end the turn.`
+	return `[runtime] your last response was empty. emit a bash command, a comment (# ...), a narrate heredoc, or "exit" to end the turn.`
 }
 
 // rePromptInvalidBash is the next-observation text after `bash -n` rejected
 // the emit. bashErr carries the raw stderr from `bash -n`.
+//
+// In practice the #1 cause of bash-syntax failure is the model emitting
+// natural-language prose at the top level (e.g. "Hi! How can I help?")
+// because every response is fed to bash -c. The re-prompt leads with that
+// hypothesis so the model corrects course on the next turn, then falls back
+// to generic-bash-fix guidance.
 func rePromptInvalidBash(bashErr string) string {
 	return fmt.Sprintf(`[runtime] your last response was not valid bash. bash -n said:
   %s
 
-if you wanted to say something, use:
-  - narrate "message"        (voiceover prose for the human; not a sink for command output)
-  - # comment text           (a bash comment, no side effect)
+THE MOST LIKELY CAUSE: you emitted natural-language prose (a greeting, an
+explanation, a markdown answer) instead of bash. Every response is run as
+bash -c — there is no chat channel. To say something to the human, wrap
+prose in a narrate heredoc:
 
-if you wanted to run a command, ensure it's valid bash.`, bashErr)
+  narrate <<'EOF'
+  your message here — apostrophes, "quotes", $vars all pass through verbatim.
+  EOF
+
+To end the turn, emit literally:  exit
+To combine: end the heredoc, then  exit  on its own line, OR append  && exit
+to the heredoc opener (the heredoc body is the only thing the runtime
+parses as natural language; everywhere else, plain text fails).
+
+If you actually meant to run a command, fix the bash quoting. "unexpected
+EOF while looking for matching" errors come from unbalanced quotes —
+apostrophes inside single quotes close the quote prematurely. Use double
+quotes or a heredoc for any text containing apostrophes.`, bashErr)
 }
 
 // rePromptBlockedPattern is the next-observation text after a sed -i / perl -i

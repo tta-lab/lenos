@@ -27,7 +27,14 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.Contains(t, got, "raw bash")
 	assert.Contains(t, got, "exit")
 	assert.Contains(t, got, "narrate")
-	assert.Contains(t, got, `narrate "message"`)
+	// narrate is heredoc-only (the bash-quoting trap is the #1 cause of
+	// re-prompts; one canonical form eliminates the apostrophe edge cases).
+	assert.Contains(t, got, "narrate <<'EOF'",
+		"narrate examples must use the heredoc form")
+	assert.NotContains(t, got, `narrate "`,
+		"narrate must not be advertised in double-quoted form (apostrophe trap)")
+	assert.NotContains(t, got, `narrate '`,
+		"narrate must not be advertised in single-quoted form (apostrophe trap)")
 
 	// MUST NOT mention the legacy <cmd> markup — that's the whole point.
 	assert.False(t, strings.Contains(got, "<cmd>"),
