@@ -23,6 +23,29 @@ var lambdaSGR = lipgloss.NewStyle().
 	Bold(true).
 	Render(tui.GlyphLambda)
 
+// blockquotePrefix prepends `> ` to every line of src so Glamour renders
+// it as a blockquote (indented + amber bar marker per MarkdownRenderer's
+// BlockQuote style). Used to differentiate agent activity from user msgs
+// in the chat list — the user msg renders flush, the bash / output /
+// trailer / runtime / prose blocks render quoted under it.
+//
+// Empty lines stay empty (no trailing space) so Glamour doesn't fragment
+// the blockquote across paragraph breaks.
+func blockquotePrefix(src string) string {
+	if src == "" {
+		return src
+	}
+	lines := strings.Split(src, "\n")
+	for i, line := range lines {
+		if line == "" {
+			lines[i] = ">"
+		} else {
+			lines[i] = "> " + line
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // attachMdView (re)attaches the .md watcher for the given session and
 // rebuilds the chat list from its current contents. Called from the
 // loadSessionMsg handler so the chat panel always reflects the current
@@ -95,30 +118,39 @@ func (m *UI) rebuildMdBlocks() {
 		return
 	}
 
+	// All blocks go through Glamour so bash fences, code, and prose all get
+	// proper markdown styling. Non-user blocks are blockquoted (a `> ` line
+	// prefix before rendering) so Glamour draws them with its blockquote
+	// indent + colored bar — that's the visual differentiation between
+	// "what the user said" (flush, with our terracotta bar) and "what the
+	// agent did" (Glamour-blockquoted, with amber bar).
 	renderer, rerr := tui.MarkdownRenderer(contentWidth)
 	items := make([]chat.MessageItem, 0, len(blocks))
 	for _, b := range blocks {
-		var rendered string
+		kind := chat.MdBlockOther
+		if b.Kind == tui.BlockUserMsg {
+			kind = chat.MdBlockUserMsg
+		}
+
+		source := b.Source
+		if kind == chat.MdBlockOther {
+			source = blockquotePrefix(source)
+		}
+
+		rendered := source
 		if rerr == nil {
-			out, err := renderer.Render(b.Source)
+			out, err := renderer.Render(source)
 			if err != nil {
 				slog.Warn("Render block", "kind", b.Kind, "err", err)
-				rendered = b.Source
 			} else {
 				rendered = strings.TrimRight(out, "\n")
 			}
-		} else {
-			rendered = b.Source
 		}
-		// User-message blocks: replace the leading λ with our colored
-		// version so the start of every turn pops visually. Glamour wrapped
-		// the **λ** in bold escapes; we replace the λ glyph in place — our
-		// SGR sequence applies amber+bold and resets cleanly, so trailing
-		// Glamour resets are harmless.
-		if b.Kind == tui.BlockUserMsg {
+		if kind == chat.MdBlockUserMsg {
+			// Color the leading λ so the start of every turn pops.
 			rendered = strings.Replace(rendered, tui.GlyphLambda, lambdaSGR, 1)
 		}
-		items = append(items, chat.NewMdBlockItem(m.com.Styles, b.ID(), b.Source, rendered))
+		items = append(items, chat.NewMdBlockItem(m.com.Styles, b.ID(), b.Source, rendered, kind))
 	}
 	m.chat.SetMessages(items...)
 }
