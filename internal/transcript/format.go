@@ -67,19 +67,26 @@ func humanizeDuration(d time.Duration) string {
 	}
 }
 
-// RenderTrailerSuccess renders a success trailer (timing only).
-func RenderTrailerSuccess(at time.Time, dur time.Duration) string {
-	return fmt.Sprintf("*[%s, %s]*\n\n", at.Format("15:04:05"), humanizeDuration(dur))
+// RenderTrailerSuccess renders a success trailer. Successful commands have
+// no visible footer in the transcript — the bash block plus its output (if
+// any) is the whole story; the prior `*[HH:MM:SS, Xs]*` timestamp footer
+// was pure noise in the chat list.
+//
+// Signature retained for API compatibility; at and dur are unused.
+func RenderTrailerSuccess(_ time.Time, _ time.Duration) string {
+	return ""
 }
 
-// RenderTrailerFailure renders a failure trailer with ❌ exit code.
+// RenderTrailerFailure renders a failure trailer with the ❌ exit code so
+// errors stay loud in the transcript. The previous `*[HH:MM:SS, Xs]*`
+// timestamp prefix is dropped — the exit code carries the signal value.
 // Signal-derived codes get parenthetical context (SIGINT, killed, SIGTERM).
-func RenderTrailerFailure(at time.Time, dur time.Duration, exitCode int) string {
+func RenderTrailerFailure(_ time.Time, _ time.Duration, exitCode int) string {
 	ctx := signalContext(exitCode)
 	if ctx != "" {
-		return fmt.Sprintf("*[%s, %s]* — ❌ **exit %d** (%s)\n\n", at.Format("15:04:05"), humanizeDuration(dur), exitCode, ctx)
+		return fmt.Sprintf("❌ **exit %d** (%s)\n\n", exitCode, ctx)
 	}
-	return fmt.Sprintf("*[%s, %s]* — ❌ **exit %d**\n\n", at.Format("15:04:05"), humanizeDuration(dur), exitCode)
+	return fmt.Sprintf("❌ **exit %d**\n\n", exitCode)
 }
 
 func signalContext(code int) string {

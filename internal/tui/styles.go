@@ -3,6 +3,7 @@ package tui
 import (
 	"charm.land/glamour/v2"
 	"charm.land/glamour/v2/ansi"
+	glamourstyles "charm.land/glamour/v2/styles"
 	"charm.land/lipgloss/v2"
 )
 
@@ -99,31 +100,31 @@ func NewStyles() Styles {
 	}
 }
 
-// MarkdownRenderer returns a Glamour TermRenderer with our theme overrides.
-// The theme:
-//   - Block quote: amber foreground for the > marker, italic body unchanged
-//   - Code block: terminal default fg/bg (we do not paint user code)
-//   - Headings: bold; in our format h1/h2 do not appear
-//   - Italic + bold: terminal default attrs
+// MarkdownRenderer returns a Glamour TermRenderer with our theme overrides
+// stacked on top of the default dark style — Glamour's WithStyles fully
+// replaces the active StyleConfig, so passing only our overrides would
+// strip default heading / bold / list styling and leave plain `## Foo`
+// in the output.
+//
+// We override:
+//   - BlockQuote: amber `>` marker
+//   - CodeBlock / Code: terminal default fg/bg (we don't paint user code)
+//
+// Everything else (headings, bold/italic, lists, links, tables) keeps the
+// stock dark-mode appearance.
 func MarkdownRenderer(width int) (*glamour.TermRenderer, error) {
+	cfg := glamourstyles.DarkStyleConfig
+	cfg.BlockQuote = ansi.StyleBlock{
+		StylePrimitive: ansi.StylePrimitive{Color: pointerTo("214")},
+		Indent:         new(uint(1)),
+		IndentToken:    new(">"),
+	}
+	cfg.CodeBlock = ansi.StyleCodeBlock{
+		StyleBlock: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{}},
+	}
+	cfg.Code = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{}}
 	return glamour.NewTermRenderer(
-		glamour.WithStyles(ansi.StyleConfig{
-			BlockQuote: ansi.StyleBlock{
-				StylePrimitive: ansi.StylePrimitive{
-					Color: pointerTo("214"),
-				},
-				Indent:      new(uint(1)),
-				IndentToken: new(">"),
-			},
-			CodeBlock: ansi.StyleCodeBlock{
-				StyleBlock: ansi.StyleBlock{
-					StylePrimitive: ansi.StylePrimitive{},
-				},
-			},
-			Code: ansi.StyleBlock{
-				StylePrimitive: ansi.StylePrimitive{},
-			},
-		}),
+		glamour.WithStyles(cfg),
 		glamour.WithWordWrap(width),
 	)
 }
