@@ -101,6 +101,7 @@ func New(com *common.Common, sessionID string, continueLast bool, triggerMessage
 	app.footer = NewFooter(styles)
 	app.bottomBar = NewBottomBar(styles, com.Styles)
 	app.input = newInputPane()
+	app.input.Configure(com, sess.ID)
 	app.notify = NewNotificationDispatcher(com.Workspace.Config())
 
 	app.renderContent(100)
@@ -354,6 +355,10 @@ func (a *App) handleKey(m tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(m, km.Home):
 		a.viewport.Home()
 		return a, nil
+	}
+	// Anything unclaimed flows into the input pane (textarea + Enter→Submit).
+	if cmd := a.input.Update(m); cmd != nil {
+		return a, cmd
 	}
 	return a, nil
 }
