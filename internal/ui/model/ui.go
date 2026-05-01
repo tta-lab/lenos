@@ -34,6 +34,7 @@ import (
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/home"
 	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/tui"
 
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
@@ -227,6 +228,17 @@ type UI struct {
 		index    int
 		draft    string
 	}
+
+	// .md transcript viewer (680e5b5d). Replaces the legacy chat-list-as-
+	// content-renderer; the agent writes the .md, watcher tails it, viewer
+	// renders. mdPath is the absolute resolved path; nil watcher means the
+	// session has not been loaded yet (uiLanding state).
+	mdPath     string
+	mdContent  []byte
+	mdRendered tui.Rendered
+	mdStyles   tui.Styles
+	mdWatcher  *tui.Watcher
+	mdWatchErr error
 }
 
 // New creates a new instance of the [UI] model.
@@ -243,6 +255,9 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 	ta.Focus()
 
 	ch := NewChat(com)
+	mdStyles := tui.NewStyles()
+	mdViewport := tui.NewViewport(80, 20, mdStyles)
+	ch.SetMdViewport(mdViewport)
 
 	keyMap := DefaultKeyMap()
 
@@ -290,6 +305,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 		initialSessionID:    initialSessionID,
 		continueLastSession: continueLast,
 		triggerMessage:      triggerMessage,
+		mdStyles:            mdStyles,
 	}
 
 	status := NewStatus(com, ui)
@@ -485,10 +501,40 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if cmd := m.setSessionMessages(msgs); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		// Attach .md watcher (680e5b5d): the chat panel renders the session
+		// transcript directly from .md instead of from in-memory message
+		// items, so we tail it via fsnotify.
+		if cmd := m.attachMdView(m.session.ID); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		// Reload prompt history for the new session.
 		m.historyReset()
 		cmds = append(cmds, m.loadPromptHistory())
 		m.updateLayoutAndSize()
+
+	case tui.MdAppendedMsg:
+		m.mdContent = append(m.mdContent, msg.Bytes...)
+		m.renderMdView()
+		if m.chat.Follow() {
+			m.chat.ScrollToBottom()
+		}
+		if m.mdWatcher != nil {
+			cmds = append(cmds, m.mdWatcher.Listen())
+		}
+
+	case tui.MdTruncatedMsg:
+		if data, err := os.ReadFile(m.mdPath); err == nil {
+			m.mdContent = data
+		}
+		m.renderMdView()
+		m.chat.ScrollToBottom()
+		if m.mdWatcher != nil {
+			cmds = append(cmds, m.mdWatcher.Listen())
+		}
+
+	case tui.MdWatchErrMsg:
+		m.mdWatchErr = msg.Err
+		slog.Warn(".md watch error", "err", msg.Err, "path", m.mdPath)
 
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
@@ -2112,6 +2158,10 @@ func (m *UI) updateSize() {
 	m.status.SetWidth(m.layout.status.Dx())
 
 	m.chat.SetSize(m.layout.main.Dx(), m.layout.main.Dy())
+	// Re-render the .md transcript at the new width — Glamour wraps to width.
+	if m.mdContent != nil {
+		m.renderMdView()
+	}
 	m.textarea.MaxHeight = TextareaMaxHeight
 	m.textarea.SetWidth(m.layout.editor.Dx())
 	m.renderPills()
