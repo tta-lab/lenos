@@ -60,7 +60,7 @@ func New(sessionID, mdPath string) (*UI, error) {
 		viewport:  NewViewport(100, 100, styles),
 	}
 
-	ui.header = NewHeader(fm, styles)
+	ui.header = NewHeader(nil, fm, styles)
 	ui.footer = NewFooter(styles)
 
 	// Render the initial content.

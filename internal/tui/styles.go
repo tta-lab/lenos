@@ -32,6 +32,12 @@ type Styles struct {
 	FooterActive    lipgloss.Style // amber text
 	FooterIdle      lipgloss.Style // slate text
 	FooterHints     lipgloss.Style // dim slate (right-aligned)
+	SandboxOn       lipgloss.Style // green
+	SandboxOff      lipgloss.Style // red
+	SandboxDegraded lipgloss.Style // amber
+	Brand           lipgloss.Style // bold cyan
+	Keystroke       lipgloss.Style // dim
+	KeystrokeTip    lipgloss.Style // dim slate
 }
 
 // NewStyles returns the resolved style set.
@@ -62,6 +68,28 @@ func NewStyles() Styles {
 			Foreground(AccentSlate),
 
 		FooterHints: lipgloss.NewStyle().
+			Foreground(AccentSlate),
+
+		SandboxOn: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("2")).
+			Bold(true),
+
+		SandboxOff: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("1")).
+			Bold(true),
+
+		SandboxDegraded: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("3")).
+			Bold(true),
+
+		Brand: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("6")).
+			Bold(true),
+
+		Keystroke: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("8")),
+
+		KeystrokeTip: lipgloss.NewStyle().
 			Foreground(AccentSlate),
 	}
 }
