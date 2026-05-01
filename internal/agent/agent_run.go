@@ -138,6 +138,13 @@ runLoopReentry:
 	if rec == nil {
 		rec = a.recorder
 	}
+	slog.Info("agent.Run env diagnostic",
+		"session_id", call.SessionID,
+		"env_LENOS_SESSION_ID", call.Env["LENOS_SESSION_ID"],
+		"env_count", len(call.Env),
+		"runner", fmt.Sprintf("%T", resolveRunner(call)),
+		"sysprompt_len", len(a.systemPrompt.Get()),
+	)
 	deps := loopDeps{
 		model:      largeModel.Model,
 		provOpts:   call.ProviderOptions,
