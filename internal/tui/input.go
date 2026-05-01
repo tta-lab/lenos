@@ -12,8 +12,7 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/common"
 )
 
-// MinTextareaHeight / MaxTextareaHeight bound the input editor height —
-// matches the legacy editor envelope from internal/ui/model.
+// MinTextareaHeight / MaxTextareaHeight bound the input editor height.
 const (
 	MinTextareaHeight = 1
 	MaxTextareaHeight = 12
