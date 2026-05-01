@@ -159,7 +159,7 @@ func (m *UI) waitNextTWTick() tea.Cmd {
 
 // startTWTickPoll starts a 500ms ticker that polls taskwarrior subtasks
 // for the worker's job. Called once from Init — the poller runs for the UI's
-// lifetime since TTAL_JOB_ID is stable per worker process.
+// lifetime since the cwd-derived job hex is stable per worker process.
 func (m *UI) startTWTickPoll(jobID string) tea.Cmd {
 	m.twPollTicker = time.NewTicker(500 * time.Millisecond)
 	m.twJobID = jobID

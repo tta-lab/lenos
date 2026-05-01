@@ -282,10 +282,12 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		}
 	}
 
-	// narrate (cmd/narrate) reads these to resolve the session .md path.
-	// Set explicitly so subprocess invocations get the right file regardless
-	// of inherited env or any mid-session cd. c.dataDir is absolute (resolved
-	// at coordinator init).
+	// narrate (cmd/narrate) needs both:
+	//   - LENOS_SESSION_ID: which session.md to append to (no way to derive)
+	//   - LENOS_DATA_DIR:   where transcripts live. Required because
+	//     cfg.Options.DataDirectory may differ from <subprocess-cwd>/.lenos
+	//     (--data-dir override, or fsext.LookupClosest walking up to a parent
+	//     project root). c.dataDir is absolute and already resolved.
 	sandboxEnv["LENOS_SESSION_ID"] = sessionID
 	sandboxEnv["LENOS_DATA_DIR"] = c.dataDir
 

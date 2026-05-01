@@ -159,9 +159,9 @@ func TestCoordinator_recorderFor_cachesPerSession(t *testing.T) {
 	assert.NotSame(t, r1a, r2, "different sessionIDs should return different recorders")
 }
 
-// TestBuildCall_SetsLenosEnvVars verifies that buildCall injects
-// LENOS_SESSION_ID + LENOS_DATA_DIR (absolute) into the subprocess env so
-// narrate (cmd/narrate) can resolve the session .md path.
+// TestBuildCall_SetsLenosEnvVars verifies buildCall injects LENOS_SESSION_ID
+// (the only env var narrate still needs — the data dir is auto-derived from
+// the subprocess cwd).
 func TestBuildCall_SetsLenosEnvVars(t *testing.T) {
 	tmp := t.TempDir()
 	configDir := t.TempDir()

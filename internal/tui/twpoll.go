@@ -3,8 +3,6 @@ package tui
 import (
 	"context"
 	"log/slog"
-	"path/filepath"
-	"regexp"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,31 +10,6 @@ import (
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
 )
-
-// worktreeJobIDRe matches the ttal worktree convention
-//
-//	<anything>/worktrees/<hex8>-<alias>
-//
-// and captures the 8-hex job ID. Used as a fallback by ResolveJobID when no
-// explicit env or arg is given.
-var worktreeJobIDRe = regexp.MustCompile(`^([0-9a-f]{8})(?:-.+)?$`)
-
-// ResolveJobID returns the taskwarrior job hex for the current worker. It
-// prefers the explicit override (caller-supplied or TTAL_JOB_ID env from
-// older worker sessions) and falls back to parsing the cwd basename when
-// running inside a `*/worktrees/<hex8>-<alias>` path. Returns "" when no
-// job can be derived — the caller should treat that as "not a TW worker"
-// and skip polling.
-func ResolveJobID(override, cwd string) string {
-	if override != "" {
-		return override
-	}
-	base := filepath.Base(cwd)
-	if m := worktreeJobIDRe.FindStringSubmatch(base); len(m) >= 2 {
-		return m[1]
-	}
-	return ""
-}
 
 // TwPollMsg carries the latest taskwarrior subtask list to the UI.
 type TwPollMsg struct {

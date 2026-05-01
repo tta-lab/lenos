@@ -38,6 +38,7 @@ import (
 
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
+	"github.com/tta-lab/lenos/internal/taskwarrior"
 	"github.com/tta-lab/lenos/internal/ui/anim"
 	"github.com/tta-lab/lenos/internal/ui/attachments"
 	"github.com/tta-lab/lenos/internal/ui/chat"
@@ -365,12 +366,10 @@ func (m *UI) Init() tea.Cmd {
 	if cmd := m.startGitPoll(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	// start taskwarrior subtask polling if running as a TW worker.
-	// Prefer TTAL_JOB_ID (legacy override) but otherwise derive the job hex
-	// from the worktree path — `<anything>/worktrees/<hex8>-<alias>` carries
-	// the same id and works without any env wiring.
-	cwd, _ := os.Getwd()
-	if jobID := tui.ResolveJobID(os.Getenv("TTAL_JOB_ID"), cwd); jobID != "" {
+	// Start taskwarrior subtask polling when running inside a ttal worktree
+	// — the job hex is derived from the cwd basename
+	// (`*/worktrees/<hex8>-<alias>`); no env wiring needed.
+	if jobID := taskwarrior.ResolveJobIDFromCwd(); jobID != "" {
 		if cmd := m.startTWTickPoll(jobID); cmd != nil {
 			cmds = append(cmds, cmd)
 		}

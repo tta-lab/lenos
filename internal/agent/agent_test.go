@@ -56,15 +56,24 @@ func TestBuildSummaryPrompt(t *testing.T) {
 	})
 }
 
+// chdirIntoWorktree creates a tempdir shaped like
+// `.../worktrees/<hex>-test` and chdirs into it so taskwarrior.ResolveJobID
+// returns the hex.
+func chdirIntoWorktree(t *testing.T, hex string) {
+	t.Helper()
+	root := t.TempDir()
+	wt := filepath.Join(root, "worktrees", hex+"-test")
+	require.NoError(t, os.MkdirAll(wt, 0o755))
+	t.Chdir(wt)
+}
+
 func TestGenerateTitle(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("task CLI not available on windows")
 	}
-	if _, err := os.LookupEnv("TTAL_JOB_ID"); !err {
-		t.Setenv("TTAL_JOB_ID", "25620b89")
-	}
 
 	t.Run("uses task description as session title", func(t *testing.T) {
+		chdirIntoWorktree(t, "25620b89")
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)
@@ -89,6 +98,7 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 	})
 
 	t.Run("empty array falls back to default", func(t *testing.T) {
+		chdirIntoWorktree(t, "25620b89")
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)
@@ -109,12 +119,13 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		assert.Equal(t, DefaultSessionName, updated.Title)
 	})
 
-	t.Run("no TTAL_JOB_ID uses default", func(t *testing.T) {
+	t.Run("non-worktree cwd uses default", func(t *testing.T) {
+		// Plain tempdir (no worktrees/<hex>-* parent) → ResolveJobIDFromCwd
+		// returns "" → default title.
+		t.Chdir(t.TempDir())
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)
-
-		t.Setenv("TTAL_JOB_ID", "")
 
 		a := &sessionAgent{sessions: env.sessions}
 		a.generateTitle(t.Context(), sess.ID, "")
@@ -125,6 +136,7 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 	})
 
 	t.Run("description over 100 chars is truncated", func(t *testing.T) {
+		chdirIntoWorktree(t, "25620b89")
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)

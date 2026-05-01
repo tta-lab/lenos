@@ -74,7 +74,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		prompt = append(prompt, fantasy.NewSystemMessage(systemPromptPrefix))
 	}
 	prompt = append(prompt, history...)
-	prompt = append(prompt, fantasy.NewUserMessage(buildSummaryPrompt(ctx, os.Getenv("TTAL_JOB_ID"))))
+	prompt = append(prompt, fantasy.NewUserMessage(buildSummaryPrompt(ctx, taskwarrior.ResolveJobIDFromCwd())))
 
 	stream, err := largeModel.Model.Stream(genCtx, fantasy.Call{
 		Prompt:          prompt,
@@ -178,10 +178,10 @@ func (a *sessionAgent) getSessionMessages(ctx context.Context, s session.Session
 
 // generateTitle generates a session titled based on the initial prompt.
 func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, userPrompt string) {
-	jobID := os.Getenv("TTAL_JOB_ID")
+	jobID := taskwarrior.ResolveJobIDFromCwd()
 	var title string
 	if jobID == "" {
-		slog.Warn("TTAL_JOB_ID not set; using default session name")
+		slog.Warn("Cwd is not a ttal worktree; using default session name")
 		title = DefaultSessionName
 	} else {
 		cmd := exec.CommandContext(ctx, "task",
