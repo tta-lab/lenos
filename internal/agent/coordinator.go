@@ -287,7 +287,6 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 	// fsext.LookupClosest walk-up from cwd that lenos's main process uses,
 	// so the two always converge — no LENOS_DATA_DIR export required.
 	sandboxEnv["LENOS_SESSION_ID"] = sessionID
-	slog.Debug("buildCall env", "session_id", sessionID, "cwd", c.cfg.WorkingDir(), "env_count", len(sandboxEnv))
 
 	cwd := c.cfg.WorkingDir()
 	var additionalReadOnlyPaths []string

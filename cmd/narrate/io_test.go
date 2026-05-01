@@ -85,6 +85,13 @@ func TestResolveInput(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "args win", got)
 	})
+
+	t.Run("stdin read error propagates", func(t *testing.T) {
+		badReader := errorReader{}
+		_, err := resolveInput([]string{}, badReader)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "read stdin")
+	})
 }
 
 type errorReader struct{}
@@ -182,5 +189,30 @@ func TestReadStdinIfPiped(t *testing.T) {
 		got, err := readStdinIfPiped(strings.NewReader("hello\nworld\n"))
 		require.NoError(t, err)
 		require.Equal(t, "hello\nworld\n", got)
+	})
+
+	t.Run("real pipe reads content", func(t *testing.T) {
+		t.Parallel()
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+		go func() {
+			w.Write([]byte("from pipe\n"))
+			w.Close()
+		}()
+		got, err := readStdinIfPiped(r)
+		require.NoError(t, err)
+		require.Equal(t, "from pipe\n", got)
+	})
+
+	t.Run("dev tty returns empty without blocking", func(t *testing.T) {
+		t.Parallel()
+		f, err := os.Open("/dev/tty")
+		if err != nil {
+			t.Skip("no /dev/tty available")
+		}
+		defer f.Close()
+		got, err := readStdinIfPiped(f)
+		require.NoError(t, err)
+		require.Equal(t, "", got)
 	})
 }
