@@ -41,8 +41,8 @@ internal/
   db/                              SQLite via sqlc, with migrations
     sql/                           Raw SQL queries (consumed by sqlc)
     migrations/                    Schema migrations
-  ui/                              Bubble Tea v2 TUI (see internal/ui/AGENTS.md)
-  tui/                             Bash-first .md viewer (Phase 4; see internal/tui/README.md)
+  ui/                              Reusable TUI primitives — dialogs, completions, chat items, attachments, image, notification backends, styles, common, util, logo, diffview, list. Library imports for internal/tui (see internal/ui/AGENTS.md).
+  tui/                             TUI composition root for interactive lenos. Owns Header / Viewport / BottomBar / Footer / Help / InputPane plus Watcher, TwPoller, GitPoller, NotificationDispatcher; routes pubsub events from Workspace. See internal/tui/README.md.
   permission/                      Tool permission checking and allow-lists
   event/                           Telemetry (PostHog)
   pubsub/                          Internal pub/sub for cross-component messaging
