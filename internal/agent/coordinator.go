@@ -235,11 +235,27 @@ func (c *coordinator) recorderFor(sessionID string) transcript.Recorder {
 		path := filepath.Join(c.dataDir, "sessions", sessionID+".md")
 		r := transcript.NewMdRecorder(path)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
+			useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
+			var sandboxState string
+			if useSandbox && c.sandboxClient != nil {
+				sandboxState = "on"
+			} else if useSandbox && c.sandboxClient == nil {
+				sandboxState = "degraded"
+			} else {
+				sandboxState = "off"
+			}
+			title := ""
+			if sess, err := c.sessions.Get(context.Background(), sessionID); err == nil {
+				title = sess.Title
+			}
 			_ = r.Open(context.Background(), transcript.Meta{
 				SessionID: sessionID,
-				Agent:     "lenos",
+				Agent:     agentNameOr(c.cfg.Overrides().AgentName),
 				Model:     c.currentAgent.Model().Model.Model(),
 				StartedAt: time.Now().UTC(),
+				Sandbox:   sandboxState,
+				Title:     title,
+				Cwd:       c.cfg.WorkingDir(),
 			})
 		}
 		return r
@@ -885,4 +901,11 @@ func resolveSandbox(p *bool) bool {
 		return true
 	}
 	return *p
+}
+
+func agentNameOr(name string) string {
+	if name != "" {
+		return name
+	}
+	return "lenos"
 }

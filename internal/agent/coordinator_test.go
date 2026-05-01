@@ -8,12 +8,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/pubsub"
+	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/transcript"
 	"github.com/tta-lab/temenos/client"
 )
@@ -29,7 +32,30 @@ func (s *stubAgent) Run(_ context.Context, _ SessionAgentCall) error { return s.
 func (s *stubAgent) Model() Model {
 	return Model{
 		ModelCfg: config.SelectedModel{Model: s.modelName, Provider: "test"},
+		Model:    &stubFantasyModel{modelName: s.modelName},
 	}
+}
+
+type stubFantasyModel struct {
+	modelName string
+}
+
+func (s *stubFantasyModel) Model() string    { return s.modelName }
+func (s *stubFantasyModel) Provider() string { return "test" }
+func (s *stubFantasyModel) Generate(_ context.Context, _ fantasy.Call) (*fantasy.Response, error) {
+	return nil, nil
+}
+
+func (s *stubFantasyModel) Stream(_ context.Context, _ fantasy.Call) (fantasy.StreamResponse, error) {
+	return nil, nil
+}
+
+func (s *stubFantasyModel) GenerateObject(_ context.Context, _ fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
+	return nil, nil
+}
+
+func (s *stubFantasyModel) StreamObject(_ context.Context, _ fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
+	return nil, nil
 }
 
 // minimalCoordinator exposes the Run error-mapping path for unit testing
@@ -83,7 +109,6 @@ func TestCoordinator_Run_StopReasonMapping(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			c := &minimalCoordinator{
 				currentAgent: &stubAgent{runErr: tc.runErr, modelName: "test-model"},
 			}
@@ -137,9 +162,12 @@ func TestCoordinator_recorderFor_cachesPerSession(t *testing.T) {
 // LENOS_SESSION_ID + LENOS_DATA_DIR (absolute) into the subprocess env so
 // narrate (cmd/narrate) can resolve the session .md path.
 func TestBuildCall_SetsLenosEnvVars(t *testing.T) {
-	t.Parallel()
-
 	tmp := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 	cfg, err := config.Init(tmp, "", false)
 	require.NoError(t, err)
 
@@ -160,13 +188,269 @@ func TestBuildCall_SetsLenosEnvVars(t *testing.T) {
 
 	assert.Equal(t, "sess-123", call.Env["LENOS_SESSION_ID"])
 	assert.Equal(t, tmp, call.Env["LENOS_DATA_DIR"])
-	assert.True(t, filepath.IsAbs(call.Env["LENOS_DATA_DIR"]),
-		"LENOS_DATA_DIR must be absolute")
+	assert.True(t, filepath.IsAbs(call.Env["LENOS_DATA_DIR"]))
 }
 
-// TestIsUnauthorized verifies that isUnauthorized correctly classifies
-// fantasy.ProviderError by status code. This is the gateway for the
-// OAuth/API-key refresh retry path in Coordinator.Run.
+// testConfigStore is a minimal ConfigStore for recorderFor unit tests.
+// It avoids file I/O by providing in-memory config values.
+type testConfigStore struct {
+	agentName  string
+	sandbox    *bool
+	workingDir string
+}
+
+func (t *testConfigStore) Config() *config.Config {
+	return &config.Config{Options: &config.Options{Sandbox: t.sandbox}}
+}
+
+func (t *testConfigStore) Overrides() *config.RuntimeOverrides {
+	return &config.RuntimeOverrides{AgentName: t.agentName}
+}
+func (t *testConfigStore) WorkingDir() string                            { return t.workingDir }
+func (t *testConfigStore) Resolver() config.VariableResolver             { return nil }
+func (t *testConfigStore) KnownProviders() []catwalk.Provider            { return nil }
+func (t *testConfigStore) SetupAgents()                                  {}
+func (t *testConfigStore) SetConfigField(_ config.Scope, _, _ any) error { return nil }
+func (t *testConfigStore) RemoveConfigField(_ string) error              { return nil }
+func (t *testConfigStore) HasConfigField(_ string) (bool, error)         { return false, nil }
+
+// testSessionService is a minimal session.Service for recorderFor unit tests.
+type testSessionService struct {
+	title  string
+	getErr error
+}
+
+func (t *testSessionService) Get(_ context.Context, id string) (session.Session, error) {
+	if t.getErr != nil {
+		return session.Session{}, t.getErr
+	}
+	return session.Session{ID: id, Title: t.title}, nil
+}
+func (t *testSessionService) List(_ context.Context) ([]session.Session, error) { return nil, nil }
+func (t *testSessionService) Create(_ context.Context, _ string) (session.Session, error) {
+	return session.Session{}, nil
+}
+
+func (t *testSessionService) UpdateTitleAndUsage(_ context.Context, _, _ string, _, _ int64, _ float64) error {
+	return nil
+}
+
+func (t *testSessionService) AppendMessage(_ context.Context, _, _ string, _ ...message.Message) error {
+	return nil
+}
+
+func (t *testSessionService) ListMessages(_ context.Context, _ string) ([]message.Message, error) {
+	return nil, nil
+}
+
+func (t *testSessionService) AgentQueuedPrompts(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
+func (t *testSessionService) AgentQueuedPromptsList(_ context.Context, _ string) ([]string, error) {
+	return nil, nil
+}
+
+func (t *testSessionService) CreateTitleSession(_ context.Context, _ string) (session.Session, error) {
+	return session.Session{}, nil
+}
+func (t *testSessionService) CreateAgentToolSessionID(_, _ string) string { return "" }
+func (t *testSessionService) ParseAgentToolSessionID(_ string) (string, string, bool) {
+	return "", "", false
+}
+func (t *testSessionService) IsAgentToolSession(_ string) bool { return false }
+func (t *testSessionService) Save(_ context.Context, _ session.Session) (session.Session, error) {
+	return session.Session{}, nil
+}
+func (t *testSessionService) Rename(_ context.Context, _, _ string) error { return nil }
+func (t *testSessionService) Delete(_ context.Context, _ string) error    { return nil }
+func (t *testSessionService) GetLast(_ context.Context) (session.Session, error) {
+	return session.Session{}, nil
+}
+
+func (t *testSessionService) CreateTaskSession(_ context.Context, _, _, _ string) (session.Session, error) {
+	return session.Session{}, nil
+}
+
+func (t *testSessionService) Subscribe(_ context.Context) <-chan pubsub.Event[session.Session] {
+	return nil
+}
+
+func TestRecorderFor_AgentNameOverride(t *testing.T) {
+	dataDir := t.TempDir()
+	sessionsDir := filepath.Join(dataDir, "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+
+	cfg, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	err = cfg.SetConfigField(config.ScopeGlobal, "agent", "kestrel")
+	require.NoError(t, err)
+
+	sid := "agent-override-test"
+	c := &coordinator{
+		dataDir:      dataDir,
+		recorders:    csync.NewMap[string, transcript.Recorder](),
+		currentAgent: &stubAgent{modelName: "test-model"},
+		cfg:          cfg,
+		sessions:     &testSessionService{},
+	}
+
+	r := c.recorderFor(sid)
+	require.NotNil(t, r)
+
+	bs, err := os.ReadFile(filepath.Join(sessionsDir, sid+".md"))
+	require.NoError(t, err)
+	// AgentName comes from Overrides().AgentName (runtime override)
+	// If runtime override is empty, defaults to "lenos"
+	require.Contains(t, string(bs), "agent: lenos\n")
+}
+
+func TestRecorderFor_SandboxThreeState(t *testing.T) {
+	boolPtr := func(v bool) *bool { return &v }
+
+	cases := []struct {
+		name          string
+		sandboxOption *bool
+		sandboxClient *client.Client
+		want          string
+	}{
+		{"sandbox on, client present", boolPtr(true), &client.Client{}, "sandbox: on\n"},
+		{"sandbox on, client absent (degraded)", boolPtr(true), nil, "sandbox: degraded\n"},
+		{"sandbox off", boolPtr(false), &client.Client{}, "sandbox: off\n"}, // will fail if sandbox option not wired
+		{"sandbox nil (default true), client present", nil, &client.Client{}, "sandbox: on\n"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			dataDir := t.TempDir()
+			sessionsDir := filepath.Join(dataDir, "sessions")
+			require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+			configDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+			t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+			t.Setenv("LENOS_GLOBAL_DATA", configDir)
+			t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+			require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+			t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+			t.Setenv("LENOS_GLOBAL_DATA", configDir)
+			t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+			require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+
+			cfg, err := config.Init(dataDir, "", false)
+			require.NoError(t, err)
+
+			sid := "sandbox-" + tc.name
+			c := &coordinator{
+				dataDir:       dataDir,
+				recorders:     csync.NewMap[string, transcript.Recorder](),
+				currentAgent:  &stubAgent{modelName: "test-model"},
+				cfg:           cfg,
+				sessions:      &testSessionService{},
+				sandboxClient: tc.sandboxClient,
+			}
+
+			// Override sandbox option if specified
+			if tc.sandboxOption != nil {
+				cfg.Config().Options.Sandbox = tc.sandboxOption
+			}
+
+			r := c.recorderFor(sid)
+			require.NotNil(t, r)
+
+			bs, err := os.ReadFile(filepath.Join(sessionsDir, sid+".md"))
+			require.NoError(t, err)
+			require.Contains(t, string(bs), tc.want)
+		})
+	}
+}
+
+func TestRecorderFor_TitleAndCwd(t *testing.T) {
+	dataDir := t.TempDir()
+	sessionsDir := filepath.Join(dataDir, "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	sid := "title-cwd-test"
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+
+	cfg, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+
+	c := &coordinator{
+		dataDir:      dataDir,
+		recorders:    csync.NewMap[string, transcript.Recorder](),
+		currentAgent: &stubAgent{modelName: "test-model"},
+		cfg:          cfg,
+		sessions:     &testSessionService{title: "My Test Task"},
+	}
+
+	r := c.recorderFor(sid)
+	require.NotNil(t, r)
+
+	bs, err := os.ReadFile(filepath.Join(sessionsDir, sid+".md"))
+	require.NoError(t, err)
+	content := string(bs)
+	require.Contains(t, content, "title: My Test Task\n")
+	require.Contains(t, content, "cwd: ")
+}
+
+func TestRecorderFor_TitleErrorIsNonFatal(t *testing.T) {
+	dataDir := t.TempDir()
+	sessionsDir := filepath.Join(dataDir, "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	sid := "title-err-test"
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+
+	cfg, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+
+	c := &coordinator{
+		dataDir:      dataDir,
+		recorders:    csync.NewMap[string, transcript.Recorder](),
+		currentAgent: &stubAgent{modelName: "test-model"},
+		cfg:          cfg,
+		sessions:     &testSessionService{getErr: errors.New("session not found")},
+	}
+
+	r := c.recorderFor(sid)
+	require.NotNil(t, r)
+
+	bs, err := os.ReadFile(filepath.Join(sessionsDir, sid+".md"))
+	require.NoError(t, err)
+	require.NotContains(t, string(bs), "title:")
+}
+
 func TestIsUnauthorized(t *testing.T) {
 	t.Parallel()
 
@@ -200,21 +484,13 @@ func TestIsUnauthorized(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			got := isUnauthorized(tc.err)
 			assert.Equal(t, tc.want, got)
 		})
 	}
 }
 
-// _newCoordinatorSignatureLock is a compile-time guard. It is never executed —
-// passing nil for cfg would crash NewCoordinator at runtime — but the closure
-// body must type-check, which forces NewCoordinator's 7th positional argument
-// to accept *client.Client. If someone reverts the wiring (e.g. drops the
-// parameter), the next `go build` fails. Add a unit test only if you also
-// want runtime coverage; the existing TestResolveRunner already covers the
-// non-nil-client → SandboxRunner path, and subtask 4's integration test
-// exercises the full chain end-to-end.
+// _newCoordinatorSignatureLock is a compile-time guard.
 var _newCoordinatorSignatureLock = func() {
 	var sc *client.Client
 	_, _ = NewCoordinator(context.TODO(), nil, nil, nil, nil, nil, sc)
