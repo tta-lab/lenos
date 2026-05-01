@@ -82,7 +82,20 @@ func New(com *common.Common, sessionID string, continueLast bool, triggerMessage
 	}
 	mdPath := filepath.Join(dataDir, "sessions", sess.ID+".md")
 
-	md, _ := os.ReadFile(mdPath) // missing file is fine; watcher will pick up creates
+	// Ensure the .md exists before the watcher attaches — transcript writes
+	// happen lazily on first agent activity, but fsnotify needs an existing
+	// inode at registration time. AppendStrict uses O_APPEND|O_CREATE so an
+	// empty file is harmless.
+	if err := os.MkdirAll(filepath.Dir(mdPath), 0o755); err != nil {
+		slog.Warn("MkdirAll for session .md", "path", mdPath, "err", err)
+	}
+	if _, err := os.Stat(mdPath); os.IsNotExist(err) {
+		if f, err := os.OpenFile(mdPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644); err == nil {
+			f.Close()
+		}
+	}
+
+	md, _ := os.ReadFile(mdPath)
 	fm, _, _ := ParseFrontmatter(md)
 
 	styles := NewStyles()
