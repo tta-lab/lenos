@@ -46,6 +46,7 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/completions"
 	"github.com/tta-lab/lenos/internal/ui/dialog"
 	fimage "github.com/tta-lab/lenos/internal/ui/image"
+	"github.com/tta-lab/lenos/internal/ui/list"
 	"github.com/tta-lab/lenos/internal/ui/logo"
 	"github.com/tta-lab/lenos/internal/ui/notification"
 	"github.com/tta-lab/lenos/internal/ui/styles"
@@ -1690,6 +1691,12 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					cmds = append(cmds, cmd)
 				}
 				m.chat.SelectFirst()
+			case key.Matches(msg, m.keyMap.Chat.Copy):
+				// y / c / Y / C: copy selection. If the user has a mouse-drag
+				// highlight, copy that range; otherwise copy the focused block's
+				// raw .md source (the verbatim transcript text — what the user
+				// expects when they hit y on a bash block).
+				cmds = append(cmds, m.copyChatBlockOrHighlight())
 			case key.Matches(msg, m.keyMap.Chat.End):
 				if cmd := m.chat.ScrollToBottomAndAnimate(); cmd != nil {
 					cmds = append(cmds, cmd)
@@ -3038,6 +3045,30 @@ func (m *UI) copyChatHighlight() tea.Cmd {
 			return nil
 		},
 	)
+}
+
+// copyChatBlockOrHighlight is the y/c keypress entry point. It copies the
+// mouse-drag highlight when one exists, otherwise the focused block's raw
+// .md source (verbatim transcript text — what users expect when yanking
+// a bash or output block).
+func (m *UI) copyChatBlockOrHighlight() tea.Cmd {
+	if m.chat.HasHighlight() {
+		return m.copyChatHighlight()
+	}
+	item := m.chat.list.SelectedItem()
+	if item == nil {
+		return nil
+	}
+	rawer, ok := item.(list.RawRenderable)
+	if !ok {
+		return nil
+	}
+	width := m.chat.list.Width()
+	text := rawer.RawRender(width)
+	if text == "" {
+		return nil
+	}
+	return common.CopyToClipboard(text, "Block copied to clipboard")
 }
 
 // renderLogo renders the Lenos logo with the given styles and dimensions.

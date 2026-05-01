@@ -8,10 +8,20 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/tta-lab/lenos/internal/tui"
 	"github.com/tta-lab/lenos/internal/ui/chat"
 )
+
+// lambdaStyle paints the user-prompt λ in phosphor amber + bold so the eye
+// catches the start of every turn. Computed once and reused across blocks
+// — lipgloss.NewStyle is cheap, but we hold the rendered SGR string for the
+// hot path.
+var lambdaSGR = lipgloss.NewStyle().
+	Foreground(tui.AccentAmber).
+	Bold(true).
+	Render(tui.GlyphLambda)
 
 // attachMdView (re)attaches the .md watcher for the given session and
 // rebuilds the chat list from its current contents. Called from the
@@ -99,6 +109,14 @@ func (m *UI) rebuildMdBlocks() {
 			}
 		} else {
 			rendered = b.Source
+		}
+		// User-message blocks: replace the leading λ with our colored
+		// version so the start of every turn pops visually. Glamour wrapped
+		// the **λ** in bold escapes; we replace the λ glyph in place — our
+		// SGR sequence applies amber+bold and resets cleanly, so trailing
+		// Glamour resets are harmless.
+		if b.Kind == tui.BlockUserMsg {
+			rendered = strings.Replace(rendered, tui.GlyphLambda, lambdaSGR, 1)
 		}
 		items = append(items, chat.NewMdBlockItem(m.com.Styles, b.ID(), b.Source, rendered))
 	}
