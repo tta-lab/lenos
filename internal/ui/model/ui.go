@@ -366,9 +366,11 @@ func (m *UI) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 	// start taskwarrior subtask polling if running as a TW worker.
-	// TTAL_JOB_ID is set once at worker spawn and never changes, so the
-	// ticker runs for the UI lifetime with no session coupling.
-	if jobID := os.Getenv("TTAL_JOB_ID"); jobID != "" {
+	// Prefer TTAL_JOB_ID (legacy override) but otherwise derive the job hex
+	// from the worktree path — `<anything>/worktrees/<hex8>-<alias>` carries
+	// the same id and works without any env wiring.
+	cwd, _ := os.Getwd()
+	if jobID := tui.ResolveJobID(os.Getenv("TTAL_JOB_ID"), cwd); jobID != "" {
 		if cmd := m.startTWTickPoll(jobID); cmd != nil {
 			cmds = append(cmds, cmd)
 		}

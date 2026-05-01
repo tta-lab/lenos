@@ -41,12 +41,15 @@ func TestResolveSessionPath(t *testing.T) {
 		require.Contains(t, err.Error(), "LENOS_SESSION_ID")
 	})
 
-	t.Run("only SESSION_ID set", func(t *testing.T) {
+	t.Run("only SESSION_ID set falls back to cwd/.lenos", func(t *testing.T) {
 		t.Setenv("LENOS_DATA_DIR", "")
 		t.Setenv("LENOS_SESSION_ID", "abc123")
-		_, err := resolveSessionPath()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "LENOS_DATA_DIR")
+		dir := t.TempDir()
+		t.Chdir(dir)
+
+		path, err := resolveSessionPath()
+		require.NoError(t, err)
+		require.Equal(t, filepath.Join(dir, ".lenos", "sessions", "abc123.md"), path)
 	})
 
 	t.Run("both set", func(t *testing.T) {

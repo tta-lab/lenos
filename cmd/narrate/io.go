@@ -12,16 +12,23 @@ import (
 	"github.com/tta-lab/lenos/internal/transcript"
 )
 
-// resolveSessionPath returns the absolute .md path from env vars. Both must
-// be set and non-empty.
+// resolveSessionPath returns the absolute .md path. LENOS_SESSION_ID is the
+// only required env (a session ID can't be auto-derived without a state
+// file). LENOS_DATA_DIR is optional — when unset, falls back to
+// <cwd>/.lenos, matching the convention that each project root carries its
+// own .lenos/ directory.
 func resolveSessionPath() (string, error) {
-	dataDir := os.Getenv("LENOS_DATA_DIR")
 	sessionID := os.Getenv("LENOS_SESSION_ID")
-	if dataDir == "" {
-		return "", errors.New("LENOS_DATA_DIR not set; this binary is for use inside a lenos session")
-	}
 	if sessionID == "" {
 		return "", errors.New("LENOS_SESSION_ID not set; this binary is for use inside a lenos session")
+	}
+	dataDir := os.Getenv("LENOS_DATA_DIR")
+	if dataDir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("LENOS_DATA_DIR unset and cwd unreadable: %w", err)
+		}
+		dataDir = filepath.Join(cwd, ".lenos")
 	}
 	return filepath.Join(dataDir, "sessions", sessionID+".md"), nil
 }

@@ -9,6 +9,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestResolveJobID(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		override string
+		cwd      string
+		want     string
+	}{
+		{"override wins over cwd", "deadbeef", "/Users/x/.ttal/worktrees/12345678-foo", "deadbeef"},
+		{"worktree path with alias", "", "/Users/neil/.ttal/worktrees/680e5b5d-len", "680e5b5d"},
+		{"worktree path bare hex", "", "/somewhere/worktrees/abcdef01", "abcdef01"},
+		{"non-worktree cwd", "", "/Users/neil/code/myproj", ""},
+		{"basename too short to be hex8", "", "/Users/x/foo/abcdef0-len", ""},
+		{"basename has uppercase", "", "/Users/x/foo/ABCDEF01-len", ""},
+		{"empty override + empty cwd", "", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := ResolveJobID(tc.override, tc.cwd)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestStartTwPoll_EmptyJobIDReturnsNilPoller(t *testing.T) {
 	p, cmd := StartTwPoll("")
 	assert.Nil(t, p, "empty jobID returns nil poller")
