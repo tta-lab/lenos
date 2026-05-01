@@ -109,6 +109,7 @@ func TestCoordinator_Run_StopReasonMapping(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			c := &minimalCoordinator{
 				currentAgent: &stubAgent{runErr: tc.runErr, modelName: "test-model"},
 			}
@@ -484,6 +485,7 @@ func TestIsUnauthorized(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got := isUnauthorized(tc.err)
 			assert.Equal(t, tc.want, got)
 		})
