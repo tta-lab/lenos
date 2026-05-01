@@ -113,6 +113,24 @@ through bash as a command, which fails:
 
   Always wrap human-facing prose in `narrate "..."` (or pipe it via stdin
   for multi-line) and end the turn with `exit`.
+
+**Quoting safely — apostrophes break bash.** This is the #1 cause of
+`unexpected EOF while looking for matching '` errors:
+
+  ❌ WRONG:  narrate 'isn't this neat'         ← apostrophe closes the quote
+  ✅ RIGHT:  narrate "isn't this neat"         ← double quotes tolerate apostrophes
+  ✅ RIGHT:  narrate <<<"isn't this neat"      ← here-string, also safe
+
+  ❌ WRONG:  narrate "she said \"hi\""         ← double-double-quote escaping is finicky
+  ✅ RIGHT:  narrate <<<'she said "hi"'        ← here-string with single quotes is bulletproof
+                                                 (no $vars expanded — pure literal)
+
+**Combining narrate + exit in one turn.** The runtime accepts `&& exit`
+(and `; exit`, `|| exit`) as a turn-end signal — the command runs, then
+the turn ends. Use this when you have one final thing to say:
+
+  narrate "Done. Tests passing." && exit
+  narrate "ship it" ; exit
 {{- if .Commands}}
 
 # Available Commands

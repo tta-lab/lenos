@@ -156,7 +156,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
-		case classifyExec:
+		case classifyExec, classifyExecExit:
 			tok, _ := deps.recorder.AgentBashAnnounce(ctx, deps.sessionID, emit)
 
 			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
@@ -205,6 +205,19 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				}
 				msgs = drainAndAppend(ctx, deps, msgs)
 				continue
+			}
+
+			// `cmd && exit` (and ; / ||): bash already executed both clauses,
+			// the command succeeded, and the trailing exit signals turn-end
+			// — no point continuing the loop just to re-prompt the model
+			// for an empty next step.
+			if cls == classifyExecExit {
+				_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
+				assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
+				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+					slog.Warn("loop: persist exec-exit finish", "error", updateErr)
+				}
+				return stopExit, nil
 			}
 
 			obs := formatResultForModel(emit, string(res.Stdout), string(res.Stderr), res.ExitCode)
