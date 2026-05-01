@@ -14,37 +14,14 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/chat"
 )
 
-// lambdaStyle paints the user-prompt λ in phosphor amber + bold so the eye
+// lambdaSGR paints the user-prompt λ in phosphor amber + bold so the eye
 // catches the start of every turn. Computed once and reused across blocks
-// — lipgloss.NewStyle is cheap, but we hold the rendered SGR string for the
-// hot path.
+// — lipgloss.NewStyle is cheap, but we hold the rendered SGR string for
+// the hot path.
 var lambdaSGR = lipgloss.NewStyle().
 	Foreground(tui.AccentAmber).
 	Bold(true).
 	Render(tui.GlyphLambda)
-
-// blockquotePrefix prepends `> ` to every line of src so Glamour renders
-// it as a blockquote (indented + amber bar marker per MarkdownRenderer's
-// BlockQuote style). Used to differentiate agent activity from user msgs
-// in the chat list — the user msg renders flush, the bash / output /
-// trailer / runtime / prose blocks render quoted under it.
-//
-// Empty lines stay empty (no trailing space) so Glamour doesn't fragment
-// the blockquote across paragraph breaks.
-func blockquotePrefix(src string) string {
-	if src == "" {
-		return src
-	}
-	lines := strings.Split(src, "\n")
-	for i, line := range lines {
-		if line == "" {
-			lines[i] = ">"
-		} else {
-			lines[i] = "> " + line
-		}
-	}
-	return strings.Join(lines, "\n")
-}
 
 // attachMdView (re)attaches the .md watcher for the given session and
 // rebuilds the chat list from its current contents. Called from the
@@ -118,12 +95,11 @@ func (m *UI) rebuildMdBlocks() {
 		return
 	}
 
-	// All blocks go through Glamour so bash fences, code, and prose all get
-	// proper markdown styling. Non-user blocks are blockquoted (a `> ` line
-	// prefix before rendering) so Glamour draws them with its blockquote
-	// indent + colored bar — that's the visual differentiation between
-	// "what the user said" (flush, with our terracotta bar) and "what the
-	// agent did" (Glamour-blockquoted, with amber bar).
+	// Every block renders through Glamour as plain markdown — bash fences
+	// stay monospace, prose gets paragraph spacing, runtime-event
+	// blockquotes keep their `> ...` styling. Differentiation between user
+	// and agent comes from the per-kind line prefix below (only the user
+	// msg gets the terracotta bar; agent activity renders flush).
 	renderer, rerr := tui.MarkdownRenderer(contentWidth)
 	items := make([]chat.MessageItem, 0, len(blocks))
 	for _, b := range blocks {
@@ -132,14 +108,9 @@ func (m *UI) rebuildMdBlocks() {
 			kind = chat.MdBlockUserMsg
 		}
 
-		source := b.Source
-		if kind == chat.MdBlockOther {
-			source = blockquotePrefix(source)
-		}
-
-		rendered := source
+		rendered := b.Source
 		if rerr == nil {
-			out, err := renderer.Render(source)
+			out, err := renderer.Render(b.Source)
 			if err != nil {
 				slog.Warn("Render block", "kind", b.Kind, "err", err)
 			} else {
