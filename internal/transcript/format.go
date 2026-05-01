@@ -18,6 +18,15 @@ func RenderFrontmatter(m Meta) string {
 	fmt.Fprintf(&b, "agent: %s\n", m.Agent)
 	fmt.Fprintf(&b, "model: %s\n", m.Model)
 	fmt.Fprintf(&b, "started_at: %s\n", m.StartedAt.Format(time.RFC3339))
+	if m.Sandbox != "" {
+		fmt.Fprintf(&b, "sandbox: %s\n", m.Sandbox)
+	}
+	if m.Title != "" {
+		fmt.Fprintf(&b, "title: %s\n", m.Title)
+	}
+	if m.Cwd != "" {
+		fmt.Fprintf(&b, "cwd: %s\n", m.Cwd)
+	}
 	b.WriteString("---\n\n")
 	return b.String()
 }

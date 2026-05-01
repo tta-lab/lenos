@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +23,44 @@ func TestRenderFrontmatter(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, string(golden), RenderFrontmatter(meta))
+}
+
+func TestRenderFrontmatterAllFields(t *testing.T) {
+	t.Parallel()
+
+	meta := Meta{
+		SessionID: "test-session-1234",
+		Agent:     "kestrel",
+		Model:     "claude-sonnet-4-6",
+		StartedAt: time.Date(2026, 4, 28, 10, 30, 0, 0, time.UTC),
+		Sandbox:   "on",
+		Title:     "My Test Task",
+		Cwd:       "/Users/test/project",
+	}
+
+	golden, err := os.ReadFile("testdata/session_start_full.md")
+	require.NoError(t, err)
+
+	require.Equal(t, string(golden), RenderFrontmatter(meta))
+}
+
+func TestRenderFrontmatterSandboxOnly(t *testing.T) {
+	t.Parallel()
+
+	meta := Meta{
+		SessionID: "test-session-1234",
+		Agent:     "kestrel",
+		Model:     "claude-sonnet-4-6",
+		StartedAt: time.Date(2026, 4, 28, 10, 30, 0, 0, time.UTC),
+		Sandbox:   "on",
+	}
+
+	output := RenderFrontmatter(meta)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	require.Equal(t, 7, len(lines))
+	require.Contains(t, output, "sandbox: on\n")
+	require.NotContains(t, output, "title:")
+	require.NotContains(t, output, "cwd:")
 }
 
 func TestRenderUserMessage(t *testing.T) {

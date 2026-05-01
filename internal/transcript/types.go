@@ -41,6 +41,9 @@ type Meta struct {
 	Agent     string
 	Model     string
 	StartedAt time.Time
+	Sandbox   string // "on", "off", "degraded", or "" (unset)
+	Title     string
+	Cwd       string
 }
 
 // TrailerToken is an opaque token that callers MUST hold from AgentBashAnnounce
