@@ -9,25 +9,30 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/transcript"
 )
 
-// resolveSessionPath returns the absolute .md path. LENOS_SESSION_ID is the
-// only required env (a session ID can't be auto-derived without a state
-// file). LENOS_DATA_DIR is optional — when unset, falls back to
-// <cwd>/.lenos, matching the convention that each project root carries its
-// own .lenos/ directory.
+// resolveSessionPath returns the absolute .md path.
+//
+// Resolution rules — cwd is the single source of truth:
+//   - LENOS_SESSION_ID is the only required env (a session ID can't be
+//     auto-derived without a state file; multiple session.md files can
+//     coexist in the same data dir).
+//   - The data directory is found via fsext.LookupClosest from cwd,
+//     matching how lenos's main process resolves DataDirectory. When no
+//     ancestor .lenos/ exists, falls back to <cwd>/.lenos.
 func resolveSessionPath() (string, error) {
 	sessionID := os.Getenv("LENOS_SESSION_ID")
 	if sessionID == "" {
 		return "", errors.New("LENOS_SESSION_ID not set; this binary is for use inside a lenos session")
 	}
-	dataDir := os.Getenv("LENOS_DATA_DIR")
-	if dataDir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("LENOS_DATA_DIR unset and cwd unreadable: %w", err)
-		}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("read cwd: %w", err)
+	}
+	dataDir, ok := fsext.LookupClosest(cwd, ".lenos")
+	if !ok {
 		dataDir = filepath.Join(cwd, ".lenos")
 	}
 	return filepath.Join(dataDir, "sessions", sessionID+".md"), nil

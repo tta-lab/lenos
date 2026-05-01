@@ -282,14 +282,11 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		}
 	}
 
-	// narrate (cmd/narrate) needs both:
-	//   - LENOS_SESSION_ID: which session.md to append to (no way to derive)
-	//   - LENOS_DATA_DIR:   where transcripts live. Required because
-	//     cfg.Options.DataDirectory may differ from <subprocess-cwd>/.lenos
-	//     (--data-dir override, or fsext.LookupClosest walking up to a parent
-	//     project root). c.dataDir is absolute and already resolved.
+	// narrate (cmd/narrate) needs LENOS_SESSION_ID to know which session.md
+	// to append to. The data directory is auto-discovered via the same
+	// fsext.LookupClosest walk-up from cwd that lenos's main process uses,
+	// so the two always converge — no LENOS_DATA_DIR export required.
 	sandboxEnv["LENOS_SESSION_ID"] = sessionID
-	sandboxEnv["LENOS_DATA_DIR"] = c.dataDir
 
 	cwd := c.cfg.WorkingDir()
 	var additionalReadOnlyPaths []string

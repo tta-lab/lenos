@@ -188,8 +188,8 @@ func TestBuildCall_SetsLenosEnvVars(t *testing.T) {
 	call := c.buildCall(context.Background(), "sess-123", "hi", Model{}, config.ProviderConfig{})
 
 	assert.Equal(t, "sess-123", call.Env["LENOS_SESSION_ID"])
-	assert.Equal(t, tmp, call.Env["LENOS_DATA_DIR"])
-	assert.True(t, filepath.IsAbs(call.Env["LENOS_DATA_DIR"]))
+	_, hasDataDir := call.Env["LENOS_DATA_DIR"]
+	assert.False(t, hasDataDir, "LENOS_DATA_DIR no longer exported; narrate finds .lenos via cwd LookupClosest")
 }
 
 // testConfigStore is a minimal ConfigStore for recorderFor unit tests.

@@ -84,9 +84,9 @@ type SessionAgentCall struct {
 	SandboxClient *client.Client
 
 	// Env is the explicit environment overlay for each subprocess. The
-	// coordinator sets LENOS_SESSION_ID + LENOS_DATA_DIR (absolute) so
-	// narrate (cmd/narrate) can resolve the session .md path: the loop
-	// does not need to add them.
+	// coordinator sets LENOS_SESSION_ID so narrate (cmd/narrate) can resolve
+	// the session .md path; the data directory is auto-discovered via
+	// fsext.LookupClosest from cwd, so the loop does not need to add it.
 	Env map[string]string
 
 	// AllowedPaths is the read/write bound for the runner. The first entry

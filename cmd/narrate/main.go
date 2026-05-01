@@ -2,8 +2,8 @@
 // lenos agent session invoke it as `narrate "<text>"` (or `cmd | narrate`)
 // to append human-readable prose to the session's .md transcript.
 //
-// Reads LENOS_SESSION_ID (required); the data directory defaults to
-// <cwd>/.lenos and can be overridden via LENOS_DATA_DIR.
+// Reads LENOS_SESSION_ID (required); the data directory is auto-discovered
+// via the same fsext.LookupClosest walk-up from cwd that lenos itself uses.
 package main
 
 import (
@@ -19,9 +19,9 @@ var rootCmd = &cobra.Command{
 	Short: "Append prose to the current lenos session's .md transcript",
 	Long: `narrate appends prose to the current lenos session's .md transcript.
 
-Resolves the target path as ${LENOS_DATA_DIR:-$(pwd)/.lenos}/sessions/${LENOS_SESSION_ID}.md.
-LENOS_SESSION_ID is required; LENOS_DATA_DIR is optional and defaults to
-the .lenos directory in the current working directory.
+Reads LENOS_SESSION_ID (required) and finds the session .md by walking up
+from the current working directory to the closest .lenos/ directory —
+the same resolution lenos itself uses, so the two always agree.
 
 Examples:
   narrate "switching approach"

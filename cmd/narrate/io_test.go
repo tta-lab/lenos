@@ -26,23 +26,14 @@ func funlock(f *os.File) {
 }
 
 func TestResolveSessionPath(t *testing.T) {
-	t.Run("both unset", func(t *testing.T) {
-		t.Setenv("LENOS_DATA_DIR", "")
-		t.Setenv("LENOS_SESSION_ID", "")
-		_, err := resolveSessionPath()
-		require.Error(t, err)
-	})
-
-	t.Run("only DATA_DIR set", func(t *testing.T) {
-		t.Setenv("LENOS_DATA_DIR", "/tmp/.lenos")
+	t.Run("missing SESSION_ID errors", func(t *testing.T) {
 		t.Setenv("LENOS_SESSION_ID", "")
 		_, err := resolveSessionPath()
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "LENOS_SESSION_ID")
 	})
 
-	t.Run("only SESSION_ID set falls back to cwd/.lenos", func(t *testing.T) {
-		t.Setenv("LENOS_DATA_DIR", "")
+	t.Run("plain cwd → <cwd>/.lenos", func(t *testing.T) {
 		t.Setenv("LENOS_SESSION_ID", "abc123")
 		dir := t.TempDir()
 		t.Chdir(dir)
@@ -52,12 +43,19 @@ func TestResolveSessionPath(t *testing.T) {
 		require.Equal(t, filepath.Join(dir, ".lenos", "sessions", "abc123.md"), path)
 	})
 
-	t.Run("both set", func(t *testing.T) {
-		t.Setenv("LENOS_DATA_DIR", "/tmp/.lenos")
+	t.Run("ancestor .lenos wins via LookupClosest", func(t *testing.T) {
+		// /<tmp>/.lenos exists, cwd is /<tmp>/sub. narrate should resolve
+		// the ancestor's .lenos, not create a new one in sub.
 		t.Setenv("LENOS_SESSION_ID", "abc123")
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, ".lenos"), 0o755))
+		sub := filepath.Join(root, "sub")
+		require.NoError(t, os.MkdirAll(sub, 0o755))
+		t.Chdir(sub)
+
 		path, err := resolveSessionPath()
 		require.NoError(t, err)
-		require.Equal(t, "/tmp/.lenos/sessions/abc123.md", path)
+		require.Equal(t, filepath.Join(root, ".lenos", "sessions", "abc123.md"), path)
 	})
 }
 
