@@ -55,6 +55,7 @@ func init() {
 		loginCmd,
 		statsCmd,
 		sessionCmd,
+		systemPromptCmd,
 	)
 }
 

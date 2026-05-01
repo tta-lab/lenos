@@ -71,6 +71,10 @@ type Coordinator interface {
 	Summarize(context.Context, string) error
 	Model() Model
 	UpdateModels(ctx context.Context) error
+	// SystemPrompt returns the fully-resolved system prompt currently sent
+	// to the model on every turn. Useful for `lenos system-prompt` and
+	// debugging "the model isn't following the protocol" issues.
+	SystemPrompt() string
 }
 
 type coordinator struct {
@@ -146,6 +150,11 @@ func NewCoordinator(
 	if err != nil {
 		return nil, fmt.Errorf("build system prompt: %w", err)
 	}
+	// Push the resolved prompt onto the agent — without this, agent_run.go's
+	// a.systemPrompt.Get() returns the empty string passed at NewSessionAgent
+	// construction and the model runs with no instructions (which is why the
+	// bash-first protocol was being ignored).
+	c.currentAgent.SetSystemPrompt(c.systemPrompt)
 
 	return c, nil
 }
@@ -843,6 +852,10 @@ func (c *coordinator) Model() Model {
 	return c.currentAgent.Model()
 }
 
+func (c *coordinator) SystemPrompt() string {
+	return c.systemPrompt
+}
+
 func (c *coordinator) UpdateModels(ctx context.Context) error {
 	// Build the models again so we make sure we get the latest config.
 	large, small, err := c.buildAgentModels(ctx, false)
@@ -850,6 +863,22 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 		return err
 	}
 	c.currentAgent.SetModels(large, small)
+
+	// Rebuild the system prompt — the coder post-template can vary by
+	// provider/model — and push it onto the agent.
+	sp, err := SystemPrompt(
+		ctx,
+		c.cfg.WorkingDir(),
+		large.Model.Provider(),
+		large.Model.Model(),
+		c.cfg,
+		prompt.WithContextPaths(c.cfg.Config().Agents[config.AgentCoder].ContextPaths),
+	)
+	if err != nil {
+		return fmt.Errorf("rebuild system prompt: %w", err)
+	}
+	c.systemPrompt = sp
+	c.currentAgent.SetSystemPrompt(sp)
 	return nil
 }
 
