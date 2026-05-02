@@ -71,18 +71,15 @@ func (i *MdBlockItem) RawRender(width int) string {
 	return body
 }
 
-// Render implements list.Item. User-msg blocks get the bordered bar
-// (focus changes its weight); other blocks get plain padding so they
-// read as "agent territory" — no per-line border noise.
+// Render implements list.Item. linePrefix is always non-empty (see
+// linePrefix doc) so the gutter width never changes on focus toggle —
+// only the visual identity of the prefix does.
 func (i *MdBlockItem) Render(width int) string {
 	body := i.rendered
 	if i.isHighlighted() {
 		body = i.renderHighlighted(body, width, lipgloss.Height(body))
 	}
 	prefix := i.linePrefix()
-	if prefix == "" {
-		return body
-	}
 	lines := strings.Split(body, "\n")
 	for n, line := range lines {
 		lines[n] = prefix + line
@@ -91,14 +88,16 @@ func (i *MdBlockItem) Render(width int) string {
 }
 
 // linePrefix returns the rendered SGR string to prepend on every line of
-// the block, or "" to render flush. Per-kind:
+// the block. Always non-empty so the horizontal gutter is stable across
+// focus toggles — toggling visibility (bar vs invisible) without changing
+// width keeps content from shifting on j/k navigation. Per-kind:
 //   - UserMsg: UserBlurred (faint bar) or UserFocused (solid bar) — the
 //     terracotta vertical bar that marks turns the user owns. Always shown
 //     so the eye can scan turn boundaries even when focus lives elsewhere.
 //   - Other (bash / output / runtime / prose / lenos-bash composite):
-//     BlockFocused (subtle slate bar) when focused, "" when blurred. j/k
-//     navigation is visible across the whole transcript without painting
-//     extra chrome onto agent activity at rest.
+//     BlockBlurred (transparent 2-char gutter) at rest, BlockFocused
+//     (subtle slate bar in the same 2-char slot) when focused. Visual
+//     change is the bar appearing, not the content moving.
 func (i *MdBlockItem) linePrefix() string {
 	if i.kind == MdBlockUserMsg {
 		if i.focused {
@@ -109,7 +108,7 @@ func (i *MdBlockItem) linePrefix() string {
 	if i.focused {
 		return i.sty.Chat.Message.BlockFocused.Render()
 	}
-	return ""
+	return i.sty.Chat.Message.BlockBlurred.Render()
 }
 
 // IsStickyAnchor implements StickyAnchor — user-msg blocks pin to the

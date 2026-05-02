@@ -39,21 +39,29 @@ func TestMdBlockItem_RawRender_highlighted_returnsRawSource_noANSI(t *testing.T)
 	assert.False(t, strings.Contains(got, "\x1b[36m"), "highlighted RawRender must not embed the pre-styled cyan from rendered")
 }
 
-// Focus on a non-user block must produce a visible left-bar prefix so j/k
-// navigation is observable across the whole transcript (regression: previously
-// only user-msg blocks showed any focus marker).
-func TestMdBlockItem_linePrefix_focusedNonUser_showsBar(t *testing.T) {
+// Focus on a non-user block must produce a visibly different prefix without
+// changing the prefix WIDTH — the gutter is always the same number of cells
+// (transparent at rest, slate bar when focused) so toggling focus never
+// shifts the content. Regression guard for the layout-bug fix.
+func TestMdBlockItem_linePrefix_focusedNonUser_changesIdentityNotWidth(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	item := NewMdBlockItem(&sty, "id-fb", "ls -la\n", "ls -la\n", MdBlockOther)
 
 	blurred := item.linePrefix()
-	assert.Empty(t, blurred, "non-user blurred block must render flush (no prefix)")
+	assert.NotEmpty(t, blurred, "non-user blurred block must hold the gutter (otherwise focus toggle shifts content)")
 
 	item.SetFocused(true)
 	focused := item.linePrefix()
 	assert.NotEmpty(t, focused, "non-user focused block must show a bar prefix")
-	assert.NotEqual(t, blurred, focused, "focused prefix must differ from blurred")
+	assert.NotEqual(t, blurred, focused, "focused prefix must differ from blurred (visual identity change)")
+
+	// Gutter width must be stable across focus toggles — the chars shown may
+	// differ (space vs bar), but their displayed width must match so the
+	// content column doesn't shift.
+	blurredWidth := ansi.StringWidth(blurred)
+	focusedWidth := ansi.StringWidth(focused)
+	assert.Equal(t, blurredWidth, focusedWidth, "blurred/focused prefix widths must match — no shift on focus toggle")
 }
 
 // Render returns the styled rendered string (so the visible chat list keeps

@@ -130,5 +130,17 @@ func TestChat_renderStickyBand_blankWhenNoSticky(t *testing.T) {
 	assert.Empty(t, out)
 }
 
+// Mouse handlers must subtract the sticky-band row from the chat-area y
+// before passing into list coordinates — otherwise every click lands one
+// row low (regression: previously the mouse selected the item below where
+// the user pointed). This locks the helper at value 1.
+func TestChat_chatToListY_subtractsStickyBand(t *testing.T) {
+	t.Parallel()
+	c := newStickyTestChat()
+	assert.Equal(t, 0, c.chatToListY(1), "click on first list row (chat row 1) → list row 0")
+	assert.Equal(t, 4, c.chatToListY(5), "click on chat row 5 → list row 4")
+	assert.Equal(t, -1, c.chatToListY(0), "click on the sticky band itself → before any item")
+}
+
 // Avoid unused import in case list is otherwise unreferenced.
 var _ = list.NewList

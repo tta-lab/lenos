@@ -111,6 +111,10 @@ func NewStyles() Styles {
 // in the output.
 //
 // We override:
+//   - Document.Margin: cleared (default is 2). The chat list owns the
+//     left gutter via per-block linePrefix; an extra Glamour margin on
+//     top would stack two indents and make focus toggles "shift" content
+//     because the prefix-driven 2 chars combine with the margin-driven 2.
 //   - BlockQuote: amber `>` marker
 //   - CodeBlock / Code: terminal default fg/bg (we don't paint user code)
 //
@@ -118,6 +122,14 @@ func NewStyles() Styles {
 // stock dark-mode appearance.
 func MarkdownRenderer(width int) (*glamour.TermRenderer, error) {
 	cfg := glamourstyles.DarkStyleConfig
+	cfg.Document = ansi.StyleBlock{
+		StylePrimitive: ansi.StylePrimitive{
+			BlockPrefix: "\n",
+			BlockSuffix: "\n",
+		},
+		// Margin intentionally absent — the chat list's per-block prefix
+		// system owns left alignment.
+	}
 	cfg.BlockQuote = ansi.StyleBlock{
 		StylePrimitive: ansi.StylePrimitive{Color: pointerTo("214")},
 		Indent:         new(uint(1)),

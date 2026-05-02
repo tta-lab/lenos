@@ -326,6 +326,21 @@ func (m *Chat) SelectedItemInView() bool {
 	return m.list.SelectedItemInView()
 }
 
+// stickyBandRows is the number of rows Draw reserves above the list for
+// the sticky-lambda turn header. Mouse handlers must subtract this from
+// the incoming chat-area y before passing into list coordinates, or
+// every click lands one row low (selecting the item below where the user
+// pointed).
+const stickyBandRows = 1
+
+// chatToListY converts a chat-area y coordinate to the list's coordinate
+// space by subtracting the sticky-band offset. Returns the unchanged
+// value if the input is at or above the sticky row (negative result is
+// passed through to the list, which treats it as "before any item").
+func (m *Chat) chatToListY(y int) int {
+	return y - stickyBandRows
+}
+
 // StickyTurnInfo carries the data needed to render the sticky-lambda band.
 // Empty Line means there is no active sticky (chat scrolled to a turn-start
 // or no turns at all).
@@ -570,7 +585,7 @@ func (m *Chat) HandleMouseDown(x, y int) (bool, tea.Cmd) {
 		return false, nil
 	}
 
-	itemIdx, itemY := m.list.ItemIndexAtPosition(x, y)
+	itemIdx, itemY := m.list.ItemIndexAtPosition(x, m.chatToListY(y))
 	if itemIdx < 0 {
 		return false, nil
 	}
@@ -686,7 +701,7 @@ func (m *Chat) HandleMouseDrag(x, y int) bool {
 		return false
 	}
 
-	itemIdx, itemY := m.list.ItemIndexAtPosition(x, y)
+	itemIdx, itemY := m.list.ItemIndexAtPosition(x, m.chatToListY(y))
 	if itemIdx < 0 {
 		return false
 	}
