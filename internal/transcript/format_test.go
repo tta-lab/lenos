@@ -231,7 +231,16 @@ func TestRenderOutputBlock(t *testing.T) {
 		t.Parallel()
 
 		result := RenderOutputBlock(nil)
-		require.Equal(t, "```\n```\n\n", result)
+		require.Equal(t, "", result)
+	})
+
+	t.Run("triple-backticks sanitized to prevent fence imbalance", func(t *testing.T) {
+		t.Parallel()
+
+		out := []byte("foo\n```\nbar")
+		got := RenderOutputBlock(out)
+		require.NotContains(t, got, "```")
+		require.Contains(t, got, "bar")
 	})
 
 	t.Run("unicode and emoji preserved", func(t *testing.T) {

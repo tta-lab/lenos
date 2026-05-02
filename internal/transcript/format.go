@@ -39,10 +39,12 @@ func RenderUserMessage(text string) string {
 	return fmt.Sprintf("**λ** %s\n\n", text)
 }
 
-// RenderBashBlock renders a fenced bash block. The bash content is included
-// verbatim (no trim), preserving multi-line heredocs exactly.
+// RenderBashBlock renders a fenced `lenos-bash` block — a custom language
+// identifier intercepted by the composite block parser in
+// internal/tui/blocks.go. The bash content is included verbatim (no trim),
+// preserving multi-line heredocs exactly.
 func RenderBashBlock(bash string) string {
-	return fmt.Sprintf("```bash\n%s\n```\n\n", bash)
+	return fmt.Sprintf("```lenos-bash\n%s\n```\n\n", bash)
 }
 
 // humanizeDuration formats a duration for display in trailers.
@@ -102,13 +104,19 @@ func signalContext(code int) string {
 	}
 }
 
-// RenderOutputBlock renders a fenced plain output block with captured stdout/stderr.
-// Always includes a trailing blank line. Empty output renders an empty fenced block.
+// RenderOutputBlock renders captured stdout/stderr as plain markdown content.
+// Fenced wrapping is intentionally removed — output is rendered as-is so
+// Glamour can format it (headings, lists, etc.) and the composite block
+// parser in internal/tui/blocks.go groups it with its parent lenos-bash
+// fence. Triple-backticks in stdout are sanitized by inserting a zero-width
+// space after the first backtick in any ``` sequence, preventing fence
+// imbalance in the transcript.
 func RenderOutputBlock(out []byte) string {
 	if len(out) == 0 {
-		return "```\n```\n\n"
+		return ""
 	}
-	return fmt.Sprintf("```\n%s\n```\n\n", string(out))
+	sanitized := strings.ReplaceAll(string(out), "```", "`​``")
+	return strings.TrimRight(sanitized, "\n") + "\n\n"
 }
 
 // RenderRuntimeEvent renders a severity-prefixed runtime-event blockquote.

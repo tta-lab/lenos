@@ -1,4 +1,4 @@
-```bash
+```lenos-bash
 go test ./auth
 ```
 
