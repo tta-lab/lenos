@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,12 +24,17 @@ func setupSessionDir(t *testing.T) (dataDir string) {
 func TestRoot_HappyPath_Args(t *testing.T) {
 	dataDir := setupSessionDir(t)
 
+	buf := &bytes.Buffer{}
+	rootCmd.SetOut(buf)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
+
 	rootCmd.SetArgs([]string{"hello world"})
 	rootCmd.SetIn(strings.NewReader(""))
 
 	t.Setenv("LENOS_SESSION_ID", "test-session")
 
 	require.NoError(t, rootCmd.Execute())
+	require.Contains(t, buf.String(), "narrate written")
 
 	mdPath := filepath.Join(dataDir, "sessions", "test-session.md")
 	data, err := os.ReadFile(mdPath)

@@ -50,6 +50,7 @@ For visual emphasis, emit markdown directly:
 		if err := appendWithRetry(w, []byte(rendered)); err != nil {
 			return fmt.Errorf("write %s: %w", path, err)
 		}
+		fmt.Fprintln(cmd.OutOrStdout(), "narrate written")
 		return nil
 	},
 }
