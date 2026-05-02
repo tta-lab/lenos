@@ -21,19 +21,22 @@ func pointerTo(s string) *string {
 	return &s
 }
 
-// Brand palette hex codes — package-level so cross-file consumers
-// (markdown.go, the Glamour theme below, the dialog rename gradient,
-// etc.) all reference the same source of truth instead of duplicating
-// literals. Keep these in sync with the inline `primary`/`secondary`
-// values in DefaultStyles below; promote those next time we need them
-// outside the constructor.
+// Brand palette — package-level so cross-file consumers (markdown.go,
+// the Glamour theme below, the dialog rename gradient, the YOLO icon,
+// text selection, etc.) all reference the same source of truth instead
+// of duplicating literals. Hex form for ansi.StylePrimitive callers
+// that need *string; typed-color form for direct lipgloss use.
 const (
-	BrandTertiaryHex = "#b8973e" // antique gold — `$` prompt, prompt placeholder, rename gradient destination
+	BrandPrimaryHex   = "#c4734f" // terracotta — primary brand, user-msg bar, focused borders
+	BrandSecondaryHex = "#d4a574" // peach-tan — secondary brand, user-msg foreground
+	BrandTertiaryHex  = "#b8973e" // antique gold — `$` prompt, rename gradient destination
 )
 
-// BrandTertiary is the typed-color form of BrandTertiaryHex for direct
-// use in lipgloss styles outside the DefaultStyles constructor.
-var BrandTertiary = lipgloss.Color(BrandTertiaryHex)
+var (
+	BrandPrimary   = lipgloss.Color(BrandPrimaryHex)
+	BrandSecondary = lipgloss.Color(BrandSecondaryHex)
+	BrandTertiary  = lipgloss.Color(BrandTertiaryHex)
+)
 
 const (
 	CheckIcon   string = "✓"
@@ -490,8 +493,8 @@ func (s *Styles) DialogHelpStyles() help.Styles {
 // DefaultStyles returns the default styles for the UI.
 func DefaultStyles() Styles {
 	var (
-		primary   = lipgloss.Color("#c4734f")
-		secondary = lipgloss.Color("#d4a574")
+		primary   = BrandPrimary
+		secondary = BrandSecondary
 		tertiary  = BrandTertiary
 
 		// Backgrounds
@@ -508,7 +511,7 @@ func DefaultStyles() Styles {
 
 		// Borders
 		border      = lipgloss.Color("#4d4348")
-		borderFocus = lipgloss.Color("#c4734f")
+		borderFocus = BrandPrimary
 
 		// Status
 		error   = lipgloss.Color("#e06c75")
@@ -640,7 +643,7 @@ func DefaultStyles() Styles {
 				Prefix:          " ",
 				Suffix:          " ",
 				Color:           pointerTo("#c4a34f"),
-				BackgroundColor: pointerTo("#c4734f"),
+				BackgroundColor: pointerTo(BrandPrimaryHex),
 				Bold:            new(true),
 			},
 		},
@@ -738,7 +741,7 @@ func DefaultStyles() Styles {
 					Color: pointerTo("#a89d8a"),
 				},
 				CommentPreproc: ansi.StylePrimitive{
-					Color: pointerTo("#c4734f"),
+					Color: pointerTo(BrandPrimaryHex),
 				},
 				Keyword: ansi.StylePrimitive{
 					Color: pointerTo("#7e8ea8"),
@@ -1168,7 +1171,7 @@ func DefaultStyles() Styles {
 	// Editor
 	s.EditorPromptNormalFocused = lipgloss.NewStyle().Foreground(greenDark).SetString("::: ")
 	s.EditorPromptNormalBlurred = s.EditorPromptNormalFocused.Foreground(fgMuted)
-	s.EditorPromptYoloIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(lipgloss.Color("#c4734f")).Bold(true).SetString(" ! ")
+	s.EditorPromptYoloIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(BrandPrimary).Bold(true).SetString(" ! ")
 	s.EditorPromptYoloIconBlurred = s.EditorPromptYoloIconFocused.Foreground(lipgloss.Color("#8a7e6e"))
 	s.EditorPromptYoloDotsFocused = lipgloss.NewStyle().MarginRight(1).Foreground(lipgloss.Color("#c4a34f")).SetString(":::")
 	s.EditorPromptYoloDotsBlurred = s.EditorPromptYoloDotsFocused.Foreground(lipgloss.Color("#8a7e6e"))
@@ -1243,7 +1246,7 @@ func DefaultStyles() Styles {
 	s.Chat.Message.ThinkingFooterDuration = s.Subtle
 
 	// Text selection.
-	s.TextSelection = lipgloss.NewStyle().Foreground(lipgloss.Color("#e8dcc8")).Background(lipgloss.Color("#c4734f"))
+	s.TextSelection = lipgloss.NewStyle().Foreground(lipgloss.Color("#e8dcc8")).Background(BrandPrimary)
 
 	// Dialog styles
 	s.Dialog.Title = base.Padding(0, 1).Foreground(primary)
