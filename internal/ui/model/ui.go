@@ -203,11 +203,11 @@ type UI struct {
 	// detailsOpen tracks whether the details panel is open
 	detailsOpen bool
 
-	// pills state
-	pillsExpanded      bool
-	focusedPillSection pillSection
-	promptQueue        int
-	pillsView          string
+	// pills state — bottom panel carries the prompt queue only; TODOs live
+	// in the header expansion (ctrl+d).
+	pillsExpanded bool
+	promptQueue   int
+	pillsView     string
 
 	// Todo spinner
 	todoSpinner    spinner.Model
@@ -1383,20 +1383,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 				return true
 			}
-		case key.Matches(msg, m.keyMap.Chat.PillLeft):
-			if m.state == uiChat && m.hasSession() && m.pillsExpanded && m.focus != uiFocusEditor {
-				if cmd := m.switchPillSection(-1); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-				return true
-			}
-		case key.Matches(msg, m.keyMap.Chat.PillRight):
-			if m.state == uiChat && m.hasSession() && m.pillsExpanded && m.focus != uiFocusEditor {
-				if cmd := m.switchPillSection(1); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-				return true
-			}
 		case key.Matches(msg, m.keyMap.Suspend):
 			if m.isAgentBusy() {
 				cmds = append(cmds, util.ReportWarn("Agent is busy, please wait..."))
@@ -1727,6 +1713,7 @@ func (m *UI) drawHeader(scr uv.Screen, area uv.Rectangle) {
 		m.session,
 		true,
 		m.detailsOpen,
+		m.effectiveTodos(),
 		area.Dx(),
 	)
 }
@@ -1924,9 +1911,6 @@ func (m *UI) ShortHelp() []key.Binding {
 				k.Chat.PageDown,
 				k.Chat.Copy,
 			)
-			if m.pillsExpanded && hasIncompleteTodos(m.effectiveTodos()) && m.promptQueue > 0 {
-				binds = append(binds, k.Chat.PillLeft)
-			}
 		}
 	default:
 		// TODO: other states
@@ -2037,9 +2021,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 					k.Chat.ClearHighlight,
 				},
 			)
-			if m.pillsExpanded && hasIncompleteTodos(m.effectiveTodos()) && m.promptQueue > 0 {
-				binds = append(binds, []key.Binding{k.Chat.PillLeft})
-			}
 		}
 	default:
 		if m.session == nil {
@@ -3020,7 +3001,16 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	maxItemsPerSection := remainingHeight - 3       // Account for section title and spacing
 
 	filesSection := m.modifiedFilesInfo(sectionWidth, maxItemsPerSection, false)
+	todoSection := m.todoListInfo(sectionWidth)
+
 	sections := filesSection
+	if todoSection != "" {
+		if sections == "" {
+			sections = todoSection
+		} else {
+			sections = lipgloss.JoinHorizontal(lipgloss.Top, filesSection, "  ", todoSection)
+		}
+	}
 	uv.NewStyledString(
 		s.CompactDetails.View.
 			Width(area.Dx()).
@@ -3033,6 +3023,24 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 				),
 			),
 	).Draw(scr, area)
+}
+
+// todoListInfo renders the TODO list section for the ctrl+d details overlay.
+// Returns "" when no taskwarrior job is bound or no todos exist — the caller
+// then omits the column entirely.
+func (m *UI) todoListInfo(width int) string {
+	todos := m.effectiveTodos()
+	if len(todos) == 0 {
+		return ""
+	}
+	t := m.com.Styles
+	icon := t.Tool.TodoInProgressIcon.Render(styles.SpinnerIcon)
+	if m.todoIsSpinning {
+		icon = m.todoSpinner.View()
+	}
+	title := t.CompactDetails.Title.Render("TODO")
+	body := FormatTodosList(t, todos, icon, width)
+	return lipgloss.JoinVertical(lipgloss.Left, title, body)
 }
 
 func (m *UI) copyChatHighlight() tea.Cmd {

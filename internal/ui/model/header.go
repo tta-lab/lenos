@@ -11,6 +11,7 @@ import (
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/ui/common"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 const (
@@ -38,13 +39,16 @@ func newHeader(com *common.Common) *header {
 	}
 }
 
-// drawHeader draws the header for the given session.
+// drawHeader draws the header for the given session. todos drives the
+// `TODO x/N` segment in the compact metadata strip — pass an empty slice
+// when no taskwarrior job is bound to the session.
 func (h *header) drawHeader(
 	scr uv.Screen,
 	area uv.Rectangle,
-	session *session.Session,
+	sess *session.Session,
 	compact bool,
 	detailsOpen bool,
+	todos []session.Todo,
 	width int,
 ) {
 	t := h.com.Styles
@@ -55,12 +59,12 @@ func (h *header) drawHeader(
 	h.width = width
 	h.compact = compact
 
-	if !compact || session == nil {
+	if !compact || sess == nil {
 		uv.NewStyledString(h.logo).Draw(scr, area)
 		return
 	}
 
-	if session.ID == "" {
+	if sess.ID == "" {
 		return
 	}
 
@@ -86,10 +90,11 @@ func (h *header) drawHeader(
 	}
 	details := renderHeaderDetails(
 		h.com,
-		session,
+		sess,
 		detailsOpen,
 		availDetailWidth,
 		sandbox,
+		todos,
 	)
 
 	remainingWidth := width -
@@ -113,10 +118,11 @@ func (h *header) drawHeader(
 // renderHeaderDetails renders the details section of the header.
 func renderHeaderDetails(
 	com *common.Common,
-	session *session.Session,
+	sess *session.Session,
 	detailsOpen bool,
 	availWidth int,
 	sandbox *bool, // nil means enabled (default true)
+	todos []session.Todo,
 ) string {
 	t := com.Styles
 
@@ -133,9 +139,13 @@ func renderHeaderDetails(
 	agentCfg := com.Config().Agents[config.AgentCoder]
 	model := com.Config().GetModelByType(agentCfg.Model)
 	if model != nil && model.ContextWindow > 0 {
-		percentage := (float64(session.CompletionTokens+session.PromptTokens) / float64(model.ContextWindow)) * 100
+		percentage := (float64(sess.CompletionTokens+sess.PromptTokens) / float64(model.ContextWindow)) * 100
 		formattedPercentage := t.Header.Percentage.Render(fmt.Sprintf("%d%%", int(percentage)))
 		parts = append(parts, formattedPercentage)
+	}
+
+	if seg := formatTodoSegment(t, todos); seg != "" {
+		parts = append(parts, seg)
 	}
 
 	const keystroke = "ctrl+d"
@@ -155,4 +165,22 @@ func renderHeaderDetails(
 
 	result := cwd + metadata
 	return ansi.Truncate(result, max(0, availWidth), "…")
+}
+
+// formatTodoSegment formats the `TODO done/total` segment shown in the
+// compact header strip. Returns "" when todos is empty so the caller drops
+// the segment (and its leading separator dot) entirely.
+func formatTodoSegment(t *styles.Styles, todos []session.Todo) string {
+	if len(todos) == 0 {
+		return ""
+	}
+	completed := 0
+	for _, td := range todos {
+		if td.Status == session.TodoStatusCompleted {
+			completed++
+		}
+	}
+	label := t.Header.Keystroke.Render("TODO")
+	count := t.Header.KeystrokeTip.Render(fmt.Sprintf(" %d/%d", completed, len(todos)))
+	return label + count
 }
