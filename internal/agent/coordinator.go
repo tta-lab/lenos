@@ -256,6 +256,11 @@ func (c *coordinator) recorderFor(sessionID string) transcript.Recorder {
 			title := ""
 			if sess, err := c.sessions.Get(context.Background(), sessionID); err == nil {
 				title = sess.Title
+			} else {
+				// Cosmetic metadata only — recorder still opens with empty title.
+				// Logged so the silent-fallback path is observable when debugging
+				// "why did the transcript header lose the title?".
+				slog.Warn("recorderFor: session metadata fetch failed", "session", sessionID, "err", err)
 			}
 			_ = r.Open(context.Background(), transcript.Meta{
 				SessionID: sessionID,

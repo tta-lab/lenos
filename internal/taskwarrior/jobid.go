@@ -1,6 +1,7 @@
 package taskwarrior
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -33,10 +34,13 @@ func ResolveJobID(cwd string) string {
 }
 
 // ResolveJobIDFromCwd is a convenience wrapper that calls os.Getwd
-// internally. Returns "" on any error.
+// internally. Returns "" on any error — and logs the Getwd failure so
+// callers diagnosing "not a worktree" don't chase the wrong root cause
+// (a deleted cwd looks identical to a non-worktree path otherwise).
 func ResolveJobIDFromCwd() string {
 	cwd, err := os.Getwd()
 	if err != nil {
+		slog.Warn("taskwarrior.ResolveJobIDFromCwd: getwd failed", "err", err)
 		return ""
 	}
 	return ResolveJobID(cwd)

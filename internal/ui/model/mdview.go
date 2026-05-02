@@ -47,6 +47,10 @@ func (m *UI) attachMdView(sessionID string) tea.Cmd {
 
 	cfg := m.com.Workspace.Config()
 	if cfg == nil || cfg.Options == nil {
+		// Reaching attachMdView with no resolved config is an upstream bug
+		// (loadSessionMsg should not fire before config is ready). Log so
+		// it doesn't manifest as a silently-blank chat.
+		slog.Warn("attachMdView: workspace config not ready", "session", sessionID)
 		return nil
 	}
 	dataDir, err := filepath.Abs(cfg.Options.DataDirectory)
@@ -64,7 +68,15 @@ func (m *UI) attachMdView(sessionID string) tea.Cmd {
 		slog.Warn("MkdirAll for session .md", "path", mdPath, "err", err)
 	}
 	if _, err := os.Stat(mdPath); os.IsNotExist(err) {
-		if f, err := os.OpenFile(mdPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644); err == nil {
+		f, err := os.OpenFile(mdPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			// Non-success non-EEXIST (permissions, disk full) — log so the
+			// downstream watcher-attach failure isn't the first user-visible
+			// signal of a deeper problem.
+			if !os.IsExist(err) {
+				slog.Warn("attachMdView: pre-create session .md failed", "path", mdPath, "err", err)
+			}
+		} else {
 			_ = f.Close()
 		}
 	}
@@ -72,6 +84,7 @@ func (m *UI) attachMdView(sessionID string) tea.Cmd {
 	initial, watcher, err := tui.NewWatcher(mdPath, 5*time.Millisecond)
 	if err != nil {
 		m.mdWatchErr = err
+		slog.Warn("attachMdView: watcher construction failed", "path", mdPath, "err", err)
 		return nil
 	}
 	m.mdContent = initial
@@ -107,6 +120,12 @@ func (m *UI) rebuildMdBlocks() {
 	// and agent comes from the per-kind line prefix below (only the user
 	// msg gets the terracotta bar; agent activity renders flush).
 	renderer, rerr := tui.MarkdownRenderer(contentWidth)
+	if rerr != nil {
+		// classifyAndRenderBlock falls back to raw source per-block when
+		// rerr is non-nil; surface the construction failure once at the
+		// top level so debugging the wall-of-raw-markdown UX is easy.
+		slog.Warn("rebuildMdBlocks: Glamour renderer construction failed", "width", contentWidth, "err", rerr)
+	}
 	items := make([]chat.MessageItem, 0, len(blocks))
 	for _, b := range blocks {
 		kind, rendered := classifyAndRenderBlock(b, renderer, rerr)

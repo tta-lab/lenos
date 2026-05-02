@@ -515,6 +515,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tui.MdTruncatedMsg:
 		if data, err := os.ReadFile(m.mdPath); err == nil {
 			m.mdContent = data
+		} else {
+			slog.Warn(".md re-read after truncation failed", "err", err, "path", m.mdPath)
+			cmds = append(cmds, util.ReportError(fmt.Errorf("session transcript re-read failed: %w", err)))
 		}
 		m.rebuildMdBlocks()
 		m.chat.ScrollToBottom()
@@ -525,6 +528,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tui.MdWatchErrMsg:
 		m.mdWatchErr = msg.Err
 		slog.Warn(".md watch error", "err", msg.Err, "path", m.mdPath)
+		cmds = append(cmds, util.ReportError(fmt.Errorf("session transcript watcher: %w", msg.Err)))
 
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))

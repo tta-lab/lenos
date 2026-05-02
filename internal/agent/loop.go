@@ -215,7 +215,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
 				assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
-					slog.Warn("loop: persist exec-exit finish", "error", updateErr)
+					slog.Warn("loop: failed to persist message after exec-exit", "error", updateErr)
 				}
 				return stopExit, nil
 			}
