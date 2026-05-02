@@ -14,8 +14,9 @@ import (
 type MdBlockKind int
 
 const (
-	MdBlockOther   MdBlockKind = iota // bash / output / trailer / runtime / prose
-	MdBlockUserMsg                    // **λ** user message — gets the left bar
+	MdBlockOther     MdBlockKind = iota // output / trailer / runtime / prose / legacy bash
+	MdBlockUserMsg                      // **λ** user message — gets the left bar
+	MdBlockLenosBash                    // ```lenos-bash composite — cmd + output rendered together
 )
 
 // MdBlockItem is a list.List item that renders one block of the session

@@ -40,6 +40,7 @@ type Styles struct {
 	Keystroke       lipgloss.Style // dim
 	KeystrokeTip    lipgloss.Style // dim slate
 	WatchErr        lipgloss.Style // bold crimson — recoverable watch error
+	BashPrompt      lipgloss.Style // cyan $ prefix on lenos-bash composite blocks
 }
 
 // NewStyles returns the resolved style set.
@@ -97,6 +98,9 @@ func NewStyles() Styles {
 		WatchErr: lipgloss.NewStyle().
 			Foreground(AccentCrimson).
 			Bold(true),
+
+		BashPrompt: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("6")),
 	}
 }
 

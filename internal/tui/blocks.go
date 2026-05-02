@@ -48,17 +48,24 @@ func (b Block) ID() string {
 // SplitBlocks walks the .md transcript and emits one Block per logical unit.
 // It does not invoke Glamour — callers render each Block's Source as needed
 // (typically once at SetMessages time, cached on the *mdBlockItem).
+//
+// lenos-bash composite rule: when a ```lenos-bash ... ``` fence closes,
+// subsequent non-blank blocks are absorbed into the same composite Block
+// (their Source appended) until we hit a boundary: another ```lenos-bash
+// fence, a **λ** user message, a > *runtime: event, or *(turn ended)*.
+// Legacy ```bash fences (old sessions) do NOT composite-absorb — each gets
+// its own BlockBashCmd item.
 func SplitBlocks(body []byte) []Block {
 	if len(body) == 0 {
 		return nil
 	}
 	src := string(body)
 
-	// Preserve the original line layout but split on runs of blank lines so
-	// fence-internal blank lines are kept inside a single block.
 	var blocks []Block
 	var current []string
 	currentInFence := false
+	inLenosFence := false // true when the current fence opened with lenos-bash
+	compositing := false  // true when absorbing blocks into a lenos-bash composite
 
 	flush := func() {
 		if len(current) == 0 {
@@ -76,24 +83,63 @@ func SplitBlocks(body []byte) []Block {
 		current = current[:0]
 	}
 
+	absorbIntoComposite := func() {
+		text := strings.TrimRight(strings.Join(current, "\n"), "\n")
+		if strings.TrimSpace(text) == "" {
+			current = current[:0]
+			return
+		}
+		kind := classifyBlock(text)
+		// Stop compositing when we hit a boundary block kind.
+		if compositing && (kind == BlockUserMsg || kind == BlockRuntime || kind == BlockTurnEnd || (kind == BlockBashCmd && strings.HasPrefix(strings.TrimSpace(strings.SplitN(text, "\n", 2)[0]), "```lenos-bash"))) {
+			compositing = false
+			flush()
+			return
+		}
+		if compositing && len(blocks) > 0 {
+			last := &blocks[len(blocks)-1]
+			last.Source += "\n\n" + text
+			current = current[:0]
+			return
+		}
+		flush()
+	}
+
 	for _, line := range strings.Split(src, "\n") {
 		trimmed := strings.TrimLeft(line, " \t")
 		if strings.HasPrefix(trimmed, "```") {
 			currentInFence = !currentInFence
 			current = append(current, line)
+			if len(current) == 1 && strings.HasPrefix(strings.TrimSpace(line), "```") {
+				// Opening fence — detect if it's lenos-bash.
+				if strings.HasPrefix(strings.TrimSpace(line), "```lenos-bash") || strings.HasPrefix(strings.TrimSpace(line), "``` lenos-bash") {
+					inLenosFence = true
+				}
+			}
 			if !currentInFence {
-				// Closing fence — emit this block now (don't wait for blank).
-				flush()
+				// Closing fence.
+				if inLenosFence {
+					flush()
+					compositing = true
+					inLenosFence = false
+				} else {
+					absorbIntoComposite()
+				}
 			}
 			continue
 		}
 		if !currentInFence && strings.TrimSpace(line) == "" {
-			flush()
+			if len(current) > 0 {
+				absorbIntoComposite()
+			}
+			current = current[:0]
 			continue
 		}
 		current = append(current, line)
 	}
-	flush()
+	if len(current) > 0 {
+		absorbIntoComposite()
+	}
 	return blocks
 }
 
@@ -109,6 +155,8 @@ func classifyBlock(text string) BlockKind {
 	switch {
 	case strings.HasPrefix(first, "**λ**"):
 		return BlockUserMsg
+	case strings.HasPrefix(first, "```lenos-bash"), strings.HasPrefix(first, "``` lenos-bash"):
+		return BlockBashCmd
 	case strings.HasPrefix(first, "```bash"), strings.HasPrefix(first, "``` bash"):
 		return BlockBashCmd
 	case strings.HasPrefix(first, "```"):
