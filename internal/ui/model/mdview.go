@@ -77,7 +77,7 @@ func (m *UI) attachMdView(sessionID string) tea.Cmd {
 		}
 	}
 
-	initial, watcher, err := tui.NewWatcher(mdPath, 5*time.Millisecond)
+	initial, watcher, err := transcript.NewWatcher(mdPath, 5*time.Millisecond)
 	if err != nil {
 		m.mdWatchErr = err
 		slog.Warn("attachMdView: watcher construction failed", "path", mdPath, "err", err)
@@ -86,7 +86,14 @@ func (m *UI) attachMdView(sessionID string) tea.Cmd {
 	m.mdContent = initial
 	m.mdWatcher = watcher
 	m.rebuildMdBlocks()
-	return watcher.Listen()
+	return mdWatchCmd(watcher)
+}
+
+// mdWatchCmd wraps a transcript.Watcher's Next() in a tea.Cmd so the
+// transcript pkg stays bubbletea-free. Returned cmd blocks until the next
+// file event arrives.
+func mdWatchCmd(w *transcript.Watcher) tea.Cmd {
+	return func() tea.Msg { return w.Next() }
 }
 
 // rebuildMdBlocks parses mdContent into transcript blocks and feeds them

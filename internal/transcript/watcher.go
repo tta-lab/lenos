@@ -1,24 +1,31 @@
-package tui
+package transcript
 
 import (
 	"os"
 	"sync"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/fsnotify/fsnotify"
 )
 
-// MdAppendedMsg is emitted when the file grows; contains the new bytes.
-type MdAppendedMsg struct{ Bytes []byte }
+// WatchEvent is the marker interface for events delivered by Watcher.Next.
+// Concrete types are WatchAppend, WatchTruncate, WatchError.
+type WatchEvent interface{ isWatchEvent() }
 
-// MdTruncatedMsg is emitted when the file shrinks (e.g. session reset).
-type MdTruncatedMsg struct{}
+// WatchAppend is delivered when the file grew; Bytes carries the new tail.
+type WatchAppend struct{ Bytes []byte }
 
-// MdWatchErrMsg is emitted on fsnotify errors.
-type MdWatchErrMsg struct{ Err error }
+// WatchTruncate is delivered when the file shrank (e.g. session reset).
+type WatchTruncate struct{}
 
-// Watcher tails a .md file and emits tea.Msg on changes.
+// WatchError is delivered when fsnotify reports an error.
+type WatchError struct{ Err error }
+
+func (WatchAppend) isWatchEvent()   {}
+func (WatchTruncate) isWatchEvent() {}
+func (WatchError) isWatchEvent()    {}
+
+// Watcher tails a .md file and emits WatchEvents on Next.
 type Watcher struct {
 	path     string
 	offset   int64
@@ -39,7 +46,8 @@ type event struct {
 
 // NewWatcher opens the .md file, reads current content, and starts watching.
 // Returns the initial bytes (everything in the file at construction time)
-// plus a Watcher whose Listen() method returns a tea.Cmd for Bubble Tea.
+// plus a Watcher whose Next() method blocks until the next file event.
+// Callers wanting Bubble Tea integration wrap Next in a tea.Cmd one-liner.
 func NewWatcher(path string, debounce time.Duration) (initial []byte, w *Watcher, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -121,7 +129,7 @@ func (w *Watcher) tailLoop(debounce time.Duration) {
 	}
 }
 
-// readAppend reads new bytes from the current offset and emits MdAppendedMsg.
+// readAppend reads new bytes from the current offset and emits WatchAppend.
 func (w *Watcher) readAppend() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -178,18 +186,17 @@ func (w *Watcher) readAppend() {
 	w.events <- event{appended: newBytes[:n]}
 }
 
-// Listen returns a tea.Cmd that blocks until the next file event.
-func (w *Watcher) Listen() func() tea.Msg {
-	return func() tea.Msg {
-		e := <-w.events
-		if e.err != nil {
-			return MdWatchErrMsg{Err: e.err}
-		}
-		if e.truncated {
-			return MdTruncatedMsg{}
-		}
-		return MdAppendedMsg{Bytes: e.appended}
+// Next blocks until the next file event and returns it. Tea-aware callers
+// wrap this in `func() tea.Msg { return w.Next() }`.
+func (w *Watcher) Next() WatchEvent {
+	e := <-w.events
+	if e.err != nil {
+		return WatchError{Err: e.err}
 	}
+	if e.truncated {
+		return WatchTruncate{}
+	}
+	return WatchAppend{Bytes: e.appended}
 }
 
 // Close releases fsnotify resources and stops the background goroutine promptly.

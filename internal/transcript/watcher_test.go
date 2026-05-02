@@ -1,4 +1,4 @@
-package tui
+package transcript
 
 import (
 	"os"
@@ -31,17 +31,17 @@ func TestWatcher(t *testing.T) {
 	// Append a bash block.
 	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n\n```bash\ngo build\n```\n"), 0o644))
 
-	msg := w.Listen()()
-	appendMsg, ok := msg.(MdAppendedMsg)
-	require.True(t, ok, "expected MdAppendedMsg, got %T", msg)
+	msg := w.Next()
+	appendMsg, ok := msg.(WatchAppend)
+	require.True(t, ok, "expected WatchAppend, got %T", msg)
 	assert.Equal(t, []byte("\n```bash\ngo build\n```\n"), appendMsg.Bytes)
 
 	// Multiple writes within debounce window coalesce.
 	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n\n```bash\ngo build\n```\n\noutput\n"), 0o644))
 	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n\n```bash\ngo build\n```\n\noutput\nerror\n"), 0o644))
 
-	msg = w.Listen()()
-	appendMsg, ok = msg.(MdAppendedMsg)
+	msg = w.Next()
+	appendMsg, ok = msg.(WatchAppend)
 	require.True(t, ok)
 	// Should contain all new bytes since last offset.
 	assert.Contains(t, string(appendMsg.Bytes), "error")
@@ -66,9 +66,9 @@ func TestWatcherTruncation(t *testing.T) {
 	// Truncate the file.
 	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n"), 0o644))
 
-	msg := w.Listen()()
-	_, ok := msg.(MdTruncatedMsg)
-	assert.True(t, ok, "expected MdTruncatedMsg, got %T", msg)
+	msg := w.Next()
+	_, ok := msg.(WatchTruncate)
+	assert.True(t, ok, "expected WatchTruncate, got %T", msg)
 
 	w.Close()
 }
