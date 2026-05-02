@@ -112,9 +112,35 @@ func (i *MdBlockItem) linePrefix() string {
 	return ""
 }
 
+// IsStickyAnchor implements StickyAnchor — user-msg blocks pin to the
+// top of the viewport when scrolled past so the reader always knows
+// which turn they're inside.
+func (i *MdBlockItem) IsStickyAnchor() bool { return i.kind == MdBlockUserMsg }
+
+// StickyLine returns the first line of the rendered user-msg, used as the
+// pinned header. The Glamour-rendered first line preserves the styled λ
+// glyph; non-anchor blocks return "".
+func (i *MdBlockItem) StickyLine() string {
+	if i.kind != MdBlockUserMsg {
+		return ""
+	}
+	if idx := strings.IndexByte(i.rendered, '\n'); idx >= 0 {
+		return i.rendered[:idx]
+	}
+	return i.rendered
+}
+
+// StickyAnchor identifies items that may pin to the top of the chat
+// viewport when scrolled past. Used for the sticky-lambda turn header.
+type StickyAnchor interface {
+	IsStickyAnchor() bool
+	StickyLine() string
+}
+
 // Compile-time interface checks.
 var (
 	_ MessageItem        = (*MdBlockItem)(nil)
 	_ list.Focusable     = (*MdBlockItem)(nil)
 	_ list.Highlightable = (*MdBlockItem)(nil)
+	_ StickyAnchor       = (*MdBlockItem)(nil)
 )

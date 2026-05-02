@@ -75,6 +75,17 @@ func (l *List) Gap() int {
 	return l.gap
 }
 
+// OffsetIdx returns the index of the item at the top of the viewport.
+func (l *List) OffsetIdx() int {
+	return l.offsetIdx
+}
+
+// OffsetLine returns the number of lines of the top-of-viewport item that
+// are scrolled off-screen above. 0 means the item starts flush with the top.
+func (l *List) OffsetLine() int {
+	return l.offsetLine
+}
+
 // AtBottom returns whether the list is showing the last item at the bottom.
 func (l *List) AtBottom() bool {
 	if len(l.items) == 0 {
