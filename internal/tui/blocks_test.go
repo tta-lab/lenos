@@ -101,6 +101,23 @@ func TestSplitBlocks_LenosBashCompositeBoundary_AcceptsSpaceForm(t *testing.T) {
 	assert.NotContains(t, blocks[1].Source, "first output", "second composite must start clean")
 }
 
+// Mid-write transcripts (watcher delivers partial bytes between fsnotify
+// events) end with an unclosed lenos-bash fence. The parser must still
+// surface the partial content as a BlockBashCmd so the in-progress cmd
+// renders in the chat list — silently dropping it would leave the user
+// staring at a frozen UI mid-emit.
+func TestSplitBlocks_UnclosedLenosBashFence(t *testing.T) {
+	t.Parallel()
+	src := []byte("```lenos-bash\n" +
+		"narrate <<'EOF'\n" +
+		"work in progress\n")
+	blocks := SplitBlocks(src)
+	require.Len(t, blocks, 1, "partial content must surface as a single block, not be dropped")
+	assert.Equal(t, BlockBashCmd, blocks[0].Kind)
+	assert.Contains(t, blocks[0].Source, "narrate <<'EOF'")
+	assert.Contains(t, blocks[0].Source, "work in progress")
+}
+
 // isLenosBashFence is the single source of truth for recognising the
 // fence opening line — both canonical and space-separated forms.
 func TestIsLenosBashFence(t *testing.T) {

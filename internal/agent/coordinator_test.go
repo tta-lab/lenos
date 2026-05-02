@@ -159,6 +159,44 @@ func TestCoordinator_recorderFor_cachesPerSession(t *testing.T) {
 	assert.NotSame(t, r1a, r2, "different sessionIDs should return different recorders")
 }
 
+// SystemPrompt is the building block both NewCoordinator and UpdateModels
+// call to refresh c.systemPrompt before pushing it onto the agent. A
+// regression here (empty result, error returned) makes the model run
+// with no instructions — the bash-first protocol breaks silently. Pin
+// it with a happy-path call against a default-initialized config.
+func TestSystemPrompt_BuildsNonEmptyPrompt(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	cfg, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+
+	prompt, err := SystemPrompt(context.Background(), dataDir, "anthropic", "claude-sonnet-4-6", cfg)
+	require.NoError(t, err)
+	require.NotEmpty(t, prompt, "SystemPrompt must produce non-empty content — empty means no model instructions")
+
+	// Spot-check the bash-first protocol marker is present so a future
+	// template restructure that drops the protocol section gets caught.
+	// "narrate <<" + "exit" together signal the heredoc-only contract is
+	// rendered into the prompt.
+	assert.Contains(t, prompt, "narrate <<", "bash-first protocol must explain narrate heredoc form")
+	assert.Contains(t, prompt, "Output Protocol", "bash-first output-protocol section must be in the rendered prompt")
+}
+
+// TestCoordinator_SystemPromptGetterReturnsStored asserts the wiring
+// between c.systemPrompt and c.SystemPrompt() is intact — guards against
+// a future rename / refactor breaking the read path used by UI code that
+// surfaces the active prompt.
+func TestCoordinator_SystemPromptGetterReturnsStored(t *testing.T) {
+	t.Parallel()
+	c := &coordinator{systemPrompt: "test-prompt-sentinel"}
+	assert.Equal(t, "test-prompt-sentinel", c.SystemPrompt())
+}
+
 // TestBuildCall_SetsLenosEnvVars verifies buildCall injects LENOS_SESSION_ID
 // (the only env var narrate still needs — the data dir is auto-derived from
 // the subprocess cwd).
@@ -277,6 +315,12 @@ func (t *testSessionService) Subscribe(_ context.Context) <-chan pubsub.Event[se
 	return nil
 }
 
+// TestRecorderFor_AgentNameOverride exercises the actual --agent runtime
+// override path: recorderFor reads c.cfg.Overrides().AgentName, not the
+// persisted config field. The previous incarnation of this test set the
+// config field via SetConfigField, which left Overrides empty — the
+// assertion passed vacuously on the default "lenos" name. Now we mutate
+// the runtime overrides directly so the override actually flows through.
 func TestRecorderFor_AgentNameOverride(t *testing.T) {
 	dataDir := t.TempDir()
 	sessionsDir := filepath.Join(dataDir, "sessions")
@@ -287,16 +331,10 @@ func TestRecorderFor_AgentNameOverride(t *testing.T) {
 	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
 	t.Setenv("LENOS_GLOBAL_DATA", configDir)
 	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
-	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
-	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
-	t.Setenv("LENOS_GLOBAL_DATA", configDir)
-	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
-	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
 
 	cfg, err := config.Init(dataDir, "", false)
 	require.NoError(t, err)
-	err = cfg.SetConfigField(config.ScopeGlobal, "agent", "kestrel")
-	require.NoError(t, err)
+	cfg.Overrides().AgentName = "kestrel"
 
 	sid := "agent-override-test"
 	c := &coordinator{
@@ -312,9 +350,11 @@ func TestRecorderFor_AgentNameOverride(t *testing.T) {
 
 	bs, err := os.ReadFile(filepath.Join(sessionsDir, sid+".md"))
 	require.NoError(t, err)
-	// AgentName comes from Overrides().AgentName (runtime override)
-	// If runtime override is empty, defaults to "lenos"
-	require.Contains(t, string(bs), "agent: lenos\n")
+	// AgentName comes from Overrides().AgentName (the --agent runtime flag).
+	// With the override set to "kestrel" the meta header must reflect it —
+	// not the default "lenos".
+	require.Contains(t, string(bs), "agent: kestrel\n")
+	require.NotContains(t, string(bs), "agent: lenos\n", "regression: override path silently fell back to default")
 }
 
 func TestRecorderFor_SandboxThreeState(t *testing.T) {

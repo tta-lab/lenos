@@ -92,9 +92,17 @@ func TestClassifyAndRenderBlock_LenosBash(t *testing.T) {
 		assert.Equal(t, chat.MdBlockOther, kind, "legacy ```bash must not become MdBlockLenosBash")
 	})
 
-	t.Run("user msg classifies as MdBlockUserMsg", func(t *testing.T) {
-		b := tui.Block{Kind: tui.BlockUserMsg, Source: "**λ** hello"}
-		kind, _ := classifyAndRenderBlock(b, renderer, nil)
+	t.Run("user msg classifies as MdBlockUserMsg + λ replaced with colored ANSI", func(t *testing.T) {
+		b := tui.Block{Kind: tui.BlockUserMsg, Source: "**λ** hello world"}
+		kind, rendered := classifyAndRenderBlock(b, renderer, nil)
 		assert.Equal(t, chat.MdBlockUserMsg, kind)
+
+		// The λ glyph must survive Glamour rendering AND get the bold-amber SGR
+		// wrapper applied. Without the wrapper the visual anchor for "this is
+		// the start of a turn" disappears.
+		stripped := ansi.Strip(rendered)
+		assert.Contains(t, stripped, tui.GlyphLambda, "λ must remain in stripped output")
+		assert.Contains(t, stripped, "hello world", "user-msg body preserved")
+		assert.Contains(t, rendered, lambdaSGR, "lambdaSGR must be embedded around the λ glyph")
 	})
 }
