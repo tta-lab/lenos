@@ -75,6 +75,57 @@ func TestSplitBlocks_BackToBackFences(t *testing.T) {
 	assert.Equal(t, BlockOutput, blocks[1].Kind)
 }
 
+// Regression: the boundary check that terminates a lenos-bash composite
+// must accept BOTH the canonical `\`\`\`lenos-bash` form AND the legacy
+// space-separated `\`\`\` lenos-bash` form. A bug in the inline boundary
+// check on absorbIntoComposite missed the space form, causing the second
+// command to merge into the first composite block.
+func TestSplitBlocks_LenosBashCompositeBoundary_AcceptsSpaceForm(t *testing.T) {
+	t.Parallel()
+	src := []byte("```lenos-bash\n" +
+		"first cmd\n" +
+		"```\n" +
+		"\n" +
+		"first output\n" +
+		"\n" +
+		"``` lenos-bash\n" +
+		"second cmd\n" +
+		"```\n")
+	blocks := SplitBlocks(src)
+	require.Len(t, blocks, 2, "space-form fence must terminate the prior composite")
+	assert.Equal(t, BlockBashCmd, blocks[0].Kind)
+	assert.Contains(t, blocks[0].Source, "first cmd")
+	assert.Contains(t, blocks[0].Source, "first output", "first output absorbs into the canonical-form composite")
+	assert.Equal(t, BlockBashCmd, blocks[1].Kind)
+	assert.Contains(t, blocks[1].Source, "second cmd")
+	assert.NotContains(t, blocks[1].Source, "first output", "second composite must start clean")
+}
+
+// isLenosBashFence is the single source of truth for recognising the
+// fence opening line — both canonical and space-separated forms.
+func TestIsLenosBashFence(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		line string
+		want bool
+	}{
+		{"```lenos-bash", true},
+		{"``` lenos-bash", true},
+		{"  ```lenos-bash  ", true},
+		{"```bash", false},
+		{"```", false},
+		{"```lenos-bashx", true}, // permissive prefix match — same as classifier
+		{"** lenos-bash **", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.line, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, isLenosBashFence(tc.line))
+		})
+	}
+}
+
 func TestBlockID_StableAndKindAware(t *testing.T) {
 	t.Parallel()
 	a := Block{Kind: BlockBashCmd, Source: "```bash\necho hi\n```"}

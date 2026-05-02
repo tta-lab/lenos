@@ -90,8 +90,7 @@ func SplitBlocks(body []byte) []Block {
 			return
 		}
 		kind := classifyBlock(text)
-		// Stop compositing when we hit a boundary block kind.
-		if compositing && (kind == BlockUserMsg || kind == BlockRuntime || kind == BlockTurnEnd || (kind == BlockBashCmd && strings.HasPrefix(strings.TrimSpace(strings.SplitN(text, "\n", 2)[0]), "```lenos-bash"))) {
+		if compositing && isCompositeBoundary(kind, text) {
 			compositing = false
 			flush()
 			return
@@ -112,7 +111,7 @@ func SplitBlocks(body []byte) []Block {
 			current = append(current, line)
 			if len(current) == 1 && strings.HasPrefix(strings.TrimSpace(line), "```") {
 				// Opening fence — detect if it's lenos-bash.
-				if strings.HasPrefix(strings.TrimSpace(line), "```lenos-bash") || strings.HasPrefix(strings.TrimSpace(line), "``` lenos-bash") {
+				if isLenosBashFence(line) {
 					inLenosFence = true
 				}
 			}
@@ -155,7 +154,7 @@ func classifyBlock(text string) BlockKind {
 	switch {
 	case strings.HasPrefix(first, "**λ**"):
 		return BlockUserMsg
-	case strings.HasPrefix(first, "```lenos-bash"), strings.HasPrefix(first, "``` lenos-bash"):
+	case isLenosBashFence(first):
 		return BlockBashCmd
 	case strings.HasPrefix(first, "```bash"), strings.HasPrefix(first, "``` bash"):
 		return BlockBashCmd
@@ -169,5 +168,36 @@ func classifyBlock(text string) BlockKind {
 		return BlockRuntime
 	default:
 		return BlockProse
+	}
+}
+
+// isLenosBashFence reports whether the given line opens (or closes) a
+// lenos-bash fence. Accepts the canonical `\`\`\`lenos-bash` form and the
+// space-separated `\`\`\` lenos-bash` form so legacy or hand-edited
+// transcripts still parse. Single source of truth for fence detection so
+// the parser's three call sites can't drift.
+func isLenosBashFence(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.HasPrefix(trimmed, "```lenos-bash") ||
+		strings.HasPrefix(trimmed, "``` lenos-bash")
+}
+
+// isCompositeBoundary reports whether the given block (text + classified
+// kind) terminates an in-progress lenos-bash composite. Boundaries: a new
+// turn (user msg), a runtime event, a turn-end marker, or another
+// lenos-bash fence — anything that says "this isn't the previous cmd's
+// output anymore."
+func isCompositeBoundary(kind BlockKind, text string) bool {
+	switch kind {
+	case BlockUserMsg, BlockRuntime, BlockTurnEnd:
+		return true
+	case BlockBashCmd:
+		first := text
+		if i := strings.IndexByte(text, '\n'); i >= 0 {
+			first = text[:i]
+		}
+		return isLenosBashFence(first)
+	default:
+		return false
 	}
 }
