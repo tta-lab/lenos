@@ -36,7 +36,6 @@ import (
 
 func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
-	rootCmd.PersistentFlags().StringP("data-dir", "D", "", "Custom lenos data directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
@@ -55,6 +54,7 @@ func init() {
 		loginCmd,
 		statsCmd,
 		sessionCmd,
+		systemPromptCmd,
 	)
 }
 
@@ -77,9 +77,6 @@ lenos --debug --cwd /path/to/project
 
 # Run in yolo mode (auto-accept all permissions; use with care)
 lenos --yolo
-
-# Run with custom data directory
-lenos --data-dir /path/to/custom/.lenos
 
 # Continue a previous session
 lenos --session {session-id}
@@ -219,7 +216,6 @@ func setupWorkspaceWithProgressBar(cmd *cobra.Command, agentName string, context
 // AppWorkspace.
 func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
-	dataDir, _ := cmd.Flags().GetString("data-dir")
 	ctx := cmd.Context()
 
 	cwd, err := ResolveCwd(cmd)
@@ -227,7 +223,9 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string)
 		return nil, nil, err
 	}
 
-	store, err := config.Init(cwd, dataDir, debug)
+	// dataDir is "" → config.Init resolves via fsext.LookupClosest(cwd,
+	// ".lenos"). cwd is the SSOT.
+	store, err := config.Init(cwd, "", debug)
 	if err != nil {
 		return nil, nil, err
 	}

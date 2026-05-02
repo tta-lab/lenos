@@ -30,11 +30,6 @@ var logsCmd = &cobra.Command{
 			return fmt.Errorf("failed to get current working directory: %v", err)
 		}
 
-		dataDir, err := cmd.Flags().GetString("data-dir")
-		if err != nil {
-			return fmt.Errorf("failed to get data directory: %v", err)
-		}
-
 		follow, err := cmd.Flags().GetBool("follow")
 		if err != nil {
 			return fmt.Errorf("failed to get follow flag: %v", err)
@@ -51,7 +46,7 @@ var logsCmd = &cobra.Command{
 			log.SetColorProfile(colorprofile.NoTTY)
 		}
 
-		cfg, err := config.Load(cwd, dataDir, false)
+		cfg, err := config.Load(cwd, "", false)
 		if err != nil {
 			return fmt.Errorf("failed to load configuration: %v", err)
 		}

@@ -71,6 +71,10 @@ type Coordinator interface {
 	Summarize(context.Context, string) error
 	Model() Model
 	UpdateModels(ctx context.Context) error
+	// SystemPrompt returns the fully-resolved system prompt currently sent
+	// to the model on every turn. Useful for `lenos system-prompt` and
+	// debugging "the model isn't following the protocol" issues.
+	SystemPrompt() string
 }
 
 type coordinator struct {
@@ -146,6 +150,11 @@ func NewCoordinator(
 	if err != nil {
 		return nil, fmt.Errorf("build system prompt: %w", err)
 	}
+	// Push the resolved prompt onto the agent — without this, agent_run.go's
+	// a.systemPrompt.Get() returns the empty string passed at NewSessionAgent
+	// construction and the model runs with no instructions (which is why the
+	// bash-first protocol was being ignored).
+	c.currentAgent.SetSystemPrompt(c.systemPrompt)
 
 	return c, nil
 }
@@ -235,11 +244,32 @@ func (c *coordinator) recorderFor(sessionID string) transcript.Recorder {
 		path := filepath.Join(c.dataDir, "sessions", sessionID+".md")
 		r := transcript.NewMdRecorder(path)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
+			useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
+			var sandboxState string
+			if useSandbox && c.sandboxClient != nil {
+				sandboxState = "on"
+			} else if useSandbox && c.sandboxClient == nil {
+				sandboxState = "degraded"
+			} else {
+				sandboxState = "off"
+			}
+			title := ""
+			if sess, err := c.sessions.Get(context.Background(), sessionID); err == nil {
+				title = sess.Title
+			} else {
+				// Cosmetic metadata only — recorder still opens with empty title.
+				// Logged so the silent-fallback path is observable when debugging
+				// "why did the transcript header lose the title?".
+				slog.Warn("recorderFor: session metadata fetch failed", "session", sessionID, "err", err)
+			}
 			_ = r.Open(context.Background(), transcript.Meta{
 				SessionID: sessionID,
-				Agent:     "lenos",
+				Agent:     agentNameOr(c.cfg.Overrides().AgentName),
 				Model:     c.currentAgent.Model().Model.Model(),
 				StartedAt: time.Now().UTC(),
+				Sandbox:   sandboxState,
+				Title:     title,
+				Cwd:       c.cfg.WorkingDir(),
 			})
 		}
 		return r
@@ -257,12 +287,11 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		}
 	}
 
-	// narrate (cmd/narrate) reads these to resolve the session .md path.
-	// Set explicitly so subprocess invocations get the right file regardless
-	// of inherited env or any mid-session cd. c.dataDir is absolute (resolved
-	// at coordinator init).
+	// narrate (cmd/narrate) needs LENOS_SESSION_ID to know which session.md
+	// to append to. The data directory is auto-discovered via the same
+	// fsext.LookupClosest walk-up from cwd that lenos's main process uses,
+	// so the two always converge — no LENOS_DATA_DIR export required.
 	sandboxEnv["LENOS_SESSION_ID"] = sessionID
-	sandboxEnv["LENOS_DATA_DIR"] = c.dataDir
 
 	cwd := c.cfg.WorkingDir()
 	var additionalReadOnlyPaths []string
@@ -827,6 +856,10 @@ func (c *coordinator) Model() Model {
 	return c.currentAgent.Model()
 }
 
+func (c *coordinator) SystemPrompt() string {
+	return c.systemPrompt
+}
+
 func (c *coordinator) UpdateModels(ctx context.Context) error {
 	// Build the models again so we make sure we get the latest config.
 	large, small, err := c.buildAgentModels(ctx, false)
@@ -834,6 +867,22 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 		return err
 	}
 	c.currentAgent.SetModels(large, small)
+
+	// Rebuild the system prompt — the coder post-template can vary by
+	// provider/model — and push it onto the agent.
+	sp, err := SystemPrompt(
+		ctx,
+		c.cfg.WorkingDir(),
+		large.Model.Provider(),
+		large.Model.Model(),
+		c.cfg,
+		prompt.WithContextPaths(c.cfg.Config().Agents[config.AgentCoder].ContextPaths),
+	)
+	if err != nil {
+		return fmt.Errorf("rebuild system prompt: %w", err)
+	}
+	c.systemPrompt = sp
+	c.currentAgent.SetSystemPrompt(sp)
 	return nil
 }
 
@@ -885,4 +934,11 @@ func resolveSandbox(p *bool) bool {
 		return true
 	}
 	return *p
+}
+
+func agentNameOr(name string) string {
+	if name != "" {
+		return name
+	}
+	return "lenos"
 }

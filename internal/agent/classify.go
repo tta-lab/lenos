@@ -12,8 +12,9 @@ import (
 type classifyResult int
 
 const (
-	classifyExec classifyResult = iota
-	classifyExit
+	classifyExec     classifyResult = iota
+	classifyExit                    // emit IS the exit (no command to run)
+	classifyExecExit                // emit ends in `<sep> exit` — run, then exit
 	classifyEmpty
 	classifyInvalidBash
 	classifyBanned
@@ -24,6 +25,16 @@ const (
 // by other commands, or "exit" inside a quoted string never match because
 // classify() trims the input first and only this regex is applied.
 var exitRe = regexp.MustCompile(`^\s*exit(\s+-?\d+)?\s*$`)
+
+// trailingExitRe matches an emit whose final command is `exit` joined by a
+// shell separator: `... && exit`, `... ; exit`, `... || exit`, or a newline
+// (e.g. heredoc body followed by `exit` on the next line). The model uses
+// this idiom to combine an action (typically `narrate "..."`) with turn-end
+// in a single response — common enough that ignoring the exit signal would
+// force every turn into a redundant follow-up emit. We strip the trailing
+// exit clause and run the command portion via classifyExec, then the loop
+// returns stopExit instead of continuing.
+var trailingExitRe = regexp.MustCompile(`(?:&&|\|\||;|\n)\s*exit(?:\s+-?\d+)?\s*$`)
 
 // blockedCmdPatterns guards in-place file edits (sed -i / perl -i). CC native
 // sandbox is the dominant defense; this is a thin nudge to push agents toward
@@ -53,6 +64,9 @@ func classify(ctx context.Context, emit string) (cls classifyResult, bashErr str
 	}
 	if err := bashSyntaxCheck(ctx, emit); err != "" {
 		return classifyInvalidBash, err
+	}
+	if trailingExitRe.MatchString(trimmed) {
+		return classifyExecExit, ""
 	}
 	return classifyExec, ""
 }

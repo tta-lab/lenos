@@ -42,7 +42,7 @@ internal/
     sql/                           Raw SQL queries (consumed by sqlc)
     migrations/                    Schema migrations
   ui/                              Bubble Tea v2 TUI (see internal/ui/AGENTS.md)
-  tui/                             Bash-first .md viewer (Phase 4; see internal/tui/README.md)
+  transcript/                      Bash-first .md transcript: writer + parser + fsnotify watcher
   permission/                      Tool permission checking and allow-lists
   event/                           Telemetry (PostHog)
   pubsub/                          Internal pub/sub for cross-component messaging
@@ -86,8 +86,8 @@ internal/
 - **Update Golden Files**: `go test ./... -update` (regenerates `.golden`
   files when test output changes)
   - Update specific package:
-    `go test ./internal/tui/components/core -update` (in this case,
-    we're updating "core")
+    `go test ./internal/transcript -update` (in this case,
+    we're updating transcript golden files)
 - **Lint**: `task lint:fix`
 - **Format**: `task fmt` (`gofumpt -w .`)
 - **Modernize**: `task modernize` (runs `modernize` which makes code

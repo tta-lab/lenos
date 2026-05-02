@@ -16,6 +16,7 @@ import (
 
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/home"
+	"github.com/tta-lab/lenos/internal/taskwarrior"
 )
 
 // Prompt represents a template-based prompt generator.
@@ -216,7 +217,7 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		Platform:   platform,
 		Date:       p.now().Format("1/2/2006"),
 		SkillList:  skillList,
-		JobID:      os.Getenv("TTAL_JOB_ID"),
+		JobID:      taskwarrior.ResolveJobIDFromCwd(),
 	}
 	if isGit {
 		var err error

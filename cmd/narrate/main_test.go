@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,39 +10,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRoot_HappyPath_Args(t *testing.T) {
+// setupSessionDir chdirs into a tempdir whose .lenos/sessions/ subdir is
+// where narrate will write. Returns the .lenos data dir for assertions.
+func setupSessionDir(t *testing.T) (dataDir string) {
+	t.Helper()
 	tmp := t.TempDir()
-	sessionsDir := filepath.Join(tmp, "sessions")
-	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	dataDir = filepath.Join(tmp, ".lenos")
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "sessions"), 0o755))
+	t.Chdir(tmp)
+	return dataDir
+}
+
+func TestRoot_HappyPath_Args(t *testing.T) {
+	dataDir := setupSessionDir(t)
+
+	buf := &bytes.Buffer{}
+	rootCmd.SetOut(buf)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
 
 	rootCmd.SetArgs([]string{"hello world"})
-	rootCmd.SetIn(strings.NewReader("")) // no stdin
+	rootCmd.SetIn(strings.NewReader(""))
 
-	t.Setenv("LENOS_DATA_DIR", tmp)
 	t.Setenv("LENOS_SESSION_ID", "test-session")
 
 	require.NoError(t, rootCmd.Execute())
+	require.Contains(t, buf.String(), "narrate written")
 
-	mdPath := filepath.Join(sessionsDir, "test-session.md")
+	mdPath := filepath.Join(dataDir, "sessions", "test-session.md")
 	data, err := os.ReadFile(mdPath)
 	require.NoError(t, err)
 	require.Equal(t, "hello world\n\n", string(data))
 }
 
 func TestRoot_HappyPath_Stdin(t *testing.T) {
-	tmp := t.TempDir()
-	sessionsDir := filepath.Join(tmp, "sessions")
-	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	dataDir := setupSessionDir(t)
 
 	rootCmd.SetArgs([]string{})
 	rootCmd.SetIn(strings.NewReader("piped content\n"))
 
-	t.Setenv("LENOS_DATA_DIR", tmp)
 	t.Setenv("LENOS_SESSION_ID", "test-session")
 
 	require.NoError(t, rootCmd.Execute())
 
-	mdPath := filepath.Join(sessionsDir, "test-session.md")
+	mdPath := filepath.Join(dataDir, "sessions", "test-session.md")
 	data, err := os.ReadFile(mdPath)
 	require.NoError(t, err)
 	require.Equal(t, "piped content\n\n", string(data))
@@ -50,23 +61,19 @@ func TestRoot_HappyPath_Stdin(t *testing.T) {
 func TestRoot_MissingEnv(t *testing.T) {
 	rootCmd.SetArgs([]string{"hello"})
 	rootCmd.SetIn(strings.NewReader(""))
-	t.Setenv("LENOS_DATA_DIR", "")
 	t.Setenv("LENOS_SESSION_ID", "")
 
 	err := rootCmd.Execute()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "LENOS")
+	require.Contains(t, err.Error(), "LENOS_SESSION_ID")
 }
 
 func TestRoot_EmptyInput(t *testing.T) {
-	tmp := t.TempDir()
-	sessionsDir := filepath.Join(tmp, "sessions")
-	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	setupSessionDir(t)
 
 	rootCmd.SetArgs([]string{})
 	rootCmd.SetIn(strings.NewReader(""))
 
-	t.Setenv("LENOS_DATA_DIR", tmp)
 	t.Setenv("LENOS_SESSION_ID", "test-session")
 
 	err := rootCmd.Execute()
@@ -75,11 +82,8 @@ func TestRoot_EmptyInput(t *testing.T) {
 }
 
 func TestRoot_AppendOnly(t *testing.T) {
-	tmp := t.TempDir()
-	sessionsDir := filepath.Join(tmp, "sessions")
-	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	dataDir := setupSessionDir(t)
 
-	t.Setenv("LENOS_DATA_DIR", tmp)
 	t.Setenv("LENOS_SESSION_ID", "test-session")
 
 	rootCmd.SetArgs([]string{"first"})
@@ -90,7 +94,7 @@ func TestRoot_AppendOnly(t *testing.T) {
 	rootCmd.SetIn(strings.NewReader(""))
 	require.NoError(t, rootCmd.Execute())
 
-	mdPath := filepath.Join(sessionsDir, "test-session.md")
+	mdPath := filepath.Join(dataDir, "sessions", "test-session.md")
 	data, err := os.ReadFile(mdPath)
 	require.NoError(t, err)
 	require.Equal(t, "first\n\nsecond\n\n", string(data))

@@ -122,3 +122,49 @@ func TestClassify_HeredocWithExit(t *testing.T) {
 	cls, _ := classify(ctx, emit)
 	require.Equal(t, classifyExec, cls)
 }
+
+func TestClassify_ExecExit(t *testing.T) {
+	t.Parallel()
+	if _, err := os.Stat("/bin/bash"); err != nil {
+		t.Skip("/bin/bash not available")
+	}
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		emit string
+	}{
+		{"narrate && exit", `narrate "Hi" && exit`},
+		{"narrate && exit 0", `narrate "Hi" && exit 0`},
+		{"semicolon exit", `echo done ; exit`},
+		{"semicolon exit no space", `echo done;exit`},
+		{"or exit", `echo go || exit 1`},
+		{"chained && exit", `cd /tmp && ls && exit`},
+		{"trailing whitespace", "echo hi && exit   "},
+		{"heredoc with exit on newline", "narrate <<'EOF'\nHi\nEOF\nexit"},
+		{"multi-line cmds with trailing exit", "echo one\necho two\nexit"},
+		{"heredoc with exit N on newline", "cat <<EOF\nfoo\nEOF\nexit 2"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cls, _ := classify(ctx, tc.emit)
+			require.Equal(t, classifyExecExit, cls,
+				"expected classifyExecExit for %q (got %v)", tc.emit, cls)
+		})
+	}
+}
+
+func TestClassify_BareExitStillBareExit(t *testing.T) {
+	t.Parallel()
+	if _, err := os.Stat("/bin/bash"); err != nil {
+		t.Skip("/bin/bash not available")
+	}
+	// Bare `exit` must classify as classifyExit (the emit-IS-the-exit path),
+	// not classifyExecExit (run-then-exit). The two paths emit different
+	// recorder events.
+	ctx := context.Background()
+	cls, _ := classify(ctx, "exit")
+	require.Equal(t, classifyExit, cls)
+	cls, _ = classify(ctx, "exit 0")
+	require.Equal(t, classifyExit, cls)
+}

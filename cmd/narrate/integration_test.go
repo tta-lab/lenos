@@ -39,42 +39,44 @@ func assertStderrPrefix(t *testing.T, out []byte, err error, contains string) {
 	require.Contains(t, string(out), contains)
 }
 
+// setupSessionRoot returns (rootDir, dataDir). narrate run with cwd=rootDir
+// will resolve dataDir via LookupClosest.
+func setupSessionRoot(t *testing.T) (root, dataDir string) {
+	t.Helper()
+	root = t.TempDir()
+	dataDir = filepath.Join(root, ".lenos")
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "sessions"), 0o755))
+	return root, dataDir
+}
+
 func TestNarrateBinary_EndToEnd(t *testing.T) {
-	tmp := t.TempDir()
-	sessionsDir := filepath.Join(tmp, "sessions")
-	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	root, dataDir := setupSessionRoot(t)
 	sessionID := "test-session"
-	mdPath := filepath.Join(sessionsDir, sessionID+".md")
+	mdPath := filepath.Join(dataDir, "sessions", sessionID+".md")
 
-	bin := buildNarrateBinary(t, tmp)
+	bin := buildNarrateBinary(t, t.TempDir())
+	env := append(os.Environ(), "LENOS_SESSION_ID="+sessionID)
 
-	env := append(os.Environ(),
-		"LENOS_SESSION_ID="+sessionID,
-		"LENOS_DATA_DIR="+tmp,
-	)
-
-	// Invoke `narrate "hello world"` (positional args path).
 	args := exec.Command(bin, "hello world")
 	args.Env = env
+	args.Dir = root
 	out, err := args.CombinedOutput()
 	require.NoError(t, err, "narrate args: %s", out)
 
-	// Invoke `printf ... | narrate` (piped stdin path).
 	pipe := exec.Command(bin)
 	pipe.Env = env
+	pipe.Dir = root
 	pipe.Stdin = bytes.NewBufferString("first line\nsecond line\n")
 	out, err = pipe.CombinedOutput()
 	require.NoError(t, err, "narrate pipe: %s", out)
 
-	// Invoke narrate with a markdown blockquote via stdin — confirms single-mode
-	// doesn't corrupt markdown formatting from stdin.
 	bq := exec.Command(bin)
 	bq.Env = env
+	bq.Dir = root
 	bq.Stdin = bytes.NewBufferString("> ⚠️ markdown blockquote\n")
 	out, err = bq.CombinedOutput()
 	require.NoError(t, err, "narrate blockquote: %s", out)
 
-	// Read the .md file and assert contents.
 	got, err := os.ReadFile(mdPath)
 	require.NoError(t, err)
 	expected := "hello world\n\n" +
@@ -83,30 +85,25 @@ func TestNarrateBinary_EndToEnd(t *testing.T) {
 	require.Equal(t, expected, string(got))
 }
 
-func TestNarrateBinary_FailsWithoutEnv(t *testing.T) {
+func TestNarrateBinary_FailsWithoutSessionID(t *testing.T) {
 	tmp := t.TempDir()
 	bin := buildNarrateBinary(t, tmp)
 
 	cmd := exec.Command(bin, "hello")
-	cmd.Env = []string{} // no env at all
+	cmd.Env = []string{} // no LENOS_SESSION_ID
+	cmd.Dir = tmp
 	out, err := cmd.CombinedOutput()
-	assertStderrPrefix(t, out, err, "LENOS_DATA_DIR")
+	assertStderrPrefix(t, out, err, "LENOS_SESSION_ID")
 }
 
 func TestNarrateBinary_FailsOnEmptyStdin(t *testing.T) {
-	tmp := t.TempDir()
-	sessionsDir := filepath.Join(tmp, "sessions")
-	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
-	sessionID := "test-session"
-
-	bin := buildNarrateBinary(t, tmp)
+	root, _ := setupSessionRoot(t)
+	bin := buildNarrateBinary(t, t.TempDir())
 
 	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(),
-		"LENOS_SESSION_ID="+sessionID,
-		"LENOS_DATA_DIR="+tmp,
-	)
-	cmd.Stdin = bytes.NewBufferString("") // empty pipe
+	cmd.Env = append(os.Environ(), "LENOS_SESSION_ID=test-session")
+	cmd.Dir = root
+	cmd.Stdin = bytes.NewBufferString("")
 	out, err := cmd.CombinedOutput()
 	assertStderrPrefix(t, out, err, "content required")
 }

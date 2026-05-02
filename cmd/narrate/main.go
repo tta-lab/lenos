@@ -2,8 +2,8 @@
 // lenos agent session invoke it as `narrate "<text>"` (or `cmd | narrate`)
 // to append human-readable prose to the session's .md transcript.
 //
-// Reads LENOS_SESSION_ID + LENOS_DATA_DIR; failure modes per E14 of
-// flicknote 30666153 (clear stderr message + non-zero exit).
+// Reads LENOS_SESSION_ID (required); the data directory is auto-discovered
+// via the same fsext.LookupClosest walk-up from cwd that lenos itself uses.
 package main
 
 import (
@@ -19,9 +19,9 @@ var rootCmd = &cobra.Command{
 	Short: "Append prose to the current lenos session's .md transcript",
 	Long: `narrate appends prose to the current lenos session's .md transcript.
 
-Reads LENOS_SESSION_ID and LENOS_DATA_DIR from environment to derive the
-target path: ${LENOS_DATA_DIR}/sessions/${LENOS_SESSION_ID}.md. Both env
-vars are required.
+Reads LENOS_SESSION_ID (required) and finds the session .md by walking up
+from the current working directory to the closest .lenos/ directory —
+the same resolution lenos itself uses, so the two always agree.
 
 Examples:
   narrate "switching approach"
@@ -50,6 +50,7 @@ For visual emphasis, emit markdown directly:
 		if err := appendWithRetry(w, []byte(rendered)); err != nil {
 			return fmt.Errorf("write %s: %w", path, err)
 		}
+		fmt.Fprintln(cmd.OutOrStdout(), "narrate written")
 		return nil
 	},
 }

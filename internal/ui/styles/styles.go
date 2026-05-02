@@ -21,6 +21,23 @@ func pointerTo(s string) *string {
 	return &s
 }
 
+// Brand palette — package-level so cross-file consumers (markdown.go,
+// the Glamour theme below, the dialog rename gradient, the YOLO icon,
+// text selection, etc.) all reference the same source of truth instead
+// of duplicating literals. Hex form for ansi.StylePrimitive callers
+// that need *string; typed-color form for direct lipgloss use.
+const (
+	BrandPrimaryHex   = "#c4734f" // terracotta — primary brand, user-msg bar, focused borders
+	BrandSecondaryHex = "#d4a574" // peach-tan — secondary brand, user-msg foreground
+	BrandTertiaryHex  = "#b8973e" // antique gold — `$` prompt, rename gradient destination
+)
+
+var (
+	BrandPrimary   = lipgloss.Color(BrandPrimaryHex)
+	BrandSecondary = lipgloss.Color(BrandSecondaryHex)
+	BrandTertiary  = lipgloss.Color(BrandTertiaryHex)
+)
+
 const (
 	CheckIcon   string = "✓"
 	SpinnerIcon string = "⋯"
@@ -212,6 +229,8 @@ type Styles struct {
 		Message struct {
 			UserBlurred      lipgloss.Style
 			UserFocused      lipgloss.Style
+			BlockBlurred     lipgloss.Style // transparent 2-char gutter on non-user blocks at rest (matches BlockFocused width — prevents focus-toggle shift)
+			BlockFocused     lipgloss.Style // slate bar shown on focused non-user blocks (j/k navigation marker)
 			AssistantBlurred lipgloss.Style
 			AssistantFocused lipgloss.Style
 			NoContent        lipgloss.Style
@@ -474,9 +493,9 @@ func (s *Styles) DialogHelpStyles() help.Styles {
 // DefaultStyles returns the default styles for the UI.
 func DefaultStyles() Styles {
 	var (
-		primary   = lipgloss.Color("#c4734f")
-		secondary = lipgloss.Color("#d4a574")
-		tertiary  = lipgloss.Color("#b8973e")
+		primary   = BrandPrimary
+		secondary = BrandSecondary
+		tertiary  = BrandTertiary
 
 		// Backgrounds
 		bgBase        = lipgloss.Color("#1a1016")
@@ -492,7 +511,7 @@ func DefaultStyles() Styles {
 
 		// Borders
 		border      = lipgloss.Color("#4d4348")
-		borderFocus = lipgloss.Color("#c4734f")
+		borderFocus = BrandPrimary
 
 		// Status
 		error   = lipgloss.Color("#e06c75")
@@ -624,7 +643,7 @@ func DefaultStyles() Styles {
 				Prefix:          " ",
 				Suffix:          " ",
 				Color:           pointerTo("#c4a34f"),
-				BackgroundColor: pointerTo("#c4734f"),
+				BackgroundColor: pointerTo(BrandPrimaryHex),
 				Bold:            new(true),
 			},
 		},
@@ -722,7 +741,7 @@ func DefaultStyles() Styles {
 					Color: pointerTo("#a89d8a"),
 				},
 				CommentPreproc: ansi.StylePrimitive{
-					Color: pointerTo("#c4734f"),
+					Color: pointerTo(BrandPrimaryHex),
 				},
 				Keyword: ansi.StylePrimitive{
 					Color: pointerTo("#7e8ea8"),
@@ -760,7 +779,7 @@ func DefaultStyles() Styles {
 					Bold:      new(true),
 				},
 				NameDecorator: ansi.StylePrimitive{
-					Color: pointerTo("#b8973e"),
+					Color: pointerTo(BrandTertiaryHex),
 				},
 				NameFunction: ansi.StylePrimitive{
 					Color: pointerTo("#6b8a5e"),
@@ -772,7 +791,7 @@ func DefaultStyles() Styles {
 					Color: pointerTo("#a67c52"),
 				},
 				LiteralStringEscape: ansi.StylePrimitive{
-					Color: pointerTo("#b8973e"),
+					Color: pointerTo(BrandTertiaryHex),
 				},
 				GenericDeleted: ansi.StylePrimitive{
 					Color: pointerTo("#c44f4f"),
@@ -1152,7 +1171,7 @@ func DefaultStyles() Styles {
 	// Editor
 	s.EditorPromptNormalFocused = lipgloss.NewStyle().Foreground(greenDark).SetString("::: ")
 	s.EditorPromptNormalBlurred = s.EditorPromptNormalFocused.Foreground(fgMuted)
-	s.EditorPromptYoloIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(lipgloss.Color("#c4734f")).Bold(true).SetString(" ! ")
+	s.EditorPromptYoloIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(BrandPrimary).Bold(true).SetString(" ! ")
 	s.EditorPromptYoloIconBlurred = s.EditorPromptYoloIconFocused.Foreground(lipgloss.Color("#8a7e6e"))
 	s.EditorPromptYoloDotsFocused = lipgloss.NewStyle().MarginRight(1).Foreground(lipgloss.Color("#c4a34f")).SetString(":::")
 	s.EditorPromptYoloDotsBlurred = s.EditorPromptYoloDotsFocused.Foreground(lipgloss.Color("#8a7e6e"))
@@ -1192,6 +1211,13 @@ func DefaultStyles() Styles {
 		BorderForeground(primary).BorderStyle(normalBorder)
 	s.Chat.Message.UserFocused = lipgloss.NewStyle().Foreground(secondary).PaddingLeft(1).BorderLeft(true).
 		BorderForeground(primary).BorderStyle(messageFocussedBorder)
+	// Non-user blocks get a subtle slate bar only when focused so j/k navigation
+	// is visible across the whole transcript (user blocks already have a permanent
+	// terracotta bar). At rest a transparent 2-char gutter (BlockBlurred) holds
+	// the same horizontal slot so the content never shifts when focus toggles.
+	s.Chat.Message.BlockBlurred = lipgloss.NewStyle().PaddingLeft(2)
+	s.Chat.Message.BlockFocused = lipgloss.NewStyle().PaddingLeft(1).BorderLeft(true).
+		BorderForeground(fgSubtle).BorderStyle(messageFocussedBorder)
 	// Assistant messages - green accent
 	s.Chat.Message.AssistantBlurred = lipgloss.NewStyle().Foreground(fgBase).PaddingLeft(2)
 	s.Chat.Message.AssistantFocused = lipgloss.NewStyle().Foreground(green).PaddingLeft(1).BorderLeft(true).
@@ -1220,7 +1246,7 @@ func DefaultStyles() Styles {
 	s.Chat.Message.ThinkingFooterDuration = s.Subtle
 
 	// Text selection.
-	s.TextSelection = lipgloss.NewStyle().Foreground(lipgloss.Color("#e8dcc8")).Background(lipgloss.Color("#c4734f"))
+	s.TextSelection = lipgloss.NewStyle().Foreground(lipgloss.Color("#e8dcc8")).Background(BrandPrimary)
 
 	// Dialog styles
 	s.Dialog.Title = base.Padding(0, 1).Foreground(primary)
@@ -1269,7 +1295,7 @@ func DefaultStyles() Styles {
 	s.Dialog.Sessions.RenamingView = s.Dialog.View.BorderForeground(lipgloss.Color("#c4a34f"))
 	s.Dialog.Sessions.RenamingingMessage = s.Base.Padding(1)
 	s.Dialog.Sessions.RenamingTitleGradientFromColor = lipgloss.Color("#c4a34f")
-	s.Dialog.Sessions.RenamingTitleGradientToColor = lipgloss.Color("#b8973e")
+	s.Dialog.Sessions.RenamingTitleGradientToColor = BrandTertiary
 	s.Dialog.Sessions.RenamingItemBlurred = s.Dialog.NormalItem.Foreground(fgSubtle)
 	s.Dialog.Sessions.RenamingingItemFocused = s.Dialog.SelectedItem.UnsetBackground().UnsetForeground()
 	s.Dialog.Sessions.RenamingPlaceholder = base.Foreground(lipgloss.Color("#8a7e6e"))

@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +23,44 @@ func TestRenderFrontmatter(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, string(golden), RenderFrontmatter(meta))
+}
+
+func TestRenderFrontmatterAllFields(t *testing.T) {
+	t.Parallel()
+
+	meta := Meta{
+		SessionID: "test-session-1234",
+		Agent:     "kestrel",
+		Model:     "claude-sonnet-4-6",
+		StartedAt: time.Date(2026, 4, 28, 10, 30, 0, 0, time.UTC),
+		Sandbox:   "on",
+		Title:     "My Test Task",
+		Cwd:       "/Users/test/project",
+	}
+
+	golden, err := os.ReadFile("testdata/session_start_full.md")
+	require.NoError(t, err)
+
+	require.Equal(t, string(golden), RenderFrontmatter(meta))
+}
+
+func TestRenderFrontmatterSandboxOnly(t *testing.T) {
+	t.Parallel()
+
+	meta := Meta{
+		SessionID: "test-session-1234",
+		Agent:     "kestrel",
+		Model:     "claude-sonnet-4-6",
+		StartedAt: time.Date(2026, 4, 28, 10, 30, 0, 0, time.UTC),
+		Sandbox:   "on",
+	}
+
+	output := RenderFrontmatter(meta)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	require.Equal(t, 7, len(lines))
+	require.Contains(t, output, "sandbox: on\n")
+	require.NotContains(t, output, "title:")
+	require.NotContains(t, output, "cwd:")
 }
 
 func TestRenderUserMessage(t *testing.T) {
@@ -87,36 +126,6 @@ func TestRenderBashBlock(t *testing.T) {
 		result := RenderBashBlock(heredoc)
 		require.Contains(t, result, "cat <<'EOF'\nline one\nline two\nEOF")
 	})
-}
-
-func TestHumanizeDuration(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		duration time.Duration
-		expected string
-	}{
-		{0, "0.000s"},
-		{50 * time.Millisecond, "0.050s"},
-		{100 * time.Millisecond, "0.100s"},
-		{150 * time.Millisecond, "0.150s"},
-		{250 * time.Millisecond, "0.250s"},
-		{400 * time.Millisecond, "0.400s"},
-		{900 * time.Millisecond, "0.900s"},
-		{999 * time.Millisecond, "0.999s"},
-		{1 * time.Second, "1s"},
-		{12 * time.Second, "12s"},
-		{60 * time.Second, "1m0s"},
-		{65 * time.Second, "1m5s"},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.expected, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.expected, humanizeDuration(tc.duration))
-		})
-	}
 }
 
 func TestRenderTrailerSuccess(t *testing.T) {
@@ -192,7 +201,16 @@ func TestRenderOutputBlock(t *testing.T) {
 		t.Parallel()
 
 		result := RenderOutputBlock(nil)
-		require.Equal(t, "```\n```\n\n", result)
+		require.Equal(t, "", result)
+	})
+
+	t.Run("triple-backticks sanitized to prevent fence imbalance", func(t *testing.T) {
+		t.Parallel()
+
+		out := []byte("foo\n```\nbar")
+		got := RenderOutputBlock(out)
+		require.NotContains(t, got, "```")
+		require.Contains(t, got, "bar")
 	})
 
 	t.Run("unicode and emoji preserved", func(t *testing.T) {

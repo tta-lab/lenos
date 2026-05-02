@@ -434,6 +434,67 @@ func TestRunLoop_ExecPersistsResultRow(t *testing.T) {
 	assert.False(t, cc.Pending)
 }
 
+// TestRunLoop_ExecExitSingleEmit covers the classifyExecExit happy path:
+// the model emits `cmd && exit` once, the runner executes the cmd, and
+// the loop calls TurnEnd + returns stopExit WITHOUT re-prompting the
+// model (verified by scriptedModel containing only the single emit —
+// any extra Stream call would panic).
+func TestRunLoop_ExecExitSingleEmit(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{`narrate "hi" && exit`}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("hi\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "say hi")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop, "single-emit cmd && exit must end the turn")
+
+	// Recorder sequence proves no second model emit happened: prompt,
+	// announce, result, turn-end. A regression that re-prompts after the
+	// run would insert another announce/result pair.
+	assert.Equal(t, []string{
+		"UserMessage:say hi",
+		`AgentBashAnnounce:narrate "hi" && exit`,
+		"BashResult:hi\n:exit=0",
+		"TurnEnd",
+	}, rec.calls)
+
+	// Bash actually ran, and the assistant row finished EndTurn.
+	require.Equal(t, []string{`narrate "hi" && exit`}, runner.bash)
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+}
+
+// TestRunLoop_ExecExitSingleEmit_PreCmdFails pins the current behavior
+// when the pre-exit command exits non-zero (e.g. `false && exit` —
+// bash short-circuits so `exit` never runs, but the loop classified
+// the emit as classifyExecExit and ends the turn unconditionally based
+// on intent, not realised exit). If a future change wants to re-prompt
+// on pre-cmd failure, this test will need to flip — making the change
+// visible in code review.
+func TestRunLoop_ExecExitSingleEmit_PreCmdFails(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{`false && exit`}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 1, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop, "classifyExecExit honors model intent regardless of pre-cmd exit code")
+
+	// Turn ended despite the non-zero exit: TurnEnd appears in the trace
+	// and no second model emit was solicited (would have panicked).
+	assert.Contains(t, rec.calls, "TurnEnd")
+	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
+}
+
 // --- Mock helpers ---
 
 func messagesByRole(ms *mockMessageService, role message.MessageRole) []message.Message {

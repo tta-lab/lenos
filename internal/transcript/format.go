@@ -18,6 +18,15 @@ func RenderFrontmatter(m Meta) string {
 	fmt.Fprintf(&b, "agent: %s\n", m.Agent)
 	fmt.Fprintf(&b, "model: %s\n", m.Model)
 	fmt.Fprintf(&b, "started_at: %s\n", m.StartedAt.Format(time.RFC3339))
+	if m.Sandbox != "" {
+		fmt.Fprintf(&b, "sandbox: %s\n", m.Sandbox)
+	}
+	if m.Title != "" {
+		fmt.Fprintf(&b, "title: %s\n", m.Title)
+	}
+	if m.Cwd != "" {
+		fmt.Fprintf(&b, "cwd: %s\n", m.Cwd)
+	}
 	b.WriteString("---\n\n")
 	return b.String()
 }
@@ -27,50 +36,37 @@ func RenderFrontmatter(m Meta) string {
 // verbatim with no per-line marker.
 func RenderUserMessage(text string) string {
 	text = strings.TrimRight(text, "\n")
-	return fmt.Sprintf("**λ** %s\n\n", text)
+	return fmt.Sprintf(LambdaMsgPrefix+" %s\n\n", text)
 }
 
-// RenderBashBlock renders a fenced bash block. The bash content is included
-// verbatim (no trim), preserving multi-line heredocs exactly.
+// RenderBashBlock renders a fenced `lenos-bash` block — a custom language
+// identifier intercepted by the composite block parser in blocks.go (same
+// package). The bash content is included verbatim (no trim), preserving
+// multi-line heredocs exactly.
 func RenderBashBlock(bash string) string {
-	return fmt.Sprintf("```bash\n%s\n```\n\n", bash)
+	return fmt.Sprintf("```lenos-bash\n%s\n```\n\n", bash)
 }
 
-// humanizeDuration formats a duration for display in trailers.
+// RenderTrailerSuccess renders a success trailer. Successful commands have
+// no visible footer in the transcript — the bash block plus its output (if
+// any) is the whole story; the prior `*[HH:MM:SS, Xs]*` timestamp footer
+// was pure noise in the chat list.
 //
-// Rules:
-//   - <1s    → 3-decimal seconds (e.g. "50ms → 0.050s", "150ms → 0.150s")
-//   - 1s..<60s → integer seconds (e.g. "12s")
-//   - ≥60s     → <m>m<s>s (e.g. "1m5s")
-func humanizeDuration(d time.Duration) string {
-	ns := d.Nanoseconds()
-	switch {
-	case ns < 1_000_000_000:
-		// <1s: always 3-decimal seconds (e.g. 50ms → "0.050s",
-		// 150ms → "0.150s", 400ms → "0.400s", 999ms → "0.999s").
-		return fmt.Sprintf("%.3fs", float64(ns)/1e9)
-	case ns < 60_000_000_000:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	default:
-		m := int(d.Minutes())
-		s := int(d.Seconds()) % 60
-		return fmt.Sprintf("%dm%ds", m, s)
-	}
+// Signature retained for API compatibility; at and dur are unused.
+func RenderTrailerSuccess(_ time.Time, _ time.Duration) string {
+	return ""
 }
 
-// RenderTrailerSuccess renders a success trailer (timing only).
-func RenderTrailerSuccess(at time.Time, dur time.Duration) string {
-	return fmt.Sprintf("*[%s, %s]*\n\n", at.Format("15:04:05"), humanizeDuration(dur))
-}
-
-// RenderTrailerFailure renders a failure trailer with ❌ exit code.
+// RenderTrailerFailure renders a failure trailer with the ❌ exit code so
+// errors stay loud in the transcript. The previous `*[HH:MM:SS, Xs]*`
+// timestamp prefix is dropped — the exit code carries the signal value.
 // Signal-derived codes get parenthetical context (SIGINT, killed, SIGTERM).
-func RenderTrailerFailure(at time.Time, dur time.Duration, exitCode int) string {
+func RenderTrailerFailure(_ time.Time, _ time.Duration, exitCode int) string {
 	ctx := signalContext(exitCode)
 	if ctx != "" {
-		return fmt.Sprintf("*[%s, %s]* — ❌ **exit %d** (%s)\n\n", at.Format("15:04:05"), humanizeDuration(dur), exitCode, ctx)
+		return fmt.Sprintf("❌ **exit %d** (%s)\n\n", exitCode, ctx)
 	}
-	return fmt.Sprintf("*[%s, %s]* — ❌ **exit %d**\n\n", at.Format("15:04:05"), humanizeDuration(dur), exitCode)
+	return fmt.Sprintf("❌ **exit %d**\n\n", exitCode)
 }
 
 func signalContext(code int) string {
@@ -86,13 +82,25 @@ func signalContext(code int) string {
 	}
 }
 
-// RenderOutputBlock renders a fenced plain output block with captured stdout/stderr.
-// Always includes a trailing blank line. Empty output renders an empty fenced block.
+// RenderOutputBlock renders captured stdout/stderr as plain markdown content.
+// Fenced wrapping is intentionally removed — output is rendered as-is so
+// Glamour can format it (headings, lists, etc.) and the composite block
+// parser in blocks.go (same package) groups it with its parent lenos-bash
+// fence. Triple-backticks in stdout are sanitized by inserting a zero-width
+// space after the first backtick in any ``` sequence, preventing fence
+// imbalance in the transcript.
+// zwspFenceBreaker inserts a zero-width space (U+200B) between the first
+// and second backticks of a literal triple-backtick run so downstream
+// markdown parsers don't see a fence. The \u200b escape keeps
+// the invisible character visible in source.
+const zwspFenceBreaker = "`\u200b``"
+
 func RenderOutputBlock(out []byte) string {
 	if len(out) == 0 {
-		return "```\n```\n\n"
+		return ""
 	}
-	return fmt.Sprintf("```\n%s\n```\n\n", string(out))
+	sanitized := strings.ReplaceAll(string(out), "```", zwspFenceBreaker)
+	return strings.TrimRight(sanitized, "\n") + "\n\n"
 }
 
 // RenderRuntimeEvent renders a severity-prefixed runtime-event blockquote.

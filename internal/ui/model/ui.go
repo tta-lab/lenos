@@ -34,9 +34,11 @@ import (
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/home"
 	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/transcript"
 
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
+	"github.com/tta-lab/lenos/internal/taskwarrior"
 	"github.com/tta-lab/lenos/internal/ui/anim"
 	"github.com/tta-lab/lenos/internal/ui/attachments"
 	"github.com/tta-lab/lenos/internal/ui/chat"
@@ -44,6 +46,7 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/completions"
 	"github.com/tta-lab/lenos/internal/ui/dialog"
 	fimage "github.com/tta-lab/lenos/internal/ui/image"
+	"github.com/tta-lab/lenos/internal/ui/list"
 	"github.com/tta-lab/lenos/internal/ui/logo"
 	"github.com/tta-lab/lenos/internal/ui/notification"
 	"github.com/tta-lab/lenos/internal/ui/styles"
@@ -200,11 +203,11 @@ type UI struct {
 	// detailsOpen tracks whether the details panel is open
 	detailsOpen bool
 
-	// pills state
-	pillsExpanded      bool
-	focusedPillSection pillSection
-	promptQueue        int
-	pillsView          string
+	// pills state — bottom panel carries the prompt queue only; TODOs live
+	// in the header expansion (ctrl+d).
+	pillsExpanded bool
+	promptQueue   int
+	pillsView     string
 
 	// Todo spinner
 	todoSpinner    spinner.Model
@@ -227,6 +230,15 @@ type UI struct {
 		index    int
 		draft    string
 	}
+
+	// .md transcript watcher (680e5b5d). Items are rebuilt from mdContent
+	// via transcript.SplitBlocks → chat.MdBlockItem on every Watch* event. mdPath
+	// is the absolute resolved path; nil watcher means the session has not
+	// been loaded yet (uiLanding state).
+	mdPath     string
+	mdContent  []byte
+	mdWatcher  *transcript.Watcher
+	mdWatchErr error
 }
 
 // New creates a new instance of the [UI] model.
@@ -349,10 +361,10 @@ func (m *UI) Init() tea.Cmd {
 	if cmd := m.startGitPoll(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	// start taskwarrior subtask polling if running as a TW worker.
-	// TTAL_JOB_ID is set once at worker spawn and never changes, so the
-	// ticker runs for the UI lifetime with no session coupling.
-	if jobID := os.Getenv("TTAL_JOB_ID"); jobID != "" {
+	// Start taskwarrior subtask polling when running inside a ttal worktree
+	// — the job hex is derived from the cwd basename
+	// (`*/worktrees/<hex8>-<alias>`); no env wiring needed.
+	if jobID := taskwarrior.ResolveJobIDFromCwd(); jobID != "" {
 		if cmd := m.startTWTickPoll(jobID); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -479,16 +491,44 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadSessionMsg:
 		m.setState(uiChat, m.focus)
 		m.session = msg.session
-		msgs, err := m.com.Workspace.ListMessages(context.Background(), m.session.ID)
-		if err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		} else if cmd := m.setSessionMessages(msgs); cmd != nil {
+		// 680e5b5d: chat list items come from the session .md transcript
+		// (parsed into blocks), not from the in-memory message stream.
+		// attachMdView rebuilds the list from the on-disk content.
+		if cmd := m.attachMdView(m.session.ID); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 		// Reload prompt history for the new session.
 		m.historyReset()
 		cmds = append(cmds, m.loadPromptHistory())
 		m.updateLayoutAndSize()
+
+	case transcript.WatchAppend:
+		m.mdContent = append(m.mdContent, msg.Bytes...)
+		m.rebuildMdBlocks()
+		if m.chat.Follow() {
+			m.chat.ScrollToBottom()
+		}
+		if m.mdWatcher != nil {
+			cmds = append(cmds, mdWatchCmd(m.mdWatcher))
+		}
+
+	case transcript.WatchTruncate:
+		if data, err := os.ReadFile(m.mdPath); err == nil {
+			m.mdContent = data
+		} else {
+			slog.Warn(".md re-read after truncation failed", "err", err, "path", m.mdPath)
+			cmds = append(cmds, util.ReportError(fmt.Errorf("session transcript re-read failed: %w", err)))
+		}
+		m.rebuildMdBlocks()
+		m.chat.ScrollToBottom()
+		if m.mdWatcher != nil {
+			cmds = append(cmds, mdWatchCmd(m.mdWatcher))
+		}
+
+	case transcript.WatchError:
+		m.mdWatchErr = msg.Err
+		slog.Warn(".md watch error", "err", msg.Err, "path", m.mdPath)
+		cmds = append(cmds, util.ReportError(fmt.Errorf("session transcript watcher: %w", msg.Err)))
 
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
@@ -555,14 +595,11 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Logos doesn't use child sessions — foreign messages are ignored.
 			break
 		}
-		switch msg.Type {
-		case pubsub.CreatedEvent:
-			cmds = append(cmds, m.appendSessionMessage(msg.Payload))
-		case pubsub.UpdatedEvent:
-			cmds = append(cmds, m.updateSessionMessage(msg.Payload))
-		case pubsub.DeletedEvent:
-			m.chat.RemoveMessage(msg.Payload.ID)
-		}
+		// 680e5b5d: message-event payloads no longer drive the chat list
+		// (the .md watcher does). Spinner / pill / agent-busy side effects
+		// below still need this branch to fire on every event, so the
+		// switch-on-Type stays as a side-effect-only no-op.
+		_ = msg.Type
 		// start the spinner if there is a new message
 		if hasInProgressTodo(m.effectiveTodos()) && m.isAgentBusy() && !m.todoIsSpinning {
 			m.todoIsSpinning = true
@@ -1350,20 +1387,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 				return true
 			}
-		case key.Matches(msg, m.keyMap.Chat.PillLeft):
-			if m.state == uiChat && m.hasSession() && m.pillsExpanded && m.focus != uiFocusEditor {
-				if cmd := m.switchPillSection(-1); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-				return true
-			}
-		case key.Matches(msg, m.keyMap.Chat.PillRight):
-			if m.state == uiChat && m.hasSession() && m.pillsExpanded && m.focus != uiFocusEditor {
-				if cmd := m.switchPillSection(1); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-				return true
-			}
 		case key.Matches(msg, m.keyMap.Suspend):
 			if m.isAgentBusy() {
 				cmds = append(cmds, util.ReportWarn("Agent is busy, please wait..."))
@@ -1658,6 +1681,12 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					cmds = append(cmds, cmd)
 				}
 				m.chat.SelectFirst()
+			case key.Matches(msg, m.keyMap.Chat.Copy):
+				// y / c / Y / C: copy selection. If the user has a mouse-drag
+				// highlight, copy that range; otherwise copy the focused block's
+				// raw .md source (the verbatim transcript text — what the user
+				// expects when they hit y on a bash block).
+				cmds = append(cmds, m.copyChatBlockOrHighlight())
 			case key.Matches(msg, m.keyMap.Chat.End):
 				if cmd := m.chat.ScrollToBottomAndAnimate(); cmd != nil {
 					cmds = append(cmds, cmd)
@@ -1688,6 +1717,7 @@ func (m *UI) drawHeader(scr uv.Screen, area uv.Rectangle) {
 		m.session,
 		true,
 		m.detailsOpen,
+		m.effectiveTodos(),
 		area.Dx(),
 	)
 }
@@ -1885,9 +1915,6 @@ func (m *UI) ShortHelp() []key.Binding {
 				k.Chat.PageDown,
 				k.Chat.Copy,
 			)
-			if m.pillsExpanded && hasIncompleteTodos(m.effectiveTodos()) && m.promptQueue > 0 {
-				binds = append(binds, k.Chat.PillLeft)
-			}
 		}
 	default:
 		// TODO: other states
@@ -1998,9 +2025,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 					k.Chat.ClearHighlight,
 				},
 			)
-			if m.pillsExpanded && hasIncompleteTodos(m.effectiveTodos()) && m.promptQueue > 0 {
-				binds = append(binds, []key.Binding{k.Chat.PillLeft})
-			}
 		}
 	default:
 		if m.session == nil {
@@ -2112,6 +2136,10 @@ func (m *UI) updateSize() {
 	m.status.SetWidth(m.layout.status.Dx())
 
 	m.chat.SetSize(m.layout.main.Dx(), m.layout.main.Dy())
+	// Width changed → re-render blocks at new width (Glamour wraps to width).
+	if m.mdContent != nil {
+		m.rebuildMdBlocks()
+	}
 	m.textarea.MaxHeight = TextareaMaxHeight
 	m.textarea.SetWidth(m.layout.editor.Dx())
 	m.renderPills()
@@ -2977,7 +3005,16 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	maxItemsPerSection := remainingHeight - 3       // Account for section title and spacing
 
 	filesSection := m.modifiedFilesInfo(sectionWidth, maxItemsPerSection, false)
+	todoSection := m.todoListInfo(sectionWidth)
+
 	sections := filesSection
+	if todoSection != "" {
+		if sections == "" {
+			sections = todoSection
+		} else {
+			sections = lipgloss.JoinHorizontal(lipgloss.Top, filesSection, "  ", todoSection)
+		}
+	}
 	uv.NewStyledString(
 		s.CompactDetails.View.
 			Width(area.Dx()).
@@ -2992,6 +3029,24 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	).Draw(scr, area)
 }
 
+// todoListInfo renders the TODO list section for the ctrl+d details overlay.
+// Returns "" when no taskwarrior job is bound or no todos exist — the caller
+// then omits the column entirely.
+func (m *UI) todoListInfo(width int) string {
+	todos := m.effectiveTodos()
+	if len(todos) == 0 {
+		return ""
+	}
+	t := m.com.Styles
+	icon := t.Tool.TodoInProgressIcon.Render(styles.SpinnerIcon)
+	if m.todoIsSpinning {
+		icon = m.todoSpinner.View()
+	}
+	title := t.CompactDetails.Title.Render("TODO")
+	body := FormatTodosList(t, todos, icon, width)
+	return lipgloss.JoinVertical(lipgloss.Left, title, body)
+}
+
 func (m *UI) copyChatHighlight() tea.Cmd {
 	text := m.chat.HighlightContent()
 	return common.CopyToClipboardWithCallback(
@@ -3002,6 +3057,30 @@ func (m *UI) copyChatHighlight() tea.Cmd {
 			return nil
 		},
 	)
+}
+
+// copyChatBlockOrHighlight is the y/c keypress entry point. It copies the
+// mouse-drag highlight when one exists, otherwise the focused block's raw
+// .md source (verbatim transcript text — what users expect when yanking
+// a bash or output block).
+func (m *UI) copyChatBlockOrHighlight() tea.Cmd {
+	if m.chat.HasHighlight() {
+		return m.copyChatHighlight()
+	}
+	item := m.chat.list.SelectedItem()
+	if item == nil {
+		return nil
+	}
+	rawer, ok := item.(list.RawRenderable)
+	if !ok {
+		return nil
+	}
+	width := m.chat.list.Width()
+	text := rawer.RawRender(width)
+	if text == "" {
+		return nil
+	}
+	return common.CopyToClipboard(text, "Block copied to clipboard")
 }
 
 // renderLogo renders the Lenos logo with the given styles and dimensions.

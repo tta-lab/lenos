@@ -25,6 +25,9 @@ install:
 	@echo "Installing lenos..."
 	@go build -o $(shell go env GOPATH)/bin/lenos .
 	@echo "✓ Installed to $(shell go env GOPATH)/bin/lenos"
+	@echo "Installing narrate..."
+	@go build -o $(shell go env GOPATH)/bin/narrate ./cmd/narrate
+	@echo "✓ Installed to $(shell go env GOPATH)/bin/narrate"
 
 clean:
 	@echo "Cleaning build artifacts..."

@@ -7,7 +7,7 @@ started_at: 2026-04-28T10:30:00Z
 
 **λ** test
 
-```bash
+```lenos-bash
 some command
 ```
 

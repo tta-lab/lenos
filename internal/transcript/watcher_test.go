@@ -1,4 +1,4 @@
-package tui
+package transcript
 
 import (
 	"os"
@@ -10,6 +10,25 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// nextWithTimeout pulls the next event from the watcher or fails the test
+// instead of blocking forever — guards CI runs on slow filesystems (Docker
+// overlay, NFS, loaded runners) where fsnotify events can arrive late or
+// not at all.
+func nextWithTimeout(t *testing.T, w *Watcher, timeout time.Duration) WatchEvent {
+	t.Helper()
+	done := make(chan WatchEvent, 1)
+	go func() { done <- w.Next() }()
+	select {
+	case ev := <-done:
+		return ev
+	case <-time.After(timeout):
+		t.Fatalf("watcher event did not arrive within %s", timeout)
+		return nil
+	}
+}
+
+const watcherTestTimeout = 5 * time.Second
 
 func TestWatcher(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -31,17 +50,17 @@ func TestWatcher(t *testing.T) {
 	// Append a bash block.
 	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n\n```bash\ngo build\n```\n"), 0o644))
 
-	msg := w.Listen()()
-	appendMsg, ok := msg.(MdAppendedMsg)
-	require.True(t, ok, "expected MdAppendedMsg, got %T", msg)
+	msg := nextWithTimeout(t, w, watcherTestTimeout)
+	appendMsg, ok := msg.(WatchAppend)
+	require.True(t, ok, "expected WatchAppend, got %T", msg)
 	assert.Equal(t, []byte("\n```bash\ngo build\n```\n"), appendMsg.Bytes)
 
 	// Multiple writes within debounce window coalesce.
 	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n\n```bash\ngo build\n```\n\noutput\n"), 0o644))
 	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n\n```bash\ngo build\n```\n\noutput\nerror\n"), 0o644))
 
-	msg = w.Listen()()
-	appendMsg, ok = msg.(MdAppendedMsg)
+	msg = nextWithTimeout(t, w, watcherTestTimeout)
+	appendMsg, ok = msg.(WatchAppend)
 	require.True(t, ok)
 	// Should contain all new bytes since last offset.
 	assert.Contains(t, string(appendMsg.Bytes), "error")
@@ -66,9 +85,14 @@ func TestWatcherTruncation(t *testing.T) {
 	// Truncate the file.
 	require.NoError(t, os.WriteFile(mdPath, []byte("# Session\n"), 0o644))
 
-	msg := w.Listen()()
-	_, ok := msg.(MdTruncatedMsg)
-	assert.True(t, ok, "expected MdTruncatedMsg, got %T", msg)
+	msg := nextWithTimeout(t, w, watcherTestTimeout)
+	tr, ok := msg.(WatchTruncate)
+	assert.True(t, ok, "expected WatchTruncate, got %T", msg)
+	// WatchTruncate is contractually empty — the read-back happens in the UI
+	// layer (see attachMdView's truncation branch). Pin the empty-payload
+	// contract so a future watcher change can't silently start passing bytes
+	// that callers would ignore (or worse, accidentally trust).
+	assert.Equal(t, WatchTruncate{}, tr, "WatchTruncate must carry no fields — caller re-reads the file")
 
 	w.Close()
 }

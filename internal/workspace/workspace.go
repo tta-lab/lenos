@@ -64,6 +64,7 @@ type Workspace interface {
 	WorkingDir() string
 	Resolver() config.VariableResolver
 	AgentName() string
+	AgentSandboxState() string // "on", "off", or "degraded"
 
 	// Config mutations (proxied to server in client mode)
 	UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error

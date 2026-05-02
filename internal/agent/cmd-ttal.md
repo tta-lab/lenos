@@ -1,8 +1,5 @@
 Manage tasks and PRs via the ttal agent runtime
 
-## Session Start
-  ttal task get              # load full task context and plan (no extra params)
-
 ## Subtasks (taskwarrior)
   task <uuid> done           # mark a completed subtask
   task <uuid> start          # mark a subtask as in-progress
