@@ -128,36 +128,6 @@ func TestRenderBashBlock(t *testing.T) {
 	})
 }
 
-func TestHumanizeDuration(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		duration time.Duration
-		expected string
-	}{
-		{0, "0.000s"},
-		{50 * time.Millisecond, "0.050s"},
-		{100 * time.Millisecond, "0.100s"},
-		{150 * time.Millisecond, "0.150s"},
-		{250 * time.Millisecond, "0.250s"},
-		{400 * time.Millisecond, "0.400s"},
-		{900 * time.Millisecond, "0.900s"},
-		{999 * time.Millisecond, "0.999s"},
-		{1 * time.Second, "1s"},
-		{12 * time.Second, "12s"},
-		{60 * time.Second, "1m0s"},
-		{65 * time.Second, "1m5s"},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.expected, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.expected, humanizeDuration(tc.duration))
-		})
-	}
-}
-
 func TestRenderTrailerSuccess(t *testing.T) {
 	t.Parallel()
 

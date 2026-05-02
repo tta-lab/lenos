@@ -47,28 +47,6 @@ func RenderBashBlock(bash string) string {
 	return fmt.Sprintf("```lenos-bash\n%s\n```\n\n", bash)
 }
 
-// humanizeDuration formats a duration for display in trailers.
-//
-// Rules:
-//   - <1s    → 3-decimal seconds (e.g. "50ms → 0.050s", "150ms → 0.150s")
-//   - 1s..<60s → integer seconds (e.g. "12s")
-//   - ≥60s     → <m>m<s>s (e.g. "1m5s")
-func humanizeDuration(d time.Duration) string {
-	ns := d.Nanoseconds()
-	switch {
-	case ns < 1_000_000_000:
-		// <1s: always 3-decimal seconds (e.g. 50ms → "0.050s",
-		// 150ms → "0.150s", 400ms → "0.400s", 999ms → "0.999s").
-		return fmt.Sprintf("%.3fs", float64(ns)/1e9)
-	case ns < 60_000_000_000:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	default:
-		m := int(d.Minutes())
-		s := int(d.Seconds()) % 60
-		return fmt.Sprintf("%dm%ds", m, s)
-	}
-}
-
 // RenderTrailerSuccess renders a success trailer. Successful commands have
 // no visible footer in the transcript — the bash block plus its output (if
 // any) is the whole story; the prior `*[HH:MM:SS, Xs]*` timestamp footer
