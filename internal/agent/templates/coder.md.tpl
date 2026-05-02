@@ -336,8 +336,6 @@ Adapt verbosity to match the work completed:
 <task>
 Your task is {{.JobID}}.
 
-**Session start**: Use `ttal task get` (no extra arguments) to get full task context and plan.
-
 **Subtask management via taskwarrior CLI:**
 - `task {{.JobID}} tree` — view your subtask tree
 - `task <uuid> done` — mark a subtask as completed
