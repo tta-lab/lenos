@@ -93,17 +93,21 @@ func (i *MdBlockItem) Render(width int) string {
 // linePrefix returns the rendered SGR string to prepend on every line of
 // the block, or "" to render flush. Per-kind:
 //   - UserMsg: UserBlurred (faint bar) or UserFocused (solid bar) — the
-//     terracotta vertical bar that marks turns the user owns.
-//   - Other: "" — non-user blocks are pre-quoted with `> ` before Glamour
-//     renders them (see model.blockquotePrefix), so Glamour's blockquote
-//     style already supplies the indent + amber marker. Adding our own
-//     prefix would stack two bars on top of each other.
+//     terracotta vertical bar that marks turns the user owns. Always shown
+//     so the eye can scan turn boundaries even when focus lives elsewhere.
+//   - Other (bash / output / runtime / prose / lenos-bash composite):
+//     BlockFocused (subtle slate bar) when focused, "" when blurred. j/k
+//     navigation is visible across the whole transcript without painting
+//     extra chrome onto agent activity at rest.
 func (i *MdBlockItem) linePrefix() string {
 	if i.kind == MdBlockUserMsg {
 		if i.focused {
 			return i.sty.Chat.Message.UserFocused.Render()
 		}
 		return i.sty.Chat.Message.UserBlurred.Render()
+	}
+	if i.focused {
+		return i.sty.Chat.Message.BlockFocused.Render()
 	}
 	return ""
 }
