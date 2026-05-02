@@ -111,11 +111,17 @@ func signalContext(code int) string {
 // fence. Triple-backticks in stdout are sanitized by inserting a zero-width
 // space after the first backtick in any ``` sequence, preventing fence
 // imbalance in the transcript.
+// zwspFenceBreaker inserts a zero-width space (U+200B) between the first
+// and second backticks of a literal triple-backtick run so downstream
+// markdown parsers don't see a fence. The \u200b escape keeps
+// the invisible character visible in source.
+const zwspFenceBreaker = "`\u200b``"
+
 func RenderOutputBlock(out []byte) string {
 	if len(out) == 0 {
 		return ""
 	}
-	sanitized := strings.ReplaceAll(string(out), "```", "`​``")
+	sanitized := strings.ReplaceAll(string(out), "```", zwspFenceBreaker)
 	return strings.TrimRight(sanitized, "\n") + "\n\n"
 }
 
