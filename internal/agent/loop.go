@@ -320,7 +320,7 @@ func formatResultForModel(_ string, stdout, stderr string, exitCode int) string 
 		body += "\nSTDERR:\n" + html.EscapeString(stderr)
 	}
 	if body == "" {
-		body = "(no output)"
+		body = "Bash completed with no output"
 	}
 	if exitCode != 0 && exitCode != -1 {
 		body += fmt.Sprintf("\n(exit code: %d)", exitCode)
