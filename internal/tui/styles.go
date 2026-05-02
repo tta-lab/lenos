@@ -17,9 +17,10 @@ const (
 
 // Accent colours — three semantic tokens per orientation.
 var (
-	AccentAmber   = lipgloss.Color("214") // #ffaf00 — phosphor amber
-	AccentSlate   = lipgloss.Color("245") // #8a8a8a — dim chrome
-	AccentCrimson = lipgloss.Color("160") // #d70000 — error/halt (reserved v2)
+	AccentAmber   = lipgloss.Color("214")     // #ffaf00 — phosphor amber
+	AccentSlate   = lipgloss.Color("245")     // #8a8a8a — dim chrome
+	AccentCrimson = lipgloss.Color("160")     // #d70000 — error/halt (reserved v2)
+	AccentBrass   = lipgloss.Color("#b8973e") // antique gold — shell prompt, classic-terminal evocation
 )
 
 // Styles holds resolved lipgloss styles for TUI chrome elements.
@@ -100,7 +101,7 @@ func NewStyles() Styles {
 			Bold(true),
 
 		BashPrompt: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("6")),
+			Foreground(AccentBrass),
 	}
 }
 
