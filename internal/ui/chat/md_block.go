@@ -59,14 +59,14 @@ func NewMdBlockItem(sty *styles.Styles, id, rawSource, rendered string, kind MdB
 // ID implements chat.Identifiable.
 func (i *MdBlockItem) ID() string { return i.id }
 
-// RawRender implements list.RawRenderable. Returns the unstyled .md source
-// so the chat-list copy path produces verbatim transcript text.
+// RawRender implements list.RawRenderable. Returns the verbatim .md
+// source so the chat-list copy path (y/c yank, mouse selection) yields
+// transcript text without ANSI styling. Highlight wraps the raw source
+// when set — clipboard extraction reads from this same path.
 func (i *MdBlockItem) RawRender(width int) string {
-	_ = width
-	body := i.rendered
-	h := lipgloss.Height(body)
+	body := i.rawSource
 	if i.isHighlighted() {
-		body = i.renderHighlighted(body, width, h)
+		body = i.renderHighlighted(body, width, lipgloss.Height(body))
 	}
 	return body
 }
@@ -75,7 +75,10 @@ func (i *MdBlockItem) RawRender(width int) string {
 // (focus changes its weight); other blocks get plain padding so they
 // read as "agent territory" — no per-line border noise.
 func (i *MdBlockItem) Render(width int) string {
-	body := i.RawRender(width)
+	body := i.rendered
+	if i.isHighlighted() {
+		body = i.renderHighlighted(body, width, lipgloss.Height(body))
+	}
 	prefix := i.linePrefix()
 	if prefix == "" {
 		return body
