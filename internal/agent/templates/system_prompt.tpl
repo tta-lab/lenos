@@ -115,7 +115,7 @@ the runtime hands control back). Match this shape exactly.
   EOF
   exit
 
-**Project orientation** — chain reads, narrate the conclusion, exit:
+**Project orientation (multi-turn)** — narrate progress, run reads, narrate the conclusion, then exit. Each `ASSISTANT:` block below is a separate model response:
 
   USER: tell me more about this project
   ASSISTANT:
