@@ -81,7 +81,8 @@ Footer state is derived from the last 2 KB of markdown:
 
 | Last content | State | Render |
 |---|---|---|
-| Ends with ```` ```bash ```` (unclosed) | `ACTIVE` | amber spinner + elapsed |
+| Ends with ```` ```lenos-bash ```` (unclosed) | `ACTIVE` | amber spinner + elapsed |
+| Ends with ```` ```bash ```` (unclosed, legacy) | `ACTIVE` | amber spinner + elapsed |
 | Ends with `*[HH:MM:SS, Xs]*` trailer | `TURN_ENDED` | dim "turn N ended" |
 | Ends with user message only | `IDLE` | dim "awaiting agent" |
 | File empty or whitespace only | `IDLE` | dim "awaiting agent" |

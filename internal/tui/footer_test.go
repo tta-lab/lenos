@@ -48,6 +48,13 @@ func TestDeriveFooter(t *testing.T) {
 		assert.Equal(t, "narrate <<EOF", d.LatestBashCmd)
 	})
 
+	t.Run("active lenos-bash block", func(t *testing.T) {
+		md := []byte("---\n---\n\n```lenos-bash\ngo test ./...\n```\n")
+		d := DeriveFooter(md)
+		assert.Equal(t, FooterStateActive, d.State)
+		assert.Equal(t, "go test ./...", d.LatestBashCmd)
+	})
+
 	t.Run("idle after trailer", func(t *testing.T) {
 		md := []byte("---\n---\n\n*[10:30:05, 12s]*\n")
 		d := DeriveFooter(md)

@@ -90,6 +90,9 @@ func tokenizeSections(body string) []section {
 }
 
 func classifyLine(line string) string {
+	if strings.HasPrefix(line, "```lenos-bash") || strings.HasPrefix(line, "``` lenos-bash") {
+		return "bash"
+	}
 	if strings.HasPrefix(line, "```bash") || strings.HasPrefix(line, "``` bash") {
 		return "bash"
 	}
@@ -159,6 +162,9 @@ func classifySection(s section, allSections []section, idx int) FooterDerivation
 
 func extractBashCmd(lines []string) string {
 	for _, line := range lines {
+		if strings.HasPrefix(line, "```lenos-bash") || strings.HasPrefix(line, "``` lenos-bash") {
+			continue
+		}
 		if strings.HasPrefix(line, "```bash") || strings.HasPrefix(line, "``` bash") {
 			continue
 		}
