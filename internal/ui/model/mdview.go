@@ -11,6 +11,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/tta-lab/lenos/internal/transcript"
 	"github.com/tta-lab/lenos/internal/tui"
 	"github.com/tta-lab/lenos/internal/ui/chat"
 )
@@ -22,7 +23,7 @@ import (
 var lambdaSGR = lipgloss.NewStyle().
 	Foreground(tui.AccentAmber).
 	Bold(true).
-	Render(tui.GlyphLambda)
+	Render(transcript.Lambda)
 
 // attachMdView (re)attaches the .md watcher for the given session and
 // rebuilds the chat list from its current contents. Called from the
@@ -103,7 +104,7 @@ func (m *UI) rebuildMdBlocks() {
 	}
 	contentWidth := max(width-chat.MessageLeftPaddingTotal, 1)
 
-	blocks := tui.SplitBlocks(m.mdContent)
+	blocks := transcript.SplitBlocks(m.mdContent)
 	if len(blocks) == 0 {
 		m.chat.SetMessages()
 		return
@@ -129,14 +130,14 @@ func (m *UI) rebuildMdBlocks() {
 	m.chat.SetMessages(items...)
 }
 
-// classifyAndRenderBlock maps a tui.Block to a chat.MdBlockKind and its
-// pre-rendered display string. Lenos-bash composites get the special
+// classifyAndRenderBlock maps a transcript.Block to a chat.MdBlockKind and
+// its pre-rendered display string. Lenos-bash composites get the special
 // `$ <cmd>` rendering — cmd's first line only, colored prompt, with the
 // post-fence output rendered as plain markdown via Glamour. Everything
 // else (user msg, output, prose, runtime, legacy bash) goes through
 // Glamour as-is.
-func classifyAndRenderBlock(b tui.Block, renderer *glamour.TermRenderer, rerr error) (chat.MdBlockKind, string) {
-	if b.Kind == tui.BlockBashCmd && isLenosBashSource(b.Source) {
+func classifyAndRenderBlock(b transcript.Block, renderer *glamour.TermRenderer, rerr error) (chat.MdBlockKind, string) {
+	if b.Kind == transcript.BlockBashCmd && isLenosBashSource(b.Source) {
 		return chat.MdBlockLenosBash, renderLenosBashSource(b.Source, renderer, rerr)
 	}
 
@@ -152,8 +153,8 @@ func classifyAndRenderBlock(b tui.Block, renderer *glamour.TermRenderer, rerr er
 			rendered = strings.Trim(out, "\n")
 		}
 	}
-	if b.Kind == tui.BlockUserMsg {
-		rendered = strings.Replace(rendered, tui.GlyphLambda, lambdaSGR, 1)
+	if b.Kind == transcript.BlockUserMsg {
+		rendered = strings.Replace(rendered, transcript.Lambda, lambdaSGR, 1)
 		return chat.MdBlockUserMsg, rendered
 	}
 	return chat.MdBlockOther, rendered

@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/transcript"
 	"github.com/tta-lab/lenos/internal/tui"
 	"github.com/tta-lab/lenos/internal/ui/chat"
 )
@@ -68,7 +69,7 @@ func TestClassifyAndRenderBlock_LenosBash(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("single-line cmd renders as $ cmd", func(t *testing.T) {
-		b := tui.Block{Kind: tui.BlockBashCmd, Source: "```lenos-bash\nls -la\n```\n\nfile1\nfile2"}
+		b := transcript.Block{Kind: transcript.BlockBashCmd, Source: "```lenos-bash\nls -la\n```\n\nfile1\nfile2"}
 		kind, rendered := classifyAndRenderBlock(b, renderer, nil)
 		assert.Equal(t, chat.MdBlockLenosBash, kind)
 		stripped := ansi.Strip(rendered)
@@ -77,7 +78,7 @@ func TestClassifyAndRenderBlock_LenosBash(t *testing.T) {
 	})
 
 	t.Run("multi-line cmd collapses to first line plus ellipsis", func(t *testing.T) {
-		b := tui.Block{Kind: tui.BlockBashCmd, Source: "```lenos-bash\nnarrate <<EOF\nfoo\nEOF\n```"}
+		b := transcript.Block{Kind: transcript.BlockBashCmd, Source: "```lenos-bash\nnarrate <<EOF\nfoo\nEOF\n```"}
 		kind, rendered := classifyAndRenderBlock(b, renderer, nil)
 		assert.Equal(t, chat.MdBlockLenosBash, kind)
 		stripped := ansi.Strip(rendered)
@@ -87,13 +88,13 @@ func TestClassifyAndRenderBlock_LenosBash(t *testing.T) {
 	})
 
 	t.Run("legacy bash fence falls through to Other (Glamour)", func(t *testing.T) {
-		b := tui.Block{Kind: tui.BlockBashCmd, Source: "```bash\nlegacy\n```"}
+		b := transcript.Block{Kind: transcript.BlockBashCmd, Source: "```bash\nlegacy\n```"}
 		kind, _ := classifyAndRenderBlock(b, renderer, nil)
 		assert.Equal(t, chat.MdBlockOther, kind, "legacy ```bash must not become MdBlockLenosBash")
 	})
 
 	t.Run("user msg classifies as MdBlockUserMsg + λ replaced with colored ANSI", func(t *testing.T) {
-		b := tui.Block{Kind: tui.BlockUserMsg, Source: "**λ** hello world"}
+		b := transcript.Block{Kind: transcript.BlockUserMsg, Source: "**λ** hello world"}
 		kind, rendered := classifyAndRenderBlock(b, renderer, nil)
 		assert.Equal(t, chat.MdBlockUserMsg, kind)
 
@@ -101,7 +102,7 @@ func TestClassifyAndRenderBlock_LenosBash(t *testing.T) {
 		// wrapper applied. Without the wrapper the visual anchor for "this is
 		// the start of a turn" disappears.
 		stripped := ansi.Strip(rendered)
-		assert.Contains(t, stripped, tui.GlyphLambda, "λ must remain in stripped output")
+		assert.Contains(t, stripped, transcript.Lambda, "λ must remain in stripped output")
 		assert.Contains(t, stripped, "hello world", "user-msg body preserved")
 		assert.Contains(t, rendered, lambdaSGR, "lambdaSGR must be embedded around the λ glyph")
 	})

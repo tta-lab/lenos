@@ -1,4 +1,4 @@
-package tui
+package transcript
 
 import (
 	"fmt"
@@ -152,7 +152,7 @@ func classifyBlock(text string) BlockKind {
 	first = strings.TrimSpace(first)
 
 	switch {
-	case strings.HasPrefix(first, "**λ**"):
+	case strings.HasPrefix(first, LambdaMsgPrefix):
 		return BlockUserMsg
 	case isLenosBashFence(first):
 		return BlockBashCmd

@@ -232,7 +232,7 @@ type UI struct {
 	}
 
 	// .md transcript watcher (680e5b5d). Items are rebuilt from mdContent
-	// via tui.SplitBlocks → chat.MdBlockItem on every Md*Msg event. mdPath
+	// via transcript.SplitBlocks → chat.MdBlockItem on every Md*Msg event. mdPath
 	// is the absolute resolved path; nil watcher means the session has not
 	// been loaded yet (uiLanding state).
 	mdPath     string

@@ -36,7 +36,7 @@ func RenderFrontmatter(m Meta) string {
 // verbatim with no per-line marker.
 func RenderUserMessage(text string) string {
 	text = strings.TrimRight(text, "\n")
-	return fmt.Sprintf("**"+Lambda+"** %s\n\n", text)
+	return fmt.Sprintf(LambdaMsgPrefix+" %s\n\n", text)
 }
 
 // RenderBashBlock renders a fenced `lenos-bash` block — a custom language
