@@ -40,9 +40,9 @@ func RenderUserMessage(text string) string {
 }
 
 // RenderBashBlock renders a fenced `lenos-bash` block — a custom language
-// identifier intercepted by the composite block parser in
-// internal/tui/blocks.go. The bash content is included verbatim (no trim),
-// preserving multi-line heredocs exactly.
+// identifier intercepted by the composite block parser in blocks.go (same
+// package). The bash content is included verbatim (no trim), preserving
+// multi-line heredocs exactly.
 func RenderBashBlock(bash string) string {
 	return fmt.Sprintf("```lenos-bash\n%s\n```\n\n", bash)
 }
@@ -85,7 +85,7 @@ func signalContext(code int) string {
 // RenderOutputBlock renders captured stdout/stderr as plain markdown content.
 // Fenced wrapping is intentionally removed — output is rendered as-is so
 // Glamour can format it (headings, lists, etc.) and the composite block
-// parser in internal/tui/blocks.go groups it with its parent lenos-bash
+// parser in blocks.go (same package) groups it with its parent lenos-bash
 // fence. Triple-backticks in stdout are sanitized by inserting a zero-width
 // space after the first backtick in any ``` sequence, preventing fence
 // imbalance in the transcript.

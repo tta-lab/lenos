@@ -10,7 +10,10 @@ import (
 )
 
 // MdBlockKind classifies a transcript block for styling. Mirrors
-// tui.BlockKind — re-declared here to avoid a chat → tui import.
+// transcript.BlockKind — re-declared here to keep the chat package
+// independent of the transcript domain types (chat is a presentation
+// layer; the blocks it renders happen to come from .md, but it doesn't
+// need to import the parser).
 type MdBlockKind int
 
 const (
@@ -20,9 +23,9 @@ const (
 )
 
 // MdBlockItem is a list.List item that renders one block of the session
-// .md transcript. Blocks come from tui.SplitBlocks; the item is the bridge
-// between that text-shaped output and the chat-list interactivity (focus,
-// highlight, copy).
+// .md transcript. Blocks come from transcript.SplitBlocks; the item is the
+// bridge between that text-shaped output and the chat-list interactivity
+// (focus, highlight, copy).
 //
 // Styling differentiates user-msg blocks from everything else — only the
 // user msg gets the left-border bar; bash / output / trailer / runtime /
@@ -40,7 +43,7 @@ type MdBlockItem struct {
 }
 
 // NewMdBlockItem wraps a transcript block. id should be stable across
-// re-parses (use tui.Block.ID()). rawSource is what RawRender returns
+// re-parses (use transcript.Block.ID()). rawSource is what RawRender returns
 // (used for clipboard copy — verbatim .md text). rendered is the styled
 // display text shown in the chat list. kind drives which prefix style
 // applies (user-msg gets the bar, everything else doesn't).

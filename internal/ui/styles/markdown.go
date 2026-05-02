@@ -8,8 +8,7 @@ import (
 )
 
 // Accent colours used by the chat list when rendering transcript content.
-// Slimmed to the tokens that survived the internal/tui orphan cleanup —
-// the wider lipgloss palette for the chat list lives in styles.go.
+// The wider lipgloss palette for the chat list lives in styles.go.
 var (
 	AccentAmber = lipgloss.Color("214")     // #ffaf00 — phosphor amber, used for the λ user-turn glyph
 	AccentBrass = lipgloss.Color("#b8973e") // antique gold — `$` shell-prompt prefix on lenos-bash composites
