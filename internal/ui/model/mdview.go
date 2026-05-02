@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/tta-lab/lenos/internal/transcript"
 	"github.com/tta-lab/lenos/internal/ui/chat"
 	"github.com/tta-lab/lenos/internal/ui/styles"
+	"github.com/tta-lab/lenos/internal/ui/util"
 )
 
 // lambdaSGR paints the user-prompt λ in phosphor amber + bold so the eye
@@ -81,7 +83,7 @@ func (m *UI) attachMdView(sessionID string) tea.Cmd {
 	if err != nil {
 		m.mdWatchErr = err
 		slog.Warn("attachMdView: watcher construction failed", "path", mdPath, "err", err)
-		return nil
+		return util.ReportError(fmt.Errorf("transcript watcher failed to start: %w", err))
 	}
 	m.mdContent = initial
 	m.mdWatcher = watcher

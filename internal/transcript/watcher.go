@@ -1,6 +1,7 @@
 package transcript
 
 import (
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -49,12 +50,6 @@ type event struct {
 // plus a Watcher whose Next() method blocks until the next file event.
 // Callers wanting Bubble Tea integration wrap Next in a tea.Cmd one-liner.
 func NewWatcher(path string, debounce time.Duration) (initial []byte, w *Watcher, err error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer f.Close()
-
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, err
@@ -106,7 +101,15 @@ func (w *Watcher) tailLoop(debounce time.Duration) {
 			if e.Has(fsnotify.Remove) || e.Has(fsnotify.Rename) {
 				// File was deleted or moved; re-watch if it reappears.
 				w.watcher.Remove(w.path)
-				_ = w.watcher.Add(w.path)
+				if addErr := w.watcher.Add(w.path); addErr != nil {
+					// Re-watch failed (path no longer exists); surface so the
+					// UI shows an error instead of Next() blocking forever.
+					select {
+					case w.events <- event{err: fmt.Errorf("re-watch after remove/rename failed: %w", addErr)}:
+					default:
+					}
+					continue
+				}
 				// Treat as truncation — next Write will re-open and read from 0.
 				select {
 				case w.events <- event{truncated: true}:
