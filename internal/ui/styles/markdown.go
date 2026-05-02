@@ -9,9 +9,13 @@ import (
 
 // Accent colours used by the chat list when rendering transcript content.
 // The wider lipgloss palette for the chat list lives in styles.go.
+//
+// AccentBrass aliases BrandTertiary so the `$` prompt and the dialog
+// rename gradient draw from the same source of truth — see
+// BrandTertiaryHex in styles.go for the canonical hex value.
 var (
-	AccentAmber = lipgloss.Color("214")     // #ffaf00 — phosphor amber, used for the λ user-turn glyph
-	AccentBrass = lipgloss.Color("#b8973e") // antique gold — `$` shell-prompt prefix on lenos-bash composites
+	AccentAmber = lipgloss.Color("214") // #ffaf00 — phosphor amber, used for the λ user-turn glyph
+	AccentBrass = BrandTertiary         // antique gold — `$` shell-prompt prefix on lenos-bash composites
 )
 
 // BashPromptStyle paints the leading `$ ` on a lenos-bash composite block.

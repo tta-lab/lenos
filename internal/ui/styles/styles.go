@@ -21,6 +21,20 @@ func pointerTo(s string) *string {
 	return &s
 }
 
+// Brand palette hex codes — package-level so cross-file consumers
+// (markdown.go, the Glamour theme below, the dialog rename gradient,
+// etc.) all reference the same source of truth instead of duplicating
+// literals. Keep these in sync with the inline `primary`/`secondary`
+// values in DefaultStyles below; promote those next time we need them
+// outside the constructor.
+const (
+	BrandTertiaryHex = "#b8973e" // antique gold — `$` prompt, prompt placeholder, rename gradient destination
+)
+
+// BrandTertiary is the typed-color form of BrandTertiaryHex for direct
+// use in lipgloss styles outside the DefaultStyles constructor.
+var BrandTertiary = lipgloss.Color(BrandTertiaryHex)
+
 const (
 	CheckIcon   string = "✓"
 	SpinnerIcon string = "⋯"
@@ -478,7 +492,7 @@ func DefaultStyles() Styles {
 	var (
 		primary   = lipgloss.Color("#c4734f")
 		secondary = lipgloss.Color("#d4a574")
-		tertiary  = lipgloss.Color("#b8973e")
+		tertiary  = BrandTertiary
 
 		// Backgrounds
 		bgBase        = lipgloss.Color("#1a1016")
@@ -762,7 +776,7 @@ func DefaultStyles() Styles {
 					Bold:      new(true),
 				},
 				NameDecorator: ansi.StylePrimitive{
-					Color: pointerTo("#b8973e"),
+					Color: pointerTo(BrandTertiaryHex),
 				},
 				NameFunction: ansi.StylePrimitive{
 					Color: pointerTo("#6b8a5e"),
@@ -774,7 +788,7 @@ func DefaultStyles() Styles {
 					Color: pointerTo("#a67c52"),
 				},
 				LiteralStringEscape: ansi.StylePrimitive{
-					Color: pointerTo("#b8973e"),
+					Color: pointerTo(BrandTertiaryHex),
 				},
 				GenericDeleted: ansi.StylePrimitive{
 					Color: pointerTo("#c44f4f"),
@@ -1278,7 +1292,7 @@ func DefaultStyles() Styles {
 	s.Dialog.Sessions.RenamingView = s.Dialog.View.BorderForeground(lipgloss.Color("#c4a34f"))
 	s.Dialog.Sessions.RenamingingMessage = s.Base.Padding(1)
 	s.Dialog.Sessions.RenamingTitleGradientFromColor = lipgloss.Color("#c4a34f")
-	s.Dialog.Sessions.RenamingTitleGradientToColor = lipgloss.Color("#b8973e")
+	s.Dialog.Sessions.RenamingTitleGradientToColor = BrandTertiary
 	s.Dialog.Sessions.RenamingItemBlurred = s.Dialog.NormalItem.Foreground(fgSubtle)
 	s.Dialog.Sessions.RenamingingItemFocused = s.Dialog.SelectedItem.UnsetBackground().UnsetForeground()
 	s.Dialog.Sessions.RenamingPlaceholder = base.Foreground(lipgloss.Color("#8a7e6e"))
