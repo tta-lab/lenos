@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/transcript"
-	"github.com/tta-lab/lenos/internal/tui"
 	"github.com/tta-lab/lenos/internal/ui/chat"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 // splitLenosBashSource isolates cmd from the absorbed output so the
@@ -65,7 +65,7 @@ func TestSplitLenosBashSource(t *testing.T) {
 // state during Render and is not concurrent-safe; sharing one across parallel
 // subtests panics in BlockStack.Parent.
 func TestClassifyAndRenderBlock_LenosBash(t *testing.T) {
-	renderer, err := tui.MarkdownRenderer(80)
+	renderer, err := styles.MarkdownRenderer(80)
 	require.NoError(t, err)
 
 	t.Run("single-line cmd renders as $ cmd", func(t *testing.T) {

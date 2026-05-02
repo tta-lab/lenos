@@ -1,4 +1,4 @@
-package tui
+package styles
 
 import (
 	"charm.land/glamour/v2"
@@ -7,22 +7,17 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// GlyphLambda is the user-turn anchor. Kept as a const so call sites stay
-// disciplined — never spell out the literal Greek letter inline.
-const GlyphLambda = "λ"
-
-// Accent colours used by the chat list and transcript renderer. Slimmed
-// to the tokens that survived the internal/tui orphan cleanup — slate /
-// crimson lived in the orphaned chrome modules and went with them.
+// Accent colours used by the chat list when rendering transcript content.
+// Slimmed to the tokens that survived the internal/tui orphan cleanup —
+// the wider lipgloss palette for the chat list lives in styles.go.
 var (
 	AccentAmber = lipgloss.Color("214")     // #ffaf00 — phosphor amber, used for the λ user-turn glyph
 	AccentBrass = lipgloss.Color("#b8973e") // antique gold — `$` shell-prompt prefix on lenos-bash composites
 )
 
 // BashPromptStyle paints the leading `$ ` on a lenos-bash composite block.
-// Exported so the chat list can render it directly without going through a
-// Styles aggregator (which used to exist for the orphaned tui chrome — see
-// internal/tui/doc.go for the cleanup history).
+// Exported as a top-level var so the chat list renders it directly — no
+// Styles aggregator needed for one token.
 var BashPromptStyle = lipgloss.NewStyle().Foreground(AccentBrass)
 
 // MarkdownRenderer returns a Glamour TermRenderer with our theme overrides
@@ -65,5 +60,3 @@ func MarkdownRenderer(width int) (*glamour.TermRenderer, error) {
 		glamour.WithWordWrap(width),
 	)
 }
-
-func pointerTo[T any](v T) *T { return &v }

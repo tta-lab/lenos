@@ -35,7 +35,7 @@ type DelayedClickMsg struct {
 // messages.
 //
 // Per the 680e5b5d audit, items are sourced from the session .md transcript
-// (via tui.SplitBlocks → chat.MdBlockItem) instead of pubsub message
+// (via transcript.SplitBlocks → chat.MdBlockItem) instead of pubsub message
 // events. The list infrastructure stays unchanged: each block is one
 // navigable / focusable / highlightable / copyable item.
 type Chat struct {

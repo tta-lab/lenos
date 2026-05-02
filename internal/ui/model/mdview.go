@@ -12,8 +12,8 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/tta-lab/lenos/internal/transcript"
-	"github.com/tta-lab/lenos/internal/tui"
 	"github.com/tta-lab/lenos/internal/ui/chat"
+	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
 // lambdaSGR paints the user-prompt λ in phosphor amber + bold so the eye
@@ -21,7 +21,7 @@ import (
 // — lipgloss.NewStyle is cheap, but we hold the rendered SGR string for
 // the hot path.
 var lambdaSGR = lipgloss.NewStyle().
-	Foreground(tui.AccentAmber).
+	Foreground(styles.AccentAmber).
 	Bold(true).
 	Render(transcript.Lambda)
 
@@ -122,7 +122,7 @@ func (m *UI) rebuildMdBlocks() {
 	// blockquotes keep their `> ...` styling. Differentiation between user
 	// and agent comes from the per-kind line prefix below (only the user
 	// msg gets the terracotta bar; agent activity renders flush).
-	renderer, rerr := tui.MarkdownRenderer(contentWidth)
+	renderer, rerr := styles.MarkdownRenderer(contentWidth)
 	if rerr != nil {
 		// classifyAndRenderBlock falls back to raw source per-block when
 		// rerr is non-nil; surface the construction failure once at the
@@ -182,9 +182,9 @@ func isLenosBashSource(source string) bool {
 func renderLenosBashSource(source string, renderer *glamour.TermRenderer, rerr error) string {
 	cmd, output := splitLenosBashSource(source)
 	firstLine, _, multiline := strings.Cut(cmd, "\n")
-	cmdLine := tui.BashPromptStyle.Render("$ ") + firstLine
+	cmdLine := styles.BashPromptStyle.Render("$ ") + firstLine
 	if multiline {
-		cmdLine += " " + tui.BashPromptStyle.Render("…")
+		cmdLine += " " + styles.BashPromptStyle.Render("…")
 	}
 	if strings.TrimSpace(output) == "" {
 		return cmdLine
