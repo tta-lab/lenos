@@ -1,18 +1,24 @@
-// Package tui is a pure-.md-viewer Bubble Tea TUI for bash-first sessions.
+// Package tui hosts the transcript-adapter primitives consumed by the
+// chat list: block parsing, the Glamour renderer used for body styling,
+// and the fsnotify-backed .md watcher.
 //
-// It watches the session transcript (.md) via fsnotify, renders it with
-// Glamour, and provides three UI concerns:
+// The package was originally a full Bubble Tea composition root (Steps
+// 10–15 of plan 680e5b5d) but the cutover was reverted in commit
+// efb94277 — internal/ui/model/ remains the live composition root. Only
+// the transcript-domain primitives survived; the chrome modules
+// (header / footer / viewport / keys / pills / pollers / notifier)
+// were dropped wholesale once the orphan audit confirmed zero external
+// production callers.
 //
-//   - Header: 1-row session status from .md frontmatter + turn count
-//   - Viewport: virtual-scroll content area with bottom-pin contract
-//   - Footer: 1-row status derived purely from .md tail (no pubsub, no state
-//     machine)
+// Public surface:
 //
-// The .md is the source of truth. The TUI is a window.
+//   - Block / BlockKind / SplitBlocks — transcript block parser
+//   - GlyphLambda / AccentAmber / AccentBrass — accent tokens used by chat
+//   - BashPromptStyle — the cyan-brass `$` prefix for lenos-bash composites
+//   - MarkdownRenderer — Glamour TermRenderer with our theme overrides
+//   - Watcher / NewWatcher / Md*Msg — fsnotify wrapper for the .md file
 //
 // Reference flicknotes:
 //   - 7015e7aa — orientation (parent)
 //   - 57a09f51 — render format spec
-//   - 8fbf143f — sage's design (visual language reference)
-//   - 5a17f0c9 — implementation plan (this package implements)
 package tui

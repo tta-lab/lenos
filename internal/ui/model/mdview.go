@@ -24,11 +24,6 @@ var lambdaSGR = lipgloss.NewStyle().
 	Bold(true).
 	Render(tui.GlyphLambda)
 
-// bashPromptStyle paints the leading `$ ` on a lenos-bash composite block.
-// Lifted from tui.NewStyles() once at package init so render is a single
-// SGR concat per block.
-var bashPromptStyle = tui.NewStyles().BashPrompt
-
 // attachMdView (re)attaches the .md watcher for the given session and
 // rebuilds the chat list from its current contents. Called from the
 // loadSessionMsg handler so the chat panel always reflects the current
@@ -179,9 +174,9 @@ func isLenosBashSource(source string) bool {
 func renderLenosBashSource(source string, renderer *glamour.TermRenderer, rerr error) string {
 	cmd, output := splitLenosBashSource(source)
 	firstLine, _, multiline := strings.Cut(cmd, "\n")
-	cmdLine := bashPromptStyle.Render("$ ") + firstLine
+	cmdLine := tui.BashPromptStyle.Render("$ ") + firstLine
 	if multiline {
-		cmdLine += " " + bashPromptStyle.Render("…")
+		cmdLine += " " + tui.BashPromptStyle.Render("…")
 	}
 	if strings.TrimSpace(output) == "" {
 		return cmdLine

@@ -7,103 +7,23 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Glyph constants for disciplined use throughout the TUI.
-const (
-	GlyphLambda       = "λ"
-	GlyphArrowDown    = "↓"
-	GlyphArrowUp      = "↑"
-	GlyphArrowEndDown = "↡"
-)
+// GlyphLambda is the user-turn anchor. Kept as a const so call sites stay
+// disciplined — never spell out the literal Greek letter inline.
+const GlyphLambda = "λ"
 
-// Accent colours — three semantic tokens per orientation.
+// Accent colours used by the chat list and transcript renderer. Slimmed
+// to the tokens that survived the internal/tui orphan cleanup — slate /
+// crimson lived in the orphaned chrome modules and went with them.
 var (
-	AccentAmber   = lipgloss.Color("214")     // #ffaf00 — phosphor amber
-	AccentSlate   = lipgloss.Color("245")     // #8a8a8a — dim chrome
-	AccentCrimson = lipgloss.Color("160")     // #d70000 — error/halt (reserved v2)
-	AccentBrass   = lipgloss.Color("#b8973e") // antique gold — shell prompt, classic-terminal evocation
+	AccentAmber = lipgloss.Color("214")     // #ffaf00 — phosphor amber, used for the λ user-turn glyph
+	AccentBrass = lipgloss.Color("#b8973e") // antique gold — `$` shell-prompt prefix on lenos-bash composites
 )
 
-// Styles holds resolved lipgloss styles for TUI chrome elements.
-type Styles struct {
-	Header          lipgloss.Style // dim slate
-	HeaderSep       lipgloss.Style // dim slate ─
-	StickyLambda    lipgloss.Style // amber λ prefix + default body
-	StickyTurnRight lipgloss.Style // dim slate turn N ↑
-	StickySep       lipgloss.Style // dim slate ─
-	NewIndicator    lipgloss.Style // dim amber ↓ N new ↡
-	FooterActive    lipgloss.Style // amber text
-	FooterIdle      lipgloss.Style // slate text
-	FooterHints     lipgloss.Style // dim slate (right-aligned)
-	SandboxOn       lipgloss.Style // green
-	SandboxOff      lipgloss.Style // red
-	SandboxDegraded lipgloss.Style // amber
-	Brand           lipgloss.Style // bold cyan
-	Keystroke       lipgloss.Style // dim
-	KeystrokeTip    lipgloss.Style // dim slate
-	WatchErr        lipgloss.Style // bold crimson — recoverable watch error
-	BashPrompt      lipgloss.Style // cyan $ prefix on lenos-bash composite blocks
-}
-
-// NewStyles returns the resolved style set.
-func NewStyles() Styles {
-	return Styles{
-		Header: lipgloss.NewStyle().
-			Foreground(AccentSlate),
-
-		HeaderSep: lipgloss.NewStyle().
-			Foreground(AccentSlate),
-
-		StickyLambda: lipgloss.NewStyle().
-			Foreground(AccentAmber),
-
-		StickyTurnRight: lipgloss.NewStyle().
-			Foreground(AccentSlate),
-
-		StickySep: lipgloss.NewStyle().
-			Foreground(AccentSlate),
-
-		NewIndicator: lipgloss.NewStyle().
-			Foreground(AccentAmber),
-
-		FooterActive: lipgloss.NewStyle().
-			Foreground(AccentAmber),
-
-		FooterIdle: lipgloss.NewStyle().
-			Foreground(AccentSlate),
-
-		FooterHints: lipgloss.NewStyle().
-			Foreground(AccentSlate),
-
-		SandboxOn: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("2")).
-			Bold(true),
-
-		SandboxOff: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("1")).
-			Bold(true),
-
-		SandboxDegraded: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("3")).
-			Bold(true),
-
-		Brand: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("6")).
-			Bold(true),
-
-		Keystroke: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")),
-
-		KeystrokeTip: lipgloss.NewStyle().
-			Foreground(AccentSlate),
-
-		WatchErr: lipgloss.NewStyle().
-			Foreground(AccentCrimson).
-			Bold(true),
-
-		BashPrompt: lipgloss.NewStyle().
-			Foreground(AccentBrass),
-	}
-}
+// BashPromptStyle paints the leading `$ ` on a lenos-bash composite block.
+// Exported so the chat list can render it directly without going through a
+// Styles aggregator (which used to exist for the orphaned tui chrome — see
+// internal/tui/doc.go for the cleanup history).
+var BashPromptStyle = lipgloss.NewStyle().Foreground(AccentBrass)
 
 // MarkdownRenderer returns a Glamour TermRenderer with our theme overrides
 // stacked on top of the default dark style — Glamour's WithStyles fully

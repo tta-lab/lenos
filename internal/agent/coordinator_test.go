@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -229,29 +228,6 @@ func TestBuildCall_SetsLenosEnvVars(t *testing.T) {
 	_, hasDataDir := call.Env["LENOS_DATA_DIR"]
 	assert.False(t, hasDataDir, "LENOS_DATA_DIR no longer exported; narrate finds .lenos via cwd LookupClosest")
 }
-
-// testConfigStore is a minimal ConfigStore for recorderFor unit tests.
-// It avoids file I/O by providing in-memory config values.
-type testConfigStore struct {
-	agentName  string
-	sandbox    *bool
-	workingDir string
-}
-
-func (t *testConfigStore) Config() *config.Config {
-	return &config.Config{Options: &config.Options{Sandbox: t.sandbox}}
-}
-
-func (t *testConfigStore) Overrides() *config.RuntimeOverrides {
-	return &config.RuntimeOverrides{AgentName: t.agentName}
-}
-func (t *testConfigStore) WorkingDir() string                            { return t.workingDir }
-func (t *testConfigStore) Resolver() config.VariableResolver             { return nil }
-func (t *testConfigStore) KnownProviders() []catwalk.Provider            { return nil }
-func (t *testConfigStore) SetupAgents()                                  {}
-func (t *testConfigStore) SetConfigField(_ config.Scope, _, _ any) error { return nil }
-func (t *testConfigStore) RemoveConfigField(_ string) error              { return nil }
-func (t *testConfigStore) HasConfigField(_ string) (bool, error)         { return false, nil }
 
 // testSessionService is a minimal session.Service for recorderFor unit tests.
 type testSessionService struct {
