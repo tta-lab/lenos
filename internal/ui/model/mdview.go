@@ -132,7 +132,10 @@ func classifyAndRenderBlock(b tui.Block, renderer *glamour.TermRenderer, rerr er
 		if err != nil {
 			slog.Warn("Render block", "kind", b.Kind, "err", err)
 		} else {
-			rendered = strings.TrimRight(out, "\n")
+			// Trim both ends — Glamour emits leading blank rows for some
+			// block types (headings, blockquotes); coupled with SetGap(0) the
+			// list now relies purely on intra-block whitespace for rhythm.
+			rendered = strings.Trim(out, "\n")
 		}
 	}
 	if b.Kind == tui.BlockUserMsg {

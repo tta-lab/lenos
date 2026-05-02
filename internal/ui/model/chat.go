@@ -79,7 +79,10 @@ func NewChat(com *common.Common) *Chat {
 		pausedAnimations: make(map[string]struct{}),
 	}
 	l := list.NewList()
-	l.SetGap(1)
+	// Single source of inter-block separation = the Glamour margins each block
+	// pre-renders with. Adding a list gap on top stacks two blanks between
+	// items and makes the eye work harder to read a turn.
+	l.SetGap(0)
 	l.RegisterRenderCallback(c.applyHighlightRange)
 	l.RegisterRenderCallback(list.FocusedRenderCallback(l))
 	c.list = l
