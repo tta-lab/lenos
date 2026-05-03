@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -105,6 +106,10 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 		}
 
+		// SSOT for emit visibility: record the model's emit BEFORE classification
+		// so every emit reaches the .md transcript regardless of how it routes.
+		tok, _ := deps.recorder.AgentEmit(ctx, deps.sessionID, emit)
+
 		cls, bashErr := classify(ctx, emit)
 		switch cls {
 		case classifyExit:
@@ -143,7 +148,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyBanned:
-			tok, _ := deps.recorder.AgentBashAnnounce(ctx, deps.sessionID, emit)
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, "blocked: sed -i / perl -i not allowed; use src edit")
 			obs := rePromptBlockedPattern()
 			msgs = append(msgs,
@@ -157,8 +161,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyExec, classifyExecExit:
-			tok, _ := deps.recorder.AgentBashAnnounce(ctx, deps.sessionID, emit)
-
 			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 				Role:  message.Result,
 				Parts: []message.ContentPart{message.CommandContent{Command: emit, Pending: true}},
@@ -220,17 +222,16 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopExit, nil
 			}
 
-			var obs string
-			if res.ExitCode == 127 {
-				firstWord := extractFirstWord(emit)
+			obs := formatResultForModel(emit, string(res.Stdout), string(res.Stderr), res.ExitCode)
+			if firstNotFound := scanFirstCmdNotFound(string(res.Stderr)); firstNotFound != "" {
 				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
-					fmt.Sprintf("exit 127 (command not found); first word %q; re-prompted", firstWord))
-				obs = rePromptCmdNotFound(firstWord)
-				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-					slog.Warn("loop: persist exit-127 re-prompt", "error", obsErr)
+					fmt.Sprintf("stderr matched 'command not found' on %q (exit %d); re-prompted",
+						firstNotFound, res.ExitCode))
+				rePrompt := rePromptCmdNotFound(firstNotFound)
+				obs += "\n" + rePrompt
+				if obsErr := persistObservation(ctx, deps, rePrompt); obsErr != nil {
+					slog.Warn("loop: persist cmd-not-found re-prompt", "error", obsErr)
 				}
-			} else {
-				obs = formatResultForModel(emit, string(res.Stdout), string(res.Stderr), res.ExitCode)
 			}
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
@@ -438,18 +439,22 @@ func oneLine(s string) string {
 	return s
 }
 
-// extractFirstWord returns the first whitespace-delimited token of emit,
-// or "" if emit is whitespace-only. Used to render the offending command
-// name into the exit-127 re-prompt — bash determined this token is not a
-// command, so we just echo it back verbatim. Don't over-engineer the
-// parser: special-syntax tokens like `(`, `{`, `$VAR`, `~/path` will
-// surface as-is, which is fine for re-prompt purposes.
-func extractFirstWord(emit string) string {
-	fields := strings.Fields(emit)
-	if len(fields) == 0 {
+// cmdNotFoundRe matches the universal bash diagnostic "bash: <word>: command not found".
+// Anchored at line start so we capture the FIRST not-found token in multi-line stderr,
+// matching bash's left-to-right execution order — that is the offending prose-prefix.
+var cmdNotFoundRe = regexp.MustCompile(`(?m)^bash: (\S+): command not found$`)
+
+// scanFirstCmdNotFound returns the first token bash reported as "command not found"
+// in stderr, or "" if no match. Catches both:
+//   - overall exit 127 (prose-only emit, stderr has the pattern)
+//   - overall exit != 127 (prose-prefix + trailing real command — bash runs left to
+//     right, prose lines exit 127 but trailing command's exit masks them overall)
+func scanFirstCmdNotFound(stderr string) string {
+	m := cmdNotFoundRe.FindStringSubmatch(stderr)
+	if len(m) < 2 {
 		return ""
 	}
-	return fields[0]
+	return m[1]
 }
 
 // isCanceled reports whether err signals a cancellation (ctx.Done /

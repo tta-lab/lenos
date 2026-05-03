@@ -11,7 +11,7 @@ import (
 )
 
 // fakeClock returns successive times from a slice on each call. Used to make
-// AgentBashAnnounce's startedAt deterministic across a multi-event sequence.
+// AgentEmit's startedAt deterministic across a multi-event sequence.
 func fakeClock(t *testing.T, times []time.Time) func() time.Time {
 	t.Helper()
 	i := 0
@@ -51,13 +51,13 @@ func TestMdRecorder_FullSession(t *testing.T) {
 	}))
 	require.NoError(t, r.UserMessage(ctx, sid, "Find the auth bug in src/auth.go"))
 
-	tok1, err := r.AgentBashAnnounce(ctx, sid, "go test ./auth")
+	tok1, err := r.AgentEmit(ctx, sid, "go test ./auth")
 	require.NoError(t, err)
 	require.NoError(t, r.BashResult(ctx, tok1,
 		[]byte("expected: 2026-01-01\ngot:      2025-12-31\nFAIL TestAuthExpiry"),
 		1, 120*time.Millisecond))
 
-	tok2, err := r.AgentBashAnnounce(ctx, sid,
+	tok2, err := r.AgentEmit(ctx, sid,
 		"narrate <<EOF\nexpiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After\nEOF")
 	require.NoError(t, err)
 	// narrate prose written by cmd/narrate directly via RenderProse — simulate it.
@@ -65,20 +65,20 @@ func TestMdRecorder_FullSession(t *testing.T) {
 		"expiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After"))))
 	require.NoError(t, r.BashResult(ctx, tok2, nil, 0, 1*time.Millisecond))
 
-	tok3, err := r.AgentBashAnnounce(ctx, sid, "sed -i 's/Before/After/' src/auth.go")
+	tok3, err := r.AgentEmit(ctx, sid, "sed -i 's/Before/After/' src/auth.go")
 	require.NoError(t, err)
 	require.NoError(t, r.BashSkipped(ctx, tok3, SevWarn, "blocked: sed -i not allowed; use src edit"))
 
-	tok4, err := r.AgentBashAnnounce(ctx, sid, `narrate "switching approach — using src edit"`)
+	tok4, err := r.AgentEmit(ctx, sid, `narrate "switching approach — using src edit"`)
 	require.NoError(t, err)
 	require.NoError(t, r.writer.Append([]byte(RenderProse("switching approach — using src edit"))))
 	require.NoError(t, r.BashResult(ctx, tok4, nil, 0, 1*time.Millisecond))
 
-	tok5, err := r.AgentBashAnnounce(ctx, sid, "src edit src/auth.go <<EOF\n... edit ...\nEOF")
+	tok5, err := r.AgentEmit(ctx, sid, "src edit src/auth.go <<EOF\n... edit ...\nEOF")
 	require.NoError(t, err)
 	require.NoError(t, r.BashResult(ctx, tok5, nil, 0, 1200*time.Millisecond))
 
-	tok6, err := r.AgentBashAnnounce(ctx, sid, "go test ./auth")
+	tok6, err := r.AgentEmit(ctx, sid, "go test ./auth")
 	require.NoError(t, err)
 	require.NoError(t, r.BashResult(ctx, tok6, nil, 0, 30*time.Second))
 
@@ -130,7 +130,7 @@ func TestMdRecorder_BashSkipped_AllSeverities(t *testing.T) {
 			}))
 			require.NoError(t, r.UserMessage(ctx, sid, "test"))
 
-			tok, err := r.AgentBashAnnounce(ctx, sid, "some command")
+			tok, err := r.AgentEmit(ctx, sid, "some command")
 			require.NoError(t, err)
 			require.NoError(t, r.BashSkipped(ctx, tok, tc.sev, tc.desc))
 			require.NoError(t, r.TurnEnd(ctx, sid))
@@ -168,7 +168,7 @@ func TestE8MdRecorderWriteFailureNonHalting(t *testing.T) {
 	require.NoError(t, r.Open(ctx, Meta{SessionID: sid, Agent: "a", Model: "m", StartedAt: base}))
 	require.NoError(t, r.UserMessage(ctx, sid, "hi"))
 
-	tok, err := r.AgentBashAnnounce(ctx, sid, "echo hello")
+	tok, err := r.AgentEmit(ctx, sid, "echo hello")
 	require.NoError(t, err)
 	require.NoError(t, r.BashResult(ctx, tok, nil, 0, time.Millisecond))
 	require.NoError(t, r.BashSkipped(ctx, tok, SevWarn, "blocked"))
