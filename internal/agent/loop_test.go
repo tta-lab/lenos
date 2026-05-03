@@ -75,6 +75,39 @@ func (m *scriptedModel) Stream(_ context.Context, _ fantasy.Call) (fantasy.Strea
 	return seq, nil
 }
 
+// capturingModel wraps a fantasy.LanguageModel and records each Stream() call's
+// prompt messages so tests can assert on what the model receives (not just what
+// is persisted). Thread-safe for parallel test use.
+type capturingModel struct {
+	inner    fantasy.LanguageModel
+	captured [][]fantasy.Message
+	mu       sync.Mutex
+}
+
+func (c *capturingModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+	c.mu.Lock()
+	c.captured = append(c.captured, append([]fantasy.Message(nil), call.Prompt...))
+	c.mu.Unlock()
+	return c.inner.Stream(ctx, call)
+}
+
+func (c *capturingModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
+	return c.inner.Generate(ctx, call)
+}
+
+func (c *capturingModel) GenerateObject(ctx context.Context, call fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
+	return c.inner.GenerateObject(ctx, call)
+}
+
+func (c *capturingModel) StreamObject(ctx context.Context, call fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
+	return c.inner.StreamObject(ctx, call)
+}
+
+func (c *capturingModel) Provider() string { return c.inner.Provider() }
+func (c *capturingModel) Model() string    { return c.inner.Model() }
+
+var _ fantasy.LanguageModel = (*capturingModel)(nil)
+
 func (m *scriptedModel) GenerateObject(context.Context, fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
 	panic("not used")
 }
@@ -126,8 +159,8 @@ func (r *recordingRecorder) UserMessage(_ context.Context, _, text string) error
 	return nil
 }
 
-func (r *recordingRecorder) AgentEmit(_ context.Context, _, bash string) (transcript.TrailerToken, error) {
-	r.record("AgentEmit:" + truncate(bash, 30))
+func (r *recordingRecorder) AgentEmit(_ context.Context, _, emit string) (transcript.TrailerToken, error) {
+	r.record("AgentEmit:" + truncate(emit, 30))
 	return transcript.TrailerToken{}, nil
 }
 
@@ -949,7 +982,10 @@ func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
 
 // TestRunLoop_Exit127_FenceRePrompts tests the markdown fence shape failure:
 // the model wraps bash in ```bash ... ``` which bash expands as cmd-sub.
-func TestRunLoop_Exit127_FenceRePrompts(t *testing.T) {
+// TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance tests that the
+// rePromptCmdNotFound template includes guidance about markdown fences
+// regardless of input shape.
+func TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"```bash\necho hi\n```", "exit"}}
 	runner := &fakeRunner{results: []ExecResult{
@@ -1092,4 +1128,64 @@ func TestRunLoop_GrepNoMatch_NoRePrompt(t *testing.T) {
 		assert.NotContains(t, u.Content().Text, "[runtime]",
 			"exit 1 with no command-not-found pattern in stderr must NOT fire re-prompt")
 	}
+}
+
+// TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt asserts that the
+// model's Stream() receives both the full <result> envelope and the [runtime]
+// re-prompt when stderr contains "command not found". This guards against a
+// silent regression where obs += rePrompt is changed to obs = rePrompt, which
+// would drop the result envelope from the model's context while all existing
+// tests (which assert on persisted DB rows, not Stream() input) still pass.
+func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
+	t.Parallel()
+	inner := &scriptedModel{emits: []string{
+		"The PR already exists. All done.\ntask abc123 done",
+		"exit",
+	}}
+	cm := &capturingModel{inner: inner}
+	runner := &fakeRunner{results: []ExecResult{
+		{
+			Stdout:   []byte("Completed task abc123.\n"),
+			Stderr:   []byte("bash: The: command not found\nYou have more urgent tasks.\n"),
+			ExitCode: 0,
+			Duration: time.Millisecond,
+		},
+	}}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, cm, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	// Second Stream() call carries the re-prompt messages (first is initial prompt).
+	require.GreaterOrEqual(t, len(cm.captured), 2,
+		"must have at least 2 Stream() calls (initial + re-prompt turn)")
+
+	prompt := cm.captured[1]
+	var rePrompt string
+	// Find the last non-empty User message (the original prompt may also be a
+	// User message, but the re-prompt is appended after the assistant emit).
+	for _, m := range prompt {
+		if m.Role != fantasy.MessageRoleUser {
+			continue
+		}
+		if len(m.Content) == 0 {
+			continue
+		}
+		tp, ok := m.Content[0].(fantasy.TextPart)
+		if !ok {
+			t.Logf("Content[0] type: %T, value: %#v", m.Content[0], m.Content[0])
+			continue
+		}
+		rePrompt = tp.Text
+	}
+	require.NotEmpty(t, rePrompt, "second Stream() must contain a non-empty User-role message (the re-prompt)")
+
+	// The obs sent to the model must contain BOTH:
+	// - <result> envelope (proves the result wasn't dropped)
+	// - [runtime] re-prompt (proves the correction was appended)
+	assert.Contains(t, rePrompt, "<result>",
+		"model must see the result envelope, not just the re-prompt")
+	assert.Contains(t, rePrompt, "[runtime]",
+		"model must see the re-prompt correction appended to the envelope")
 }
