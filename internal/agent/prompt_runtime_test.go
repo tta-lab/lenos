@@ -48,7 +48,7 @@ func TestRePromptTimeout(t *testing.T) {
 func TestRePromptCmdNotFound_Format(t *testing.T) {
 	t.Parallel()
 	got := rePromptCmdNotFound("lorem")
-	assert.True(t, strings.HasPrefix(got, "[runtime] "), "must start with [runtime] tag")
+	assert.True(t, strings.HasPrefix(got, "[ALERT from runtime] "), "must start with [ALERT from runtime] tag")
 	assert.Contains(t, got, "command not found")
 	assert.Contains(t, got, "`lorem`", "first word must appear in backticks")
 	assert.Contains(t, got, "command -v lorem")
@@ -66,7 +66,7 @@ func TestRePromptCmdNotFound_Format(t *testing.T) {
 func TestRePromptCmdNotFound_EmptyInput(t *testing.T) {
 	t.Parallel()
 	got := rePromptCmdNotFound("")
-	assert.True(t, strings.HasPrefix(got, "[runtime] "))
+	assert.True(t, strings.HasPrefix(got, "[ALERT from runtime] "))
 	assert.Contains(t, got, "command not found")
 	assert.Contains(t, got, "narrate")
 	assert.Contains(t, got, "exit")

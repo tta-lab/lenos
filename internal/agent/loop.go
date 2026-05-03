@@ -225,13 +225,18 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 
 			stderr := string(res.Stderr)
-			obs := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
+			envelope := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
+			obs := envelope
 			if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
 				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
 					fmt.Sprintf("stderr matched 'command not found' on %q (exit %d); re-prompted",
 						firstNotFound, res.ExitCode))
 				rePrompt := rePromptCmdNotFound(firstNotFound)
-				obs += "\n" + rePrompt
+				// SALIENCE FLIP: alert FIRST so the model sees the correction before the
+				// (potentially success-looking) result envelope. Validated via worker session
+				// d2f0a207: model reasoning ignored 20 trailing [runtime] re-prompts because
+				// the envelope showed exit-0 with apparently-successful trailing command output.
+				obs = rePrompt + "\n\n" + envelope
 				if obsErr := persistObservation(ctx, deps, rePrompt); obsErr != nil {
 					slog.Warn("loop: persist cmd-not-found re-prompt", "error", obsErr)
 				}

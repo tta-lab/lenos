@@ -119,6 +119,23 @@ func (m *scriptedModel) StreamObject(context.Context, fantasy.ObjectCall) (fanta
 
 var _ fantasy.LanguageModel = (*scriptedModel)(nil)
 
+// capturingModel wraps a scriptedModel and records the messages passed to each
+// Stream() call so tests can assert on what the model actually receives.
+type capturingModel struct {
+	*scriptedModel
+	mu       sync.Mutex
+	captured [][]fantasy.Message
+}
+
+func (m *capturingModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+	m.mu.Lock()
+	m.captured = append(m.captured, []fantasy.Message(call.Prompt))
+	m.mu.Unlock()
+	return m.scriptedModel.Stream(ctx, call)
+}
+
+var _ fantasy.LanguageModel = (*capturingModel)(nil)
+
 // fakeRunner returns canned ExecResults in order. Tests use it to drive
 // classify=exec branches without touching /bin/bash.
 type fakeRunner struct {
@@ -811,7 +828,7 @@ func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
 	require.Contains(t, rec.calls[4], "UserMessage:q1")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, "[runtime]")
+	assert.Contains(t, users[0].Content().Text, "[ALERT from runtime]")
 	assert.Equal(t, "q1", users[1].Content().Text)
 }
 
@@ -927,7 +944,7 @@ func TestRunLoop_Exit127_RePromptPersisted(t *testing.T) {
 
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1, "exactly one User message (the re-prompt) must be persisted")
-	assert.Contains(t, users[0].Content().Text, "[runtime]")
+	assert.Contains(t, users[0].Content().Text, "[ALERT from runtime]")
 	assert.Contains(t, users[0].Content().Text, "`unknowncmd`")
 }
 
@@ -1079,10 +1096,10 @@ func TestRunLoop_Empty_EmitVisibleInTranscript(t *testing.T) {
 // The old exit-127 gate missed all 9 such emits. Stderr-scan catches them.
 func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{
+	cm := &capturingModel{scriptedModel: &scriptedModel{emits: []string{
 		"The PR already exists. All done.\ntask abc123 done",
 		"exit",
-	}}
+	}}}
 	runner := &fakeRunner{results: []ExecResult{
 		{
 			Stdout:   []byte("Completed task abc123.\n"),
@@ -1092,7 +1109,7 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 		},
 	}}
 	rec := &recordingRecorder{}
-	deps, ms := newDeps(t, model, runner, rec)
+	deps, ms := newDeps(t, cm, runner, rec)
 
 	_, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
@@ -1100,9 +1117,23 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	// Re-prompt must fire despite overall exit 0.
 	users := messagesByRole(ms, message.User)
 	require.GreaterOrEqual(t, len(users), 1)
-	obs := users[0].Content().Text
-	assert.Contains(t, obs, "[runtime]")
-	assert.Contains(t, obs, "`The`", "re-prompt must capture the first not-found token from stderr")
+	assert.Contains(t, users[0].Content().Text, "`The`", "re-prompt must capture the first not-found token from stderr")
+
+	// Salience flip: the second Stream() call must receive the alert BEFORE the
+	// result envelope. cm.captured[1] is the prompt for the re-prompt turn.
+	require.Len(t, cm.captured, 2, "expected exactly two Stream() calls")
+	lastUserMsg := cm.captured[1][len(cm.captured[1])-1]
+	var obs string
+	for _, part := range lastUserMsg.Content {
+		if tp, ok := part.(fantasy.TextPart); ok {
+			obs += tp.Text
+		}
+	}
+	alertIdx := strings.Index(obs, "[ALERT from runtime]")
+	envelopeIdx := strings.Index(obs, "<result>")
+	require.GreaterOrEqual(t, alertIdx, 0, "alert prefix must be present")
+	require.GreaterOrEqual(t, envelopeIdx, 0, "result envelope must be present")
+	assert.Less(t, alertIdx, envelopeIdx, "alert MUST appear before envelope (salience flip)")
 
 	// Result row also exists (envelope preserved, not replaced).
 	results := resultsByOrder(ms)

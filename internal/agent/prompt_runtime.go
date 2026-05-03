@@ -74,7 +74,7 @@ or break it into smaller steps.`, secs)
 // self-diagnose: probe with `command -v <X>` if the binary was expected,
 // or drop the prose/fence and emit pure bash if shape was wrong.
 func rePromptCmdNotFound(firstWord string) string {
-	return fmt.Sprintf(`[runtime] bash printed "command not found" for the first word `+"`%s`"+`.
+	return fmt.Sprintf(`[ALERT from runtime] bash printed "command not found" for the first word `+"`%s`"+`.
 
 if `+"`%s`"+` is a real binary you expected:
   command -v %s     # builtin probe — returns 1 (not 127) if missing
