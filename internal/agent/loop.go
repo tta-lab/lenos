@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -105,9 +106,14 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 		}
 
+		// SSOT for emit visibility: record the model's emit BEFORE classification
+		// so every emit reaches the .md transcript regardless of how it routes.
+		tok, _ := deps.recorder.AgentEmit(ctx, deps.sessionID, emit)
+
 		cls, bashErr := classify(ctx, emit)
 		switch cls {
 		case classifyExit:
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "exit — turn ends")
 			_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
@@ -116,7 +122,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			return stopExit, nil
 
 		case classifyEmpty:
-			_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevNormal, "empty emit; re-prompted")
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "empty emit; re-prompted")
 			obs := rePromptEmpty()
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
@@ -129,7 +135,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyInvalidBash:
-			_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
 				fmt.Sprintf("invalid bash; bash -n said: %s; re-prompted", oneLine(bashErr)))
 			obs := rePromptInvalidBash(bashErr)
 			msgs = append(msgs,
@@ -143,7 +149,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyBanned:
-			tok, _ := deps.recorder.AgentBashAnnounce(ctx, deps.sessionID, emit)
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, "blocked: sed -i / perl -i not allowed; use src edit")
 			obs := rePromptBlockedPattern()
 			msgs = append(msgs,
@@ -157,8 +162,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyExec, classifyExecExit:
-			tok, _ := deps.recorder.AgentBashAnnounce(ctx, deps.sessionID, emit)
-
 			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 				Role:  message.Result,
 				Parts: []message.ContentPart{message.CommandContent{Command: emit, Pending: true}},
@@ -173,6 +176,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// updating rows: a canceled context means the agent loop is
 			// shutting down and we should not pretend the command finished.
 			if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+				_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, "canceled")
 				abandonPending(ctx, deps.messages, &resultMsg)
 				return stopCanceled, ctx.Err()
 			}
@@ -220,7 +224,18 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopExit, nil
 			}
 
-			obs := formatResultForModel(emit, string(res.Stdout), string(res.Stderr), res.ExitCode)
+			stderr := string(res.Stderr)
+			obs := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
+			if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
+				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
+					fmt.Sprintf("stderr matched 'command not found' on %q (exit %d); re-prompted",
+						firstNotFound, res.ExitCode))
+				rePrompt := rePromptCmdNotFound(firstNotFound)
+				obs += "\n" + rePrompt
+				if obsErr := persistObservation(ctx, deps, rePrompt); obsErr != nil {
+					slog.Warn("loop: persist cmd-not-found re-prompt", "error", obsErr)
+				}
+			}
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -425,6 +440,24 @@ func oneLine(s string) string {
 		return s[:197] + "..."
 	}
 	return s
+}
+
+// cmdNotFoundRe matches the universal bash diagnostic "bash: <word>: command not found".
+// Anchored at line start so we capture the FIRST not-found token in multi-line stderr,
+// matching bash's left-to-right execution order — that is the offending prose-prefix.
+var cmdNotFoundRe = regexp.MustCompile(`(?m)^bash: (\S+): command not found$`)
+
+// scanFirstCmdNotFound returns the first token bash reported as "command not found"
+// in stderr, or "" if no match. Catches both:
+//   - overall exit 127 (prose-only emit, stderr has the pattern)
+//   - overall exit != 127 (prose-prefix + trailing real command — bash runs left to
+//     right, prose lines exit 127 but trailing command's exit masks them overall)
+func scanFirstCmdNotFound(stderr string) string {
+	m := cmdNotFoundRe.FindStringSubmatch(stderr)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
 }
 
 // isCanceled reports whether err signals a cancellation (ctx.Done /

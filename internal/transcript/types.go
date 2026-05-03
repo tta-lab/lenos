@@ -46,7 +46,7 @@ type Meta struct {
 	Cwd       string
 }
 
-// TrailerToken is an opaque token that callers MUST hold from AgentBashAnnounce
+// TrailerToken is an opaque token that callers MUST hold from AgentEmit
 // to either BashResult or BashSkipped. Zero-value TrailerToken{} is valid for
 // NoopRecorder so Phase 1 standalone tests don't need real state.
 type TrailerToken struct {

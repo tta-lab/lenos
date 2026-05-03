@@ -62,3 +62,35 @@ partial output captured. if the command needed more time, use bash native timeou
   timeout 30m <command>
 or break it into smaller steps.`, secs)
 }
+
+// rePromptCmdNotFound is the next-observation text after `bash -c <emit>`
+// exited with 127 (command not found). Fires both for legit-missing-tool
+// scenarios (model expected a binary that is not installed) AND for
+// chat-style shape failures (model emitted prose or fenced markdown
+// where the first word — or the cmd-sub captured output's first word —
+// is not a real command).
+//
+// The re-prompt text covers both interpretations so the model can
+// self-diagnose: probe with `command -v <X>` if the binary was expected,
+// or drop the prose/fence and emit pure bash if shape was wrong.
+func rePromptCmdNotFound(firstWord string) string {
+	return fmt.Sprintf(`[runtime] bash printed "command not found" for the first word `+"`%s`"+`.
+
+if `+"`%s`"+` is a real binary you expected:
+  command -v %s     # builtin probe — returns 1 (not 127) if missing
+then either install it, or pick an alternative.
+
+if `+"`%s`"+` looks like part of an English sentence ("Let me ...", "I'll ...",
+"Here's ...") OR you wrapped your command in a markdown fence
+(`+"```bash ... ```"+`), DROP THAT shape:
+  - the runtime parses your ENTIRE response as bash via bash -c
+  - English prose at the top runs as commands and fails
+  - markdown fences (`+"```...```"+`) are bash command-substitution syntax,
+    not chat-rendering boundaries
+
+to annotate one command (one line):  # this is a bash comment — bash ignores it
+to talk to the human (multi-line):   narrate <<'EOF' ... EOF
+to end the turn:                     exit
+to act:                              emit pure bash (chained with && / ; / | as needed).`,
+		firstWord, firstWord, firstWord, firstWord)
+}

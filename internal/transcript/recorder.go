@@ -3,6 +3,7 @@ package transcript
 import (
 	"context"
 	"log/slog"
+	"sync/atomic"
 	"time"
 )
 
@@ -11,7 +12,7 @@ import (
 // a session; Phase 2 renders them to .md via MdRecorder.
 //
 // TrailerToken invariant: callers MUST hold the token returned by
-// AgentBashAnnounce and pass it to exactly one of BashResult or BashSkipped.
+// AgentEmit and pass it to exactly one of BashResult or BashSkipped.
 // Passing the same token to both is undefined behavior.
 //
 // Methods must not panic; implementation should only log errors on write
@@ -24,9 +25,9 @@ type Recorder interface {
 	// UserMessage writes a **λ <text>** line (spec 57a09f51 §Format).
 	UserMessage(ctx context.Context, sessionID, text string) error
 
-	// AgentBashAnnounce writes a fenced bash block (announce-then-run pattern).
+	// AgentEmit writes a fenced code block for the model's emit (announce-then-classify pattern).
 	// Returns a TrailerToken that must be passed to BashResult or BashSkipped.
-	AgentBashAnnounce(ctx context.Context, sessionID, bash string) (TrailerToken, error)
+	AgentEmit(ctx context.Context, sessionID, emit string) (TrailerToken, error)
 
 	// BashResult writes the output block and trailer for a completed command.
 	// On exit==0: trailer only (success-quiet). On exit!=0: output block +
@@ -56,7 +57,7 @@ type NoopRecorder struct{}
 
 func (NoopRecorder) Open(_ context.Context, _ Meta) error             { return nil }
 func (NoopRecorder) UserMessage(_ context.Context, _, _ string) error { return nil }
-func (NoopRecorder) AgentBashAnnounce(_ context.Context, _, _ string) (TrailerToken, error) {
+func (NoopRecorder) AgentEmit(_ context.Context, _, _ string) (TrailerToken, error) {
 	return TrailerToken{}, nil
 }
 
@@ -102,9 +103,9 @@ func (r *MdRecorder) UserMessage(_ context.Context, _, text string) error {
 	return r.writer.Append([]byte(RenderUserMessage(text)))
 }
 
-func (r *MdRecorder) AgentBashAnnounce(_ context.Context, sessionID, bash string) (TrailerToken, error) {
+func (r *MdRecorder) AgentEmit(_ context.Context, sessionID, emit string) (TrailerToken, error) {
 	startedAt := r.now()
-	return TrailerToken{sessionID: sessionID, startedAt: startedAt}, r.writer.Append([]byte(RenderBashBlock(bash)))
+	return TrailerToken{sessionID: sessionID, startedAt: startedAt}, r.writer.Append([]byte(RenderBashBlock(emit)))
 }
 
 func (r *MdRecorder) BashResult(_ context.Context, tok TrailerToken, out []byte, exitCode int, dur time.Duration) error {
@@ -112,14 +113,14 @@ func (r *MdRecorder) BashResult(_ context.Context, tok TrailerToken, out []byte,
 		return r.writer.Append([]byte(RenderTrailerSuccess(tok.startedAt, dur)))
 	}
 	// Within-call atomic: output block + failure trailer written in one Append.
-	// Note: if AgentBashAnnounce previously failed under E8 (write error,
+	// Note: if AgentEmit previously failed under E8 (write error,
 	// bash block absent), the trailer appears with no preceding bash block —
 	// this is an inter-call invariant we don't enforce.
 	return r.writer.Append([]byte(RenderOutputBlock(out) + RenderTrailerFailure(tok.startedAt, dur, exitCode)))
 }
 
 func (r *MdRecorder) BashSkipped(_ context.Context, tok TrailerToken, sev Severity, desc string) error {
-	// Per spec: bash block already written by AgentBashAnnounce.
+	// Per spec: bash block already written by AgentEmit.
 	// BashSkipped writes the runtime-event blockquote; no output, no trailer.
 	return r.writeRuntimeEvent(sev, desc)
 }
@@ -155,14 +156,13 @@ func NewLoggingRecorder(r Recorder) Recorder {
 // logging the first error from each method at Warn level.
 type loggingRecorder struct {
 	inner  Recorder
-	logged bool
+	logged atomic.Bool
 }
 
 func (r *loggingRecorder) logErr(method string, err error) {
-	if !r.logged && err != nil {
+	if err != nil && r.logged.CompareAndSwap(false, true) {
 		slog.Warn("transcript recorder: first failure (subsequent failures silenced)",
 			"method", method, "error", err)
-		r.logged = true
 	}
 }
 
@@ -178,9 +178,9 @@ func (r *loggingRecorder) UserMessage(ctx context.Context, sessionID, text strin
 	return err
 }
 
-func (r *loggingRecorder) AgentBashAnnounce(ctx context.Context, sessionID, bash string) (TrailerToken, error) {
-	tok, err := r.inner.AgentBashAnnounce(ctx, sessionID, bash)
-	r.logErr("AgentBashAnnounce", err)
+func (r *loggingRecorder) AgentEmit(ctx context.Context, sessionID, emit string) (TrailerToken, error) {
+	tok, err := r.inner.AgentEmit(ctx, sessionID, emit)
+	r.logErr("AgentEmit", err)
 	return tok, err
 }
 
