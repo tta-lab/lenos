@@ -84,14 +84,6 @@ lenos run --continue "Follow up on your last response"
 
 		agentName, _ := cmd.Flags().GetString("agent")
 		contextFiles, _ := cmd.Flags().GetStringArray("context-file")
-		if agentName == "" {
-			agentName = os.Getenv("LENOS_AGENT")
-		}
-		if len(contextFiles) == 0 {
-			if envVal := os.Getenv("LENOS_CONTEXT_FILES"); envVal != "" {
-				contextFiles = strings.Split(envVal, ",")
-			}
-		}
 
 		ws, cleanup, err := setupWorkspace(cmd, agentName, contextFiles)
 		if err != nil {
