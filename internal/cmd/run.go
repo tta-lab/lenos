@@ -82,7 +82,10 @@ lenos run --continue "Follow up on your last response"
 			event.SetContinueLastSession(true)
 		}
 
-		ws, cleanup, err := setupWorkspace(cmd, "", nil)
+		agentName, _ := cmd.Root().Flags().GetString("agent")
+		contextFiles, _ := cmd.Root().Flags().GetStringArray("context-file")
+
+		ws, cleanup, err := setupWorkspace(cmd, agentName, contextFiles)
 		if err != nil {
 			return err
 		}
