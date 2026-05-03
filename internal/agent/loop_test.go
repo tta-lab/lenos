@@ -496,6 +496,31 @@ func TestRunLoop_ExecExitSingleEmit_PreCmdFails(t *testing.T) {
 	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
 }
 
+// TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt pins the current
+// scope-discipline behavior when the pre-exit command's stderr matches
+// "command not found" (e.g. `Let me start && exit`). classifyExecExit
+// short-circuits BEFORE the stderr-scan gate, so the re-prompt does NOT
+// fire — model intent is honored. If a future change wants to flip this,
+// this test must flip too — making the change visible in code review.
+func TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{`Let me start && exit`}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stderr: []byte("bash: Let: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop, "classifyExecExit honors model intent regardless of stderr cmd-not-found pattern")
+
+	assert.Contains(t, rec.calls, "TurnEnd")
+	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
+	users := messagesByRole(ms, message.User)
+	assert.Len(t, users, 0, "classifyExecExit branch must not fire the cmd-not-found re-prompt")
+}
+
 // --- Mock helpers ---
 
 func messagesByRole(ms *mockMessageService, role message.MessageRole) []message.Message {
@@ -721,6 +746,30 @@ func TestRunLoop_DrainOnTimeout(t *testing.T) {
 	require.Contains(t, rec.calls[1], "AgentEmit:sleep 5")
 	require.Contains(t, rec.calls[2], "BashResult:")
 	require.Contains(t, rec.calls[3], "RuntimeEvent:warn:timeout")
+	require.Contains(t, rec.calls[4], "UserMessage:q1")
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 2)
+	assert.Contains(t, users[0].Content().Text, "[runtime]")
+	assert.Equal(t, "q1", users[1].Content().Text)
+}
+
+func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"nopebinary", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stderr: []byte("bash: nopebinary: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, runner, rec, cannedDrainer([]string{"q1"}))
+
+	stop, err := runLoop(context.Background(), deps, nil, "run nope")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	require.Contains(t, rec.calls[1], "AgentEmit:nopebinary")
+	require.Contains(t, rec.calls[2], "BashResult:")
+	require.Contains(t, rec.calls[3], "RuntimeEvent:warn:")
+	require.Contains(t, rec.calls[3], "command not found")
 	require.Contains(t, rec.calls[4], "UserMessage:q1")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 2)
