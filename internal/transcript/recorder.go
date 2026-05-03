@@ -160,8 +160,7 @@ type loggingRecorder struct {
 }
 
 func (r *loggingRecorder) logErr(method string, err error) {
-	if !r.logged.Load() && err != nil {
-		r.logged.Store(true)
+	if err != nil && r.logged.CompareAndSwap(false, true) {
 		slog.Warn("transcript recorder: first failure (subsequent failures silenced)",
 			"method", method, "error", err)
 	}
@@ -179,8 +178,8 @@ func (r *loggingRecorder) UserMessage(ctx context.Context, sessionID, text strin
 	return err
 }
 
-func (r *loggingRecorder) AgentEmit(ctx context.Context, sessionID, bash string) (TrailerToken, error) {
-	tok, err := r.inner.AgentEmit(ctx, sessionID, bash)
+func (r *loggingRecorder) AgentEmit(ctx context.Context, sessionID, emit string) (TrailerToken, error) {
+	tok, err := r.inner.AgentEmit(ctx, sessionID, emit)
 	r.logErr("AgentEmit", err)
 	return tok, err
 }

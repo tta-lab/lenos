@@ -176,6 +176,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// updating rows: a canceled context means the agent loop is
 			// shutting down and we should not pretend the command finished.
 			if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+				_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, "canceled")
 				abandonPending(ctx, deps.messages, &resultMsg)
 				return stopCanceled, ctx.Err()
 			}
