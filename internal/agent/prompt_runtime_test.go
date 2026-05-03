@@ -53,6 +53,8 @@ func TestRePromptCmdNotFound_Format(t *testing.T) {
 	assert.Contains(t, got, "command not found")
 	assert.Contains(t, got, "`lorem`", "first word must appear in backticks")
 	assert.Contains(t, got, "command -v lorem")
+	assert.Contains(t, got, "# ", "must offer bash comment for one-line inline annotation")
+	assert.Contains(t, got, "comment")
 	assert.Contains(t, got, "narrate <<'EOF'")
 	assert.Contains(t, got, "exit")
 	assert.Contains(t, got, "```bash")

@@ -89,8 +89,9 @@ if `+"`%s`"+` looks like part of an English sentence ("Let me ...", "I'll ...",
   - markdown fences (`+"```...```"+`) are bash command-substitution syntax,
     not chat-rendering boundaries
 
-to talk to the human:  narrate <<'EOF' ... EOF
-to end the turn:       exit
-to act:                emit pure bash (chained with && / ; / | as needed).`,
+to annotate one command (one line):  # this is a bash comment — bash ignores it
+to talk to the human (multi-line):   narrate <<'EOF' ... EOF
+to end the turn:                     exit
+to act:                              emit pure bash (chained with && / ; / | as needed).`,
 		firstWord, firstWord, firstWord, firstWord)
 }
