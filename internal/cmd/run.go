@@ -82,8 +82,16 @@ lenos run --continue "Follow up on your last response"
 			event.SetContinueLastSession(true)
 		}
 
-		agentName, _ := cmd.Root().Flags().GetString("agent")
-		contextFiles, _ := cmd.Root().Flags().GetStringArray("context-file")
+		agentName, _ := cmd.Flags().GetString("agent")
+		contextFiles, _ := cmd.Flags().GetStringArray("context-file")
+		if agentName == "" {
+			agentName = os.Getenv("LENOS_AGENT")
+		}
+		if len(contextFiles) == 0 {
+			if envVal := os.Getenv("LENOS_CONTEXT_FILES"); envVal != "" {
+				contextFiles = strings.Split(envVal, ",")
+			}
+		}
 
 		ws, cleanup, err := setupWorkspace(cmd, agentName, contextFiles)
 		if err != nil {
@@ -111,5 +119,7 @@ func init() {
 	runCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
 	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
+	runCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
+	runCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file to inject at startup (repeatable)")
 	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
 }
