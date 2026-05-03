@@ -113,6 +113,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		cls, bashErr := classify(ctx, emit)
 		switch cls {
 		case classifyExit:
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "exit — turn ends")
 			_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
@@ -121,7 +122,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			return stopExit, nil
 
 		case classifyEmpty:
-			_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevNormal, "empty emit; re-prompted")
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "empty emit; re-prompted")
 			obs := rePromptEmpty()
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
@@ -134,7 +135,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyInvalidBash:
-			_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
 				fmt.Sprintf("invalid bash; bash -n said: %s; re-prompted", oneLine(bashErr)))
 			obs := rePromptInvalidBash(bashErr)
 			msgs = append(msgs,
@@ -222,8 +223,9 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopExit, nil
 			}
 
-			obs := formatResultForModel(emit, string(res.Stdout), string(res.Stderr), res.ExitCode)
-			if firstNotFound := scanFirstCmdNotFound(string(res.Stderr)); firstNotFound != "" {
+			stderr := string(res.Stderr)
+			obs := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
+			if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
 				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
 					fmt.Sprintf("stderr matched 'command not found' on %q (exit %d); re-prompted",
 						firstNotFound, res.ExitCode))

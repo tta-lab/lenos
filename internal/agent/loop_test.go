@@ -241,7 +241,7 @@ func TestRunLoop_BareExit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "do nothing")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{"UserMessage:do nothing", "AgentEmit:exit", "TurnEnd"}, rec.calls)
+	assert.Equal(t, []string{"UserMessage:do nothing", "AgentEmit:exit", "BashSkipped:normal:exit — turn ends", "TurnEnd"}, rec.calls)
 
 	// One assistant row, finished EndTurn.
 	assistants := assistantsByOrder(ms)
@@ -269,6 +269,7 @@ func TestRunLoop_ExecThenExit(t *testing.T) {
 		"AgentEmit:echo hi",
 		"BashResult:hi\n:exit=0",
 		"AgentEmit:exit",
+		"BashSkipped:normal:exit — turn ends",
 		"TurnEnd",
 	}, rec.calls)
 
@@ -287,8 +288,8 @@ func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// calls[1] is AgentEmit; calls[2] is the runtime event; final is TurnEnd.
-	require.Contains(t, rec.calls[2], "RuntimeEvent:normal:empty emit")
+	// calls[1] is AgentEmit; calls[2] is BashSkipped; final is TurnEnd.
+	require.Contains(t, rec.calls[2], "BashSkipped:normal:empty emit")
 	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
 
 	// Observation persisted as User row.
@@ -307,8 +308,8 @@ func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// calls[1] is AgentEmit; calls[2] is the warn-level runtime event.
-	require.Contains(t, rec.calls[2], "RuntimeEvent:warn:invalid bash")
+	// calls[1] is AgentEmit; calls[2] is BashSkipped.
+	require.Contains(t, rec.calls[2], "BashSkipped:warn:invalid bash")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
 	assert.Contains(t, users[0].Content().Text, "[runtime] your last response was not valid bash")
@@ -595,7 +596,7 @@ func TestRunLoop_OriginalPromptFiresUserMessage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	// Original prompt must be recorded before any model interaction.
-	assert.Equal(t, []string{"UserMessage:hello world", "AgentEmit:exit", "TurnEnd"}, rec.calls)
+	assert.Equal(t, []string{"UserMessage:hello world", "AgentEmit:exit", "BashSkipped:normal:exit — turn ends", "TurnEnd"}, rec.calls)
 }
 
 func TestRunLoop_DrainQueueEmpty_NoOp(t *testing.T) {
@@ -615,6 +616,7 @@ func TestRunLoop_DrainQueueEmpty_NoOp(t *testing.T) {
 		"AgentEmit:echo hi",
 		"BashResult:hi\n:exit=0",
 		"AgentEmit:exit",
+		"BashSkipped:normal:exit — turn ends",
 		"TurnEnd",
 	}, rec.calls)
 	// No drained rows: original prompt is recorded but not persisted by runLoop.
@@ -639,6 +641,7 @@ func TestRunLoop_DrainOneOnExec(t *testing.T) {
 		"BashResult:hi\n:exit=0",
 		"UserMessage:follow up",
 		"AgentEmit:exit",
+		"BashSkipped:normal:exit — turn ends",
 		"TurnEnd",
 	}, rec.calls)
 	users := messagesByRole(ms, message.User)
@@ -666,6 +669,7 @@ func TestRunLoop_DrainManyPreservesOrder(t *testing.T) {
 		"UserMessage:m2",
 		"UserMessage:m3",
 		"AgentEmit:exit",
+		"BashSkipped:normal:exit — turn ends",
 		"TurnEnd",
 	}, rec.calls)
 	users := messagesByRole(ms, message.User)
@@ -684,8 +688,8 @@ func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "noop")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	// order: original prompt, AgentEmit, runtime event, drained followup, turn-end.
-	require.Contains(t, rec.calls[2], "RuntimeEvent:normal:empty emit")
+	// order: original prompt, AgentEmit, BashSkipped, drained followup, exit announce, BashSkipped, turn-end.
+	require.Contains(t, rec.calls[2], "BashSkipped:normal:empty emit")
 	require.Contains(t, rec.calls[3], "UserMessage:q1")
 	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
 	users := messagesByRole(ms, message.User)
@@ -703,7 +707,7 @@ func TestRunLoop_DrainOnInvalidBash(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	require.Contains(t, rec.calls[2], "RuntimeEvent:warn:invalid bash")
+	require.Contains(t, rec.calls[2], "BashSkipped:warn:invalid bash")
 	require.Contains(t, rec.calls[3], "UserMessage:q1")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 2)
@@ -999,19 +1003,19 @@ func TestRunLoop_InvalidBash_EmitVisibleInTranscript(t *testing.T) {
 	_, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 
-	// Recorder sequence: emit announce must come BEFORE the runtime warning.
-	emitIdx, warnIdx := -1, -1
+	// Recorder sequence: emit announce must come BEFORE the bash skipped event.
+	emitIdx, skippedIdx := -1, -1
 	for i, c := range rec.calls {
 		if strings.HasPrefix(c, "AgentEmit:") && strings.Contains(c, "if true then") {
 			emitIdx = i
 		}
-		if strings.Contains(c, "RuntimeEvent:warn:invalid bash") {
-			warnIdx = i
+		if strings.Contains(c, "BashSkipped:warn:invalid bash") {
+			skippedIdx = i
 		}
 	}
 	require.GreaterOrEqual(t, emitIdx, 0, "emit must be announced — visibility gap regression")
-	require.GreaterOrEqual(t, warnIdx, 0)
-	assert.Less(t, emitIdx, warnIdx, "emit announce must come before runtime warning in transcript")
+	require.GreaterOrEqual(t, skippedIdx, 0)
+	assert.Less(t, emitIdx, skippedIdx, "emit announce must come before bash skipped event in transcript")
 }
 
 // TestRunLoop_Empty_EmitVisibleInTranscript is the same regression guard for empty emits.

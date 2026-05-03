@@ -3,6 +3,7 @@ package transcript
 import (
 	"context"
 	"log/slog"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,7 +27,7 @@ type Recorder interface {
 
 	// AgentEmit writes a fenced code block for the model's emit (announce-then-classify pattern).
 	// Returns a TrailerToken that must be passed to BashResult or BashSkipped.
-	AgentEmit(ctx context.Context, sessionID, bash string) (TrailerToken, error)
+	AgentEmit(ctx context.Context, sessionID, emit string) (TrailerToken, error)
 
 	// BashResult writes the output block and trailer for a completed command.
 	// On exit==0: trailer only (success-quiet). On exit!=0: output block +
@@ -102,9 +103,9 @@ func (r *MdRecorder) UserMessage(_ context.Context, _, text string) error {
 	return r.writer.Append([]byte(RenderUserMessage(text)))
 }
 
-func (r *MdRecorder) AgentEmit(_ context.Context, sessionID, bash string) (TrailerToken, error) {
+func (r *MdRecorder) AgentEmit(_ context.Context, sessionID, emit string) (TrailerToken, error) {
 	startedAt := r.now()
-	return TrailerToken{sessionID: sessionID, startedAt: startedAt}, r.writer.Append([]byte(RenderBashBlock(bash)))
+	return TrailerToken{sessionID: sessionID, startedAt: startedAt}, r.writer.Append([]byte(RenderBashBlock(emit)))
 }
 
 func (r *MdRecorder) BashResult(_ context.Context, tok TrailerToken, out []byte, exitCode int, dur time.Duration) error {
@@ -112,7 +113,7 @@ func (r *MdRecorder) BashResult(_ context.Context, tok TrailerToken, out []byte,
 		return r.writer.Append([]byte(RenderTrailerSuccess(tok.startedAt, dur)))
 	}
 	// Within-call atomic: output block + failure trailer written in one Append.
-	// Note: if AgentBashAnnounce previously failed under E8 (write error,
+	// Note: if AgentEmit previously failed under E8 (write error,
 	// bash block absent), the trailer appears with no preceding bash block —
 	// this is an inter-call invariant we don't enforce.
 	return r.writer.Append([]byte(RenderOutputBlock(out) + RenderTrailerFailure(tok.startedAt, dur, exitCode)))
@@ -155,14 +156,14 @@ func NewLoggingRecorder(r Recorder) Recorder {
 // logging the first error from each method at Warn level.
 type loggingRecorder struct {
 	inner  Recorder
-	logged bool
+	logged atomic.Bool
 }
 
 func (r *loggingRecorder) logErr(method string, err error) {
-	if !r.logged && err != nil {
+	if !r.logged.Load() && err != nil {
+		r.logged.Store(true)
 		slog.Warn("transcript recorder: first failure (subsequent failures silenced)",
 			"method", method, "error", err)
-		r.logged = true
 	}
 }
 
