@@ -765,3 +765,171 @@ func TestRunLoop_OnUsageStopReturnsShouldSummarize(t *testing.T) {
 	assert.True(t, sawTurnEnd, "expected recorder.TurnEnd on auto-compact stop")
 	assert.True(t, sawAutoCompactEvent, "expected recorder.RuntimeEvent for auto-compact")
 }
+
+// TestRunLoop_Exit127_PassesFirstWord verifies that when the runner returns
+// exit code 127, the loop invokes rePromptCmdNotFound with the first word of
+// the emit. The re-prompt must contain the word that bash didn't recognize.
+func TestRunLoop_Exit127_PassesFirstWord(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"lorem ipsum", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "do it")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	// Re-prompt observation persisted.
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	assert.Contains(t, users[0].Content().Text, "`lorem`", "re-prompt must reference first word")
+	assert.Contains(t, users[0].Content().Text, "exited with 127")
+
+	// RuntimeEvent logged — loop.go recorder message says "exit 127".
+	var sawRePromptEvent bool
+	for _, c := range rec.calls {
+		if strings.Contains(c, "exit 127") && strings.Contains(c, "lorem") {
+			sawRePromptEvent = true
+			break
+		}
+	}
+	assert.True(t, sawRePromptEvent, "RuntimeEvent must mention first word and exit 127")
+}
+
+// TestRunLoop_Exit127_EmptyFirstWord covers extractFirstWord returning ""
+// for a whitespace-only emit (edge case: an all-whitespace emit with a
+// runner that returns exit 127). The re-prompt should handle empty firstWord.
+func TestRunLoop_Exit127_EmptyFirstWord(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"whitespace-first", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	assert.Contains(t, users[0].Content().Text, "exited with 127")
+}
+
+// TestRunLoop_Exit127_RePromptPersisted ensures the re-prompt observation is
+// persisted as a User-role DB row so future history builds include guidance.
+func TestRunLoop_Exit127_RePromptPersisted(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"unknowncmd --flag", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1, "exactly one User message (the re-prompt) must be persisted")
+	assert.Contains(t, users[0].Content().Text, "[runtime]")
+	assert.Contains(t, users[0].Content().Text, "`unknowncmd`")
+}
+
+// TestRunLoop_Exit127_ThenExit covers the case where the model emits a
+// command+exit sequence, the command exits 127, and then the model correctly
+// exits on the next turn.
+func TestRunLoop_Exit127_ThenExit(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"nope --bad", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "run unknown cmd")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	// Two assistant rows: the initial emit and the exit.
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 2)
+	assert.Equal(t, "nope --bad", strings.TrimSpace(assistants[0].Content().Text))
+
+	// Re-prompt User row present.
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	assert.Contains(t, users[0].Content().Text, "exited with 127")
+}
+
+// TestRunLoop_Exit127_ProseRePrompts tests that when the model emits English
+// prose (e.g. "Let me check that file") and the runner returns 127, the
+// re-prompt includes guidance about prose being parsed as bash.
+func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"Hello world", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "find")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	obs := users[0].Content().Text
+	assert.Contains(t, obs, "`Hello`")
+	assert.Contains(t, obs, "narrate <<'EOF'")
+}
+
+// TestRunLoop_Exit127_FenceRePrompts tests the markdown fence shape failure:
+// the model wraps bash in ```bash ... ``` which bash expands as cmd-sub.
+func TestRunLoop_Exit127_FenceRePrompts(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"```bash\necho hi\n```", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "run")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	obs := users[0].Content().Text
+	assert.Contains(t, obs, "markdown fence")
+	assert.Contains(t, obs, "```bash")
+}
+
+// TestRunLoop_Exit127_NonExitNotAffected confirms that a non-127 exit code
+// does NOT trigger the rePromptCmdNotFound path — it uses the standard
+// formatResultForModel envelope instead.
+func TestRunLoop_Exit127_NonExitNotAffected(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"ls /nonexistent", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: nil, Stderr: []byte("ls: /nonexistent: No such file or directory\n"), ExitCode: 1, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	// Non-127 exit code: no User-role re-prompt is persisted.
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 0, "non-127 exit must NOT persist a User-role re-prompt")
+}

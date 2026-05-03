@@ -220,7 +220,18 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopExit, nil
 			}
 
-			obs := formatResultForModel(emit, string(res.Stdout), string(res.Stderr), res.ExitCode)
+			var obs string
+			if res.ExitCode == 127 {
+				firstWord := extractFirstWord(emit)
+				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
+					fmt.Sprintf("exit 127 (command not found); first word %q; re-prompted", firstWord))
+				obs = rePromptCmdNotFound(firstWord)
+				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+					slog.Warn("loop: persist exit-127 re-prompt", "error", obsErr)
+				}
+			} else {
+				obs = formatResultForModel(emit, string(res.Stdout), string(res.Stderr), res.ExitCode)
+			}
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -425,6 +436,20 @@ func oneLine(s string) string {
 		return s[:197] + "..."
 	}
 	return s
+}
+
+// extractFirstWord returns the first whitespace-delimited token of emit,
+// or "" if emit is whitespace-only. Used to render the offending command
+// name into the exit-127 re-prompt — bash determined this token is not a
+// command, so we just echo it back verbatim. Don't over-engineer the
+// parser: special-syntax tokens like `(`, `{`, `$VAR`, `~/path` will
+// surface as-is, which is fine for re-prompt purposes.
+func extractFirstWord(emit string) string {
+	fields := strings.Fields(emit)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 // isCanceled reports whether err signals a cancellation (ctx.Done /
