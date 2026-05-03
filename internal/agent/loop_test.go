@@ -75,38 +75,39 @@ func (m *scriptedModel) Stream(_ context.Context, _ fantasy.Call) (fantasy.Strea
 	return seq, nil
 }
 
-// capturingModel wraps a fantasy.LanguageModel and records each Stream() call's
+// streamCapturingModel wraps a fantasy.LanguageModel and records each Stream() call's
 // prompt messages so tests can assert on what the model receives (not just what
-// is persisted). Thread-safe for parallel test use.
-type capturingModel struct {
+// is persisted). Other LanguageModel methods (Generate, GenerateObject, StreamObject)
+// are delegated to inner without capture. Thread-safe for parallel test use.
+type streamCapturingModel struct {
 	inner    fantasy.LanguageModel
 	captured [][]fantasy.Message
 	mu       sync.Mutex
 }
 
-func (c *capturingModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+func (c *streamCapturingModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
 	c.mu.Lock()
 	c.captured = append(c.captured, append([]fantasy.Message(nil), call.Prompt...))
 	c.mu.Unlock()
 	return c.inner.Stream(ctx, call)
 }
 
-func (c *capturingModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
+func (c *streamCapturingModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
 	return c.inner.Generate(ctx, call)
 }
 
-func (c *capturingModel) GenerateObject(ctx context.Context, call fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
+func (c *streamCapturingModel) GenerateObject(ctx context.Context, call fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
 	return c.inner.GenerateObject(ctx, call)
 }
 
-func (c *capturingModel) StreamObject(ctx context.Context, call fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
+func (c *streamCapturingModel) StreamObject(ctx context.Context, call fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
 	return c.inner.StreamObject(ctx, call)
 }
 
-func (c *capturingModel) Provider() string { return c.inner.Provider() }
-func (c *capturingModel) Model() string    { return c.inner.Model() }
+func (c *streamCapturingModel) Provider() string { return c.inner.Provider() }
+func (c *streamCapturingModel) Model() string    { return c.inner.Model() }
 
-var _ fantasy.LanguageModel = (*capturingModel)(nil)
+var _ fantasy.LanguageModel = (*streamCapturingModel)(nil)
 
 func (m *scriptedModel) GenerateObject(context.Context, fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
 	panic("not used")
@@ -980,8 +981,6 @@ func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
 	assert.Contains(t, obs, "narrate <<'EOF'")
 }
 
-// TestRunLoop_Exit127_FenceRePrompts tests the markdown fence shape failure:
-// the model wraps bash in ```bash ... ``` which bash expands as cmd-sub.
 // TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance tests that the
 // rePromptCmdNotFound template includes guidance about markdown fences
 // regardless of input shape.
@@ -1142,7 +1141,7 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 		"The PR already exists. All done.\ntask abc123 done",
 		"exit",
 	}}
-	cm := &capturingModel{inner: inner}
+	cm := &streamCapturingModel{inner: inner}
 	runner := &fakeRunner{results: []ExecResult{
 		{
 			Stdout:   []byte("Completed task abc123.\n"),
@@ -1163,8 +1162,8 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 
 	prompt := cm.captured[1]
 	var rePrompt string
-	// Find the last non-empty User message (the original prompt may also be a
-	// User message, but the re-prompt is appended after the assistant emit).
+	// Overwrite intentionally: last User message is the obs (drain queue is
+	// nil here; re-prompt is appended after the assistant emit).
 	for _, m := range prompt {
 		if m.Role != fantasy.MessageRoleUser {
 			continue
