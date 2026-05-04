@@ -557,7 +557,7 @@ func TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt(t *testing.T) {
 	// Re-prompt persisted for the prose-shape failure.
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
-	assert.Contains(t, users[0].Content().Text, "[ALERT from runtime]")
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
 	assert.Contains(t, users[0].Content().Text, "`Let`")
 }
 
@@ -816,7 +816,7 @@ func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
 	require.Contains(t, rec.calls[4], "UserMessage:q1")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, "[ALERT from runtime]")
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
 	assert.Equal(t, "q1", users[1].Content().Text)
 }
 
@@ -932,7 +932,7 @@ func TestRunLoop_Exit127_RePromptPersisted(t *testing.T) {
 
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1, "exactly one User message (the re-prompt) must be persisted")
-	assert.Contains(t, users[0].Content().Text, "[ALERT from runtime]")
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
 	assert.Contains(t, users[0].Content().Text, "`unknowncmd`")
 }
 
@@ -1124,7 +1124,7 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 			obs += tp.Text
 		}
 	}
-	alertIdx := strings.Index(obs, "[ALERT from runtime]")
+	alertIdx := strings.Index(obs, alertPrefix)
 	envelopeIdx := strings.Index(obs, "<result>")
 	require.GreaterOrEqual(t, alertIdx, 0, "alert prefix must be present")
 	require.GreaterOrEqual(t, envelopeIdx, 0, "result envelope must be present")
@@ -1207,7 +1207,7 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	require.NotEmpty(t, rePrompt, "second Stream() must contain a non-empty User-role message (the re-prompt)")
 
 	// Salience flip: alert FIRST, then <result> envelope.
-	alertIdx := strings.Index(rePrompt, "[ALERT from runtime]")
+	alertIdx := strings.Index(rePrompt, alertPrefix)
 	envelopeIdx := strings.Index(rePrompt, "<result>")
 	require.GreaterOrEqual(t, alertIdx, 0, "model must see the alert prefix")
 	require.GreaterOrEqual(t, envelopeIdx, 0, "model must see the result envelope")
@@ -1235,7 +1235,7 @@ func TestRunLoop_CmdNotFound_BashLineNumberFormat(t *testing.T) {
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1, "re-prompt MUST fire on multi-line bash error format")
 	obs := users[0].Content().Text
-	assert.Contains(t, obs, "[ALERT from runtime]")
+	assert.Contains(t, obs, alertPrefix)
 	assert.Contains(t, obs, "`652a5f45`",
 		"must capture the offending token even when stderr has 'line N:' prefix")
 }
@@ -1291,7 +1291,7 @@ func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
 	obs := users[0].Content().Text
-	assert.Contains(t, obs, "[ALERT from runtime]")
+	assert.Contains(t, obs, alertPrefix)
 	assert.Contains(t, obs, "`Read`")
 }
 
@@ -1328,7 +1328,7 @@ func TestRunLoop_DrainOnProsePrefix(t *testing.T) {
 
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, "[ALERT from runtime]")
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
 	assert.Contains(t, users[0].Content().Text, "`Now`", "must reference the offending first word")
 	assert.Equal(t, "q1", users[1].Content().Text)
 }

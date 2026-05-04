@@ -2,12 +2,17 @@ package agent
 
 import "fmt"
 
-// Re-prompts feed back as the next user-role observation, prefixed [runtime].
-// Format per flicknote 30666153 §6I:
+// Re-prompts feed back as the next user-role observation. Two prefix tiers:
 //
-//	[runtime] <one-line description>
-//	<context, if any>
-//	<corrective guidance>
+//   - [runtime] — informational correction (empty, invalid-bash, banned, timeout).
+//     bash already ran (or was cleanly blocked before any side-effects).
+//   - [ALERT from runtime] — high-salience correction where the model has
+//     demonstrated it ignores trailing corrections (cmd-not-found, prose-prefix).
+//     Uses a distinct prefix and appears BEFORE any result envelope so the model
+//     reads the correction first.
+//
+// alertPrefix is the shared literal for high-salience re-prompts.
+const alertPrefix = "[ALERT from runtime]"
 
 // rePromptEmpty is the next-observation text after an empty/whitespace emit.
 func rePromptEmpty() string {
@@ -74,7 +79,7 @@ or break it into smaller steps.`, secs)
 // self-diagnose: probe with `command -v <X>` if the binary was expected,
 // or drop the prose/fence and emit pure bash if shape was wrong.
 func rePromptCmdNotFound(firstWord string) string {
-	return fmt.Sprintf(`[ALERT from runtime] bash printed "command not found" for the first word `+"`%s`"+`.
+	return fmt.Sprintf(alertPrefix+` bash printed "command not found" for the first word `+"`%s`"+`.
 
 if `+"`%s`"+` is a real binary you expected:
   command -v %s     # builtin probe — returns 1 (not 127) if missing
@@ -101,7 +106,7 @@ to act:                              emit pure bash (chained with && / ; / | as 
 // executed the emit; bash was bypassed so the model gets a clean, unambiguous
 // signal that the shape was wrong before any side-effects could happen.
 func rePromptProsePrefix(firstWord string) string {
-	return fmt.Sprintf(`[ALERT from runtime] your last emit started with the capitalized word `+"`%s`"+`, which looks like English prose.
+	return fmt.Sprintf(alertPrefix+` your last emit started with the capitalized word `+"`%s`"+`, which looks like English prose.
 
 The runtime DID NOT execute it — every byte of your response is fed to bash -c, and English sentences run as commands (which fail). To prevent any side effects, no bash ran this turn.
 

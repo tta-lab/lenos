@@ -48,7 +48,7 @@ func TestRePromptTimeout(t *testing.T) {
 func TestRePromptCmdNotFound_Format(t *testing.T) {
 	t.Parallel()
 	got := rePromptCmdNotFound("lorem")
-	assert.True(t, strings.HasPrefix(got, "[ALERT from runtime] "), "must start with [ALERT from runtime] tag")
+	assert.True(t, strings.HasPrefix(got, alertPrefix+" "), "must start with [ALERT from runtime] tag")
 	assert.Contains(t, got, "command not found")
 	assert.Contains(t, got, "`lorem`", "first word must appear in backticks")
 	assert.Contains(t, got, "command -v lorem")
@@ -66,7 +66,7 @@ func TestRePromptCmdNotFound_Format(t *testing.T) {
 func TestRePromptCmdNotFound_EmptyInput(t *testing.T) {
 	t.Parallel()
 	got := rePromptCmdNotFound("")
-	assert.True(t, strings.HasPrefix(got, "[ALERT from runtime] "))
+	assert.True(t, strings.HasPrefix(got, alertPrefix+" "))
 	assert.Contains(t, got, "command not found")
 	assert.Contains(t, got, "narrate")
 	assert.Contains(t, got, "exit")
@@ -82,7 +82,7 @@ func TestRePromptCmdNotFound_SpecialChars(t *testing.T) {
 func TestRePromptProsePrefix_Format(t *testing.T) {
 	t.Parallel()
 	got := rePromptProsePrefix("Read")
-	assert.True(t, strings.HasPrefix(got, "[ALERT from runtime] "), "must start with alert prefix")
+	assert.True(t, strings.HasPrefix(got, alertPrefix+" "), "must start with alert prefix")
 	assert.Contains(t, got, "`Read`", "first word must appear in backticks")
 	assert.Contains(t, got, "narrate <<'EOF'")
 	assert.Contains(t, got, "command -v Read")

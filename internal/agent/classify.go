@@ -45,13 +45,15 @@ var blockedCmdPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?m)(?:^|&&|\|\||;|\|)\s*perl\s+(?:-[a-zA-Z]*i)`),
 }
 
-// classify inspects an agent emit and returns the action class plus any
-// stderr text from `bash -n` (only meaningful for classifyInvalidBash).
+// classify inspects an agent emit and returns the action class plus an
+// auxiliary string (bash stderr for classifyInvalidBash; first Title-Cased
+// word for classifyProsePrefix; "" otherwise).
 //
-// Classification order is: empty → exit → banned → bash-syntax → exec.
+// Classification order: empty → exit → banned → bash-syntax → prose-prefix → trailing-exit → exec.
 // Empty short-circuits before exit so `   ` doesn't accidentally pass the
 // trim+exitRe check; banned runs before bash-syntax so we never invoke
-// `bash -n` on a refused pattern.
+// `bash -n` on a refused pattern; prose-prefix runs after bash-syntax so
+// true syntax errors still win.
 func classify(ctx context.Context, emit string) (cls classifyResult, bashErr string) {
 	trimmed := strings.TrimSpace(emit)
 	if trimmed == "" {
@@ -67,9 +69,10 @@ func classify(ctx context.Context, emit string) (cls classifyResult, bashErr str
 		return classifyInvalidBash, err
 	}
 	// Pre-exec prose detection. Catches "Read the file..." shape that
-	// passes bash -n but starts with English prose.
-	if detectProsePrefix(emit) != "" {
-		return classifyProsePrefix, ""
+	// passes bash -n but starts with English prose. Word returned via
+	// bashErr slot so the loop case doesn't need a second call.
+	if word := detectProsePrefix(emit); word != "" {
+		return classifyProsePrefix, word
 	}
 	if trailingExitRe.MatchString(trimmed) {
 		return classifyExecExit, ""

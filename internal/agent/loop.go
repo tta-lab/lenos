@@ -149,8 +149,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyProsePrefix:
-			proseWord := detectProsePrefix(emit)
-			_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
+			proseWord := bashErr // first Title-Cased word, carried from classify() via bashErr slot
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
 				fmt.Sprintf("prose-prefix detected (first word %q); re-prompted", proseWord))
 			obs := rePromptProsePrefix(proseWord)
 			msgs = append(msgs,

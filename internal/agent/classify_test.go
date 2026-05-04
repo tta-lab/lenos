@@ -169,6 +169,38 @@ func TestClassify_BareExitStillBareExit(t *testing.T) {
 	require.Equal(t, classifyExit, cls)
 }
 
+// TestClassify_ProsePrefix locks the classify() ordering: classifyProsePrefix
+// must win over classifyExecExit when the emit starts with a Title-Cased word
+// AND ends with `&& exit`. If the two checks were accidentally swapped, the
+// trailing-exit path would run bash before the prose gate fires.
+func TestClassify_ProsePrefix(t *testing.T) {
+	t.Parallel()
+	if _, err := os.Stat("/bin/bash"); err != nil {
+		t.Skip("/bin/bash not available")
+	}
+	ctx := context.Background()
+	cases := []struct {
+		emit string
+		want classifyResult
+	}{
+		{"Read the file", classifyProsePrefix},
+		{"Now starting the task", classifyProsePrefix},
+		// Critical overlap: prose-prefix must win over trailing-exit.
+		{"Let me start && exit", classifyProsePrefix},
+		{"Read files && exit", classifyProsePrefix},
+		// Lowercase-first: goes through normally.
+		{"ls -la && exit", classifyExecExit},
+		{"echo done && exit", classifyExecExit},
+	}
+	for _, tc := range cases {
+		t.Run(tc.emit, func(t *testing.T) {
+			t.Parallel()
+			cls, _ := classify(ctx, tc.emit)
+			assert.Equal(t, tc.want, cls)
+		})
+	}
+}
+
 // TestDetectProsePrefix locks the cap-letter heuristic contract.
 func TestDetectProsePrefix(t *testing.T) {
 	t.Parallel()
@@ -190,6 +222,11 @@ func TestDetectProsePrefix(t *testing.T) {
 		{"empty emit", "", ""},
 		{"only whitespace", "   \n\t  ", ""},
 		{"multi-word prose", "Now I'll start the test", "Now"},
+		// Known false positive: Title-Cased var assignment (e.g. Output=$(pwd)).
+		// The heuristic fires on the capital letter; the re-prompt is still
+		// constructive (asks model to probe with command -v Output). Documented
+		// here so a future regex tightening has a regression guard.
+		{"var assignment false positive", "Output=$(pwd)", "Output"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
