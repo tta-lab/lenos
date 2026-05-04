@@ -119,23 +119,6 @@ func (m *scriptedModel) StreamObject(context.Context, fantasy.ObjectCall) (fanta
 
 var _ fantasy.LanguageModel = (*scriptedModel)(nil)
 
-// capturingModel wraps a scriptedModel and records the messages passed to each
-// Stream() call so tests can assert on what the model actually receives.
-type capturingModel struct {
-	*scriptedModel
-	mu       sync.Mutex
-	captured [][]fantasy.Message
-}
-
-func (m *capturingModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
-	m.mu.Lock()
-	m.captured = append(m.captured, []fantasy.Message(call.Prompt))
-	m.mu.Unlock()
-	return m.scriptedModel.Stream(ctx, call)
-}
-
-var _ fantasy.LanguageModel = (*capturingModel)(nil)
-
 // fakeRunner returns canned ExecResults in order. Tests use it to drive
 // classify=exec branches without touching /bin/bash.
 type fakeRunner struct {
@@ -1096,14 +1079,18 @@ func TestRunLoop_Empty_EmitVisibleInTranscript(t *testing.T) {
 // The old exit-127 gate missed all 9 such emits. Stderr-scan catches them.
 func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	t.Parallel()
-	cm := &capturingModel{scriptedModel: &scriptedModel{emits: []string{
-		"The PR already exists. All done.\ntask abc123 done",
+	// Emit starts with lowercase (bypasses classifyProsePrefix) but contains a
+	// not-found token internally. bash runs, reports "command not found" for
+	// "nonexistentcmd" in stderr while the trailing real command succeeds (exit 0).
+	inner := &scriptedModel{emits: []string{
+		"nonexistentcmd --flag\ntask abc123 done",
 		"exit",
-	}}}
+	}}
+	cm := &streamCapturingModel{inner: inner}
 	runner := &fakeRunner{results: []ExecResult{
 		{
 			Stdout:   []byte("Completed task abc123.\n"),
-			Stderr:   []byte("bash: The: command not found\nYou have more urgent tasks.\n"),
+			Stderr:   []byte("bash: line 1: nonexistentcmd: command not found\n"),
 			ExitCode: 0,
 			Duration: time.Millisecond,
 		},
@@ -1117,7 +1104,7 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	// Re-prompt must fire despite overall exit 0.
 	users := messagesByRole(ms, message.User)
 	require.GreaterOrEqual(t, len(users), 1)
-	assert.Contains(t, users[0].Content().Text, "`The`", "re-prompt must capture the first not-found token from stderr")
+	assert.Contains(t, users[0].Content().Text, "`nonexistentcmd`", "re-prompt must capture the first not-found token from stderr")
 
 	// Salience flip: the second Stream() call must receive the alert BEFORE the
 	// result envelope. cm.captured[1] is the prompt for the re-prompt turn.
@@ -1161,22 +1148,24 @@ func TestRunLoop_GrepNoMatch_NoRePrompt(t *testing.T) {
 }
 
 // TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt asserts that the
-// model's Stream() receives both the full <result> envelope and the [runtime]
-// re-prompt when stderr contains "command not found". This guards against a
-// silent regression where obs += rePrompt is changed to obs = rePrompt, which
-// would drop the result envelope from the model's context while all existing
-// tests (which assert on persisted DB rows, not Stream() input) still pass.
+// model's Stream() receives both the full <result> envelope and the [ALERT from runtime]
+// re-prompt when stderr contains "command not found". Guards against a regression
+// where the result envelope is silently dropped from the model's context.
+//
+// Note: Title-Cased-first-word emits like "The PR already exists..." now route to
+// classifyProsePrefix pre-exec; this test uses a lowercase-starting emit so it
+// exercises the post-exec stderr-scan path.
 func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	t.Parallel()
 	inner := &scriptedModel{emits: []string{
-		"The PR already exists. All done.\ntask abc123 done",
+		"nonexistentcmd --flag\ntask abc123 done",
 		"exit",
 	}}
 	cm := &streamCapturingModel{inner: inner}
 	runner := &fakeRunner{results: []ExecResult{
 		{
 			Stdout:   []byte("Completed task abc123.\n"),
-			Stderr:   []byte("bash: The: command not found\nYou have more urgent tasks.\n"),
+			Stderr:   []byte("bash: line 1: nonexistentcmd: command not found\n"),
 			ExitCode: 0,
 			Duration: time.Millisecond,
 		},
@@ -1193,8 +1182,6 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 
 	prompt := cm.captured[1]
 	var rePrompt string
-	// Overwrite intentionally: last User message is the obs (drain queue is
-	// nil here; re-prompt is appended after the assistant emit).
 	for _, m := range prompt {
 		if m.Role != fantasy.MessageRoleUser {
 			continue
@@ -1211,11 +1198,63 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	}
 	require.NotEmpty(t, rePrompt, "second Stream() must contain a non-empty User-role message (the re-prompt)")
 
-	// The obs sent to the model must contain BOTH:
-	// - <result> envelope (proves the result wasn't dropped)
-	// - [runtime] re-prompt (proves the correction was appended)
-	assert.Contains(t, rePrompt, "<result>",
-		"model must see the result envelope, not just the re-prompt")
-	assert.Contains(t, rePrompt, "[runtime]",
-		"model must see the re-prompt correction appended to the envelope")
+	// Salience flip: alert FIRST, then <result> envelope.
+	alertIdx := strings.Index(rePrompt, "[ALERT from runtime]")
+	envelopeIdx := strings.Index(rePrompt, "<result>")
+	require.GreaterOrEqual(t, alertIdx, 0, "model must see the alert prefix")
+	require.GreaterOrEqual(t, envelopeIdx, 0, "model must see the result envelope")
+	assert.Less(t, alertIdx, envelopeIdx, "alert MUST appear before envelope (salience flip)")
+}
+
+// TestRunLoop_CmdNotFound_BashLineNumberFormat verifies the regex captures the
+// offending token when bash uses its multi-line script error format
+// "bash: line N: <token>: command not found". This format is dominant for
+// fence-shape emits (```bash\ncmd\n```) and any multi-line emit in general.
+// Without this, fence-shape emits silently fail — no re-prompt fires (validated
+// in worker session 7f71f563).
+func TestRunLoop_CmdNotFound_BashLineNumberFormat(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"```bash\ngit log\n```", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stderr: []byte("bash: line 2: 652a5f45: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1, "re-prompt MUST fire on multi-line bash error format")
+	obs := users[0].Content().Text
+	assert.Contains(t, obs, "[ALERT from runtime]")
+	assert.Contains(t, obs, "`652a5f45`",
+		"must capture the offending token even when stderr has 'line N:' prefix")
+}
+
+// TestScanFirstCmdNotFound_BothBashErrorFormats locks the regex contract for both
+// single-line and multi-line bash error formats. Failing this test means the
+// runtime won't re-prompt on a known shape failure mode — high-impact regression.
+func TestScanFirstCmdNotFound_BothBashErrorFormats(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		stderr string
+		want   string
+	}{
+		{"single-line", "bash: Let: command not found\n", "Let"},
+		{"multi-line with line number", "bash: line 2: 652a5f45: command not found\n", "652a5f45"},
+		{"multi-line bracket token", "bash: line 4: [216c6f17]: command not found\n", "[216c6f17]"},
+		{"first match wins (left-to-right)", "bash: line 2: foo: command not found\nbash: line 4: bar: command not found\n", "foo"},
+		{"no match for unrelated stderr", "ls: cannot access '/missing': No such file or directory\n", ""},
+		{"no match for partial pattern", "command not found\n", ""},
+		{"no match for stdout-style mention", "the binary 'foo' was reported as command not found by the linker\n", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := scanFirstCmdNotFound(tc.stderr)
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }

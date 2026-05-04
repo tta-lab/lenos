@@ -447,10 +447,15 @@ func oneLine(s string) string {
 	return s
 }
 
-// cmdNotFoundRe matches the universal bash diagnostic "bash: <word>: command not found".
-// Anchored at line start so we capture the FIRST not-found token in multi-line stderr,
-// matching bash's left-to-right execution order — that is the offending prose-prefix.
-var cmdNotFoundRe = regexp.MustCompile(`(?m)^bash: (\S+): command not found$`)
+// cmdNotFoundRe matches the bash diagnostic for an unknown command. Bash uses two
+// formats depending on whether the emit was a single-line or multi-line script:
+//   - single-line: "bash: <token>: command not found"
+//   - multi-line:  "bash: line N: <token>: command not found"
+//
+// The multi-line format is dominant for fence-shape emits and heredoc failures.
+// Anchored at line start so we capture the FIRST not-found token in multi-line
+// stderr, matching bash's left-to-right execution order.
+var cmdNotFoundRe = regexp.MustCompile(`(?m)^bash:(?: line \d+:)? (\S+): command not found$`)
 
 // scanFirstCmdNotFound returns the first token bash reported as "command not found"
 // in stderr, or "" if no match. Catches both:
