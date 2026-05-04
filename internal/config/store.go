@@ -18,14 +18,23 @@ import (
 	"github.com/tta-lab/lenos/internal/oauth/hyper"
 )
 
-// RuntimeOverrides holds per-session settings that are never persisted to
-// disk. They are applied on top of the loaded Config and survive only for
-// the lifetime of the process (or workspace).
+// RuntimeOverrides is a runtime-only override bag (never persisted). Applied
+// on top of the loaded Config and survive only for the lifetime of the
+// process (or workspace). Callers that set ReadOnly must verify the sandbox
+// client is connected before passing it to any code path that relies on
+// sandbox enforcement — otherwise the override silently falls through to the
+// LocalRunner.
 type RuntimeOverrides struct {
 	// AgentName is display-only — used for UI header, not agent selection.
 	AgentName         string
 	AgentContextFile  string
 	ExtraContextFiles []string
+	// ReadOnly, when true, makes BuildAllowedPaths emit cwd as ReadOnly:true so
+	// the temenos sandbox blocks any write to the working directory. Set by
+	// `lenos run --readonly`. Git common dir intentionally stays RW (see plan).
+	// Callers MUST verify temenos sandbox is connected before setting ReadOnly;
+	// see internal/cmd/run.go sandbox guard for the pattern.
+	ReadOnly bool
 }
 
 // ConfigStore is the single entry point for all config access. It owns the

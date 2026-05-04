@@ -45,6 +45,9 @@ lenos run --session {session-id} "Follow up on your last response"
 # Continue the most recent session
 lenos run --continue "Follow up on your last response"
 
+# Run an agent in read-only mode (sandbox blocks any writes to cwd)
+lenos run --readonly --agent reviewer "review the changes in HEAD"
+
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var (
@@ -84,8 +87,9 @@ lenos run --continue "Follow up on your last response"
 
 		agentName, _ := cmd.Flags().GetString("agent")
 		contextFiles, _ := cmd.Flags().GetStringArray("context-file")
+		readOnly, _ := cmd.Flags().GetBool("readonly")
 
-		ws, cleanup, err := setupWorkspace(cmd, agentName, contextFiles)
+		ws, cleanup, err := setupWorkspace(cmd, agentName, contextFiles, readOnly)
 		if err != nil {
 			return err
 		}
@@ -95,11 +99,15 @@ lenos run --continue "Follow up on your last response"
 			return fmt.Errorf("no providers configured - please run 'lenos' to set up a provider interactively")
 		}
 
+		appWs := ws.(*workspace.AppWorkspace)
+		if readOnly && !appWs.App().SandboxClientConnected() {
+			return fmt.Errorf("--readonly requires the temenos sandbox, but the sandbox client is not connected (daemon down or sandbox disabled in config); start temenos or remove --readonly")
+		}
+
 		if verbose {
 			slog.SetDefault(slog.New(log.New(os.Stderr)))
 		}
 
-		appWs := ws.(*workspace.AppWorkspace)
 		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, quiet || verbose, sessionID, useLast)
 	},
 }
@@ -113,5 +121,6 @@ func init() {
 	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	runCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
 	runCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file to inject at startup (repeatable)")
+	runCmd.Flags().Bool("readonly", false, "Enforce read-only filesystem access on the working directory via the temenos sandbox; agent cannot create or modify files in cwd.")
 	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
 }

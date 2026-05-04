@@ -42,7 +42,7 @@ lenos login copilot
 	},
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ws, cleanup, err := setupWorkspace(cmd, "", nil)
+		ws, cleanup, err := setupWorkspace(cmd, "", nil, false)
 		if err != nil {
 			return err
 		}

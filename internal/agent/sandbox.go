@@ -9,11 +9,19 @@ import (
 	"github.com/tta-lab/temenos/client"
 )
 
+// AccessMode represents the filesystem access mode for the working directory inside the temenos sandbox.
+type AccessMode string
+
+const (
+	AccessModeRW AccessMode = "rw"
+	AccessModeRO AccessMode = "ro"
+)
+
 // BuildAllowedPaths returns the allowed paths for an agent running in cwd with given access.
-// access is "rw" or "ro". CWD is always the first element (temenos uses first path as WorkingDir).
+// access is AccessModeRW or AccessModeRO. CWD is always the first element (temenos uses first path as WorkingDir).
 // additionalReadOnlyPaths are added as read-only paths (useful for granting cross-project read access).
-func BuildAllowedPaths(ctx context.Context, cwd, access string, additionalReadOnlyPaths ...string) []client.AllowedPath {
-	readOnly := access != "rw"
+func BuildAllowedPaths(ctx context.Context, cwd string, access AccessMode, additionalReadOnlyPaths ...string) []client.AllowedPath {
+	readOnly := access != AccessModeRW
 	paths := []client.AllowedPath{{Path: cwd, ReadOnly: readOnly}}
 
 	gitDir := resolveGitCommonDir(ctx, cwd)
