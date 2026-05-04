@@ -11,6 +11,7 @@ func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "run"}
 	cmd.Flags().StringP("agent", "a", "", "")
 	cmd.Flags().StringArrayP("context-file", "f", nil, "")
+	cmd.Flags().Bool("readonly", false, "")
 	return cmd
 }
 
@@ -56,4 +57,19 @@ func TestRunCmd_AgentFlagAfterSubcommand(t *testing.T) {
 	require.NoError(t, err, "cobra must accept --agent on runCmd")
 	v, _ := cmd.Flags().GetString("agent")
 	require.Equal(t, "coder", v)
+}
+
+func TestRunCmd_ReadonlyFlagDeclared(t *testing.T) {
+	f := runCmd.Flags().Lookup("readonly")
+	require.NotNil(t, f, "--readonly flag must be declared on runCmd")
+	require.Equal(t, "", f.Shorthand, "--readonly should have no shorthand")
+	require.Equal(t, "false", f.DefValue, "--readonly default must be false")
+}
+
+func TestRunCmd_ReadonlyFlagParse(t *testing.T) {
+	cmd := newRunCmd()
+	err := cmd.ParseFlags([]string{"--readonly", "hi"})
+	require.NoError(t, err)
+	v, _ := cmd.Flags().GetBool("readonly")
+	require.True(t, v)
 }

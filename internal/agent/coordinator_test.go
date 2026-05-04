@@ -513,3 +513,50 @@ var _newCoordinatorSignatureLock = func() {
 	var sc *client.Client
 	_, _ = NewCoordinator(context.TODO(), nil, nil, nil, nil, nil, sc)
 }
+
+// TestBuildCall_AccessModeFromOverrides verifies that the --readonly override
+// (RuntimeOverrides.ReadOnly) propagates to AllowedPaths[0].ReadOnly so the
+// temenos sandbox enforces RO on cwd.
+func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
+	setup := func(t *testing.T) *config.ConfigStore {
+		tmp := t.TempDir()
+		configDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+		t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+		t.Setenv("LENOS_GLOBAL_DATA", configDir)
+		t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+		cfg, err := config.Init(tmp, "", false)
+		require.NoError(t, err)
+		sessionsDir := filepath.Join(tmp, "sessions")
+		require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(sessionsDir, "sess-x.md"), nil, 0o644))
+		return cfg
+	}
+
+	t.Run("default rw", func(t *testing.T) {
+		cfg := setup(t)
+		c := &coordinator{
+			cfg:          cfg,
+			dataDir:      cfg.WorkingDir(),
+			recorders:    csync.NewMap[string, transcript.Recorder](),
+			currentAgent: &stubAgent{modelName: "test-model"},
+		}
+		call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
+		require.NotEmpty(t, call.AllowedPaths)
+		assert.False(t, call.AllowedPaths[0].ReadOnly, "default should be RW")
+	})
+
+	t.Run("override ro", func(t *testing.T) {
+		cfg := setup(t)
+		cfg.Overrides().ReadOnly = true
+		c := &coordinator{
+			cfg:          cfg,
+			dataDir:      cfg.WorkingDir(),
+			recorders:    csync.NewMap[string, transcript.Recorder](),
+			currentAgent: &stubAgent{modelName: "test-model"},
+		}
+		call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
+		require.NotEmpty(t, call.AllowedPaths)
+		assert.True(t, call.AllowedPaths[0].ReadOnly, "RO override should set cwd ReadOnly=true")
+	})
+}
