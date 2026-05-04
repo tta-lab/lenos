@@ -41,6 +41,8 @@ func init() {
 	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	rootCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
+	rootCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
+	rootCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file to inject at startup (repeatable)")
 	rootCmd.MarkFlagsMutuallyExclusive("session", "continue")
 
 	rootCmd.AddCommand(
@@ -85,6 +87,8 @@ lenos --continue
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessionID, _ := cmd.Flags().GetString("session")
 		continueLast, _ := cmd.Flags().GetBool("continue")
+		agentName, _ := cmd.Flags().GetString("agent")
+		contextFiles, _ := cmd.Flags().GetStringArray("context-file")
 
 		// Determine trigger message from positional args.
 		triggerMessage := ""
@@ -92,7 +96,7 @@ lenos --continue
 			triggerMessage = strings.Join(args, " ")
 		}
 
-		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd, "", nil)
+		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd, agentName, contextFiles)
 		if err != nil {
 			return err
 		}
