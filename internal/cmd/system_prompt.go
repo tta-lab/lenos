@@ -18,7 +18,7 @@ pushes onto the model on every turn. Concatenates the bash-first base
 prompt (env + output protocol + few-shot examples + available commands), the
 git section (status + attribution), and the coder post-template.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ws, cleanup, err := setupWorkspace(cmd, "", nil)
+		ws, cleanup, err := setupWorkspace(cmd, "", nil, false)
 		if err != nil {
 			return err
 		}

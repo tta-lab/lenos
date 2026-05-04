@@ -96,7 +96,7 @@ lenos --continue
 			triggerMessage = strings.Join(args, " ")
 		}
 
-		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd, agentName, contextFiles)
+		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd, agentName, contextFiles, false)
 		if err != nil {
 			return err
 		}
@@ -189,13 +189,13 @@ func supportsProgressBar() bool {
 
 // setupWorkspaceWithProgressBar wraps setupWorkspace with an optional
 // terminal progress bar shown during initialization.
-func setupWorkspaceWithProgressBar(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
+func setupWorkspaceWithProgressBar(cmd *cobra.Command, agentName string, contextFiles []string, readOnly bool) (workspace.Workspace, func(), error) {
 	showProgress := supportsProgressBar()
 	if showProgress {
 		_, _ = fmt.Fprintf(os.Stderr, ansi.SetIndeterminateProgressBar)
 	}
 
-	ws, cleanup, err := setupWorkspace(cmd, agentName, contextFiles)
+	ws, cleanup, err := setupWorkspace(cmd, agentName, contextFiles, readOnly)
 
 	if showProgress {
 		_, _ = fmt.Fprintf(os.Stderr, ansi.ResetProgressBar)
@@ -206,7 +206,7 @@ func setupWorkspaceWithProgressBar(cmd *cobra.Command, agentName string, context
 
 // setupWorkspace creates an in-process app.App and wraps it in an
 // AppWorkspace.
-func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string) (workspace.Workspace, func(), error) {
+func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string, readOnly bool) (workspace.Workspace, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
 	ctx := cmd.Context()
 
@@ -241,6 +241,10 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string)
 		}
 		// Store extra context files in overrides; applied in SetupAgents.
 		store.Overrides().ExtraContextFiles = append(store.Overrides().ExtraContextFiles, cf)
+	}
+
+	if readOnly {
+		store.Overrides().ReadOnly = true
 	}
 
 	// Re-run SetupAgents now that overrides are set.
