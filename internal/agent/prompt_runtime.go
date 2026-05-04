@@ -105,20 +105,31 @@ to act:                              emit pure bash (chained with && / ; / | as 
 // "Read", "The", etc — common English sentence-openers). The runtime never
 // executed the emit; bash was bypassed so the model gets a clean, unambiguous
 // signal that the shape was wrong before any side-effects could happen.
-func rePromptProsePrefix(firstWord string) string {
-	return fmt.Sprintf(alertPrefix+` your last emit started with the capitalized word `+"`%s`"+`, which looks like English prose.
+//
+// Quotes the actual offending line and shows the in-place conversion to
+// bash comment + narrate forms — model sees the exact text it should have
+// written instead of the abstract rule.
+func rePromptProsePrefix(firstWord, line string) string {
+	return fmt.Sprintf(alertPrefix+` your last emit started with English prose:
 
-The runtime DID NOT execute it — every byte of your response is fed to bash -c, and English sentences run as commands (which fail). To prevent any side effects, no bash ran this turn.
+  %s
 
-To make progress:
-  - To act:                  emit pure bash starting with a lowercase command (ls, grep, etc.)
-  - To annotate one command: # this is a bash comment — bash ignores it
-  - To talk to the human:    narrate <<'EOF' ... EOF
-  - To end the turn:         exit
+The runtime DID NOT execute it — every byte of your response is fed to bash -c, and English sentences run as commands (which fail with "command not found"). To prevent any side effects, no bash ran this turn.
 
-If `+"`%s`"+` was actually a real binary you intended to call (e.g. cap-named tools like Cargo), probe with:
+If this was meant as a brief note before a command, convert to a bash comment:
+  # %s
+
+If this was meant as a multi-line message to the human, wrap in narrate:
+  narrate <<'EOF'
+  %s
+  EOF
+
+To act, emit pure bash starting with a lowercase command (ls, grep, src, etc.).
+To end the turn, emit literally:  exit
+
+If `+"`%s`"+` was actually a real binary (e.g. cap-named tools like Cargo), probe with:
   command -v %s
 
 then re-emit with the verified path.`,
-		firstWord, firstWord, firstWord)
+		line, line, line, firstWord, firstWord)
 }

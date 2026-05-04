@@ -81,10 +81,11 @@ func TestRePromptCmdNotFound_SpecialChars(t *testing.T) {
 
 func TestRePromptProsePrefix_Format(t *testing.T) {
 	t.Parallel()
-	got := rePromptProsePrefix("Read")
+	got := rePromptProsePrefix("Read", "Read the README first")
 	assert.True(t, strings.HasPrefix(got, alertPrefix+" "), "must start with alert prefix")
-	assert.Contains(t, got, "`Read`", "first word must appear in backticks")
-	assert.Contains(t, got, "narrate <<'EOF'")
-	assert.Contains(t, got, "command -v Read")
+	assert.Contains(t, got, "Read the README first", "must quote the offending line verbatim")
+	assert.Contains(t, got, "# Read the README first", "must show comment-form conversion using the actual line")
+	assert.Contains(t, got, "narrate <<'EOF'", "must show narrate-form conversion")
+	assert.Contains(t, got, "command -v Read", "must offer command -v probe for cap-named binary case")
 	assert.Contains(t, got, "DID NOT execute", "must signal that bash was bypassed")
 }

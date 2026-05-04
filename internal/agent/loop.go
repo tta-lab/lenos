@@ -149,10 +149,15 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyProsePrefix:
-			proseWord := bashErr // first Title-Cased word, carried from classify() via bashErr slot
+			// classify() carries the first word in bashErr; we call detectProsePrefix
+			// again to also obtain the offending line for the re-prompt body.
+			// The second call is cheap (linear scan with early termination on the
+			// first non-comment line) and keeps classify's two-value return contract.
+			proseWord, proseLine := detectProsePrefix(emit)
+			_ = bashErr // bashErr == proseWord; kept for potential future divergence
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
 				fmt.Sprintf("prose-prefix detected (first word %q); re-prompted", proseWord))
-			obs := rePromptProsePrefix(proseWord)
+			obs := rePromptProsePrefix(proseWord, proseLine)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),

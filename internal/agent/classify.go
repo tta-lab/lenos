@@ -70,8 +70,9 @@ func classify(ctx context.Context, emit string) (cls classifyResult, bashErr str
 	}
 	// Pre-exec prose detection. Catches "Read the file..." shape that
 	// passes bash -n but starts with English prose. Word returned via
-	// bashErr slot so the loop case doesn't need a second call.
-	if word := detectProsePrefix(emit); word != "" {
+	// bashErr slot for routing; the loop branch calls detectProsePrefix
+	// again to also obtain the offending line for the re-prompt body.
+	if word, _ := detectProsePrefix(emit); word != "" {
 		return classifyProsePrefix, word
 	}
 	if trailingExitRe.MatchString(trimmed) {
@@ -97,25 +98,30 @@ func containsBlockedPattern(emit string) bool {
 // lowercase commands are conventional UNIX, so capital-letter is a clean signal.
 var proseFirstWordRe = regexp.MustCompile(`^([A-Z][a-z]+)\b`)
 
-// detectProsePrefix returns the Title-Cased first word of emit's first
-// non-comment, non-whitespace line, or "" if no match. Comment lines (start
-// with `#`) are skipped since bash ignores them and they don't leak.
+// detectProsePrefix returns the Title-Cased first word and the full first
+// non-comment, non-whitespace line of emit, or ("", "") if no match. Comment
+// lines (start with `#`) are skipped since bash ignores them and they don't leak.
+//
+// The full line is returned alongside the first word so re-prompts can quote
+// the model's exact prose verbatim and show the in-place conversion to bash
+// comment + narrate forms — direct conversion lowers the cognitive friction
+// in correcting next turn vs an abstract rule restatement.
 //
 // Heuristic: false positives possible on cap-named binaries (e.g. macOS
 // /usr/bin/Read, Cargo) but the prose re-prompt is constructive in those
 // cases — it asks the model to probe with `command -v <X>` and re-emit.
-func detectProsePrefix(emit string) string {
-	for _, line := range strings.Split(emit, "\n") {
-		trimmed := strings.TrimSpace(line)
+func detectProsePrefix(emit string) (firstWord, line string) {
+	for _, candidate := range strings.Split(emit, "\n") {
+		trimmed := strings.TrimSpace(candidate)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 		if m := proseFirstWordRe.FindStringSubmatch(trimmed); m != nil {
-			return m[1]
+			return m[1], trimmed
 		}
-		return "" // first content line wasn't Title-Cased — accept the emit
+		return "", "" // first content line wasn't Title-Cased — accept the emit
 	}
-	return ""
+	return "", ""
 }
 
 // bashSyntaxCheck runs `bash -n` against the emit on stdin. Returns "" on
