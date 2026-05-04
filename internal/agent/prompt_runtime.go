@@ -94,3 +94,26 @@ to end the turn:                     exit
 to act:                              emit pure bash (chained with && / ; / | as needed).`,
 		firstWord, firstWord, firstWord, firstWord)
 }
+
+// rePromptProsePrefix is the next-observation text after the runtime detected
+// a Title-Cased prose word at the start of an emit (typically "Let", "Now",
+// "Read", "The", etc — common English sentence-openers). The runtime never
+// executed the emit; bash was bypassed so the model gets a clean, unambiguous
+// signal that the shape was wrong before any side-effects could happen.
+func rePromptProsePrefix(firstWord string) string {
+	return fmt.Sprintf(`[ALERT from runtime] your last emit started with the capitalized word `+"`%s`"+`, which looks like English prose.
+
+The runtime DID NOT execute it — every byte of your response is fed to bash -c, and English sentences run as commands (which fail). To prevent any side effects, no bash ran this turn.
+
+To make progress:
+  - To act:                  emit pure bash starting with a lowercase command (ls, grep, etc.)
+  - To annotate one command: # this is a bash comment — bash ignores it
+  - To talk to the human:    narrate <<'EOF' ... EOF
+  - To end the turn:         exit
+
+If `+"`%s`"+` was actually a real binary you intended to call (e.g. cap-named tools like Cargo), probe with:
+  command -v %s
+
+then re-emit with the verified path.`,
+		firstWord, firstWord, firstWord)
+}

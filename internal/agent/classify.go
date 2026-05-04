@@ -18,6 +18,7 @@ const (
 	classifyEmpty
 	classifyInvalidBash
 	classifyBanned
+	classifyProsePrefix // emit starts with Title-Cased prose word
 )
 
 // exitRe matches a literal `exit` / `exit N` (with optional integer and
@@ -65,6 +66,11 @@ func classify(ctx context.Context, emit string) (cls classifyResult, bashErr str
 	if err := bashSyntaxCheck(ctx, emit); err != "" {
 		return classifyInvalidBash, err
 	}
+	// Pre-exec prose detection. Catches "Read the file..." shape that
+	// passes bash -n but starts with English prose.
+	if detectProsePrefix(emit) != "" {
+		return classifyProsePrefix, ""
+	}
 	if trailingExitRe.MatchString(trimmed) {
 		return classifyExecExit, ""
 	}
@@ -78,6 +84,35 @@ func containsBlockedPattern(emit string) bool {
 		}
 	}
 	return false
+}
+
+// proseFirstWordRe matches a Title-Cased English word at the start of a line
+// (after optional whitespace). UNIX commands are lowercase by convention; a
+// leading [A-Z][a-z]+ token is almost always English prose leaking into the
+// bash channel. Lowercase prose openings are deliberately not detected —
+// sample evidence shows model prose almost always starts sentence-case, and
+// lowercase commands are conventional UNIX, so capital-letter is a clean signal.
+var proseFirstWordRe = regexp.MustCompile(`^([A-Z][a-z]+)\b`)
+
+// detectProsePrefix returns the Title-Cased first word of emit's first
+// non-comment, non-whitespace line, or "" if no match. Comment lines (start
+// with `#`) are skipped since bash ignores them and they don't leak.
+//
+// Heuristic: false positives possible on cap-named binaries (e.g. macOS
+// /usr/bin/Read, Cargo) but the prose re-prompt is constructive in those
+// cases — it asks the model to probe with `command -v <X>` and re-emit.
+func detectProsePrefix(emit string) string {
+	for _, line := range strings.Split(emit, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if m := proseFirstWordRe.FindStringSubmatch(trimmed); m != nil {
+			return m[1]
+		}
+		return "" // first content line wasn't Title-Cased — accept the emit
+	}
+	return ""
 }
 
 // bashSyntaxCheck runs `bash -n` against the emit on stdin. Returns "" on

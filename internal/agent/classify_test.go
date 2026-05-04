@@ -168,3 +168,33 @@ func TestClassify_BareExitStillBareExit(t *testing.T) {
 	cls, _ = classify(ctx, "exit 0")
 	require.Equal(t, classifyExit, cls)
 }
+
+// TestDetectProsePrefix locks the cap-letter heuristic contract.
+func TestDetectProsePrefix(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		emit string
+		want string
+	}{
+		{"capitalized first word", "Read the file", "Read"},
+		{"single capitalized word", "Foo", "Foo"},
+		{"all caps not detected", "FOO", ""},
+		{"lowercase first not detected", "ls -la", ""},
+		{"single capital letter alone", "X", ""},
+		{"starts with digit", "0xDEADBEEF", ""},
+		{"absolute path", "/usr/bin/Read", ""},
+		{"comment line skipped", "# Let me try\nls /tmp", ""},
+		{"empty leading lines", "\n\n  Read the file", "Read"},
+		{"narrate heredoc accepted", "narrate <<'EOF'\nLet me explain.\nEOF", ""},
+		{"empty emit", "", ""},
+		{"only whitespace", "   \n\t  ", ""},
+		{"multi-word prose", "Now I'll start the test", "Now"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, detectProsePrefix(tc.emit))
+		})
+	}
+}

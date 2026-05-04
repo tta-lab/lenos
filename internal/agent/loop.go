@@ -148,6 +148,21 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
+		case classifyProsePrefix:
+			proseWord := detectProsePrefix(emit)
+			_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
+				fmt.Sprintf("prose-prefix detected (first word %q); re-prompted", proseWord))
+			obs := rePromptProsePrefix(proseWord)
+			msgs = append(msgs,
+				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				fantasy.NewUserMessage(obs),
+			)
+			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+				slog.Warn("loop: persist prose-prefix re-prompt", "error", obsErr)
+			}
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
+
 		case classifyBanned:
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, "blocked: sed -i / perl -i not allowed; use src edit")
 			obs := rePromptBlockedPattern()

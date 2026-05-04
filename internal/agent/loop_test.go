@@ -531,29 +531,34 @@ func TestRunLoop_ExecExitSingleEmit_PreCmdFails(t *testing.T) {
 	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
 }
 
-// TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt pins the current
-// scope-discipline behavior when the pre-exit command's stderr matches
-// "command not found" (e.g. `Let me start && exit`). classifyExecExit
-// short-circuits BEFORE the stderr-scan gate, so the re-prompt does NOT
-// fire — model intent is honored. If a future change wants to flip this,
-// this test must flip too — making the change visible in code review.
+// TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt pins the routing
+// behavior for prose-shaped emits that happen to end with `&& exit`. With the
+// classifyProsePrefix gate active, "Let me start && exit" is caught as prose
+// BEFORE trailingExitRe can match — bash never runs, a prose re-prompt fires,
+// and the model must re-emit. If a future change wants to let classifyExecExit
+// win again, this test must flip too — making the change visible in review.
 func TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{`Let me start && exit`}}
-	runner := &fakeRunner{results: []ExecResult{
-		{Stderr: []byte("bash: Let: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
-	}}
+	// Two emits: prose-prefix re-prompt fires on the first, model corrects with exit.
+	model := &scriptedModel{emits: []string{`Let me start && exit`, "exit"}}
+	runner := &fakeRunner{} // bash must NOT be called — prose gate fires pre-exec
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop, "classifyExecExit honors model intent regardless of stderr cmd-not-found pattern")
+	assert.Equal(t, stopExit, stop)
 
-	assert.Contains(t, rec.calls, "TurnEnd")
-	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
+	// Prose gate fired — no exec, no result row.
+	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
+	results := messagesByRole(ms, message.Result)
+	assert.Empty(t, results, "no result row — bash bypassed by prose-prefix gate")
+
+	// Re-prompt persisted for the prose-shape failure.
 	users := messagesByRole(ms, message.User)
-	assert.Len(t, users, 0, "classifyExecExit branch must not fire the cmd-not-found re-prompt")
+	require.Len(t, users, 1)
+	assert.Contains(t, users[0].Content().Text, "[ALERT from runtime]")
+	assert.Contains(t, users[0].Content().Text, "`Let`")
 }
 
 // --- Mock helpers ---
@@ -1072,11 +1077,14 @@ func TestRunLoop_Empty_EmitVisibleInTranscript(t *testing.T) {
 	assert.True(t, sawEmit, "even empty emits must be announced for SSOT")
 }
 
-// TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt covers the dominant
-// failure mode from session 1bd0d74e: the model emits prose followed by a real
-// command. bash runs left-to-right — prose lines exit 127 (stderr has
-// "command not found"), trailing real command exits 0, overall exit is 0.
-// The old exit-127 gate missed all 9 such emits. Stderr-scan catches them.
+// TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt covers the stderr-scan
+// failure mode from session 1bd0d74e: a multi-line emit whose first token is
+// NOT Title-Cased (so classifyProsePrefix doesn't fire), but bash reports
+// "command not found" on an internal line and the trailing real command exits 0,
+// making the overall exit 0. The old exit-127 gate missed these; stderr-scan catches them.
+//
+// Note: Title-Cased-first-word emits like "The PR already exists..." now route
+// to classifyProsePrefix pre-exec and never reach the stderr-scan path.
 func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	t.Parallel()
 	// Emit starts with lowercase (bypasses classifyProsePrefix) but contains a
@@ -1257,4 +1265,70 @@ func TestScanFirstCmdNotFound_BothBashErrorFormats(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// TestRunLoop_ProsePrefix_FiresPreExec verifies a Title-Cased prose-first-word
+// emit triggers rePromptProsePrefix BEFORE bash exec, with no result row
+// created (the runtime bypasses bash entirely for this shape).
+func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"Read the files I need", "exit"}}
+	runner := &fakeRunner{} // no canned results — runner must NOT be called
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	// No exec ran — runner.bash should be empty.
+	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
+
+	// No result row created.
+	results := messagesByRole(ms, message.Result)
+	assert.Empty(t, results, "no result row when prose-prefix bypasses exec")
+
+	// Re-prompt persisted as User row.
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	obs := users[0].Content().Text
+	assert.Contains(t, obs, "[ALERT from runtime]")
+	assert.Contains(t, obs, "`Read`")
+}
+
+// TestRunLoop_ProsePrefix_LowercaseAccepted verifies a lowercase first word
+// (legit bash command) does NOT trigger the pre-exec re-prompt — it routes
+// through classifyExec normally.
+func TestRunLoop_ProsePrefix_LowercaseAccepted(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"ls -la", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("file1\nfile2\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	// Exec ran — lowercase first word is fine.
+	assert.Equal(t, []string{"ls -la"}, runner.bash, "lowercase first word must reach exec")
+}
+
+// TestRunLoop_DrainOnProsePrefix is the drain peer for the prose-prefix branch.
+// Every re-prompt branch must have a DrainOn<X> counterpart so a future
+// simplification can't silently drop drainAndAppend.
+func TestRunLoop_DrainOnProsePrefix(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"Now starting the task", "exit"}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
+
+	_, err := runLoop(context.Background(), deps, nil, "go")
+	require.NoError(t, err)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 2)
+	assert.Contains(t, users[0].Content().Text, "[ALERT from runtime]")
+	assert.Contains(t, users[0].Content().Text, "`Now`", "must reference the offending first word")
+	assert.Equal(t, "q1", users[1].Content().Text)
 }
