@@ -1283,6 +1283,11 @@ func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
 	// No exec ran — runner.bash should be empty.
 	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
 
+	// BashSkipped recorded with the right severity and description (parity with
+	// classifyEmpty / classifyInvalidBash / classifyBanned).
+	require.Greater(t, len(rec.calls), 2, "expected at least 3 recorder calls")
+	assert.Contains(t, rec.calls[2], "BashSkipped:warn:prose-prefix detected")
+
 	// No result row created.
 	results := messagesByRole(ms, message.Result)
 	assert.Empty(t, results, "no result row when prose-prefix bypasses exec")

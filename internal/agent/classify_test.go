@@ -195,8 +195,11 @@ func TestClassify_ProsePrefix(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.emit, func(t *testing.T) {
 			t.Parallel()
-			cls, _ := classify(ctx, tc.emit)
+			cls, aux := classify(ctx, tc.emit)
 			assert.Equal(t, tc.want, cls)
+			if tc.want == classifyProsePrefix {
+				assert.NotEmpty(t, aux, "classify must return the prose word via aux slot")
+			}
 		})
 	}
 }

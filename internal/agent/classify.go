@@ -53,8 +53,9 @@ var blockedCmdPatterns = []*regexp.Regexp{
 // Empty short-circuits before exit so `   ` doesn't accidentally pass the
 // trim+exitRe check; banned runs before bash-syntax so we never invoke
 // `bash -n` on a refused pattern; prose-prefix runs after bash-syntax so
-// true syntax errors still win.
-func classify(ctx context.Context, emit string) (cls classifyResult, bashErr string) {
+// true syntax errors still win; prose-prefix runs before trailing-exit so
+// prose shapes like "Read files && exit" are caught as prose, not executed.
+func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {
 	trimmed := strings.TrimSpace(emit)
 	if trimmed == "" {
 		return classifyEmpty, ""
@@ -70,8 +71,7 @@ func classify(ctx context.Context, emit string) (cls classifyResult, bashErr str
 	}
 	// Pre-exec prose detection. Catches "Read the file..." shape that
 	// passes bash -n but starts with English prose. Word returned via
-	// bashErr slot for routing; the loop branch calls detectProsePrefix
-	// again to also obtain the offending line for the re-prompt body.
+	// aux slot; loop calls detectProsePrefix again for the full line.
 	if word, _ := detectProsePrefix(emit); word != "" {
 		return classifyProsePrefix, word
 	}

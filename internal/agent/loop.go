@@ -110,7 +110,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		// so every emit reaches the .md transcript regardless of how it routes.
 		tok, _ := deps.recorder.AgentEmit(ctx, deps.sessionID, emit)
 
-		cls, bashErr := classify(ctx, emit)
+		cls, aux := classify(ctx, emit)
 		switch cls {
 		case classifyExit:
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "exit — turn ends")
@@ -136,8 +136,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 		case classifyInvalidBash:
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
-				fmt.Sprintf("invalid bash; bash -n said: %s; re-prompted", oneLine(bashErr)))
-			obs := rePromptInvalidBash(bashErr)
+				fmt.Sprintf("invalid bash; bash -n said: %s; re-prompted", oneLine(aux)))
+			obs := rePromptInvalidBash(aux)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -149,12 +149,11 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyProsePrefix:
-			// classify() carries the first word in bashErr; we call detectProsePrefix
-			// again to also obtain the offending line for the re-prompt body.
-			// The second call is cheap (linear scan with early termination on the
-			// first non-comment line) and keeps classify's two-value return contract.
+			// aux carries the first prose word from classify(); call detectProsePrefix
+			// again to also obtain the full offending line for the re-prompt body.
+			// The second call is a cheap linear scan with early termination.
 			proseWord, proseLine := detectProsePrefix(emit)
-			_ = bashErr // bashErr == proseWord; kept for potential future divergence
+			_ = aux // aux == proseWord; acknowledged, full line obtained above
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
 				fmt.Sprintf("prose-prefix detected (first word %q); re-prompted", proseWord))
 			obs := rePromptProsePrefix(proseWord, proseLine)
