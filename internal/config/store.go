@@ -26,6 +26,10 @@ type RuntimeOverrides struct {
 	AgentName         string
 	AgentContextFile  string
 	ExtraContextFiles []string
+	// ReadOnly, when true, makes BuildAllowedPaths emit cwd as ReadOnly:true so
+	// the temenos sandbox blocks any write to the working directory. Set by
+	// `lenos run --readonly`. Git common dir intentionally stays RW (see plan).
+	ReadOnly bool
 }
 
 // ConfigStore is the single entry point for all config access. It owns the
