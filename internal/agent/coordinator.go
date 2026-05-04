@@ -310,6 +310,11 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 	// disabled) decides whether nil here is acceptable.
 	sandboxClient := c.sandboxClient
 
+	access := "rw"
+	if c.cfg.Overrides().ReadOnly {
+		access = "ro"
+	}
+
 	return SessionAgentCall{
 		SessionID:       sessionID,
 		Prompt:          prompt,
@@ -318,7 +323,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		Sandbox:         useSandbox,
 		SandboxClient:   sandboxClient,
 		Env:             sandboxEnv,
-		AllowedPaths:    BuildAllowedPaths(ctx, cwd, "rw", additionalReadOnlyPaths...),
+		AllowedPaths:    BuildAllowedPaths(ctx, cwd, access, additionalReadOnlyPaths...),
 		Recorder:        c.recorderFor(sessionID),
 	}
 }
