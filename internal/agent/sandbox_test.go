@@ -17,7 +17,7 @@ func TestBuildAllowedPaths(t *testing.T) {
 	t.Run("cwd is first element with correct access", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		ctx := context.Background()
-		paths := BuildAllowedPaths(ctx, tmpDir, "rw")
+		paths := BuildAllowedPaths(ctx, tmpDir, AccessModeRW)
 		require.NotEmpty(t, paths)
 		require.Equal(t, tmpDir, paths[0].Path)
 		require.False(t, paths[0].ReadOnly)
@@ -37,7 +37,7 @@ func TestBuildAllowedPaths(t *testing.T) {
 		require.NoError(t, exec.CommandContext(context.Background(), "git", "worktree", "add", worktreeDir).Run())
 
 		ctx := context.Background()
-		paths := BuildAllowedPaths(ctx, worktreeDir, "rw")
+		paths := BuildAllowedPaths(ctx, worktreeDir, AccessModeRW)
 		// Should have cwd + git dir
 		require.GreaterOrEqual(t, len(paths), 2)
 		// Last element should be the git dir, not read-only
@@ -49,7 +49,7 @@ func TestBuildAllowedPaths(t *testing.T) {
 	t.Run("read-only access sets cwd ReadOnly=true", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		ctx := context.Background()
-		paths := BuildAllowedPaths(ctx, tmpDir, "ro")
+		paths := BuildAllowedPaths(ctx, tmpDir, AccessModeRO)
 		require.NotEmpty(t, paths)
 		require.Equal(t, tmpDir, paths[0].Path)
 		require.True(t, paths[0].ReadOnly)
@@ -59,7 +59,7 @@ func TestBuildAllowedPaths(t *testing.T) {
 		tmpDir := t.TempDir()
 		ctx := context.Background()
 		otherDir := t.TempDir()
-		paths := BuildAllowedPaths(ctx, tmpDir, "rw", otherDir)
+		paths := BuildAllowedPaths(ctx, tmpDir, AccessModeRW, otherDir)
 		// Should have cwd + otherDir
 		require.GreaterOrEqual(t, len(paths), 2)
 		// Find otherDir in paths

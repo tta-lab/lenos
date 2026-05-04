@@ -310,9 +310,9 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 	// disabled) decides whether nil here is acceptable.
 	sandboxClient := c.sandboxClient
 
-	access := "rw"
+	access := AccessModeRW
 	if c.cfg.Overrides().ReadOnly {
-		access = "ro"
+		access = AccessModeRO
 	}
 
 	return SessionAgentCall{

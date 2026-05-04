@@ -514,9 +514,9 @@ var _newCoordinatorSignatureLock = func() {
 	_, _ = NewCoordinator(context.TODO(), nil, nil, nil, nil, nil, sc)
 }
 
-// TestBuildCall_AccessModeFromOverrides verifies that the --readonly override
-// (RuntimeOverrides.ReadOnly) propagates to AllowedPaths[0].ReadOnly so the
-// temenos sandbox enforces RO on cwd.
+// TestBuildCall_AccessModeFromOverrides verifies that RuntimeOverrides.ReadOnly
+// selects AccessModeRO (not AccessModeRW) in buildCall, which in turn sets
+// AllowedPaths[0].ReadOnly=true so the temenos sandbox enforces RO on cwd.
 func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 	setup := func(t *testing.T) *config.ConfigStore {
 		tmp := t.TempDir()
