@@ -168,3 +168,78 @@ func TestClassify_BareExitStillBareExit(t *testing.T) {
 	cls, _ = classify(ctx, "exit 0")
 	require.Equal(t, classifyExit, cls)
 }
+
+// TestClassify_ProsePrefix locks the classify() ordering: classifyProsePrefix
+// must win over classifyExecExit when the emit starts with a Title-Cased word
+// AND ends with `&& exit`. If the two checks were accidentally swapped, the
+// trailing-exit path would run bash before the prose gate fires.
+func TestClassify_ProsePrefix(t *testing.T) {
+	t.Parallel()
+	if _, err := os.Stat("/bin/bash"); err != nil {
+		t.Skip("/bin/bash not available")
+	}
+	ctx := context.Background()
+	cases := []struct {
+		emit string
+		want classifyResult
+	}{
+		{"Read the file", classifyProsePrefix},
+		{"Now starting the task", classifyProsePrefix},
+		// Critical overlap: prose-prefix must win over trailing-exit.
+		{"Let me start && exit", classifyProsePrefix},
+		{"Read files && exit", classifyProsePrefix},
+		// Lowercase-first: goes through normally.
+		{"ls -la && exit", classifyExecExit},
+		{"echo done && exit", classifyExecExit},
+	}
+	for _, tc := range cases {
+		t.Run(tc.emit, func(t *testing.T) {
+			t.Parallel()
+			cls, aux := classify(ctx, tc.emit)
+			assert.Equal(t, tc.want, cls)
+			if tc.want == classifyProsePrefix {
+				assert.NotEmpty(t, aux, "classify must return the prose word via aux slot")
+			}
+		})
+	}
+}
+
+// TestDetectProsePrefix locks the cap-letter heuristic contract. Asserts both
+// the captured first word AND the full offending line — re-prompts use the
+// line to quote the model's prose verbatim and show in-place conversion.
+func TestDetectProsePrefix(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		emit     string
+		wantWord string
+		wantLine string
+	}{
+		{"capitalized first word", "Read the file", "Read", "Read the file"},
+		{"single capitalized word", "Foo", "Foo", "Foo"},
+		{"all caps not detected", "FOO", "", ""},
+		{"lowercase first not detected", "ls -la", "", ""},
+		{"single capital letter alone", "X", "", ""},
+		{"starts with digit", "0xDEADBEEF", "", ""},
+		{"absolute path", "/usr/bin/Read", "", ""},
+		{"comment line skipped", "# Let me try\nls /tmp", "", ""},
+		{"empty leading lines", "\n\n  Read the file", "Read", "Read the file"},
+		{"narrate heredoc accepted", "narrate <<'EOF'\nLet me explain.\nEOF", "", ""},
+		{"empty emit", "", "", ""},
+		{"only whitespace", "   \n\t  ", "", ""},
+		{"multi-word prose captures full line", "Now I'll start the test", "Now", "Now I'll start the test"},
+		// Known false positive: Title-Cased var assignment (e.g. Output=$(pwd)).
+		// The heuristic fires on the capital letter; the re-prompt is still
+		// constructive (asks model to probe with command -v Output). Documented
+		// here so a future regex tightening has a regression guard.
+		{"var assignment false positive", "Output=$(pwd)", "Output", "Output=$(pwd)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			gotWord, gotLine := detectProsePrefix(tc.emit)
+			assert.Equal(t, tc.wantWord, gotWord, "firstWord")
+			assert.Equal(t, tc.wantLine, gotLine, "line")
+		})
+	}
+}

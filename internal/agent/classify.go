@@ -18,6 +18,7 @@ const (
 	classifyEmpty
 	classifyInvalidBash
 	classifyBanned
+	classifyProsePrefix // emit starts with Title-Cased prose word
 )
 
 // exitRe matches a literal `exit` / `exit N` (with optional integer and
@@ -44,14 +45,17 @@ var blockedCmdPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?m)(?:^|&&|\|\||;|\|)\s*perl\s+(?:-[a-zA-Z]*i)`),
 }
 
-// classify inspects an agent emit and returns the action class plus any
-// stderr text from `bash -n` (only meaningful for classifyInvalidBash).
+// classify inspects an agent emit and returns the action class plus an
+// auxiliary string (bash stderr for classifyInvalidBash; first Title-Cased
+// word for classifyProsePrefix; "" otherwise).
 //
-// Classification order is: empty → exit → banned → bash-syntax → exec.
+// Classification order: empty → exit → banned → bash-syntax → prose-prefix → trailing-exit → exec.
 // Empty short-circuits before exit so `   ` doesn't accidentally pass the
 // trim+exitRe check; banned runs before bash-syntax so we never invoke
-// `bash -n` on a refused pattern.
-func classify(ctx context.Context, emit string) (cls classifyResult, bashErr string) {
+// `bash -n` on a refused pattern; prose-prefix runs after bash-syntax so
+// true syntax errors still win; prose-prefix runs before trailing-exit so
+// prose shapes like "Read files && exit" are caught as prose, not executed.
+func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {
 	trimmed := strings.TrimSpace(emit)
 	if trimmed == "" {
 		return classifyEmpty, ""
@@ -64,6 +68,12 @@ func classify(ctx context.Context, emit string) (cls classifyResult, bashErr str
 	}
 	if err := bashSyntaxCheck(ctx, emit); err != "" {
 		return classifyInvalidBash, err
+	}
+	// Pre-exec prose detection. Catches "Read the file..." shape that
+	// passes bash -n but starts with English prose. Word returned via
+	// aux slot; loop calls detectProsePrefix again for the full line.
+	if word, _ := detectProsePrefix(emit); word != "" {
+		return classifyProsePrefix, word
 	}
 	if trailingExitRe.MatchString(trimmed) {
 		return classifyExecExit, ""
@@ -78,6 +88,40 @@ func containsBlockedPattern(emit string) bool {
 		}
 	}
 	return false
+}
+
+// proseFirstWordRe matches a Title-Cased English word at the start of a line
+// (after optional whitespace). UNIX commands are lowercase by convention; a
+// leading [A-Z][a-z]+ token is almost always English prose leaking into the
+// bash channel. Lowercase prose openings are deliberately not detected —
+// sample evidence shows model prose almost always starts sentence-case, and
+// lowercase commands are conventional UNIX, so capital-letter is a clean signal.
+var proseFirstWordRe = regexp.MustCompile(`^([A-Z][a-z]+)\b`)
+
+// detectProsePrefix returns the Title-Cased first word and the full first
+// non-comment, non-whitespace line of emit, or ("", "") if no match. Comment
+// lines (start with `#`) are skipped since bash ignores them and they don't leak.
+//
+// The full line is returned alongside the first word so re-prompts can quote
+// the model's exact prose verbatim and show the in-place conversion to bash
+// comment + narrate forms — direct conversion lowers the cognitive friction
+// in correcting next turn vs an abstract rule restatement.
+//
+// Heuristic: false positives possible on cap-named binaries (e.g. macOS
+// /usr/bin/Read, Cargo) but the prose re-prompt is constructive in those
+// cases — it asks the model to probe with `command -v <X>` and re-emit.
+func detectProsePrefix(emit string) (firstWord, line string) {
+	for _, candidate := range strings.Split(emit, "\n") {
+		trimmed := strings.TrimSpace(candidate)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if m := proseFirstWordRe.FindStringSubmatch(trimmed); m != nil {
+			return m[1], trimmed
+		}
+		return "", "" // first content line wasn't Title-Cased — accept the emit
+	}
+	return "", ""
 }
 
 // bashSyntaxCheck runs `bash -n` against the emit on stdin. Returns "" on

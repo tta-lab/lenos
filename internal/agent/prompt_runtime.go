@@ -2,12 +2,17 @@ package agent
 
 import "fmt"
 
-// Re-prompts feed back as the next user-role observation, prefixed [runtime].
-// Format per flicknote 30666153 §6I:
+// Re-prompts feed back as the next user-role observation. Two prefix tiers:
 //
-//	[runtime] <one-line description>
-//	<context, if any>
-//	<corrective guidance>
+//   - [runtime] — informational correction (empty, invalid-bash, banned, timeout).
+//     bash already ran (or was cleanly blocked before any side-effects).
+//   - [ALERT from runtime] — high-salience correction where the model has
+//     demonstrated it ignores trailing corrections (cmd-not-found, prose-prefix).
+//     Uses a distinct prefix and appears BEFORE any result envelope so the model
+//     reads the correction first.
+//
+// alertPrefix is the shared literal for high-salience re-prompts.
+const alertPrefix = "[ALERT from runtime]"
 
 // rePromptEmpty is the next-observation text after an empty/whitespace emit.
 func rePromptEmpty() string {
@@ -74,7 +79,7 @@ or break it into smaller steps.`, secs)
 // self-diagnose: probe with `command -v <X>` if the binary was expected,
 // or drop the prose/fence and emit pure bash if shape was wrong.
 func rePromptCmdNotFound(firstWord string) string {
-	return fmt.Sprintf(`[runtime] bash printed "command not found" for the first word `+"`%s`"+`.
+	return fmt.Sprintf(alertPrefix+` bash printed "command not found" for the first word `+"`%s`"+`.
 
 if `+"`%s`"+` is a real binary you expected:
   command -v %s     # builtin probe — returns 1 (not 127) if missing
@@ -93,4 +98,38 @@ to talk to the human (multi-line):   narrate <<'EOF' ... EOF
 to end the turn:                     exit
 to act:                              emit pure bash (chained with && / ; / | as needed).`,
 		firstWord, firstWord, firstWord, firstWord)
+}
+
+// rePromptProsePrefix is the next-observation text after the runtime detected
+// a Title-Cased prose word at the start of an emit (typically "Let", "Now",
+// "Read", "The", etc — common English sentence-openers). The runtime never
+// executed the emit; bash was bypassed so the model gets a clean, unambiguous
+// signal that the shape was wrong before any side-effects could happen.
+//
+// Quotes the actual offending line and shows the in-place conversion to
+// bash comment + narrate forms — model sees the exact text it should have
+// written instead of the abstract rule.
+func rePromptProsePrefix(firstWord, line string) string {
+	return fmt.Sprintf(alertPrefix+` your last emit started with English prose:
+
+  %s
+
+The runtime DID NOT execute it — every byte of your response is fed to bash -c, and English sentences run as commands (which fail with "command not found"). To prevent any side effects, no bash ran this turn.
+
+If this was meant as a brief note before a command, convert to a bash comment:
+  # %s
+
+If this was meant as a multi-line message to the human, wrap in narrate:
+  narrate <<'EOF'
+  %s
+  EOF
+
+To act, emit pure bash starting with a lowercase command (ls, grep, src, etc.).
+To end the turn, emit literally:  exit
+
+If `+"`%s`"+` was actually a real binary (e.g. cap-named tools like Cargo), probe with:
+  command -v %s
+
+then re-emit with the verified path.`,
+		line, line, line, firstWord, firstWord)
 }

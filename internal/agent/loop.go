@@ -110,7 +110,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		// so every emit reaches the .md transcript regardless of how it routes.
 		tok, _ := deps.recorder.AgentEmit(ctx, deps.sessionID, emit)
 
-		cls, bashErr := classify(ctx, emit)
+		cls, aux := classify(ctx, emit)
 		switch cls {
 		case classifyExit:
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "exit — turn ends")
@@ -136,14 +136,33 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 		case classifyInvalidBash:
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
-				fmt.Sprintf("invalid bash; bash -n said: %s; re-prompted", oneLine(bashErr)))
-			obs := rePromptInvalidBash(bashErr)
+				fmt.Sprintf("invalid bash; bash -n said: %s; re-prompted", oneLine(aux)))
+			obs := rePromptInvalidBash(aux)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
 				slog.Warn("loop: persist invalid-bash re-prompt", "error", obsErr)
+			}
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
+
+		case classifyProsePrefix:
+			// aux carries the first prose word from classify(); call detectProsePrefix
+			// again to also obtain the full offending line for the re-prompt body.
+			// The second call is a cheap linear scan with early termination.
+			proseWord, proseLine := detectProsePrefix(emit)
+			_ = aux // aux == proseWord; acknowledged, full line obtained above
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
+				fmt.Sprintf("prose-prefix detected (first word %q); re-prompted", proseWord))
+			obs := rePromptProsePrefix(proseWord, proseLine)
+			msgs = append(msgs,
+				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				fantasy.NewUserMessage(obs),
+			)
+			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+				slog.Warn("loop: persist prose-prefix re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
@@ -225,13 +244,18 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 
 			stderr := string(res.Stderr)
-			obs := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
+			envelope := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
+			obs := envelope
 			if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
 				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
 					fmt.Sprintf("stderr matched 'command not found' on %q (exit %d); re-prompted",
 						firstNotFound, res.ExitCode))
 				rePrompt := rePromptCmdNotFound(firstNotFound)
-				obs += "\n" + rePrompt
+				// SALIENCE FLIP: alert FIRST so the model sees the correction before the
+				// (potentially success-looking) result envelope. Validated via worker session
+				// d2f0a207: model reasoning ignored 20 trailing [runtime] re-prompts because
+				// the envelope showed exit-0 with apparently-successful trailing command output.
+				obs = rePrompt + "\n\n" + envelope
 				if obsErr := persistObservation(ctx, deps, rePrompt); obsErr != nil {
 					slog.Warn("loop: persist cmd-not-found re-prompt", "error", obsErr)
 				}
@@ -442,10 +466,15 @@ func oneLine(s string) string {
 	return s
 }
 
-// cmdNotFoundRe matches the universal bash diagnostic "bash: <word>: command not found".
-// Anchored at line start so we capture the FIRST not-found token in multi-line stderr,
-// matching bash's left-to-right execution order — that is the offending prose-prefix.
-var cmdNotFoundRe = regexp.MustCompile(`(?m)^bash: (\S+): command not found$`)
+// cmdNotFoundRe matches the bash diagnostic for an unknown command. Bash uses two
+// formats depending on whether the emit was a single-line or multi-line script:
+//   - single-line: "bash: <token>: command not found"
+//   - multi-line:  "bash: line N: <token>: command not found"
+//
+// The multi-line format is dominant for fence-shape emits and heredoc failures.
+// Anchored at line start so we capture the FIRST not-found token in multi-line
+// stderr, matching bash's left-to-right execution order.
+var cmdNotFoundRe = regexp.MustCompile(`(?m)^bash:(?: line \d+:)? (\S+): command not found$`)
 
 // scanFirstCmdNotFound returns the first token bash reported as "command not found"
 // in stderr, or "" if no match. Catches both:

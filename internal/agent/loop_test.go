@@ -531,29 +531,34 @@ func TestRunLoop_ExecExitSingleEmit_PreCmdFails(t *testing.T) {
 	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
 }
 
-// TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt pins the current
-// scope-discipline behavior when the pre-exit command's stderr matches
-// "command not found" (e.g. `Let me start && exit`). classifyExecExit
-// short-circuits BEFORE the stderr-scan gate, so the re-prompt does NOT
-// fire — model intent is honored. If a future change wants to flip this,
-// this test must flip too — making the change visible in code review.
+// TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt pins the routing
+// behavior for prose-shaped emits that happen to end with `&& exit`. With the
+// classifyProsePrefix gate active, "Let me start && exit" is caught as prose
+// BEFORE trailingExitRe can match — bash never runs, a prose re-prompt fires,
+// and the model must re-emit. If a future change wants to let classifyExecExit
+// win again, this test must flip too — making the change visible in review.
 func TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{`Let me start && exit`}}
-	runner := &fakeRunner{results: []ExecResult{
-		{Stderr: []byte("bash: Let: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
-	}}
+	// Two emits: prose-prefix re-prompt fires on the first, model corrects with exit.
+	model := &scriptedModel{emits: []string{`Let me start && exit`, "exit"}}
+	runner := &fakeRunner{} // bash must NOT be called — prose gate fires pre-exec
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop, "classifyExecExit honors model intent regardless of stderr cmd-not-found pattern")
+	assert.Equal(t, stopExit, stop)
 
-	assert.Contains(t, rec.calls, "TurnEnd")
-	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
+	// Prose gate fired — no exec, no result row.
+	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
+	results := messagesByRole(ms, message.Result)
+	assert.Empty(t, results, "no result row — bash bypassed by prose-prefix gate")
+
+	// Re-prompt persisted for the prose-shape failure.
 	users := messagesByRole(ms, message.User)
-	assert.Len(t, users, 0, "classifyExecExit branch must not fire the cmd-not-found re-prompt")
+	require.Len(t, users, 1)
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
+	assert.Contains(t, users[0].Content().Text, "`Let`")
 }
 
 // --- Mock helpers ---
@@ -811,7 +816,7 @@ func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
 	require.Contains(t, rec.calls[4], "UserMessage:q1")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, "[runtime]")
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
 	assert.Equal(t, "q1", users[1].Content().Text)
 }
 
@@ -927,7 +932,7 @@ func TestRunLoop_Exit127_RePromptPersisted(t *testing.T) {
 
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1, "exactly one User message (the re-prompt) must be persisted")
-	assert.Contains(t, users[0].Content().Text, "[runtime]")
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
 	assert.Contains(t, users[0].Content().Text, "`unknowncmd`")
 }
 
@@ -1072,27 +1077,34 @@ func TestRunLoop_Empty_EmitVisibleInTranscript(t *testing.T) {
 	assert.True(t, sawEmit, "even empty emits must be announced for SSOT")
 }
 
-// TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt covers the dominant
-// failure mode from session 1bd0d74e: the model emits prose followed by a real
-// command. bash runs left-to-right — prose lines exit 127 (stderr has
-// "command not found"), trailing real command exits 0, overall exit is 0.
-// The old exit-127 gate missed all 9 such emits. Stderr-scan catches them.
+// TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt covers the stderr-scan
+// failure mode from session 1bd0d74e: a multi-line emit whose first token is
+// NOT Title-Cased (so classifyProsePrefix doesn't fire), but bash reports
+// "command not found" on an internal line and the trailing real command exits 0,
+// making the overall exit 0. The old exit-127 gate missed these; stderr-scan catches them.
+//
+// Note: Title-Cased-first-word emits like "The PR already exists..." now route
+// to classifyProsePrefix pre-exec and never reach the stderr-scan path.
 func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{
-		"The PR already exists. All done.\ntask abc123 done",
+	// Emit starts with lowercase (bypasses classifyProsePrefix) but contains a
+	// not-found token internally. bash runs, reports "command not found" for
+	// "nonexistentcmd" in stderr while the trailing real command succeeds (exit 0).
+	inner := &scriptedModel{emits: []string{
+		"nonexistentcmd --flag\ntask abc123 done",
 		"exit",
 	}}
+	cm := &streamCapturingModel{inner: inner}
 	runner := &fakeRunner{results: []ExecResult{
 		{
 			Stdout:   []byte("Completed task abc123.\n"),
-			Stderr:   []byte("bash: The: command not found\nYou have more urgent tasks.\n"),
+			Stderr:   []byte("bash: line 1: nonexistentcmd: command not found\n"),
 			ExitCode: 0,
 			Duration: time.Millisecond,
 		},
 	}}
 	rec := &recordingRecorder{}
-	deps, ms := newDeps(t, model, runner, rec)
+	deps, ms := newDeps(t, cm, runner, rec)
 
 	_, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
@@ -1100,9 +1112,23 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	// Re-prompt must fire despite overall exit 0.
 	users := messagesByRole(ms, message.User)
 	require.GreaterOrEqual(t, len(users), 1)
-	obs := users[0].Content().Text
-	assert.Contains(t, obs, "[runtime]")
-	assert.Contains(t, obs, "`The`", "re-prompt must capture the first not-found token from stderr")
+	assert.Contains(t, users[0].Content().Text, "`nonexistentcmd`", "re-prompt must capture the first not-found token from stderr")
+
+	// Salience flip: the second Stream() call must receive the alert BEFORE the
+	// result envelope. cm.captured[1] is the prompt for the re-prompt turn.
+	require.Len(t, cm.captured, 2, "expected exactly two Stream() calls")
+	lastUserMsg := cm.captured[1][len(cm.captured[1])-1]
+	var obs string
+	for _, part := range lastUserMsg.Content {
+		if tp, ok := part.(fantasy.TextPart); ok {
+			obs += tp.Text
+		}
+	}
+	alertIdx := strings.Index(obs, alertPrefix)
+	envelopeIdx := strings.Index(obs, "<result>")
+	require.GreaterOrEqual(t, alertIdx, 0, "alert prefix must be present")
+	require.GreaterOrEqual(t, envelopeIdx, 0, "result envelope must be present")
+	assert.Less(t, alertIdx, envelopeIdx, "alert MUST appear before envelope (salience flip)")
 
 	// Result row also exists (envelope preserved, not replaced).
 	results := resultsByOrder(ms)
@@ -1130,22 +1156,24 @@ func TestRunLoop_GrepNoMatch_NoRePrompt(t *testing.T) {
 }
 
 // TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt asserts that the
-// model's Stream() receives both the full <result> envelope and the [runtime]
-// re-prompt when stderr contains "command not found". This guards against a
-// silent regression where obs += rePrompt is changed to obs = rePrompt, which
-// would drop the result envelope from the model's context while all existing
-// tests (which assert on persisted DB rows, not Stream() input) still pass.
+// model's Stream() receives both the full <result> envelope and the [ALERT from runtime]
+// re-prompt when stderr contains "command not found". Guards against a regression
+// where the result envelope is silently dropped from the model's context.
+//
+// Note: Title-Cased-first-word emits like "The PR already exists..." now route to
+// classifyProsePrefix pre-exec; this test uses a lowercase-starting emit so it
+// exercises the post-exec stderr-scan path.
 func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	t.Parallel()
 	inner := &scriptedModel{emits: []string{
-		"The PR already exists. All done.\ntask abc123 done",
+		"nonexistentcmd --flag\ntask abc123 done",
 		"exit",
 	}}
 	cm := &streamCapturingModel{inner: inner}
 	runner := &fakeRunner{results: []ExecResult{
 		{
 			Stdout:   []byte("Completed task abc123.\n"),
-			Stderr:   []byte("bash: The: command not found\nYou have more urgent tasks.\n"),
+			Stderr:   []byte("bash: line 1: nonexistentcmd: command not found\n"),
 			ExitCode: 0,
 			Duration: time.Millisecond,
 		},
@@ -1162,8 +1190,6 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 
 	prompt := cm.captured[1]
 	var rePrompt string
-	// Overwrite intentionally: last User message is the obs (drain queue is
-	// nil here; re-prompt is appended after the assistant emit).
 	for _, m := range prompt {
 		if m.Role != fantasy.MessageRoleUser {
 			continue
@@ -1180,11 +1206,134 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	}
 	require.NotEmpty(t, rePrompt, "second Stream() must contain a non-empty User-role message (the re-prompt)")
 
-	// The obs sent to the model must contain BOTH:
-	// - <result> envelope (proves the result wasn't dropped)
-	// - [runtime] re-prompt (proves the correction was appended)
-	assert.Contains(t, rePrompt, "<result>",
-		"model must see the result envelope, not just the re-prompt")
-	assert.Contains(t, rePrompt, "[runtime]",
-		"model must see the re-prompt correction appended to the envelope")
+	// Salience flip: alert FIRST, then <result> envelope.
+	alertIdx := strings.Index(rePrompt, alertPrefix)
+	envelopeIdx := strings.Index(rePrompt, "<result>")
+	require.GreaterOrEqual(t, alertIdx, 0, "model must see the alert prefix")
+	require.GreaterOrEqual(t, envelopeIdx, 0, "model must see the result envelope")
+	assert.Less(t, alertIdx, envelopeIdx, "alert MUST appear before envelope (salience flip)")
+}
+
+// TestRunLoop_CmdNotFound_BashLineNumberFormat verifies the regex captures the
+// offending token when bash uses its multi-line script error format
+// "bash: line N: <token>: command not found". This format is dominant for
+// fence-shape emits (```bash\ncmd\n```) and any multi-line emit in general.
+// Without this, fence-shape emits silently fail — no re-prompt fires (validated
+// in worker session 7f71f563).
+func TestRunLoop_CmdNotFound_BashLineNumberFormat(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"```bash\ngit log\n```", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stderr: []byte("bash: line 2: 652a5f45: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1, "re-prompt MUST fire on multi-line bash error format")
+	obs := users[0].Content().Text
+	assert.Contains(t, obs, alertPrefix)
+	assert.Contains(t, obs, "`652a5f45`",
+		"must capture the offending token even when stderr has 'line N:' prefix")
+}
+
+// TestScanFirstCmdNotFound_BothBashErrorFormats locks the regex contract for both
+// single-line and multi-line bash error formats. Failing this test means the
+// runtime won't re-prompt on a known shape failure mode — high-impact regression.
+func TestScanFirstCmdNotFound_BothBashErrorFormats(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		stderr string
+		want   string
+	}{
+		{"single-line", "bash: Let: command not found\n", "Let"},
+		{"multi-line with line number", "bash: line 2: 652a5f45: command not found\n", "652a5f45"},
+		{"multi-line bracket token", "bash: line 4: [216c6f17]: command not found\n", "[216c6f17]"},
+		{"first match wins (left-to-right)", "bash: line 2: foo: command not found\nbash: line 4: bar: command not found\n", "foo"},
+		{"no match for unrelated stderr", "ls: cannot access '/missing': No such file or directory\n", ""},
+		{"no match for partial pattern", "command not found\n", ""},
+		{"no match for stdout-style mention", "the binary 'foo' was reported as command not found by the linker\n", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := scanFirstCmdNotFound(tc.stderr)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestRunLoop_ProsePrefix_FiresPreExec verifies a Title-Cased prose-first-word
+// emit triggers rePromptProsePrefix BEFORE bash exec, with no result row
+// created (the runtime bypasses bash entirely for this shape).
+func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"Read the files I need", "exit"}}
+	runner := &fakeRunner{} // no canned results — runner must NOT be called
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	// No exec ran — runner.bash should be empty.
+	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
+
+	// BashSkipped recorded with the right severity and description (parity with
+	// classifyEmpty / classifyInvalidBash / classifyBanned).
+	require.Greater(t, len(rec.calls), 2, "expected at least 3 recorder calls")
+	assert.Contains(t, rec.calls[2], "BashSkipped:warn:prose-prefix detected")
+
+	// No result row created.
+	results := messagesByRole(ms, message.Result)
+	assert.Empty(t, results, "no result row when prose-prefix bypasses exec")
+
+	// Re-prompt persisted as User row.
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	obs := users[0].Content().Text
+	assert.Contains(t, obs, alertPrefix)
+	assert.Contains(t, obs, "`Read`")
+}
+
+// TestRunLoop_ProsePrefix_LowercaseAccepted verifies a lowercase first word
+// (legit bash command) does NOT trigger the pre-exec re-prompt — it routes
+// through classifyExec normally.
+func TestRunLoop_ProsePrefix_LowercaseAccepted(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"ls -la", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("file1\nfile2\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	// Exec ran — lowercase first word is fine.
+	assert.Equal(t, []string{"ls -la"}, runner.bash, "lowercase first word must reach exec")
+}
+
+// TestRunLoop_DrainOnProsePrefix is the drain peer for the prose-prefix branch.
+// Every re-prompt branch must have a DrainOn<X> counterpart so a future
+// simplification can't silently drop drainAndAppend.
+func TestRunLoop_DrainOnProsePrefix(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"Now starting the task", "exit"}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
+
+	_, err := runLoop(context.Background(), deps, nil, "go")
+	require.NoError(t, err)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 2)
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
+	assert.Contains(t, users[0].Content().Text, "`Now`", "must reference the offending first word")
+	assert.Equal(t, "q1", users[1].Content().Text)
 }
