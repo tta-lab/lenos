@@ -43,6 +43,7 @@ func init() {
 	rootCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	rootCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
 	rootCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file to inject at startup (repeatable)")
+	rootCmd.Flags().Bool("readonly", false, "Enforce read-only filesystem access on the working directory via the temenos sandbox; agent cannot create or modify files in cwd.")
 	rootCmd.MarkFlagsMutuallyExclusive("session", "continue")
 
 	rootCmd.AddCommand(
@@ -89,6 +90,7 @@ lenos --continue
 		continueLast, _ := cmd.Flags().GetBool("continue")
 		agentName, _ := cmd.Flags().GetString("agent")
 		contextFiles, _ := cmd.Flags().GetStringArray("context-file")
+		readOnly, _ := cmd.Flags().GetBool("readonly")
 
 		// Determine trigger message from positional args.
 		triggerMessage := ""
@@ -96,11 +98,18 @@ lenos --continue
 			triggerMessage = strings.Join(args, " ")
 		}
 
-		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd, agentName, contextFiles, false)
+		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd, agentName, contextFiles, readOnly)
 		if err != nil {
 			return err
 		}
 		defer cleanup()
+
+		if readOnly {
+			appWs, ok := ws.(*workspace.AppWorkspace)
+			if !ok || !appWs.App().SandboxClientConnected() {
+				return fmt.Errorf("--readonly requires the temenos sandbox, but the sandbox client is not connected (daemon down or sandbox disabled in config); start temenos or remove --readonly")
+			}
+		}
 
 		if sessionID != "" {
 			sess, err := resolveWorkspaceSessionID(cmd.Context(), ws, sessionID)
