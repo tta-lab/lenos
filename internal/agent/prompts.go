@@ -30,6 +30,7 @@ func SystemPrompt(
 	workingDir string,
 	provider, model string,
 	store *config.ConfigStore,
+	contextPaths []string,
 	opts ...prompt.Option,
 ) (string, error) {
 	cmds, err := loadCommandDocs()
@@ -59,11 +60,8 @@ func SystemPrompt(
 
 	identityBody := resolveIdentityBody(store)
 	wrapperOpts := append(opts, prompt.WithIdentityBody(identityBody))
-	// Include AgentCoder context paths (ExtraContextFiles flow through
-	// SetupAgents into AgentCoder.ContextPaths) so they render in the
-	// <memory> block of lenos.md.tpl.
-	if coder, ok := store.Config().Agents[config.AgentCoder]; ok && len(coder.ContextPaths) > 0 {
-		wrapperOpts = append(wrapperOpts, prompt.WithContextPaths(coder.ContextPaths))
+	if len(contextPaths) > 0 {
+		wrapperOpts = append(wrapperOpts, prompt.WithContextPaths(contextPaths))
 	}
 	lenosWrapper, err := buildLenosWrapper(ctx, provider, model, store, wrapperOpts...)
 	if err != nil {

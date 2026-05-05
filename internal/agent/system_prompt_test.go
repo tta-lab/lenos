@@ -162,7 +162,7 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 	store.Config().Options.Attribution = &config.Attribution{}
 	store.Config().Options.ContextPaths = nil
 
-	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store)
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestSystemPrompt_AgentMode_RendersAgentBody(t *testing.T) {
 	}
 	store.Overrides().AgentContextFile = agentFile
 
-	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store)
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestSystemPrompt_AgentMode_FrontmatterStripped(t *testing.T) {
 	}
 	store.Overrides().AgentContextFile = agentFile
 
-	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store)
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +265,8 @@ func TestSystemPrompt_ExtraContextFilesStillInMemory(t *testing.T) {
 	store.Overrides().ExtraContextFiles = []string{extraFile}
 	store.SetupAgents()
 
-	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store)
+	cp := getCoderContextPaths(store)
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, cp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +309,8 @@ func TestSystemPrompt_AgentMode_ExtraContextFilesStillInMemory(t *testing.T) {
 	store.Overrides().ExtraContextFiles = []string{extraFile}
 	store.SetupAgents()
 
-	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store)
+	cp := getCoderContextPaths(store)
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, cp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,5 +323,100 @@ func TestSystemPrompt_AgentMode_ExtraContextFilesStillInMemory(t *testing.T) {
 	}
 	if !strings.Contains(got, "<memory>") {
 		t.Errorf("extra context files should be in <memory> block")
+	}
+}
+
+func TestStripYAMLFrontmatter_EmptyString(t *testing.T) {
+	got := stripYAMLFrontmatter("")
+	if got != "" {
+		t.Errorf("stripYAMLFrontmatter('') = %q, want %q", got, "")
+	}
+}
+
+func TestSystemPrompt_MultipleExtraContextFiles(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	extra1 := filepath.Join(dataDir, "extra1.md")
+	extra2 := filepath.Join(dataDir, "extra2.md")
+	if err := os.WriteFile(extra1, []byte("# Extra 1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(extra2, []byte("# Extra 2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store.Overrides().ExtraContextFiles = []string{extra1, extra2}
+	store.SetupAgents()
+
+	cp := getCoderContextPaths(store)
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, cp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(got, "Extra 1") {
+		t.Errorf("extra context file 1 should appear in output")
+	}
+	if !strings.Contains(got, "Extra 2") {
+		t.Errorf("extra context file 2 should appear in output")
+	}
+}
+
+func TestSystemPrompt_ZeroExtraContextFiles(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+	store.SetupAgents()
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
+		t.Errorf("default mode should contain coder identity even without extra context")
+	}
+}
+
+func TestResolveIdentityBody_ReadErrorFallsBackToEmbedded(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	// Point to a nonexistent file — should fall back to embedded coder.md.
+	store.Overrides().AgentContextFile = filepath.Join(dataDir, "nonexistent.md")
+
+	body := resolveIdentityBody(store)
+	if !strings.Contains(body, "You are Lenos, a powerful AI Assistant") {
+		t.Errorf("read-error fallback should contain embedded coder identity, got:\n%s", body)
 	}
 }

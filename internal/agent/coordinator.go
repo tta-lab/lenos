@@ -139,12 +139,14 @@ func NewCoordinator(
 	})
 
 	// Build system prompt: bash-first base + cmd-git.tpl + lenos.md.tpl (universal rules + identity body + memory tails).
+	contextPaths := getCoderContextPaths(c.cfg)
 	c.systemPrompt, err = SystemPrompt(
 		ctx,
 		c.cfg.WorkingDir(),
 		large.Model.Provider(),
 		large.Model.Model(),
 		c.cfg,
+		contextPaths,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build system prompt: %w", err)
@@ -895,12 +897,14 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 
 	// Rebuild the system prompt — the lenos wrapper can vary by
 	// provider/model — and push it onto the agent.
+	contextPaths := getCoderContextPaths(c.cfg)
 	sp, err := SystemPrompt(
 		ctx,
 		c.cfg.WorkingDir(),
 		large.Model.Provider(),
 		large.Model.Model(),
 		c.cfg,
+		contextPaths,
 	)
 	if err != nil {
 		return fmt.Errorf("rebuild system prompt: %w", err)
@@ -958,6 +962,16 @@ func resolveSandbox(p *bool) bool {
 		return true
 	}
 	return *p
+}
+
+// getCoderContextPaths returns the context paths from the coder agent config.
+// These are populated by SetupAgents with ExtraContextFiles from --context-file
+// and global context paths from config.
+func getCoderContextPaths(store *config.ConfigStore) []string {
+	if coder, ok := store.Config().Agents[config.AgentCoder]; ok {
+		return coder.ContextPaths
+	}
+	return nil
 }
 
 func agentNameOr(name string) string {

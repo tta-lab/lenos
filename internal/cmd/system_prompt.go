@@ -8,8 +8,8 @@ import (
 )
 
 // systemPromptCmd dumps the fully-resolved system prompt currently sent to
-// the model. Useful for verifying the bash-first protocol + few-shot
-// examples are actually reaching the LLM.
+// the model. Useful for verifying the identity placement — agent body in
+// identity slot, not in <memory>.
 var systemPromptCmd = &cobra.Command{
 	Use:   "system-prompt",
 	Short: "Print the fully-resolved system prompt sent to the model",

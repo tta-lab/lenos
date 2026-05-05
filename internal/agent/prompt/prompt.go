@@ -198,7 +198,20 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	cfg := store.Config()
 	contextPaths := cfg.Options.ContextPaths
 	if len(p.contextPaths) > 0 {
-		contextPaths = append(cfg.Options.ContextPaths, p.contextPaths...)
+		// Merge global and per-prompter paths, deduplicating by lowercased
+		// expanded path so the same file doesn't render twice in <memory>.
+		seen := make(map[string]struct{}, len(contextPaths)+len(p.contextPaths))
+		merged := make([]string, 0, len(contextPaths)+len(p.contextPaths))
+		for _, pth := range append(contextPaths, p.contextPaths...) {
+			expanded := expandPath(pth, store)
+			key := strings.ToLower(expanded)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			merged = append(merged, pth)
+		}
+		contextPaths = merged
 	}
 	for _, pth := range contextPaths {
 		expanded := expandPath(pth, store)
