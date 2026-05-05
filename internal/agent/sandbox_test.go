@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,11 +39,17 @@ func TestBuildAllowedPaths(t *testing.T) {
 
 		ctx := context.Background()
 		paths := BuildAllowedPaths(ctx, worktreeDir, AccessModeRW)
-		// Should have cwd + git dir
-		require.GreaterOrEqual(t, len(paths), 2)
-		// Last element should be the git dir, not read-only
-		gitPath := paths[len(paths)-1]
-		require.Contains(t, gitPath.Path, ".git")
+		// Should have cwd + git dir + sessions carve-out
+		require.GreaterOrEqual(t, len(paths), 3)
+		// Find the git dir entry (not necessarily last — sessions carve-out is appended after)
+		var gitPath *client.AllowedPath
+		for i := range paths {
+			if strings.Contains(paths[i].Path, ".git") && !strings.Contains(paths[i].Path, ".lenos") {
+				gitPath = &paths[i]
+				break
+			}
+		}
+		require.NotNil(t, gitPath, "git-common-dir should appear in paths")
 		require.False(t, gitPath.ReadOnly)
 	})
 
@@ -85,6 +92,55 @@ func TestBuildAllowedPaths(t *testing.T) {
 			}
 		}
 		require.Equal(t, 1, cwdCount, "cwd should not appear twice")
+	})
+
+	t.Run("sessions carve-out always RW under RO cwd", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		ctx := context.Background()
+		paths := BuildAllowedPaths(ctx, tmpDir, AccessModeRO)
+
+		// cwd is RO
+		require.Equal(t, tmpDir, paths[0].Path)
+		require.True(t, paths[0].ReadOnly, "cwd should be RO")
+
+		// .lenos/sessions appears as RW carve-out
+		expected := filepath.Join(tmpDir, ".lenos", "sessions")
+		var carveOut *client.AllowedPath
+		for i := range paths {
+			if paths[i].Path == expected {
+				carveOut = &paths[i]
+				break
+			}
+		}
+		require.NotNil(t, carveOut, "cwd/.lenos/sessions should be in paths")
+		require.False(t, carveOut.ReadOnly, "sessions carve-out must be RW even when cwd is RO")
+	})
+
+	t.Run("sessions carve-out also present under RW cwd (idempotent / always-on)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		ctx := context.Background()
+		paths := BuildAllowedPaths(ctx, tmpDir, AccessModeRW)
+
+		expected := filepath.Join(tmpDir, ".lenos", "sessions")
+		found := false
+		for _, p := range paths {
+			if p.Path == expected {
+				found = true
+				require.False(t, p.ReadOnly, "sessions carve-out must be RW")
+			}
+		}
+		require.True(t, found, "sessions carve-out should appear regardless of access mode")
+	})
+
+	t.Run("sessions dir is created on host", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		ctx := context.Background()
+		_ = BuildAllowedPaths(ctx, tmpDir, AccessModeRO)
+
+		expected := filepath.Join(tmpDir, ".lenos", "sessions")
+		info, err := os.Stat(expected)
+		require.NoError(t, err, "BuildAllowedPaths should MkdirAll the sessions dir")
+		require.True(t, info.IsDir(), "sessions path should be a directory")
 	})
 }
 
