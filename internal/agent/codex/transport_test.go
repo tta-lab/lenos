@@ -63,7 +63,12 @@ func TestStripTransport_PassThroughForNonJSON(t *testing.T) {
 	defer srv.Close()
 
 	client := NewClient(nil)
-	resp, err := client.Post(srv.URL, "text/plain", strings.NewReader("hello world"))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, strings.NewReader("hello world"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "text/plain")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +96,7 @@ func TestStripTransport_EmptyBody(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := NewClient(nil)
-			req, err := http.NewRequest("POST", srv.URL, tt.body)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, tt.body)
 			if err != nil {
 				t.Fatal(err)
 			}

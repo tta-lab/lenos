@@ -378,17 +378,16 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 	}
 
 	providerType := providerCfg.Type
-	if providerType == "hyper" {
-		if strings.Contains(model.CatwalkCfg.ID, "claude") {
-			providerType = anthropic.Name
-		} else if strings.Contains(model.CatwalkCfg.ID, "gpt") {
-			providerType = openai.Name
-		} else if strings.Contains(model.CatwalkCfg.ID, "gemini") {
-			providerType = google.Name
-		} else {
-			providerType = openaicompat.Name
-		}
-	} else if providerType == codex.Name {
+	switch {
+	case providerType == "hyper" && strings.Contains(model.CatwalkCfg.ID, "claude"):
+		providerType = anthropic.Name
+	case providerType == "hyper" && strings.Contains(model.CatwalkCfg.ID, "gpt"):
+		providerType = openai.Name
+	case providerType == "hyper" && strings.Contains(model.CatwalkCfg.ID, "gemini"):
+		providerType = google.Name
+	case providerType == "hyper":
+		providerType = openaicompat.Name
+	case providerType == codex.Name:
 		providerType = openai.Name
 	}
 
