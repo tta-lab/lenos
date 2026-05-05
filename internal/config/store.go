@@ -84,13 +84,8 @@ func (s *ConfigStore) KnownProviders() []catwalk.Provider {
 func (s *ConfigStore) SetupAgents() {
 	s.config.SetupAgents()
 	if coder, ok := s.config.Agents[AgentCoder]; ok {
-		paths := []string{}
-		if s.overrides.AgentContextFile != "" {
-			paths = append(paths, s.overrides.AgentContextFile)
-		}
-		paths = append(paths, s.overrides.ExtraContextFiles...)
-		if len(paths) > 0 {
-			coder.ContextPaths = append(paths, coder.ContextPaths...)
+		if len(s.overrides.ExtraContextFiles) > 0 {
+			coder.ContextPaths = append(s.overrides.ExtraContextFiles, coder.ContextPaths...)
 			s.config.Agents[AgentCoder] = coder
 		}
 	}
