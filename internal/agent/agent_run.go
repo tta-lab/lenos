@@ -153,7 +153,7 @@ runLoopReentry:
 		postStepHook = func(stepIdx int, u fantasy.Usage) {
 			payload, err := hooks.MarshalPostStep(stepIdx, sessionID, modelID, contextWindow, u, time.Now())
 			if err != nil {
-				slog.Warn("post_step: marshal envelope", "error", err)
+				slog.Warn("post_step: marshal envelope", "session", sessionID, "step", stepIdx, "error", err)
 				return
 			}
 			timeout := hookTimeout // capture at closure-execution time, before spawning goroutine
@@ -161,7 +161,7 @@ runLoopReentry:
 				hookCtx, cancel := context.WithTimeout(context.Background(), timeout)
 				defer cancel()
 				if err := runner.Run(hookCtx, payload); err != nil {
-					slog.Warn("post_step: runner failed", "error", err)
+					slog.Warn("post_step: runner failed", "session", sessionID, "step", stepIdx, "error", err)
 				}
 			}()
 		}

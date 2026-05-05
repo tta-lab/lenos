@@ -1,4 +1,3 @@
-// Package hooks defines lifecycle hooks fired by the agent loop.
 package hooks
 
 import "context"

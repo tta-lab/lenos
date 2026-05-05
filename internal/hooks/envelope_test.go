@@ -77,24 +77,47 @@ func TestMarshalPostStep_RoundTrip(t *testing.T) {
 }
 
 func TestMarshalPostStep_ZeroContextWindow(t *testing.T) {
-	now := time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC)
-	u := fantasy.Usage{InputTokens: 100, OutputTokens: 50}
+	t.Run("no tokens", func(t *testing.T) {
+		now := time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC)
+		u := fantasy.Usage{InputTokens: 0, OutputTokens: 0}
 
-	data, err := MarshalPostStep(0, "sid", "model", 0, u, now)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
+		data, err := MarshalPostStep(0, "sid", "model", 0, u, now)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
 
-	var ev PostStepEvent
-	if err := json.Unmarshal(data, &ev); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if ev.ContextUsedPct != 0 {
-		t.Fatalf("context_used_pct = %f, want 0", ev.ContextUsedPct)
-	}
-	if ev.ContextRemainingPct != 0 {
-		t.Fatalf("context_remaining_pct = %f, want 0", ev.ContextRemainingPct)
-	}
+		var ev PostStepEvent
+		if err := json.Unmarshal(data, &ev); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if ev.ContextUsedPct != 0 {
+			t.Fatalf("context_used_pct = %f, want 0 (no tokens, no window)", ev.ContextUsedPct)
+		}
+		if ev.ContextRemainingPct != 0 {
+			t.Fatalf("context_remaining_pct = %f, want 0", ev.ContextRemainingPct)
+		}
+	})
+
+	t.Run("tokens no window", func(t *testing.T) {
+		now := time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC)
+		u := fantasy.Usage{InputTokens: 100, OutputTokens: 50}
+
+		data, err := MarshalPostStep(0, "sid", "model", 0, u, now)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+
+		var ev PostStepEvent
+		if err := json.Unmarshal(data, &ev); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if ev.ContextUsedPct != -1 {
+			t.Fatalf("context_used_pct = %f, want -1 (sentinel for meaningless pct)", ev.ContextUsedPct)
+		}
+		if ev.ContextRemainingPct != -1 {
+			t.Fatalf("context_remaining_pct = %f, want -1", ev.ContextRemainingPct)
+		}
+	})
 }
 
 func TestMarshalPostStep_TokenMath(t *testing.T) {

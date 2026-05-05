@@ -37,6 +37,11 @@ func MarshalPostStep(stepIdx int, sessionID, modelID string, contextWindow int, 
 	if contextWindow > 0 {
 		usedPct = float64(u.InputTokens+u.OutputTokens) / float64(contextWindow) * 100
 		remainingPct = 100 - usedPct
+	} else if contextWindow == 0 && (u.InputTokens > 0 || u.OutputTokens > 0) {
+		// contextWindow is zero but tokens were consumed — percentage is meaningless.
+		// Use -1 as a sentinel so consumers can distinguish "not available" from "truly 0%".
+		usedPct = -1
+		remainingPct = -1
 	}
 	ev := PostStepEvent{
 		Version:             1,

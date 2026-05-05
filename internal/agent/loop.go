@@ -53,8 +53,7 @@ type loopDeps struct {
 	onUsage func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool
 
 	// postStepHook is called after each step with the just-completed step's
-	// usage. Nil-safe: a nil value is a no-op. Errors must NOT abort the loop;
-	// callers handle their own logging.
+	// usage. Nil-safe: a nil value is a no-op.
 	postStepHook func(stepIdx int, u fantasy.Usage)
 }
 

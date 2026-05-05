@@ -66,17 +66,13 @@ The `[hooks].post_step` interface is a stable contract. Lenos commits to:
    failure. There is no retry, no circuit breaker, and no ordering guarantee
    between hook completion and the next agent step. Consumers must be cheap
    and idempotent.
-
-## Failure semantics
-
-- 5-second timeout per invocation.
-- Errors are logged at WARN; the agent loop never aborts on hook failure.
-- No retry, no circuit breaker. Consumers should fail fast and be cheap.
-- When `post_step` is empty or `hooks` is absent, no hook is invoked.
-
-The hook fires only after a model stream completes successfully. If a step
-fails (network error, auth error, rate-limit, provider error), `runLoop`
-returns immediately and `post_step` is NOT invoked for that step. Consumers
-may observe gaps in `step_index` sequence — these correspond to failed steps.
-Consumers that need to detect step failures should consult the lenos transcript
-or session message log, not the hook stream.
+   
+   The hook fires only after a model stream completes successfully. If a step
+   fails (network error, auth error, rate-limit, provider error), `runLoop`
+   returns immediately and `post_step` is NOT invoked for that step. Consumers
+   may observe gaps in `step_index` sequence — these correspond to failed
+   steps. Consumers that need to detect step failures should consult the lenos
+   transcript or session message log, not the hook stream.
+   
+   When `post_step` is empty or `hooks` is absent, no hook is invoked — the
+   agent loop pays nothing.

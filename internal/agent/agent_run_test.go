@@ -257,21 +257,28 @@ func TestCombineQueuedCalls_SingleCall(t *testing.T) {
 
 // recRunner records every Run call's payload for assertions.
 type recRunner struct {
-	mu    sync.Mutex
-	calls [][]byte
-	wg    sync.WaitGroup
+	mu      sync.Mutex
+	calls   [][]byte
+	started chan struct{}
+}
+
+func newRecRunner(expected int) *recRunner {
+	return &recRunner{started: make(chan struct{}, expected)}
 }
 
 func (r *recRunner) Run(_ context.Context, p []byte) error {
-	r.wg.Add(1)
-	defer r.wg.Done()
+	r.started <- struct{}{}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.calls = append(r.calls, append([]byte(nil), p...))
+	r.mu.Unlock()
 	return nil
 }
 
-func (r *recRunner) Wait() { r.wg.Wait() }
+func (r *recRunner) Wait(expected int) {
+	for i := 0; i < expected; i++ {
+		<-r.started
+	}
+}
 
 // errRunner always returns an error.
 type errRunner struct{}
@@ -295,7 +302,7 @@ func TestRun_HookRunnerFiresPerStep(t *testing.T) {
 	sess, err := env.sessions.Create(t.Context(), "hook test")
 	require.NoError(t, err)
 
-	rec := &recRunner{}
+	rec := newRecRunner(2) // 2 steps: echo hi + exit
 	bm := &scriptedModel{emits: []string{"echo hi", "exit"}}
 	agent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
@@ -309,8 +316,8 @@ func TestRun_HookRunnerFiresPerStep(t *testing.T) {
 	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
 	require.NoError(t, err)
 
-	// Wait for hook goroutines to complete
-	rec.Wait()
+	// Wait for hook goroutines to complete (deterministic: blocks until N Run calls)
+	rec.Wait(2)
 
 	rec.mu.Lock()
 	require.Len(t, rec.calls, 2, "hook should fire 2 times (exec + exit)")
