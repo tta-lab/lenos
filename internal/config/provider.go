@@ -18,6 +18,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/catwalk/pkg/embedded"
 	"github.com/charmbracelet/x/etag"
+	"github.com/tta-lab/lenos/internal/agent/codex"
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/home"
@@ -181,6 +182,18 @@ func Providers(cfg *Config) ([]catwalk.Provider, error) {
 				return
 			}
 			providers.Append(item)
+		})
+
+		// Codex provider definition is embedded — no remote fetch needed (vs Hyper which
+		// pulls a live provider list from hyper.charm.land and Catwalk which pulls from
+		// charm.land/catwalk). The login flow (cmd/login.go::loginCodex) handles auth;
+		// this just makes the provider + its model list visible in the model picker so
+		// users can select Codex models the same way they pick Catwalk-listed models.
+		wg.Go(func() {
+			if customProvidersOnly {
+				return
+			}
+			providers.Append(codex.Embedded())
 		})
 
 		wg.Wait()
