@@ -125,6 +125,8 @@ func hoistSystemToInstructions(body []byte) []byte {
 		}
 		text, ok := extractTextContent(item["content"])
 		if !ok {
+			slog.Debug("codex transport: found developer/system item but failed to extract text content",
+				"role", role, "index", i)
 			continue
 		}
 		instructions = text
@@ -169,6 +171,10 @@ func extractTextContent(raw json.RawMessage) (string, bool) {
 		return "", false
 	}
 	// Try string form first.
+	// Guard: content: null unmarshals as "" but should NOT be treated as valid text.
+	if bytes.Equal(raw, []byte("null")) {
+		return "", false
+	}
 	var s string
 	if err := json.Unmarshal(raw, &s); err == nil {
 		return s, true
@@ -179,6 +185,7 @@ func extractTextContent(raw json.RawMessage) (string, bool) {
 		return "", false
 	}
 	var sb strings.Builder
+	hasContent := false
 	for _, p := range parts {
 		var typ string
 		if err := json.Unmarshal(p["type"], &typ); err != nil {
@@ -194,8 +201,9 @@ func extractTextContent(raw json.RawMessage) (string, bool) {
 			continue
 		}
 		sb.WriteString(t)
+		hasContent = true
 	}
-	if sb.Len() == 0 {
+	if !hasContent {
 		return "", false
 	}
 	return sb.String(), true

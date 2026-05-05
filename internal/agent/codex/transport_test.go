@@ -257,6 +257,50 @@ func TestHoistSystemToInstructions_InvalidJSON_Passthrough(t *testing.T) {
 	}
 }
 
+func TestHoistSystemToInstructions_NullContent_Passthrough(t *testing.T) {
+	body := []byte(`{"input":[{"role":"developer","content":null},{"role":"user","content":"hi"}]}`)
+	out := hoistSystemToInstructions(body)
+	if !bytes.Equal(out, body) {
+		t.Errorf("expected passthrough on null content; body changed:\nbefore: %s\nafter:  %s", body, out)
+	}
+}
+
+func TestHoistSystemToInstructions_EmptyStringContent_Hoisted(t *testing.T) {
+	body := []byte(`{"input":[{"role":"developer","content":""},{"role":"user","content":"hi"}]}`)
+	out := hoistSystemToInstructions(body)
+	var got map[string]any
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got["instructions"] != "" {
+		t.Errorf("expected instructions=\"\", got %#v", got["instructions"])
+	}
+	input := got["input"].([]any)
+	if len(input) != 1 {
+		t.Errorf("expected developer item removed; input len=%d", len(input))
+	}
+}
+
+func TestHoistSystemToInstructions_EmptyInputArray_Passthrough(t *testing.T) {
+	body := []byte(`{"input":[],"model":"gpt-5.5"}`)
+	out := hoistSystemToInstructions(body)
+	if !bytes.Equal(out, body) {
+		t.Errorf("expected passthrough on empty input array; body changed:\nbefore: %s\nafter:  %s", body, out)
+	}
+}
+
+func TestHoistSystemToInstructions_ListContentTypeText_Hoisted(t *testing.T) {
+	body := []byte(`{"input":[{"role":"developer","content":[{"type":"text","text":"sys"}]},{"role":"user","content":"hi"}]}`)
+	out := hoistSystemToInstructions(body)
+	var got map[string]any
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got["instructions"] != "sys" {
+		t.Errorf("expected instructions=\"sys\", got %#v", got["instructions"])
+	}
+}
+
 func TestHoistSystemToInstructions_NoInputField_Passthrough(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.5","store":false}`)
 	out := hoistSystemToInstructions(body)
