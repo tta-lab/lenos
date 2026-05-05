@@ -51,6 +51,10 @@ type loopDeps struct {
 	// onUsage is called after each step with usage metrics.
 	// Return true to request an early stop with stopShouldSummarize.
 	onUsage func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool
+
+	// postStepHook is called after each step with the just-completed step's
+	// usage. Nil-safe: a nil value is a no-op.
+	postStepHook func(stepIdx int, u fantasy.Usage)
 }
 
 // stopReason explains why runLoop returned. The caller maps it to the right
@@ -95,6 +99,9 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopCanceled, streamErr
 			}
 			return stopError, streamErr
+		}
+		if deps.postStepHook != nil {
+			deps.postStepHook(step, usage)
 		}
 		if deps.onUsage != nil {
 			if deps.onUsage(step, usage, meta) {

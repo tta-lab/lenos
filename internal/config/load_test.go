@@ -35,6 +35,23 @@ func TestConfig_LoadFromBytes(t *testing.T) {
 	require.Equal(t, "https://api.openai.com/v2", pc.BaseURL)
 }
 
+func TestConfig_LoadHooks(t *testing.T) {
+	t.Run("hooks present", func(t *testing.T) {
+		data := []byte(`{"hooks": {"post_step": "echo hi"}}`)
+		cfg, err := loadFromBytes([][]byte{data})
+		require.NoError(t, err)
+		require.NotNil(t, cfg.Hooks)
+		require.Equal(t, "echo hi", cfg.Hooks.PostStep)
+	})
+
+	t.Run("hooks absent", func(t *testing.T) {
+		data := []byte(`{"providers": {"openai": {"api_key": "key"}}}`)
+		cfg, err := loadFromBytes([][]byte{data})
+		require.NoError(t, err)
+		require.Nil(t, cfg.Hooks)
+	})
+}
+
 // testStore wraps a Config in a minimal ConfigStore for testing.
 func testStore(cfg *Config) *ConfigStore {
 	return &ConfigStore{config: cfg}

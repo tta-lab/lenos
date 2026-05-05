@@ -78,6 +78,10 @@
         "tools": {
           "$ref": "#/$defs/Tools",
           "description": "Tool configurations"
+        },
+        "hooks": {
+          "$ref": "#/$defs/Hooks",
+          "description": "Lifecycle hooks for external integration"
         }
       },
       "additionalProperties": false,
@@ -85,6 +89,16 @@
       "required": [
         "tools"
       ]
+    },
+    "Hooks": {
+      "properties": {
+        "post_step": {
+          "type": "string",
+          "description": "Shell command run after each model step; stdin = JSON envelope; env inherited from process"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
     },
     "Map[string,github.com/tta-lab/lenos/internal/config.ProviderConfig]": {
       "properties": {},

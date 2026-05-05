@@ -262,6 +262,12 @@ type Tools struct {
 	Grep ToolGrep `json:"grep,omitzero"`
 }
 
+// Hooks holds lifecycle hook configurations for external integration.
+// Each hook is a shell command run at a specific lifecycle point.
+type Hooks struct {
+	PostStep string `json:"post_step,omitempty" jsonschema:"description=Shell command run after each model step; stdin = JSON envelope; env inherited from process"`
+}
+
 type ToolLs struct {
 	MaxDepth *int `json:"max_depth,omitempty" jsonschema:"description=Maximum depth for the ls tool,default=0,example=10"`
 	MaxItems *int `json:"max_items,omitempty" jsonschema:"description=Maximum number of items to return for the ls tool,default=1000,example=100"`
@@ -299,6 +305,8 @@ type Config struct {
 	Permissions *Permissions `json:"permissions,omitempty" jsonschema:"description=Permission settings for tool usage"`
 
 	Tools Tools `json:"tools,omitzero" jsonschema:"description=Tool configurations"`
+
+	Hooks *Hooks `json:"hooks,omitempty" jsonschema:"description=Lifecycle hooks for external integration"`
 
 	Agents map[string]Agent `json:"-"`
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
+	"github.com/tta-lab/lenos/internal/hooks"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/stringext"
@@ -33,6 +34,10 @@ func buildHistory(msgs []message.Message) []fantasy.Message {
 }
 
 const queuedPromptSep = "\n\n"
+
+// hookTimeout is the per-invocation deadline for post_step hooks. Var (not
+// const) so tests can shrink it via export_test.go.
+var hookTimeout = 5 * time.Second
 
 // errorFinishFor returns an appropriate FinishReason and user-facing message
 // for a run error. This provides actionable feedback (e.g. "enable Copilot
@@ -135,20 +140,47 @@ runLoopReentry:
 
 	largeModel := a.largeModel.Get()
 	rec := call.Recorder
+
+	// postStepHook builds and fires the configured post_step hook, if any.
+	// Runs in a goroutine with hookTimeout deadline; errors are logged at
+	// WARN but never abort the loop.
+	var postStepHook func(stepIdx int, u fantasy.Usage)
+	if a.hookRunner != nil {
+		runner := a.hookRunner
+		sessionID := call.SessionID
+		modelID := largeModel.Model.Model()
+		contextWindow := int(largeModel.CatwalkCfg.ContextWindow)
+		postStepHook = func(stepIdx int, u fantasy.Usage) {
+			payload, err := hooks.MarshalPostStep(stepIdx, sessionID, modelID, contextWindow, u, time.Now())
+			if err != nil {
+				slog.Warn("post_step: marshal envelope", "session", sessionID, "step", stepIdx, "error", err)
+				return
+			}
+			timeout := hookTimeout // capture at closure-execution time, before spawning goroutine
+			go func() {
+				hookCtx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
+				if err := runner.Run(hookCtx, payload); err != nil {
+					slog.Warn("post_step: runner failed", "session", sessionID, "step", stepIdx, "error", err)
+				}
+			}()
+		}
+	}
 	if rec == nil {
 		rec = a.recorder
 	}
 	deps := loopDeps{
-		model:      largeModel.Model,
-		provOpts:   call.ProviderOptions,
-		messages:   a.messages,
-		runner:     resolveRunner(call),
-		recorder:   transcript.NewLoggingRecorder(rec),
-		sessionID:  call.SessionID,
-		sysPrompt:  a.systemPrompt.Get(),
-		providerID: call.ProviderID,
-		env:        call.Env,
-		paths:      call.AllowedPaths,
+		model:        largeModel.Model,
+		provOpts:     call.ProviderOptions,
+		messages:     a.messages,
+		runner:       resolveRunner(call),
+		recorder:     transcript.NewLoggingRecorder(rec),
+		sessionID:    call.SessionID,
+		sysPrompt:    a.systemPrompt.Get(),
+		providerID:   call.ProviderID,
+		env:          call.Env,
+		paths:        call.AllowedPaths,
+		postStepHook: postStepHook,
 		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) bool {
 			s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
 			if !ok {
