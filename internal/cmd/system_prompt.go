@@ -8,17 +8,26 @@ import (
 )
 
 // systemPromptCmd dumps the fully-resolved system prompt currently sent to
-// the model. Useful for verifying the bash-first protocol + few-shot
-// examples are actually reaching the LLM.
+// the model. Useful for verifying the identity placement — agent body in
+// identity slot, not in <memory>.
 var systemPromptCmd = &cobra.Command{
 	Use:   "system-prompt",
 	Short: "Print the fully-resolved system prompt sent to the model",
 	Long: `system-prompt prints the system prompt that the agent coordinator currently
 pushes onto the model on every turn. Concatenates the bash-first base
-prompt (env + output protocol + few-shot examples + available commands), the
-git section (status + attribution), and the coder post-template.`,
+prompt, git status/attribution, and the identity wrapper (universal rules +
+identity body + memory tails).
+
+Flags:
+  --agent, -a      Agent identity file name (e.g. coder, pr-review-lead).
+                   Defaults to "coder". The agent body is injected into the
+                   identity slot at the prompt top — NOT in <memory>.
+  --context-file, -f  Extra context file (repeatable). Injected into the
+                   <memory> block at the prompt tail.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ws, cleanup, err := setupWorkspace(cmd, "", nil, false)
+		agentName, _ := cmd.Flags().GetString("agent")
+		contextFiles, _ := cmd.Flags().GetStringArray("context-file")
+		ws, cleanup, err := setupWorkspace(cmd, agentName, contextFiles, false)
 		if err != nil {
 			return err
 		}
@@ -35,4 +44,9 @@ git section (status + attribution), and the coder post-template.`,
 		fmt.Fprint(cmd.OutOrStdout(), coord.SystemPrompt())
 		return nil
 	},
+}
+
+func init() {
+	systemPromptCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder, pr-review-lead)")
+	systemPromptCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file (repeatable)")
 }

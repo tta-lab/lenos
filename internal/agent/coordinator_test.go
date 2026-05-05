@@ -174,7 +174,7 @@ func TestSystemPrompt_BuildsNonEmptyPrompt(t *testing.T) {
 	cfg, err := config.Init(dataDir, "", false)
 	require.NoError(t, err)
 
-	prompt, err := SystemPrompt(context.Background(), dataDir, "anthropic", "claude-sonnet-4-6", cfg)
+	prompt, err := SystemPrompt(context.Background(), dataDir, "anthropic", "claude-sonnet-4-6", cfg, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, prompt, "SystemPrompt must produce non-empty content — empty means no model instructions")
 

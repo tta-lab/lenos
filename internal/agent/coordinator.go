@@ -21,7 +21,6 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/codex"
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/log"
@@ -139,14 +138,15 @@ func NewCoordinator(
 		Recorder:             recorder,
 	})
 
-	// Build system prompt: bash-first base (env + output protocol + available commands) + cmd-git.tpl (git status + attribution) + coder post-template (lenos style and conventions).
+	// Build system prompt: bash-first base + cmd-git.tpl + lenos.md.tpl (universal rules + identity body + memory tails).
+	contextPaths := getCoderContextPaths(c.cfg)
 	c.systemPrompt, err = SystemPrompt(
 		ctx,
 		c.cfg.WorkingDir(),
 		large.Model.Provider(),
 		large.Model.Model(),
 		c.cfg,
-		prompt.WithContextPaths(c.cfg.Config().Agents[config.AgentCoder].ContextPaths),
+		contextPaths,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build system prompt: %w", err)
@@ -895,15 +895,16 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 	}
 	c.currentAgent.SetModels(large, small)
 
-	// Rebuild the system prompt — the coder post-template can vary by
+	// Rebuild the system prompt — the lenos wrapper can vary by
 	// provider/model — and push it onto the agent.
+	contextPaths := getCoderContextPaths(c.cfg)
 	sp, err := SystemPrompt(
 		ctx,
 		c.cfg.WorkingDir(),
 		large.Model.Provider(),
 		large.Model.Model(),
 		c.cfg,
-		prompt.WithContextPaths(c.cfg.Config().Agents[config.AgentCoder].ContextPaths),
+		contextPaths,
 	)
 	if err != nil {
 		return fmt.Errorf("rebuild system prompt: %w", err)
@@ -961,6 +962,16 @@ func resolveSandbox(p *bool) bool {
 		return true
 	}
 	return *p
+}
+
+// getCoderContextPaths returns the context paths from the coder agent config.
+// These are populated by SetupAgents with ExtraContextFiles from --context-file
+// and global context paths from config.
+func getCoderContextPaths(store *config.ConfigStore) []string {
+	if coder, ok := store.Config().Agents[config.AgentCoder]; ok {
+		return coder.ContextPaths
+	}
+	return nil
 }
 
 func agentNameOr(name string) string {

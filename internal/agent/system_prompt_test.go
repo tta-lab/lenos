@@ -1,11 +1,14 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/config"
 )
 
 func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
@@ -81,6 +84,56 @@ func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {
 	assert.Contains(t, got, "web search <query>")
 }
 
+func TestStripYAMLFrontmatter_FrontmatterStripped(t *testing.T) {
+	input := "---\nname: coder\nrole: worker\n---\n# Body\nContent"
+	want := "# Body\nContent"
+	got := stripYAMLFrontmatter(input)
+	if got != want {
+		t.Errorf("stripYAMLFrontmatter() = %q, want %q", got, want)
+	}
+}
+
+func TestStripYAMLFrontmatter_NoFrontmatterPreserved(t *testing.T) {
+	input := "# Just body\nNo frontmatter"
+	got := stripYAMLFrontmatter(input)
+	if got != input {
+		t.Errorf("stripYAMLFrontmatter() = %q, want %q", got, input)
+	}
+}
+
+func TestStripYAMLFrontmatter_UnterminatedPreserved(t *testing.T) {
+	input := "---\nname: coder\n---incomplete"
+	got := stripYAMLFrontmatter(input)
+	if got != input {
+		t.Errorf("stripYAMLFrontmatter() = %q, want %q", got, input)
+	}
+}
+
+func TestStripYAMLFrontmatter_FrontmatterOnly(t *testing.T) {
+	input := "---\nname: coder\n---"
+	got := stripYAMLFrontmatter(input)
+	if got != "" {
+		t.Errorf("stripYAMLFrontmatter() = %q, want %q", got, "")
+	}
+}
+
+func TestStripYAMLFrontmatter_FrontmatterWithEmptyBody(t *testing.T) {
+	input := "---\nname: coder\n---\n"
+	got := stripYAMLFrontmatter(input)
+	if got != "" {
+		t.Errorf("stripYAMLFrontmatter() = %q, want %q", got, "")
+	}
+}
+
+func TestStripYAMLFrontmatter_InnerDashesNotStripped(t *testing.T) {
+	input := "# Body with --- inside\nNot leading frontmatter"
+	want := input
+	got := stripYAMLFrontmatter(input)
+	if got != want {
+		t.Errorf("stripYAMLFrontmatter() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildBaseSystemPrompt_NoCommandSectionWhenEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -92,4 +145,278 @@ func TestBuildBaseSystemPrompt_NoCommandSectionWhenEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(got, "# Available Commands"),
 		"empty Commands slice should suppress the heading")
+}
+
+func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
+		t.Errorf("default mode should contain coder identity")
+	}
+}
+
+func TestSystemPrompt_AgentMode_RendersAgentBody(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	agentContent := "You are a PR Review Lead.\n\nFocus on code quality."
+	agentFile := filepath.Join(dataDir, "reviewer.md")
+	if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store.Overrides().AgentContextFile = agentFile
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(got, "You are a PR Review Lead") {
+		t.Errorf("agent mode should contain agent body, got substring")
+	}
+	if strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
+		t.Errorf("agent mode should NOT contain coder identity when agent file given")
+	}
+}
+
+func TestSystemPrompt_AgentMode_FrontmatterStripped(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	agentContent := "---\nname: reviewer\nrole: code-review\n---\n# Body\nActual content"
+	agentFile := filepath.Join(dataDir, "reviewer.md")
+	if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store.Overrides().AgentContextFile = agentFile
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(got, "name: reviewer") {
+		t.Errorf("frontmatter should be stripped")
+	}
+	if !strings.Contains(got, "Actual content") {
+		t.Errorf("agent body content should appear after frontmatter strip")
+	}
+}
+
+func TestSystemPrompt_ExtraContextFilesStillInMemory(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	extraContent := "# Extra note\nThis should be in <memory>"
+	extraFile := filepath.Join(dataDir, "extra.md")
+	if err := os.WriteFile(extraFile, []byte(extraContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store.Overrides().ExtraContextFiles = []string{extraFile}
+	store.SetupAgents()
+
+	cp := getCoderContextPaths(store)
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, cp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(got, "<memory>") {
+		t.Errorf("extra context files should be in <memory> block")
+	}
+	if !strings.Contains(got, "Extra note") {
+		t.Errorf("extra context file content should appear in output")
+	}
+}
+
+func TestSystemPrompt_AgentMode_ExtraContextFilesStillInMemory(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	agentContent := "You are a reviewer.\n---\nbody"
+	agentFile := filepath.Join(dataDir, "reviewer.md")
+	if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store.Overrides().AgentContextFile = agentFile
+
+	extraContent := "# Context\nProject details"
+	extraFile := filepath.Join(dataDir, "extra.md")
+	if err := os.WriteFile(extraFile, []byte(extraContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store.Overrides().ExtraContextFiles = []string{extraFile}
+	store.SetupAgents()
+
+	cp := getCoderContextPaths(store)
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, cp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(got, "You are a reviewer") {
+		t.Errorf("agent body should appear in output")
+	}
+	if !strings.Contains(got, "Context") {
+		t.Errorf("extra context file should appear in output")
+	}
+	if !strings.Contains(got, "<memory>") {
+		t.Errorf("extra context files should be in <memory> block")
+	}
+}
+
+func TestStripYAMLFrontmatter_EmptyString(t *testing.T) {
+	got := stripYAMLFrontmatter("")
+	if got != "" {
+		t.Errorf("stripYAMLFrontmatter('') = %q, want %q", got, "")
+	}
+}
+
+func TestSystemPrompt_MultipleExtraContextFiles(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	extra1 := filepath.Join(dataDir, "extra1.md")
+	extra2 := filepath.Join(dataDir, "extra2.md")
+	if err := os.WriteFile(extra1, []byte("# Extra 1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(extra2, []byte("# Extra 2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store.Overrides().ExtraContextFiles = []string{extra1, extra2}
+	store.SetupAgents()
+
+	cp := getCoderContextPaths(store)
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, cp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(got, "Extra 1") {
+		t.Errorf("extra context file 1 should appear in output")
+	}
+	if !strings.Contains(got, "Extra 2") {
+		t.Errorf("extra context file 2 should appear in output")
+	}
+}
+
+func TestSystemPrompt_ZeroExtraContextFiles(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+	store.SetupAgents()
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
+		t.Errorf("default mode should contain coder identity even without extra context")
+	}
+}
+
+func TestResolveIdentityBody_ReadErrorFallsBackToEmbedded(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	// Point to a nonexistent file — should fall back to embedded coder.md.
+	store.Overrides().AgentContextFile = filepath.Join(dataDir, "nonexistent.md")
+
+	body := resolveIdentityBody(store)
+	if !strings.Contains(body, "You are Lenos, a powerful AI Assistant") {
+		t.Errorf("read-error fallback should contain embedded coder identity, got:\n%s", body)
+	}
 }

@@ -233,15 +233,16 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 
 	cfg := store.Config()
 
-	// Resolve agent identity file if specified.
-	if agentName != "" {
-		agentContextFile, resolveErr := resolveAgentFile(agentName, cfg.Options.AgentPaths)
-		if resolveErr != nil {
-			return nil, nil, resolveErr
-		}
-		store.Overrides().AgentName = agentName
-		store.Overrides().AgentContextFile = agentContextFile
+	// Default agent identity to "coder" when none specified via --agent.
+	if agentName == "" {
+		agentName = "coder"
 	}
+	agentContextFile, resolveErr := resolveAgentFile(agentName, cfg.Options.AgentPaths)
+	if resolveErr != nil {
+		return nil, nil, resolveErr
+	}
+	store.Overrides().AgentName = agentName
+	store.Overrides().AgentContextFile = agentContextFile
 
 	// Validate and store extra context files.
 	for _, cf := range contextFiles {
@@ -375,7 +376,10 @@ func ResolveCwd(cmd *cobra.Command) (string, error) {
 }
 
 // resolveAgentFile searches agent_paths for an agent.md file matching the given name.
-// Returns the absolute path of the first match or an error.
+// Returns:
+//   - (path, nil) if the agent file is found on disk.
+//   - ("", nil) if name == "coder" and not found on disk (caller uses embedded fallback).
+//   - ("", err) for any other failure.
 func resolveAgentFile(agentName string, agentPaths []string) (string, error) {
 	filename := agentName + ".md"
 	var searched []string
@@ -392,6 +396,10 @@ func resolveAgentFile(agentName string, agentPaths []string) (string, error) {
 			}
 			return absPath, nil
 		}
+	}
+	if agentName == "coder" {
+		// Embedded fallback for the well-known default identity.
+		return "", nil
 	}
 	return "", fmt.Errorf("agent file %q not found in agent_paths: %v", filename, searched)
 }

@@ -149,14 +149,6 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 		t, _ := time.Parse("1/2/2006", "1/1/2025")
 		return t
 	}
-	prompt, err := coderPrompt(
-		prompt.WithTimeFunc(fixedTime),
-		prompt.WithPlatform("linux"),
-		prompt.WithWorkingDir(filepath.ToSlash(env.workingDir)),
-	)
-	if err != nil {
-		return nil, err
-	}
 	cfg, err := config.Init(env.workingDir, "", false)
 	if err != nil {
 		return nil, err
@@ -172,7 +164,18 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	// Clear some fields to avoid issues with VCR cassette matching.
 	cfg.Config().Options.ContextPaths = nil
 
-	systemPrompt, err := prompt.Build(context.TODO(), large.Provider(), large.Model(), cfg)
+	identityBody := stripYAMLFrontmatter(string(embeddedCoderMd))
+	lenosP, err := prompt.NewPrompt("lenos", string(lenosWrapperTmpl),
+		prompt.WithTimeFunc(fixedTime),
+		prompt.WithPlatform("linux"),
+		prompt.WithWorkingDir(filepath.ToSlash(env.workingDir)),
+		prompt.WithIdentityBody(identityBody),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	systemPrompt, err := lenosP.Build(context.TODO(), large.Provider(), large.Model(), cfg)
 	if err != nil {
 		return nil, err
 	}
