@@ -18,6 +18,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
+	"github.com/tta-lab/lenos/internal/agent/codex"
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/agent/prompt"
@@ -387,6 +388,8 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 		} else {
 			providerType = openaicompat.Name
 		}
+	} else if providerType == codex.Name {
+		providerType = openai.Name
 	}
 
 	switch providerType {
@@ -617,6 +620,24 @@ func (c *coordinator) buildOpenaiProvider(baseURL, apiKey string, headers map[st
 	return openai.New(opts...)
 }
 
+func (c *coordinator) buildCodexProvider(baseURL, apiKey string, headers map[string]string) (fantasy.Provider, error) {
+	opts := []openai.Option{
+		openai.WithAPIKey(apiKey),
+		openai.WithBaseURL(baseURL),
+		openai.WithUseResponsesAPI(),
+	}
+	// Use the strip-transport wrapper to defend against max_output_tokens leaks.
+	var inner http.RoundTripper
+	if c.cfg.Config().Options.Debug {
+		inner = log.NewHTTPClient().Transport
+	}
+	opts = append(opts, openai.WithHTTPClient(codex.NewClient(inner)))
+	if len(headers) > 0 {
+		opts = append(opts, openai.WithHeaders(headers))
+	}
+	return openai.New(opts...)
+}
+
 func (c *coordinator) buildOpenrouterProvider(_, apiKey string, headers map[string]string) (fantasy.Provider, error) {
 	opts := []openrouter.Option{
 		openrouter.WithAPIKey(apiKey),
@@ -821,6 +842,8 @@ func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model con
 		return c.buildOpenaiCompatProvider(baseURL, apiKey, headers, providerCfg.ExtraBody, providerCfg.ID, isSubAgent)
 	case hyper.Name:
 		return c.buildHyperProvider(apiKey)
+	case codex.Name:
+		return c.buildCodexProvider(baseURL, apiKey, headers)
 	default:
 		return nil, fmt.Errorf("provider type not supported: %q", providerCfg.Type)
 	}
