@@ -23,6 +23,7 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/hooks"
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
@@ -125,6 +126,11 @@ func NewCoordinator(
 		return nil, err
 	}
 
+	var hookRunner hooks.Runner = hooks.NoopRunner{}
+	if h := cfg.Config().Hooks; h != nil && h.PostStep != "" {
+		hookRunner = hooks.ShellRunner{Command: h.PostStep}
+	}
+
 	c.currentAgent = NewSessionAgent(SessionAgentOptions{
 		LargeModel:           large,
 		SmallModel:           small,
@@ -136,6 +142,7 @@ func NewCoordinator(
 		Messages:             messages,
 		Notify:               notify,
 		Recorder:             recorder,
+		HookRunner:           hookRunner,
 	})
 
 	// Build system prompt: bash-first base + cmd-git.tpl + lenos.md.tpl (universal rules + identity body + memory tails).

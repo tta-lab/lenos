@@ -18,6 +18,7 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
+	"github.com/tta-lab/lenos/internal/hooks"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
@@ -135,6 +136,7 @@ type sessionAgent struct {
 
 	messageQueue   *csync.Map[string, []SessionAgentCall]
 	activeRequests *csync.Map[string, context.CancelFunc]
+	hookRunner     hooks.Runner
 }
 
 type SessionAgentOptions struct {
@@ -151,6 +153,10 @@ type SessionAgentOptions struct {
 	// the agent uses transcript.NoopRecorder so standalone tests run
 	// without writing a transcript artifact.
 	Recorder transcript.Recorder
+
+	// HookRunner is called after each model step with a JSON envelope on
+	// stdin. Nil-safe: when nil, no post-step hook runs.
+	HookRunner hooks.Runner
 }
 
 func NewSessionAgent(
@@ -173,5 +179,6 @@ func NewSessionAgent(
 		recorder:             rec,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
+		hookRunner:           opts.HookRunner,
 	}
 }

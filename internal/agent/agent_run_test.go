@@ -2,9 +2,13 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
@@ -249,6 +253,142 @@ func TestCombineQueuedCalls_SingleCall(t *testing.T) {
 	require.Equal(t, "hello", out.Prompt)
 	require.Equal(t, "s1", out.SessionID)
 	require.Equal(t, "test", out.ProviderID)
+}
+
+// recRunner records every Run call's payload for assertions.
+type recRunner struct {
+	mu    sync.Mutex
+	calls [][]byte
+}
+
+func (r *recRunner) Run(_ context.Context, p []byte) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, append([]byte(nil), p...))
+	return nil
+}
+
+// errRunner always returns an error.
+type errRunner struct{}
+
+func (errRunner) Run(context.Context, []byte) error { return errors.New("boom") }
+
+// blockRunner blocks until the context expires.
+type blockRunner struct{ gate chan struct{} }
+
+func (b *blockRunner) Run(ctx context.Context, _ []byte) error {
+	select {
+	case <-b.gate:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func TestRun_HookRunnerFiresPerStep(t *testing.T) {
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "hook test")
+	require.NoError(t, err)
+
+	rec := &recRunner{}
+	bm := &scriptedModel{emits: []string{"echo hi", "exit"}}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SystemPrompt: "sys",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+		HookRunner:   rec,
+	}).(*sessionAgent)
+
+	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
+	require.NoError(t, err)
+
+	// Settle to let hook goroutines complete
+	time.Sleep(100 * time.Millisecond)
+
+	rec.mu.Lock()
+	require.Len(t, rec.calls, 2, "hook should fire 2 times (exec + exit)")
+	// Verify envelope structure
+	for i, payload := range rec.calls {
+		var ev map[string]any
+		require.NoError(t, json.Unmarshal(payload, &ev))
+		assert.Equal(t, float64(1), ev["version"])
+		assert.Equal(t, "post_step", ev["event"])
+		assert.Equal(t, float64(i), ev["step_index"])
+		assert.Equal(t, sess.ID, ev["session_id"])
+	}
+	rec.mu.Unlock()
+}
+
+func TestRun_HookRunnerFailingDoesNotAbortLoop(t *testing.T) {
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "hook fail test")
+	require.NoError(t, err)
+
+	bm := &scriptedModel{emits: []string{"echo one", "echo two", "exit"}}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SystemPrompt: "sys",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+		HookRunner:   errRunner{},
+	}).(*sessionAgent)
+
+	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
+	require.NoError(t, err, "loop should not abort on hook failure")
+}
+
+func TestRun_HookRunnerNoopGating(t *testing.T) {
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "hook noop test")
+	require.NoError(t, err)
+
+	bm := &scriptedModel{emits: []string{"exit"}}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SystemPrompt: "sys",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+		// HookRunner is nil — no goroutines should be spawned
+	}).(*sessionAgent)
+
+	before := runtime.NumGoroutine()
+	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
+	require.NoError(t, err)
+	time.Sleep(100 * time.Millisecond) // settle goroutines
+	after := runtime.NumGoroutine()
+
+	// Allow small variance from scheduler goroutines
+	diff := after - before
+	if diff > 3 {
+		t.Fatalf("possible goroutine leak: %d → %d (diff %d)", before, after, diff)
+	}
+}
+
+func TestRun_HookRunnerTimeout(t *testing.T) {
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "hook timeout test")
+	require.NoError(t, err)
+
+	blk := &blockRunner{gate: make(chan struct{})}
+	bm := &scriptedModel{emits: []string{"exit"}}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SystemPrompt: "sys",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+		HookRunner:   blk,
+	}).(*sessionAgent)
+
+	// Shrink timeout so test runs in 50ms instead of 5s
+	defer SetHookTimeout(50 * time.Millisecond)()
+
+	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
+	require.NoError(t, err, "loop should continue even if hook times out")
 }
 
 func TestCombineQueuedCalls_ManyCallsJoinedWithSeparator(t *testing.T) {
