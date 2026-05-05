@@ -643,6 +643,56 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 		require.Equal(t, catwalk.TypeAnthropic, customProvider.Type)
 	})
 
+	t.Run("codex custom provider type is allowed", func(t *testing.T) {
+		cfg := &Config{
+			Providers: csync.NewMapFrom(map[string]ProviderConfig{
+				"codex": {
+					APIKey:  "sk-test",
+					BaseURL: "https://chatgpt.com/backend-api/codex",
+					Type:    "codex",
+					Models: []catwalk.Model{{
+						ID: "gpt-5.1-codex",
+					}},
+				},
+			}),
+		}
+		cfg.setDefaults("/tmp", "")
+
+		env := env.NewFromMap(map[string]string{})
+		resolver := NewEnvironmentVariableResolver(env)
+		err := cfg.configureProviders(testStore(cfg), env, resolver, []catwalk.Provider{})
+		require.NoError(t, err)
+
+		require.Equal(t, cfg.Providers.Len(), 1)
+		_, exists := cfg.Providers.Get("codex")
+		require.True(t, exists)
+	})
+
+	t.Run("unknown custom provider type is rejected", func(t *testing.T) {
+		cfg := &Config{
+			Providers: csync.NewMapFrom(map[string]ProviderConfig{
+				"weirdtype": {
+					APIKey:  "sk-test",
+					BaseURL: "https://api.weird.com/v1",
+					Type:    "not-a-real-type",
+					Models: []catwalk.Model{{
+						ID: "test-model",
+					}},
+				},
+			}),
+		}
+		cfg.setDefaults("/tmp", "")
+
+		env := env.NewFromMap(map[string]string{})
+		resolver := NewEnvironmentVariableResolver(env)
+		err := cfg.configureProviders(testStore(cfg), env, resolver, []catwalk.Provider{})
+		require.NoError(t, err)
+
+		require.Equal(t, cfg.Providers.Len(), 0)
+		_, exists := cfg.Providers.Get("weirdtype")
+		require.False(t, exists)
+	})
+
 	t.Run("disabled custom provider is removed", func(t *testing.T) {
 		cfg := &Config{
 			Providers: csync.NewMapFrom(map[string]ProviderConfig{
