@@ -36,6 +36,15 @@ const (
 	ClientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 )
 
+// Embed returned copy for test overrides.
+var (
+	// VarAuthURL is AuthURL as a variable (overridable for testing).
+	VarAuthURL = AuthURL
+
+	// VarTokenURL is TokenURL as a variable (overridable for testing).
+	VarTokenURL = TokenURL
+)
+
 // Embedded returns the embedded Codex provider definition.
 var Embedded = sync.OnceValue(func() catwalk.Provider {
 	var provider catwalk.Provider
