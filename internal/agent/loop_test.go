@@ -718,6 +718,105 @@ func TestRunLoop_DrainManyPreservesOrder(t *testing.T) {
 	assert.Equal(t, "m3", users[2].Content().Text)
 }
 
+func TestRunLoop_PostStepHookCalledPerStep(t *testing.T) {
+	t.Parallel()
+	var (
+		mu     sync.Mutex
+		steps  []int
+		usages []fantasy.Usage
+	)
+	model := &scriptedModel{emits: []string{"echo one", "echo two", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("one\n"), ExitCode: 0, Duration: time.Millisecond},
+		{Stdout: []byte("two\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.postStepHook = func(stepIdx int, u fantasy.Usage) {
+		mu.Lock()
+		defer mu.Unlock()
+		steps = append(steps, stepIdx)
+		usages = append(usages, u)
+	}
+
+	stop, err := runLoop(context.Background(), deps, nil, "start")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, steps, 3, "postStepHook should be called 3 times (2 exec + 1 exit)")
+	assert.Equal(t, 0, steps[0])
+	assert.Equal(t, 1, steps[1])
+	assert.Equal(t, 2, steps[2])
+	// Each step should have non-zero usage
+	for i, u := range usages {
+		if u.InputTokens == 0 && u.OutputTokens == 0 && u.TotalTokens == 0 {
+			t.Fatalf("step %d: expected non-zero usage", i)
+		}
+	}
+}
+
+func TestRunLoop_PostStepHookFiresBeforeOnUsage(t *testing.T) {
+	t.Parallel()
+	var hookSteps []int
+	var usageSteps []int
+	model := &scriptedModel{emits: []string{"fail", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("out\n"), ExitCode: 1, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.postStepHook = func(stepIdx int, u fantasy.Usage) {
+		hookSteps = append(hookSteps, stepIdx)
+	}
+	deps.onUsage = func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool {
+		usageSteps = append(usageSteps, stepIdx)
+		return false // don't auto-compact
+	}
+
+	stop, err := runLoop(context.Background(), deps, nil, "go")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	// postStepHook fires for every step, onUsage fires for every step
+	require.Len(t, hookSteps, 2, "postStepHook: both steps")
+	require.Len(t, usageSteps, 2, "onUsage: both steps")
+}
+
+func TestRunLoop_PostStepHookExecutesBeforeAutoCompact(t *testing.T) {
+	t.Parallel()
+	var hookCalled bool
+	model := &scriptedModel{emits: []string{"exit"}}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
+	deps.postStepHook = func(int, fantasy.Usage) {
+		hookCalled = true
+	}
+	deps.onUsage = func(int, fantasy.Usage, fantasy.ProviderMetadata) bool {
+		return true // trigger auto-compact
+	}
+
+	stop, err := runLoop(context.Background(), deps, nil, "go")
+	require.NoError(t, err)
+	assert.Equal(t, stopShouldSummarize, stop)
+	// Even though onUsage returned true on step 0, postStepHook should have fired first
+	if !hookCalled {
+		t.Fatal("postStepHook was not called before onUsage returned true")
+	}
+}
+
+func TestRunLoop_PostStepHookNil(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"exit"}}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
+	// postStepHook is nil by default — should not panic
+
+	stop, err := runLoop(context.Background(), deps, nil, "go")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+}
+
 func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"   ", "exit"}}
