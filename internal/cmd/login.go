@@ -15,6 +15,7 @@ import (
 	hyperp "github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/oauth"
+	"github.com/tta-lab/lenos/internal/oauth/codex"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
 	"github.com/tta-lab/lenos/internal/oauth/hyper"
 	"github.com/tta-lab/lenos/internal/workspace"
@@ -26,19 +27,24 @@ var loginCmd = &cobra.Command{
 	Short:   "Login Lenos to a platform",
 	Long: `Login Lenos to a specified platform.
 The platform should be provided as an argument.
-Available platforms are: hyper, copilot.`,
+Available platforms are: hyper, copilot, codex.`,
 	Example: `
 # Authenticate with Hyper
 lenos login
 
 # Authenticate with GitHub Copilot
 lenos login copilot
+
+# Authenticate with Codex (ChatGPT)
+lenos login codex
   `,
 	ValidArgs: []cobra.Completion{
 		"hyper",
 		"copilot",
 		"github",
 		"github-copilot",
+		"codex",
+		"chatgpt",
 	},
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -63,6 +69,8 @@ lenos login copilot
 			return loginHyper(ws)
 		case "copilot", "github", "github-copilot":
 			return loginCopilot(cmd.Context(), ws)
+		case "codex", "chatgpt":
+			return loginCodex(cmd.Context(), ws)
 		default:
 			return fmt.Errorf("unknown platform: %s", args[0])
 		}
@@ -194,6 +202,68 @@ func loginCopilot(ctx context.Context, ws workspace.Workspace) error {
 
 	fmt.Println()
 	fmt.Println("You're now authenticated with GitHub Copilot!")
+	return nil
+}
+
+func loginCodex(ctx context.Context, ws workspace.Workspace) error {
+	loginCtx := getLoginContext()
+
+	cfg := ws.Config()
+	if pc, ok := cfg.Providers.Get("codex"); ok && pc.OAuthToken != nil {
+		fmt.Println("You are already logged in to Codex (ChatGPT).")
+		return nil
+	}
+
+	fmt.Println("Requesting device code from OpenAI...")
+	dar, err := codex.InitiateDeviceAuth(loginCtx)
+	if err != nil {
+		return fmt.Errorf("device auth init: %w", err)
+	}
+
+	if clipboard.WriteAll(dar.UserCode) == nil {
+		fmt.Println("The following code should be on clipboard already:")
+	} else {
+		fmt.Println("Copy the following code:")
+	}
+	fmt.Println()
+	fmt.Println(lipgloss.NewStyle().Bold(true).Render(dar.UserCode))
+	fmt.Println()
+	fmt.Println("Press enter to open this URL, and then paste it there:")
+	fmt.Println()
+	fmt.Println(lipgloss.NewStyle().Hyperlink(dar.VerifyURL, "id=codex").Render(dar.VerifyURL))
+	fmt.Println()
+	waitEnter()
+	if err := browser.OpenURL(dar.VerifyURL); err != nil {
+		fmt.Println("Could not open the URL. Please open it manually.")
+	}
+
+	fmt.Println("Waiting for authorization...")
+	tokens, err := codex.PollForToken(loginCtx, dar)
+	if err != nil {
+		return fmt.Errorf("poll for token: %w", err)
+	}
+
+	accountID := codex.ExtractChatGPTAccountID(tokens.IDToken)
+	if accountID == "" {
+		// Fall back to access_token (matches forgecode behavior)
+		accountID = codex.ExtractChatGPTAccountID(tokens.AccessToken)
+	}
+	if accountID == "" {
+		return fmt.Errorf("could not extract chatgpt_account_id from tokens")
+	}
+
+	if err := cmp.Or(
+		ws.SetConfigField(config.ScopeGlobal, "providers.codex.api_key", tokens.AccessToken),
+		ws.SetConfigField(config.ScopeGlobal, "providers.codex.oauth", tokens.Token),
+		ws.SetConfigField(config.ScopeGlobal, "providers.codex.extra_headers.ChatGPT-Account-Id", accountID),
+		ws.SetConfigField(config.ScopeGlobal, "providers.codex.extra_headers.originator", "codex_cli_rs"),
+		ws.SetConfigField(config.ScopeGlobal, "providers.codex.extra_headers.OpenAI-Beta", "responses=experimental"),
+	); err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Println("You're now authenticated with Codex (ChatGPT)!")
 	return nil
 }
 
