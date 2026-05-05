@@ -156,8 +156,9 @@ runLoopReentry:
 				slog.Warn("post_step: marshal envelope", "error", err)
 				return
 			}
+			timeout := hookTimeout // capture at closure-execution time, before spawning goroutine
 			go func() {
-				hookCtx, cancel := context.WithTimeout(context.Background(), hookTimeout)
+				hookCtx, cancel := context.WithTimeout(context.Background(), timeout)
 				defer cancel()
 				if err := runner.Run(hookCtx, payload); err != nil {
 					slog.Warn("post_step: runner failed", "error", err)

@@ -259,14 +259,19 @@ func TestCombineQueuedCalls_SingleCall(t *testing.T) {
 type recRunner struct {
 	mu    sync.Mutex
 	calls [][]byte
+	wg    sync.WaitGroup
 }
 
 func (r *recRunner) Run(_ context.Context, p []byte) error {
+	r.wg.Add(1)
+	defer r.wg.Done()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.calls = append(r.calls, append([]byte(nil), p...))
 	return nil
 }
+
+func (r *recRunner) Wait() { r.wg.Wait() }
 
 // errRunner always returns an error.
 type errRunner struct{}
@@ -304,8 +309,8 @@ func TestRun_HookRunnerFiresPerStep(t *testing.T) {
 	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
 	require.NoError(t, err)
 
-	// Settle to let hook goroutines complete
-	time.Sleep(100 * time.Millisecond)
+	// Wait for hook goroutines to complete
+	rec.Wait()
 
 	rec.mu.Lock()
 	require.Len(t, rec.calls, 2, "hook should fire 2 times (exec + exit)")

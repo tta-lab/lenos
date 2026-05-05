@@ -126,7 +126,7 @@ func NewCoordinator(
 		return nil, err
 	}
 
-	var hookRunner hooks.Runner = hooks.NoopRunner{}
+	var hookRunner hooks.Runner
 	if h := cfg.Config().Hooks; h != nil && h.PostStep != "" {
 		hookRunner = hooks.ShellRunner{Command: h.PostStep}
 	}
