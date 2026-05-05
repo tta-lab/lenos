@@ -58,6 +58,7 @@ Lenos looks for a `config.json` file in the following locations (highest priorit
 3. `$XDG_CONFIG_HOME/lenos/config.json` or `~/.config/lenos/config.json` (global config)
 
 See the [JSON schema](schema.json) for all available options.
+See [hooks documentation](docs/hooks.md) for post-step lifecycle hooks configuration.
 
 ### Environment Variables
 
