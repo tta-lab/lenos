@@ -12,8 +12,10 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	codexpkg "github.com/tta-lab/lenos/internal/agent/codex"
 	hyperp "github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/oauth"
+	"github.com/tta-lab/lenos/internal/oauth/codex"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
 	"github.com/tta-lab/lenos/internal/oauth/hyper"
 )
@@ -281,6 +283,8 @@ func (s *ConfigStore) RefreshOAuthToken(ctx context.Context, scope Scope, provid
 		newToken, refreshErr = copilot.RefreshToken(ctx, providerConfig.OAuthToken.RefreshToken)
 	case hyperp.Name:
 		newToken, refreshErr = hyper.ExchangeToken(ctx, providerConfig.OAuthToken.RefreshToken)
+	case codexpkg.Name:
+		newToken, refreshErr = codex.RefreshToken(ctx, providerConfig.OAuthToken.RefreshToken)
 	default:
 		return fmt.Errorf("OAuth refresh not supported for provider %s", providerID)
 	}
