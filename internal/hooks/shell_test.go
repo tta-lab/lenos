@@ -71,7 +71,7 @@ func TestShellRunner_Timeout(t *testing.T) {
 
 func TestShellRunner_StderrShorterThanCap(t *testing.T) {
 	r := ShellRunner{
-		Command: "printf '%.0sX' {1..200} >&2; exit 1",
+		Command: "python3 -c \"import sys; sys.stderr.write('x' * 200); sys.exit(1)\"",
 	}
 	err := r.Run(context.Background(), nil)
 	if err == nil {
@@ -85,7 +85,7 @@ func TestShellRunner_StderrShorterThanCap(t *testing.T) {
 
 func TestShellRunner_StderrAtCap(t *testing.T) {
 	r := ShellRunner{
-		Command: "printf '%.0sX' {1..256} >&2; exit 1",
+		Command: "python3 -c \"import sys; sys.stderr.write('x' * 256); sys.exit(1)\"",
 	}
 	err := r.Run(context.Background(), nil)
 	if err == nil {
@@ -99,7 +99,7 @@ func TestShellRunner_StderrAtCap(t *testing.T) {
 
 func TestShellRunner_StderrLongerThanCap(t *testing.T) {
 	r := ShellRunner{
-		Command: "printf '%.0sX' {1..300} >&2; exit 1",
+		Command: "python3 -c \"import sys; sys.stderr.write('x' * 300); sys.exit(1)\"",
 	}
 	err := r.Run(context.Background(), nil)
 	if err == nil {
