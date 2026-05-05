@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -140,7 +142,7 @@ func PollForToken(ctx context.Context, dar *DeviceAuthResponse) (*TokenSet, erro
 
 		authCode, codeVerifier, err := pollOnce(ctx, pollURL, dar.DeviceAuthID, dar.UserCode)
 		if err != nil {
-			if err == errPending {
+			if errors.Is(err, errPending) {
 				continue
 			}
 			return nil, err
@@ -192,6 +194,7 @@ func pollOnce(ctx context.Context, pollURL, deviceAuthID, userCode string) (stri
 
 	// 403 or 404 = auth pending
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
+		slog.Debug("codex poll: auth pending", "status", resp.StatusCode, "body", string(respBody))
 		return "", "", errPending
 	}
 	if resp.StatusCode != http.StatusOK {
