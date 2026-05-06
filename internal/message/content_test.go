@@ -202,6 +202,7 @@ func TestSetReasoningResponsesData_AppendsWhenAbsent(t *testing.T) {
 	rc := msg.ReasoningContent()
 	require.NotNil(t, rc.ResponsesData, "silent reasoning item dropped")
 	require.Equal(t, "silent-enc", *rc.ResponsesData.EncryptedContent)
+	require.NotZero(t, rc.StartedAt, "StartedAt not set on append")
 }
 
 func TestAppendThenSet_BothFieldsPreserved(t *testing.T) {
