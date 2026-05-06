@@ -375,12 +375,6 @@ func ResolveCwd(cmd *cobra.Command) (string, error) {
 	return cwd, nil
 }
 
-// resolveAgentFile searches agent_paths for an agent.md file matching the given name.
-// Returns:
-//   - (path, nil) if the agent file is found on disk.
-//   - ("", nil) if name == "coder" and not found on disk (caller uses embedded fallback).
-//   - ("", err) for any other failure.
-//
 // resolveAgentFile searches agent_paths for an agent identity file matching
 // the given name. For each dir in agentPaths, it probes two shapes in order:
 //
