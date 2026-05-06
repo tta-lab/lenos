@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"charm.land/fantasy"
+	"charm.land/fantasy/providers/openai"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -176,4 +177,41 @@ func TestToAIMessage_Result_SpecialChars(t *testing.T) {
 	assert.Contains(t, text.Text, "&lt;foo&gt;")
 	assert.Contains(t, text.Text, "&amp;bar")
 	assert.Contains(t, text.Text, "&lt;/result&gt;")
+}
+
+func TestFinishThinking_PreservesResponsesData(t *testing.T) {
+	t.Parallel()
+	msg := &Message{Parts: []ContentPart{ReasoningContent{Thinking: "x", StartedAt: 1}}}
+	enc := "enc-blob"
+	rd := &openai.ResponsesReasoningMetadata{EncryptedContent: &enc}
+	msg.SetReasoningResponsesData(rd)
+	msg.FinishThinking()
+	rc := msg.ReasoningContent()
+	require.NotNil(t, rc.ResponsesData, "ResponsesData lost after FinishThinking")
+	require.Equal(t, "enc-blob", *rc.ResponsesData.EncryptedContent)
+	require.NotZero(t, rc.FinishedAt, "FinishedAt not set")
+	require.Equal(t, "x", rc.Thinking, "Thinking lost")
+}
+
+func TestSetReasoningResponsesData_AppendsWhenAbsent(t *testing.T) {
+	t.Parallel()
+	msg := &Message{}
+	enc := "silent-enc"
+	rd := &openai.ResponsesReasoningMetadata{EncryptedContent: &enc}
+	msg.SetReasoningResponsesData(rd)
+	rc := msg.ReasoningContent()
+	require.NotNil(t, rc.ResponsesData, "silent reasoning item dropped")
+	require.Equal(t, "silent-enc", *rc.ResponsesData.EncryptedContent)
+}
+
+func TestAppendThenSet_BothFieldsPreserved(t *testing.T) {
+	t.Parallel()
+	msg := &Message{}
+	msg.AppendReasoningContent("thought-a")
+	enc := "enc"
+	rd := &openai.ResponsesReasoningMetadata{EncryptedContent: &enc}
+	msg.SetReasoningResponsesData(rd)
+	rc := msg.ReasoningContent()
+	require.Equal(t, "thought-a", rc.Thinking, "Thinking lost")
+	require.NotNil(t, rc.ResponsesData, "ResponsesData lost")
 }
