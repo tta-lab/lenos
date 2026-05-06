@@ -227,7 +227,7 @@ func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 
 type Options struct {
 	ContextPaths              []string     `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=LENOS.md"`
-	AgentPaths                []string     `json:"agent_paths,omitempty" jsonschema:"description=Paths to directories containing Agent identity files (agent.md files),example=~/.config/lenos/agents,example=./.lenos/agents"`
+	AgentPaths                []string     `json:"agent_paths,omitempty" jsonschema:"description=Paths to directories containing Agent identity files. Each path may contain flat <name>.md files OR per-agent subdirs <name>/AGENTS.md (or both). When both shapes match the same name in the same dir flat takes precedence.,example=~/.config/lenos/agents,example=./.lenos/agents,example=~/.claude/agents,example=~/Code/guion-opensource/ttal-cli/templates/ttal"`
 	TUI                       *TUIOptions  `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
 	Debug                     bool         `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
 	DisableAutoSummarize      bool         `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
