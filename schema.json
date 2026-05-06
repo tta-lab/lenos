@@ -123,11 +123,13 @@
             "type": "string",
             "examples": [
               "~/.config/lenos/agents",
-              "./.lenos/agents"
+              "./.lenos/agents",
+              "~/.claude/agents",
+              "~/Code/guion-opensource/ttal-cli/templates/ttal"
             ]
           },
           "type": "array",
-          "description": "Paths to directories containing Agent identity files (agent.md files)"
+          "description": "Paths to directories containing Agent identity files. Each path may contain flat \u003cname\u003e.md files OR per-agent subdirs \u003cname\u003e/AGENTS.md (or both). When both shapes match the same name in the same dir flat takes precedence."
         },
         "tui": {
           "$ref": "#/$defs/TUIOptions",
