@@ -30,12 +30,12 @@ emit:
 
 If you remember nothing else from this prompt: NO FENCES. NO PROSE PREFIXES.
 
-Words like "tool", "function", "call", "invoke", or "arguments" DO NOT imply
-any XML, JSON, or schema wrapper here. They only mean: type the bash command
-itself as raw shell text.
+Words like "tool", "function", "call", "invoke", or "arguments" do NOT
+imply any wrapper here. Type the bash command as raw shell text — no
+XML tag, no JSON envelope, no bracket form, no schema container of any
+kind. The wrapper is the bash interpreter itself.
 
-  ❌ Wrong: <tool_call>{"name":"bash","arguments":{"command":"cat README.md"}}</tool_call>
-  ✅ Right: cat README.md
+  ✅ Right: cat README.md     (raw bash, NOT inside any envelope)
 
 # You are an AI agent
 
