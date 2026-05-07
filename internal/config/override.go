@@ -10,73 +10,46 @@ import (
 )
 
 // ApplyEphemeralModelOverride applies model overrides from CLI flags to the
-// in-memory ConfigStore. It writes directly to store.config.Models without
-// persisting to disk. This is the single override path for both `lenos` and
-// `lenos run`.
-//
-// Conflict resolution: if both largeModel and smallModel are provided, both
-// are set. If only largeModel is provided, smallModel defaults to the
-// provider's default small model (via GetDefaultSmallModel).
-// If neither is provided, this is a no-op.
-//
-// largeModel and smallModel accept "model-name" or "provider/model-name" format.
-func ApplyEphemeralModelOverride(store *ConfigStore, largeModel, smallModel string) error {
-	if largeModel == "" && smallModel == "" {
+// in-memory ConfigStore. It sets RuntimeOverrides.ActiveTier based on
+// useSmallTier and optionally overrides the active tier's model.
+// If modelOverride is empty, only the active tier is set (no model mutation).
+// This is the single override path for both `lenos` and `lenos run`.
+func ApplyEphemeralModelOverride(store *ConfigStore, modelOverride string, useSmallTier bool) error {
+	activeTier := SelectedModelTypeLarge
+	if useSmallTier {
+		activeTier = SelectedModelTypeSmall
+	}
+	store.Overrides().ActiveTier = activeTier
+
+	if modelOverride == "" {
 		return nil
 	}
 
 	providers := store.config.Providers.Copy()
-
-	largeMatches, smallMatches, err := findModels(providers, largeModel, smallModel)
+	matches, err := findModels(providers, modelOverride)
+	if err != nil {
+		return err
+	}
+	found, err := validateMatches(matches, modelOverride, string(activeTier))
 	if err != nil {
 		return err
 	}
 
-	var largeProviderID string
-
-	// Override large model.
-	if largeModel != "" {
-		found, err := validateMatches(largeMatches, largeModel, "large")
-		if err != nil {
-			return err
-		}
-		largeProviderID = found.Provider
-		slog.Info("Overriding large model for session", "provider", found.Provider, "model", found.ModelID)
-		store.config.Models[SelectedModelTypeLarge] = SelectedModel{
-			Provider: found.Provider,
-			Model:    found.ModelID,
-		}
+	slog.Info("Overriding model for session", "tier", activeTier, "provider", found.Provider, "model", found.ModelID)
+	store.config.Models[activeTier] = SelectedModel{
+		Provider: found.Provider,
+		Model:    found.ModelID,
 	}
-
-	// Override small model.
-	switch {
-	case smallModel != "":
-		found, err := validateMatches(smallMatches, smallModel, "small")
-		if err != nil {
-			return err
-		}
-		slog.Info("Overriding small model for session", "provider", found.Provider, "model", found.ModelID)
-		store.config.Models[SelectedModelTypeSmall] = SelectedModel{
-			Provider: found.Provider,
-			Model:    found.ModelID,
-		}
-
-	case largeModel != "":
-		// No small model specified, but large model was — use provider's default.
-		smallCfg := store.GetDefaultSmallModel(largeProviderID)
-		store.config.Models[SelectedModelTypeSmall] = smallCfg
-	}
-
 	return nil
 }
 
 // GetDefaultSmallModel returns the default small model for the given
 // provider. Falls back to the large model if no default is found.
+// Retained for legacy callers; new code should use ApplyEphemeralModelOverride.
 func (s *ConfigStore) GetDefaultSmallModel(providerID string) SelectedModel {
 	cfg := s.config
 	largeModelCfg := cfg.Models[SelectedModelTypeLarge]
 
-	// Find the provider in the known providers list to get its default small model.
 	knownProviders, _ := Providers(cfg)
 	var knownProvider *catwalk.Provider
 	for _, p := range knownProviders {
@@ -86,7 +59,6 @@ func (s *ConfigStore) GetDefaultSmallModel(providerID string) SelectedModel {
 		}
 	}
 
-	// For unknown/local providers, use the large model as small.
 	if knownProvider == nil {
 		slog.Warn("Using large model as small model for unknown provider", "provider", providerID, "model", largeModelCfg.Model)
 		return largeModelCfg
@@ -109,20 +81,14 @@ func (s *ConfigStore) GetDefaultSmallModel(providerID string) SelectedModel {
 }
 
 // ParseModelStrForCLI parses a model string into provider filter and model ID.
-// Format: "model-name" or "provider/model-name" or "synthetic/moonshot/kimi-k2".
-// This function only checks if the first component is a valid provider name; if not,
-// it treats the entire string as a model ID (which may contain slashes).
 func ParseModelStrForCLI(providers map[string]ProviderConfig, modelStr string) (providerFilter, modelID string) {
 	parts := strings.Split(modelStr, "/")
 	if len(parts) == 1 {
 		return "", parts[0]
 	}
-	// Check if the first part is a valid provider name
 	if _, ok := providers[parts[0]]; ok {
 		return parts[0], strings.Join(parts[1:], "/")
 	}
-
-	// First part is not a valid provider, treat entire string as model ID
 	return "", modelStr
 }
 
@@ -132,41 +98,28 @@ type ModelMatch struct {
 	ModelID  string
 }
 
-func findModels(providers map[string]ProviderConfig, largeModel, smallModel string) ([]ModelMatch, []ModelMatch, error) {
-	largeProviderFilter, largeModelID := ParseModelStrForCLI(providers, largeModel)
-	smallProviderFilter, smallModelID := ParseModelStrForCLI(providers, smallModel)
+// findModels searches for a single model string across all providers.
+func findModels(providers map[string]ProviderConfig, modelStr string) ([]ModelMatch, error) {
+	providerFilter, modelID := ParseModelStrForCLI(providers, modelStr)
 
-	// Validate provider filters exist.
-	for _, pf := range []struct {
-		filter, label string
-	}{
-		{largeProviderFilter, "large"},
-		{smallProviderFilter, "small"},
-	} {
-		if pf.filter != "" {
-			if _, ok := providers[pf.filter]; !ok {
-				return nil, nil, fmt.Errorf("%s model: provider %q not found in configuration. Use 'lenos models' to list available models", pf.label, pf.filter)
-			}
+	if providerFilter != "" {
+		if _, ok := providers[providerFilter]; !ok {
+			return nil, fmt.Errorf("model: provider %q not found in configuration. Use 'lenos models' to list available models", providerFilter)
 		}
 	}
 
-	// Find matching models in a single pass.
-	var largeMatches, smallMatches []ModelMatch
+	var matches []ModelMatch
 	for name, provider := range providers {
 		if provider.Disable {
 			continue
 		}
 		for _, m := range provider.Models {
-			if filter(largeModelID, largeProviderFilter, m.ID, name) {
-				largeMatches = append(largeMatches, ModelMatch{Provider: name, ModelID: m.ID})
-			}
-			if filter(smallModelID, smallProviderFilter, m.ID, name) {
-				smallMatches = append(smallMatches, ModelMatch{Provider: name, ModelID: m.ID})
+			if filter(modelID, providerFilter, m.ID, name) {
+				matches = append(matches, ModelMatch{Provider: name, ModelID: m.ID})
 			}
 		}
 	}
-
-	return largeMatches, smallMatches, nil
+	return matches, nil
 }
 
 func filter(modelFilter, providerFilter, model, provider string) bool {

@@ -37,6 +37,10 @@ type RuntimeOverrides struct {
 	// Callers MUST verify temenos sandbox is connected before setting ReadOnly;
 	// see internal/cmd/run.go sandbox guard for the pattern.
 	ReadOnly bool
+	// ActiveTier is the model tier selected for this session via CLI flags.
+	// Set by ApplyEphemeralModelOverride. Zero-value (empty string) is
+	// treated as Large by the coordinator for backward compat.
+	ActiveTier SelectedModelType
 }
 
 // ConfigStore is the single entry point for all config access. It owns the

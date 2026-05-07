@@ -131,9 +131,16 @@ func NewCoordinator(
 		hookRunner = hooks.ShellRunner{Command: h.PostStep}
 	}
 
+	// Resolve primary model based on RuntimeOverrides.ActiveTier.
+	primary := large
+	if c.cfg.Overrides().ActiveTier == config.SelectedModelTypeSmall {
+		primary = small
+	}
+
 	c.currentAgent = NewSessionAgent(SessionAgentOptions{
 		LargeModel:           large,
 		SmallModel:           small,
+		PrimaryModel:         primary,
 		SystemPromptPrefix:   "",
 		SystemPrompt:         "",
 		IsSubAgent:           false,

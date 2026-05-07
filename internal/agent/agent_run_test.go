@@ -318,6 +318,7 @@ func TestRun_HookRunnerFiresPerStep(t *testing.T) {
 	agent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		PrimaryModel: Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SystemPrompt: "sys",
 		Sessions:     env.sessions,
 		Messages:     env.messages,
@@ -353,6 +354,7 @@ func TestRun_HookRunnerFailingDoesNotAbortLoop(t *testing.T) {
 	agent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		PrimaryModel: Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SystemPrompt: "sys",
 		Sessions:     env.sessions,
 		Messages:     env.messages,
@@ -372,6 +374,7 @@ func TestRun_HookRunnerNoopGating(t *testing.T) {
 	agent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		PrimaryModel: Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SystemPrompt: "sys",
 		Sessions:     env.sessions,
 		Messages:     env.messages,
@@ -401,6 +404,7 @@ func TestRun_HookRunnerTimeout(t *testing.T) {
 	agent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		PrimaryModel: Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SystemPrompt: "sys",
 		Sessions:     env.sessions,
 		Messages:     env.messages,

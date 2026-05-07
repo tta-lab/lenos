@@ -138,7 +138,7 @@ runLoopReentry:
 	startTime := time.Now()
 	a.eventPromptSent(call.SessionID)
 
-	largeModel := a.largeModel.Get()
+	primaryModel := a.primaryModel.Get()
 	rec := call.Recorder
 
 	// postStepHook builds and fires the configured post_step hook, if any.
@@ -148,8 +148,8 @@ runLoopReentry:
 	if a.hookRunner != nil {
 		runner := a.hookRunner
 		sessionID := call.SessionID
-		modelID := largeModel.Model.Model()
-		contextWindow := int(largeModel.CatwalkCfg.ContextWindow)
+		modelID := primaryModel.Model.Model()
+		contextWindow := int(primaryModel.CatwalkCfg.ContextWindow)
 		postStepHook = func(stepIdx int, u fantasy.Usage) {
 			payload, err := hooks.MarshalPostStep(stepIdx, sessionID, modelID, contextWindow, u, time.Now())
 			if err != nil {
@@ -170,7 +170,7 @@ runLoopReentry:
 		rec = a.recorder
 	}
 	deps := loopDeps{
-		model:        largeModel.Model,
+		model:        primaryModel.Model,
 		provOpts:     call.ProviderOptions,
 		messages:     a.messages,
 		runner:       resolveRunner(call),
@@ -191,7 +191,7 @@ runLoopReentry:
 				return false
 			}
 			used := s.PromptTokens + s.CompletionTokens
-			return shouldAutoCompact(int64(largeModel.CatwalkCfg.ContextWindow), used)
+			return shouldAutoCompact(int64(primaryModel.CatwalkCfg.ContextWindow), used)
 		},
 		drainQueue: func() []string {
 			queued, ok := a.messageQueue.Take(call.SessionID)
@@ -229,7 +229,7 @@ runLoopReentry:
 		// Loop already persisted partial work; surface a user-facing finish
 		// on the most-recent assistant message so the UI shows actionable
 		// guidance (e.g. "Copilot model not enabled").
-		a.attachErrorFinish(ctx, call.SessionID, runErr, largeModel.Model.Model())
+		a.attachErrorFinish(ctx, call.SessionID, runErr, primaryModel.Model.Model())
 
 		if newCall, ok := a.tryReenter(call, cancel); ok {
 			call = newCall
