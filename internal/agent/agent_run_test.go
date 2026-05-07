@@ -638,3 +638,140 @@ func TestRun_DisableAutoSummarizePreventsCompact(t *testing.T) {
 	require.NoError(t, gerr)
 	assert.Empty(t, persisted.SummaryMessageID, "no summary should be set when disableAutoSummarize is true")
 }
+
+func TestAgent_Model_ReturnsPrimaryModel(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	lm := &mockLanguageModel{}
+	sm := &mockLanguageModel{}
+
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   Model{Model: lm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SmallModel:   Model{Model: sm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		PrimaryModel: Model{Model: lm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SystemPrompt: "sys",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+	})
+
+	got := agent.Model()
+	require.Equal(t, lm, got.Model, "Model() should return primaryModel (large)")
+}
+
+func TestAgent_Model_SwitchesToSmall(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	lm := &mockLanguageModel{}
+	sm := &mockLanguageModel{}
+
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   Model{Model: lm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SmallModel:   Model{Model: sm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		PrimaryModel: Model{Model: sm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
+		SystemPrompt: "sys",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+	})
+
+	got := agent.Model()
+	require.Equal(t, sm, got.Model, "Model() should return primaryModel (small)")
+}
+
+func TestAgent_Summarize_AlwaysUsesLargeModel(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	sess, err := env.sessions.Create(t.Context(), "summarize test")
+	require.NoError(t, err)
+
+	// largeModel - will be used by Summarize
+	largeModel := &scriptedModel{
+		emits: []string{"summary content"},
+	}
+
+	// smallModel - should NOT be used by Summarize
+	smallModel := &scriptedModel{
+		emits: []string{"should not be called"},
+	}
+
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   Model{Model: largeModel, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024}},
+		SmallModel:   Model{Model: smallModel, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024}},
+		PrimaryModel: Model{Model: smallModel, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024}}, // primary=small
+		SystemPrompt: "sys",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+	}).(*sessionAgent)
+
+	// Wrap largeModel to record calls
+	originalLarge := largeModel
+	*originalLarge = *largeModel
+	wrapped := &scriptedModel{
+		emits:  []string{"summary content"},
+		usages: []fantasy.Usage{{InputTokens: 100, OutputTokens: 50}},
+	}
+	agent.largeModel.Set(Model{
+		Model:      wrapped,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+	})
+
+	// Wrap smallModel to detect any calls
+	wrappedSmall := &scriptedModel{
+		emits:  []string{"should not be called"},
+		usages: []fantasy.Usage{{InputTokens: 0, OutputTokens: 0}},
+	}
+	agent.smallModel.Set(Model{
+		Model:      wrappedSmall,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+	})
+
+	// Verify primary is small
+	require.Equal(t, smallModel, agent.primaryModel.Get().Model, "sanity: primary should be small")
+
+	// Add a user message so Summarize has something to summarize
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "hello world"}},
+	})
+	require.NoError(t, err)
+
+	// Only the assistant message will exist — Summarize reads history from messages.
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.Assistant,
+		Parts: []message.ContentPart{message.TextContent{Text: "hi back"}},
+		Model: "test-model",
+	})
+	require.NoError(t, err)
+
+	streamCallsBefore := wrapped.calls // track large model calls
+	err = agent.Summarize(t.Context(), sess.ID, fantasy.ProviderOptions{})
+	require.NoError(t, err)
+
+	// largeModel should have received the Stream call since Summarize always uses largeModel
+	require.Equal(t, streamCallsBefore+1, wrapped.calls, "largeModel should have been called by Summarize")
+	require.Equal(t, 0, wrappedSmall.calls, "smallModel should NOT have been called by Summarize")
+
+	// Also verify primary model is still small (invariant: Summarize doesn't change primary)
+	require.Equal(t, smallModel, agent.primaryModel.Get().Model, "primary should still be small after Summarize")
+}
+
+func TestAgent_SetModels_UpdatesPrimaryModel(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	lm := &mockLanguageModel{}
+	sm := &mockLanguageModel{}
+
+	agent := testSessionAgent(env, lm, sm, "sys").(*sessionAgent)
+
+	// Initially primary should match SetModels result (large by default based on ActiveTier)
+	large := Model{Model: lm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}}
+	small := Model{Model: sm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}}
+	agent.SetModels(large, small, small)
+
+	require.Equal(t, small, agent.primaryModel.Get(), "primaryModel should be updated by SetModels")
+	require.Equal(t, lm, agent.largeModel.Get().Model, "largeModel should be preserved")
+	require.Equal(t, sm, agent.smallModel.Get().Model, "smallModel should be preserved")
+}
