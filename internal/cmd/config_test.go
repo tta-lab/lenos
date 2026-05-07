@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -39,30 +41,182 @@ func TestConfigSetModelCmd_RequiresExactArgs(t *testing.T) {
 	require.Error(t, err, "set-model rejects 3 args")
 }
 
-func TestConfigSetModelCmd_RejectsInvalidTier(t *testing.T) {
-	cmd := &cobra.Command{
-		Use:  "set-model",
-		Args: cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if args[0] != "large" && args[0] != "small" {
-				return errInvalidModelType
-			}
-			return nil
-		},
+// runConfigSetModelCmd runs the real configSetModelCmd with the given args
+// and a temp LENOS_GLOBAL_DATA directory containing a config.json with inline
+// providers. Returns the full path to config.json for assertions.
+func runConfigSetModelCmd(t *testing.T, tier, model string, configJSON string) error {
+	t.Helper()
+
+	dir := t.TempDir()
+	t.Setenv("LENOS_GLOBAL_DATA", dir)
+	t.Setenv("LENOS_DISABLE_DEFAULT_PROVIDERS", "true")
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "true")
+
+	// Write the config.json
+	configPath := filepath.Join(dir, "config.json")
+	if configJSON != "" {
+		require.NoError(t, os.WriteFile(configPath, []byte(configJSON), 0o600))
 	}
 
-	err := cmd.RunE(cmd, []string{"large", "gpt-4o"})
-	require.NoError(t, err)
+	// Create a cobra command that mimics the root command with persistent flags.
+	cmd := &cobra.Command{}
+	cmd.PersistentFlags().String("cwd", dir, "cwd")
+	cmd.PersistentFlags().Bool("debug", false, "debug")
+	// Set cwd flag so ResolveCwd works.
+	require.NoError(t, cmd.PersistentFlags().Set("cwd", dir))
 
-	err = cmd.RunE(cmd, []string{"small", "gpt-4o-mini"})
+	// Build args for the set-model command.
+	args := []string{tier, model}
+	return configSetModelCmd.RunE(cmd, args)
+}
+
+func TestConfigSetModelCmd_SetsLargeModel(t *testing.T) {
+	err := runConfigSetModelCmd(t, "large", "gpt-4o", `{
+		"providers": {
+			"openai": {
+				"id": "openai",
+				"name": "OpenAI",
+				"type": "openai",
+				"base_url": "https://api.openai.com/v1",
+				"api_key": "sk-test",
+				"models": [{"id": "gpt-4o"}]
+			}
+		},
+		"options": {
+			"disable_default_providers": true,
+			"disable_provider_auto_update": true
+		}
+	}`)
 	require.NoError(t, err)
 }
 
-// errInvalidModelType is used by TestConfigSetModelCmd_RejectsInvalidTier
-var errInvalidModelType = errInvalidModelTypeFn()
+func TestConfigSetModelCmd_SetsSmallModel(t *testing.T) {
+	err := runConfigSetModelCmd(t, "small", "gpt-4o-mini", `{
+		"providers": {
+			"openai": {
+				"id": "openai",
+				"name": "OpenAI",
+				"type": "openai",
+				"base_url": "https://api.openai.com/v1",
+				"api_key": "sk-test",
+				"models": [{"id": "gpt-4o-mini"}, {"id": "gpt-4o"}]
+			}
+		},
+		"options": {
+			"disable_default_providers": true,
+			"disable_provider_auto_update": true
+		}
+	}`)
+	require.NoError(t, err)
+}
 
-type invalidModelTypeError struct{}
+func TestConfigSetModelCmd_RejectsModelNotFound(t *testing.T) {
+	err := runConfigSetModelCmd(t, "large", "nonexistent", `{
+		"providers": {
+			"openai": {
+				"id": "openai",
+				"name": "OpenAI",
+				"type": "openai",
+				"base_url": "https://api.openai.com/v1",
+				"api_key": "sk-test",
+				"models": [{"id": "gpt-4o"}, {"id": "gpt-4o-mini"}]
+			}
+		},
+		"options": {
+			"disable_default_providers": true,
+			"disable_provider_auto_update": true
+		}
+	}`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
+}
 
-func (e *invalidModelTypeError) Error() string { return "invalid model type" }
+func TestConfigSetModelCmd_RejectsEmptyModel(t *testing.T) {
+	err := runConfigSetModelCmd(t, "large", "", `{
+		"providers": {
+			"openai": {
+				"id": "openai",
+				"name": "OpenAI",
+				"type": "openai",
+				"base_url": "https://api.openai.com/v1",
+				"api_key": "sk-test",
+				"models": [{"id": "gpt-4o"}]
+			}
+		},
+		"options": {
+			"disable_default_providers": true,
+			"disable_provider_auto_update": true
+		}
+	}`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
+}
 
-func errInvalidModelTypeFn() error { return &invalidModelTypeError{} }
+func TestConfigSetModelCmd_RejectsAmbiguousModel(t *testing.T) {
+	err := runConfigSetModelCmd(t, "large", "shared-model", `{
+		"providers": {
+			"openai": {
+				"id": "openai",
+				"name": "OpenAI",
+				"type": "openai",
+				"base_url": "https://api.openai.com/v1",
+				"api_key": "sk-test",
+				"models": [{"id": "shared-model"}]
+			},
+			"anthropic": {
+				"id": "anthropic",
+				"name": "Anthropic",
+				"type": "anthropic",
+				"base_url": "https://api.anthropic.com/v1",
+				"api_key": "sk-test2",
+				"models": [{"id": "shared-model"}]
+			}
+		},
+		"options": {
+			"disable_default_providers": true,
+			"disable_provider_auto_update": true
+		}
+	}`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "multiple providers")
+}
+
+func TestConfigSetModelCmd_AcceptsProviderPrefixedModel(t *testing.T) {
+	err := runConfigSetModelCmd(t, "large", "openai/gpt-4o", `{
+		"providers": {
+			"openai": {
+				"id": "openai",
+				"name": "OpenAI",
+				"type": "openai",
+				"base_url": "https://api.openai.com/v1",
+				"api_key": "sk-test",
+				"models": [{"id": "gpt-4o"}]
+			}
+		},
+		"options": {
+			"disable_default_providers": true,
+			"disable_provider_auto_update": true
+		}
+	}`)
+	require.NoError(t, err)
+}
+
+func TestConfigSetModelCmd_RejectsInvalidTier(t *testing.T) {
+	err := runConfigSetModelCmd(t, "huge", "gpt-4o", `{
+		"providers": {
+			"openai": {
+				"id": "openai",
+				"name": "OpenAI",
+				"type": "openai",
+				"api_key": "sk-test",
+				"models": [{"id": "gpt-4o"}]
+			}
+		},
+		"options": {
+			"disable_default_providers": true,
+			"disable_provider_auto_update": true
+		}
+	}`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "model type must be 'large' or 'small'")
+}
