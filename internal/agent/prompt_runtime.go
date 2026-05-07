@@ -60,6 +60,33 @@ Use src edit for file modifications — e.g.:
 See src --help for usage.`
 }
 
+// rePromptToolCall is the next-observation text after the model emitted a
+// structured tool/function call shape. This runtime has no tool-calling API:
+// every turn is either plain bash, narrate, comments, or exit.
+func rePromptToolCall() string {
+	return alertPrefix + ` your last emit used a tool/function call format.
+
+There is NO tool/function calling API in this environment. Tool call syntax
+like <tool_call>...</tool_call>, <function_call>...</function_call>,
+<invoke ...>, or [tool_call]...[/tool_call] is discarded and never executed.
+
+To act, emit plain bash only:
+  ls -la
+  rg "needle" .
+  src edit internal/agent/loop.go
+
+To talk to the human, use:
+  narrate <<'EOF'
+  your message here
+  EOF
+
+To leave a short note before a command, use a bash comment:
+  # checking the agent loop
+
+To end the turn, emit literally:
+  exit`
+}
+
 // rePromptTimeout is the next-observation text after a per-call timeout.
 func rePromptTimeout(secs int) string {
 	return fmt.Sprintf(`[runtime] your last command exceeded the per-call timeout (%ds) and was killed.

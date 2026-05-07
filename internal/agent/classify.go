@@ -16,6 +16,7 @@ const (
 	classifyExit                    // emit IS the exit (no command to run)
 	classifyExecExit                // emit ends in `<sep> exit` — run, then exit
 	classifyEmpty
+	classifyToolCall
 	classifyInvalidBash
 	classifyBanned
 	classifyProsePrefix // emit starts with Title-Cased prose word
@@ -37,6 +38,12 @@ var exitRe = regexp.MustCompile(`^\s*exit(\s+-?\d+)?\s*$`)
 // returns stopExit instead of continuing.
 var trailingExitRe = regexp.MustCompile(`(?:&&|\|\||;|\n)\s*exit(?:\s+-?\d+)?\s*$`)
 
+// toolCallXMLRe matches XML-style tool/function call hallucinations.
+var toolCallXMLRe = regexp.MustCompile(`(?i)</?(?:tool_call|minimax:tool_call|function_call|tool_use|invoke)\b[^>]*>`)
+
+// toolCallBracketRe matches bracket-style tool/function call hallucinations.
+var toolCallBracketRe = regexp.MustCompile(`(?i)\[/?(?:tool_?call|function_?call|tool_?use|invoke)\]`)
+
 // blockedCmdPatterns guards in-place file edits (sed -i / perl -i). CC native
 // sandbox is the dominant defense; this is a thin nudge to push agents toward
 // `src edit` for in-place file modifications.
@@ -49,12 +56,14 @@ var blockedCmdPatterns = []*regexp.Regexp{
 // auxiliary string (bash stderr for classifyInvalidBash; first Title-Cased
 // word for classifyProsePrefix; "" otherwise).
 //
-// Classification order: empty → exit → banned → bash-syntax → prose-prefix → trailing-exit → exec.
+// Classification order: empty → exit → banned → tool-call → bash-syntax → prose-prefix → trailing-exit → exec.
 // Empty short-circuits before exit so `   ` doesn't accidentally pass the
 // trim+exitRe check; banned runs before bash-syntax so we never invoke
-// `bash -n` on a refused pattern; prose-prefix runs after bash-syntax so
-// true syntax errors still win; prose-prefix runs before trailing-exit so
-// prose shapes like "Read files && exit" are caught as prose, not executed.
+// `bash -n` on a refused pattern; tool-call runs before bash-syntax so
+// XML/bracket shapes get a dedicated correction instead of a generic bash
+// error; prose-prefix runs after bash-syntax so true syntax errors still
+// win; prose-prefix runs before trailing-exit so prose shapes like
+// "Read files && exit" are caught as prose, not executed.
 func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {
 	trimmed := strings.TrimSpace(emit)
 	if trimmed == "" {
@@ -65,6 +74,9 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 	}
 	if containsBlockedPattern(emit) {
 		return classifyBanned, ""
+	}
+	if containsToolCallPattern(emit) {
+		return classifyToolCall, ""
 	}
 	if err := bashSyntaxCheck(ctx, emit); err != "" {
 		return classifyInvalidBash, err
@@ -88,6 +100,10 @@ func containsBlockedPattern(emit string) bool {
 		}
 	}
 	return false
+}
+
+func containsToolCallPattern(emit string) bool {
+	return toolCallXMLRe.MatchString(emit) || toolCallBracketRe.MatchString(emit)
 }
 
 // proseFirstWordRe matches a Title-Cased English word at the start of a line

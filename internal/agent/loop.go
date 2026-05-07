@@ -141,6 +141,20 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
+		case classifyToolCall:
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
+				"tool-call format detected; re-prompted")
+			obs := rePromptToolCall()
+			msgs = append(msgs,
+				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				fantasy.NewUserMessage(obs),
+			)
+			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+				slog.Warn("loop: persist tool-call re-prompt", "error", obsErr)
+			}
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
+
 		case classifyInvalidBash:
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
 				fmt.Sprintf("invalid bash; bash -n said: %s; re-prompted", oneLine(aux)))

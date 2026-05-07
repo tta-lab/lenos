@@ -1418,6 +1418,52 @@ func TestRunLoop_ProsePrefix_LowercaseAccepted(t *testing.T) {
 	assert.Equal(t, []string{"ls -la"}, runner.bash, "lowercase first word must reach exec")
 }
 
+// TestRunLoop_ToolCall_FiresPreExec verifies tool-call shaped emits are
+// rejected before bash exec and persist a high-salience re-prompt.
+func TestRunLoop_ToolCall_FiresPreExec(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"<tool_call>{\"name\":\"bash\"}</tool_call>", "exit"}}
+	runner := &fakeRunner{} // runner must NOT be called
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	assert.Empty(t, runner.bash, "tool-call branch must not invoke runner")
+
+	require.Greater(t, len(rec.calls), 2, "expected recorder calls for emit + skip")
+	assert.Contains(t, rec.calls[2], "BashSkipped:warn:tool-call format detected")
+
+	results := messagesByRole(ms, message.Result)
+	assert.Empty(t, results, "no result row when tool-call branch bypasses exec")
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	obs := users[0].Content().Text
+	assert.Contains(t, obs, alertPrefix)
+	assert.Contains(t, obs, "There is NO tool/function calling API")
+	assert.Contains(t, obs, "emit plain bash")
+}
+
+// TestRunLoop_DrainOnToolCall ensures queued user input still drains after the
+// tool-call re-prompt branch, matching other non-exec re-prompt paths.
+func TestRunLoop_DrainOnToolCall(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"[tool_call]{\"name\":\"bash\"}[/tool_call]", "exit"}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
+
+	_, err := runLoop(context.Background(), deps, nil, "go")
+	require.NoError(t, err)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 2)
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
+	assert.Contains(t, users[0].Content().Text, "There is NO tool/function calling API")
+	assert.Equal(t, "q1", users[1].Content().Text)
+}
+
 // TestRunLoop_DrainOnProsePrefix is the drain peer for the prose-prefix branch.
 // Every re-prompt branch must have a DrainOn<X> counterpart so a future
 // simplification can't silently drop drainAndAppend.
