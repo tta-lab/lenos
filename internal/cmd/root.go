@@ -38,7 +38,6 @@ func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
-	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
 	rootCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
 	rootCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
@@ -78,9 +77,6 @@ cat README.md | lenos run "make this more glamorous" > GLAMOROUS_README.md
 
 # Run with debug logging in a specific directory
 lenos --debug --cwd /path/to/project
-
-# Run in yolo mode (auto-accept all permissions; use with care)
-lenos --yolo
 
 # Continue a previous session
 lenos --session {session-id}

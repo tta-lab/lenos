@@ -306,7 +306,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 
 	status := NewStatus(com, ui)
 
-	ui.setEditorPrompt(false)
 	ui.randomizePlaceholders()
 	ui.textarea.Placeholder = ui.readyPlaceholder
 	ui.status = status
@@ -2316,16 +2315,6 @@ func (m *UI) openEditor(value string) tea.Cmd {
 	})
 }
 
-// setEditorPrompt configures the textarea prompt function based on whether
-// yolo mode is enabled.
-func (m *UI) setEditorPrompt(yolo bool) {
-	if yolo {
-		m.textarea.SetPromptFunc(4, m.yoloPromptFunc)
-		return
-	}
-	m.textarea.SetPromptFunc(4, m.normalPromptFunc)
-}
-
 // normalPromptFunc returns the normal editor prompt style ("  λ " on first
 // line, "  · " on subsequent lines).
 func (m *UI) normalPromptFunc(info textarea.PromptInfo) string {
@@ -2340,23 +2329,6 @@ func (m *UI) normalPromptFunc(info textarea.PromptInfo) string {
 		return t.EditorPromptNormalFocused.Render()
 	}
 	return t.EditorPromptNormalBlurred.Render()
-}
-
-// yoloPromptFunc returns the yolo mode editor prompt style with warning icon
-// and colored dots.
-func (m *UI) yoloPromptFunc(info textarea.PromptInfo) string {
-	t := m.com.Styles
-	if info.LineNumber == 0 {
-		if info.Focused {
-			return t.EditorPromptYoloIconFocused.Render()
-		} else {
-			return t.EditorPromptYoloIconBlurred.Render()
-		}
-	}
-	if info.Focused {
-		return t.EditorPromptYoloDotsFocused.Render()
-	}
-	return t.EditorPromptYoloDotsBlurred.Render()
 }
 
 // closeCompletions closes the completions popup and resets state.
