@@ -180,10 +180,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return err
 	}
 
-	// Attachments are not surfaced in the bash-first loop. See task
-	// 8f7c6086 (lenos: wire attachments into bash-first loop, decide
-	// option A inline vs option B `lenos attach` CLI).
-	_ = attachments
+	prompt = message.PromptWithTextAttachments(prompt, attachments)
 
 	model := c.currentAgent.Model()
 
