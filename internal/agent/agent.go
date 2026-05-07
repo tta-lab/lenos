@@ -102,7 +102,7 @@ type SessionAgentCall struct {
 
 type SessionAgent interface {
 	Run(context.Context, SessionAgentCall) error
-	SetModels(large Model, small Model)
+	SetModels(large Model, small Model, primary Model)
 	SetSystemPrompt(systemPrompt string)
 	Cancel(sessionID string)
 	CancelAll()

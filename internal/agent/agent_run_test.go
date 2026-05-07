@@ -175,6 +175,16 @@ func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 		},
 	})
 
+	agent.primaryModel.Set(Model{
+		Model: lm,
+		CatwalkCfg: catwalk.Model{
+			ContextWindow:    200000,
+			DefaultMaxTokens: 8096,
+			CostPer1MIn:      3.0,
+			CostPer1MOut:     15.0,
+		},
+	})
+
 	usage := fantasy.Usage{
 		InputTokens:  1000,
 		OutputTokens: 500,

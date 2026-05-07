@@ -907,7 +907,12 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	c.currentAgent.SetModels(large, small)
+	// Resolve primary based on RuntimeOverrides.ActiveTier.
+	primary := large
+	if c.cfg.Overrides().ActiveTier == config.SelectedModelTypeSmall {
+		primary = small
+	}
+	c.currentAgent.SetModels(large, small, primary)
 
 	// Rebuild the system prompt — the lenos wrapper can vary by
 	// provider/model — and push it onto the agent.
