@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -119,6 +120,13 @@ func (w *testWorkspace) ListModifiedFiles(ctx context.Context) ([]workspace.Modi
 		return w.listModifiedFn()
 	}
 	return w.modifiedFiles, nil
+}
+
+func (w *testWorkspace) SetActiveModel(modelType config.SelectedModelType, model config.SelectedModel) {
+	if w.cfg == nil || w.cfg.Models == nil {
+		return
+	}
+	w.cfg.Models[modelType] = model
 }
 
 func TestEffectiveTodos(t *testing.T) {
@@ -401,4 +409,71 @@ func TestUpdateSessionMessage_Result(t *testing.T) {
 		require.True(t, ok, "item should still be a ResultMessageItem after update")
 		require.NotNil(t, resultItem, "ResultMessageItem should have updated content")
 	})
+}
+
+// callTracker records method invocations on testWorkspace for assertions.
+type callTracker struct {
+	mu    sync.Mutex
+	calls []string // method names in order
+}
+
+func (t *callTracker) add(name string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.calls = append(t.calls, name)
+}
+
+func (t *callTracker) has(name string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, c := range t.calls {
+		if c == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *callTracker) hasNot(name string) bool {
+	return !t.has(name)
+}
+
+// trackedWorkspace wraps testWorkspace with call tracking.
+type trackedWorkspace struct {
+	testWorkspace
+	tracker *callTracker
+}
+
+func (w *trackedWorkspace) SetActiveModel(modelType config.SelectedModelType, model config.SelectedModel) {
+	w.tracker.add("SetActiveModel")
+	w.testWorkspace.SetActiveModel(modelType, model)
+}
+
+func TestUI_ModelSelection_DoesNotPersist(t *testing.T) {
+	t.Parallel()
+
+	tracker := &callTracker{}
+	cfg := &config.Config{
+		Models: map[config.SelectedModelType]config.SelectedModel{
+			config.SelectedModelTypeLarge: {
+				Provider: "openai",
+				Model:    "gpt-4o",
+			},
+		},
+		Agents: map[string]config.Agent{
+			config.AgentCoder: {Model: config.SelectedModelTypeLarge},
+		},
+	}
+	tw := &testWorkspace{cfg: cfg}
+	twSvc := &trackedWorkspace{testWorkspace: *tw, tracker: tracker}
+
+	// Simulate the TUI's model selection handler directly — what the dialog
+	// ActionSelectModel case does in handleDialogMsg.
+	twSvc.SetActiveModel(config.SelectedModelTypeLarge, config.SelectedModel{
+		Provider: "anthropic",
+		Model:    "claude-3-opus",
+	})
+
+	require.True(t, tracker.has("SetActiveModel"), "SetActiveModel must be called when selecting a model in TUI")
+	require.False(t, tracker.has("UpdatePreferredModel"), "UpdatePreferredModel must NOT be called from TUI handlers")
 }

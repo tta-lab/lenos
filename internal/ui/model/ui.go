@@ -306,7 +306,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 
 	status := NewStatus(com, ui)
 
-	ui.setEditorPrompt(false)
 	ui.randomizePlaceholders()
 	ui.textarea.Placeholder = ui.readyPlaceholder
 	ui.status = status
@@ -1143,10 +1142,10 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 
 			currentModel := cfg.Models[agentCfg.Model]
 			currentModel.Think = !currentModel.Think
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
+			m.com.Workspace.SetActiveModel(agentCfg.Model, currentModel)
+			if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
 				return util.ReportError(err)()
 			}
-			m.com.Workspace.UpdateAgentModel(context.TODO())
 			status := "disabled"
 			if currentModel.Think {
 				status = "enabled"
@@ -1216,14 +1215,11 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			break
 		}
 
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		} else if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
-			// Ensure small model is set is unset.
+		m.com.Workspace.SetActiveModel(msg.ModelType, msg.Model)
+		if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
+			// Ensure small model is set if unset.
 			smallModel := m.com.Workspace.GetDefaultSmallModel(providerID)
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, smallModel); err != nil {
-				cmds = append(cmds, util.ReportError(err))
-			}
+			m.com.Workspace.SetActiveModel(config.SelectedModelTypeSmall, smallModel)
 		}
 
 		cmds = append(cmds, func() tea.Msg {
@@ -1267,13 +1263,12 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 
 		currentModel := cfg.Models[agentCfg.Model]
 		currentModel.ReasoningEffort = msg.Effort
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
+		m.com.Workspace.SetActiveModel(agentCfg.Model, currentModel)
 
 		cmds = append(cmds, func() tea.Msg {
-			m.com.Workspace.UpdateAgentModel(context.TODO())
+			if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
+				return util.ReportError(err)()
+			}
 			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
 		})
 		m.dialog.CloseDialog(dialog.ReasoningID)
@@ -2324,16 +2319,6 @@ func (m *UI) openEditor(value string) tea.Cmd {
 	})
 }
 
-// setEditorPrompt configures the textarea prompt function based on whether
-// yolo mode is enabled.
-func (m *UI) setEditorPrompt(yolo bool) {
-	if yolo {
-		m.textarea.SetPromptFunc(4, m.yoloPromptFunc)
-		return
-	}
-	m.textarea.SetPromptFunc(4, m.normalPromptFunc)
-}
-
 // normalPromptFunc returns the normal editor prompt style ("  λ " on first
 // line, "  · " on subsequent lines).
 func (m *UI) normalPromptFunc(info textarea.PromptInfo) string {
@@ -2348,23 +2333,6 @@ func (m *UI) normalPromptFunc(info textarea.PromptInfo) string {
 		return t.EditorPromptNormalFocused.Render()
 	}
 	return t.EditorPromptNormalBlurred.Render()
-}
-
-// yoloPromptFunc returns the yolo mode editor prompt style with warning icon
-// and colored dots.
-func (m *UI) yoloPromptFunc(info textarea.PromptInfo) string {
-	t := m.com.Styles
-	if info.LineNumber == 0 {
-		if info.Focused {
-			return t.EditorPromptYoloIconFocused.Render()
-		} else {
-			return t.EditorPromptYoloIconBlurred.Render()
-		}
-	}
-	if info.Focused {
-		return t.EditorPromptYoloDotsFocused.Render()
-	}
-	return t.EditorPromptYoloDotsBlurred.Render()
 }
 
 // closeCompletions closes the completions popup and resets state.

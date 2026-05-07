@@ -1,11 +1,11 @@
-package app
+package config
 
 import (
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/stretchr/testify/require"
-	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/csync"
 )
 
 func TestParseModelStr(t *testing.T) {
@@ -14,7 +14,7 @@ func TestParseModelStr(t *testing.T) {
 		modelStr        string
 		expectedFilter  string
 		expectedModelID string
-		setupProviders  func() map[string]config.ProviderConfig
+		setupProviders  func() map[string]ProviderConfig
 	}{
 		{
 			name:            "simple model with no slashes",
@@ -63,7 +63,7 @@ func TestParseModelStr(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			providers := tt.setupProviders()
-			filter, modelID := parseModelStr(providers, tt.modelStr)
+			filter, modelID := ParseModelStrForCLI(providers, tt.modelStr)
 
 			require.Equal(t, tt.expectedFilter, filter, "provider filter mismatch")
 			require.Equal(t, tt.expectedModelID, modelID, "model ID mismatch")
@@ -71,8 +71,8 @@ func TestParseModelStr(t *testing.T) {
 	}
 }
 
-func setupMockProviders() map[string]config.ProviderConfig {
-	return map[string]config.ProviderConfig{
+func setupMockProviders() map[string]ProviderConfig {
+	return map[string]ProviderConfig{
 		"openai": {
 			ID:     "openai",
 			Name:   "OpenAI",
@@ -86,8 +86,8 @@ func setupMockProviders() map[string]config.ProviderConfig {
 	}
 }
 
-func setupMockProvidersWithSlashes() map[string]config.ProviderConfig {
-	return map[string]config.ProviderConfig{
+func setupMockProvidersWithSlashes() map[string]ProviderConfig {
+	return map[string]ProviderConfig{
 		"synthetic": {
 			ID:   "synthetic",
 			Name: "Synthetic",
@@ -112,7 +112,7 @@ func TestFindModels(t *testing.T) {
 		expectedModelID  string
 		expectError      bool
 		errorContains    string
-		setupProviders   func() map[string]config.ProviderConfig
+		setupProviders   func() map[string]ProviderConfig
 	}{
 		{
 			name:             "simple model found in one provider",
@@ -157,8 +157,8 @@ func TestFindModels(t *testing.T) {
 			modelStr:      "shared-model",
 			expectError:   true,
 			errorContains: "multiple providers",
-			setupProviders: func() map[string]config.ProviderConfig {
-				return map[string]config.ProviderConfig{
+			setupProviders: func() map[string]ProviderConfig {
+				return map[string]ProviderConfig{
 					"openai": {
 						ID:     "openai",
 						Models: []catwalk.Model{{ID: "shared-model"}},
@@ -184,7 +184,7 @@ func TestFindModels(t *testing.T) {
 			providers := tt.setupProviders()
 
 			// Use findModels with the model as "large" and empty "small".
-			matches, _, err := findModels(providers, tt.modelStr, "")
+			matches, err := findModels(providers, tt.modelStr)
 			if err != nil {
 				if tt.expectError {
 					require.Contains(t, err.Error(), tt.errorContains)
@@ -202,8 +202,77 @@ func TestFindModels(t *testing.T) {
 				require.Contains(t, err.Error(), tt.errorContains)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tt.expectedProvider, match.provider)
-				require.Equal(t, tt.expectedModelID, match.modelID)
+				require.Equal(t, tt.expectedProvider, match.Provider)
+				require.Equal(t, tt.expectedModelID, match.ModelID)
+			}
+		})
+	}
+}
+
+func TestApplyEphemeralModelOverride(t *testing.T) {
+	t.Parallel()
+
+	providerSet := map[string]ProviderConfig{
+		"openai": {
+			ID:     "openai",
+			Models: []catwalk.Model{{ID: "gpt-4o"}, {ID: "shared-model"}},
+		},
+		"anthropic": {
+			ID:     "anthropic",
+			Models: []catwalk.Model{{ID: "claude"}, {ID: "shared-model"}},
+		},
+	}
+
+	cases := []struct {
+		name          string
+		modelOverride string
+		useSmallTier  bool
+		wantTier      SelectedModelType
+		wantModel     *SelectedModel
+		wantErr       string
+	}{
+		{name: "no-op", modelOverride: "", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: ""},
+		{name: "small-tier-only", modelOverride: "", useSmallTier: true, wantTier: SelectedModelTypeSmall, wantModel: nil, wantErr: ""},
+		{name: "large-override-name-only", modelOverride: "gpt-4o", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
+		{name: "small-override-with-flag", modelOverride: "gpt-4o", useSmallTier: true, wantTier: SelectedModelTypeSmall, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
+		{name: "provider-prefixed", modelOverride: "openai/gpt-4o", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
+		{name: "case-insensitive", modelOverride: "GPT-4O", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
+		{name: "ambiguous", modelOverride: "shared-model", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: "multiple providers"},
+		{name: "not-found", modelOverride: "nonexistent", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: "not found"},
+		{name: "unknown-provider", modelOverride: "bogus/gpt-4o", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: "not found"},
+		{name: "large-flag-with-override", modelOverride: "claude", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "anthropic", Model: "claude"}, wantErr: ""},
+	}
+
+	for _, tt := range cases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			store := &ConfigStore{
+				overrides: RuntimeOverrides{},
+				config: &Config{
+					Models:    make(map[SelectedModelType]SelectedModel),
+					Providers: csync.NewMapFrom(providerSet),
+				},
+			}
+
+			err := ApplyEphemeralModelOverride(store, tt.modelOverride, tt.useSmallTier)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			require.Equal(t, tt.wantTier, store.Overrides().ActiveTier, "ActiveTier mismatch")
+
+			if tt.wantModel == nil {
+				_, exists := store.config.Models[tt.wantTier]
+				require.False(t, exists, "expected no model mutation for tier %s", tt.wantTier)
+			} else {
+				got, exists := store.config.Models[tt.wantTier]
+				require.True(t, exists, "expected model entry for tier %s", tt.wantTier)
+				require.Equal(t, *tt.wantModel, got)
 			}
 		})
 	}

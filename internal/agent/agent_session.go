@@ -252,13 +252,13 @@ func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage
 // per-turn totals, saves it, and returns the updated session. On any error the
 // original session is returned unchanged and a warning is logged.
 func (a *sessionAgent) saveSessionUsage(ctx context.Context, sessionID string, usage fantasy.Usage, meta fantasy.ProviderMetadata, logMsg string) (session.Session, bool) {
-	lm := a.largeModel.Get()
+	pm := a.primaryModel.Get()
 	s, err := a.sessions.Get(ctx, sessionID)
 	if err != nil {
 		slog.Warn("Failed to load session for usage update", "session_id", sessionID, "error", err)
 		return session.Session{}, false
 	}
-	a.updateSessionUsage(lm, &s, usage, a.openrouterCost(meta))
+	a.updateSessionUsage(pm, &s, usage, a.openrouterCost(meta))
 	updated, saveErr := a.sessions.Save(ctx, s)
 	if saveErr != nil {
 		slog.Warn(logMsg, "session_id", sessionID, "error", saveErr)
@@ -351,9 +351,10 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 	return prompts
 }
 
-func (a *sessionAgent) SetModels(large Model, small Model) {
+func (a *sessionAgent) SetModels(large Model, small Model, primary Model) {
 	a.largeModel.Set(large)
 	a.smallModel.Set(small)
+	a.primaryModel.Set(primary)
 }
 
 func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
@@ -361,7 +362,7 @@ func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
 }
 
 func (a *sessionAgent) Model() Model {
-	return a.largeModel.Get()
+	return a.primaryModel.Get()
 }
 
 // formatSummaryPrompt formats the session summarization prompt from a todo list.

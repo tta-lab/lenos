@@ -38,7 +38,8 @@ func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
-	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
+	rootCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
+	rootCmd.Flags().Bool("small-model", false, "Use the small-tier model for this session")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	rootCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	rootCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
@@ -48,6 +49,7 @@ func init() {
 
 	rootCmd.AddCommand(
 		runCmd,
+		configCmd,
 		dirsCmd,
 		updateProvidersCmd,
 		logsCmd,
@@ -75,9 +77,6 @@ cat README.md | lenos run "make this more glamorous" > GLAMOROUS_README.md
 
 # Run with debug logging in a specific directory
 lenos --debug --cwd /path/to/project
-
-# Run in yolo mode (auto-accept all permissions; use with care)
-lenos --yolo
 
 # Continue a previous session
 lenos --session {session-id}
@@ -259,6 +258,15 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 
 	// Re-run SetupAgents now that overrides are set.
 	store.SetupAgents()
+
+	// Apply ephemeral model overrides from CLI flags.
+	modelOverride, _ := cmd.Flags().GetString("model")
+	useSmallTier, _ := cmd.Flags().GetBool("small-model")
+	if modelOverride != "" || useSmallTier {
+		if err := config.ApplyEphemeralModelOverride(store, modelOverride, useSmallTier); err != nil {
+			return nil, nil, fmt.Errorf("failed to apply model override: %w", err)
+		}
+	}
 
 	if err := os.MkdirAll(cfg.Options.DataDirectory, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("failed to create data directory: %q %w", cfg.Options.DataDirectory, err)

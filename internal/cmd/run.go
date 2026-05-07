@@ -51,12 +51,10 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var (
-			quiet, _      = cmd.Flags().GetBool("quiet")
-			verbose, _    = cmd.Flags().GetBool("verbose")
-			largeModel, _ = cmd.Flags().GetString("model")
-			smallModel, _ = cmd.Flags().GetString("small-model")
-			sessionID, _  = cmd.Flags().GetString("session")
-			useLast, _    = cmd.Flags().GetBool("continue")
+			quiet, _     = cmd.Flags().GetBool("quiet")
+			verbose, _   = cmd.Flags().GetBool("verbose")
+			sessionID, _ = cmd.Flags().GetString("session")
+			useLast, _   = cmd.Flags().GetBool("continue")
 		)
 
 		// Cancel on SIGINT or SIGTERM.
@@ -108,7 +106,7 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
 			slog.SetDefault(slog.New(log.New(os.Stderr)))
 		}
 
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, quiet || verbose, sessionID, useLast)
+		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, quiet || verbose, sessionID, useLast)
 	},
 }
 
@@ -116,7 +114,7 @@ func init() {
 	runCmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
 	runCmd.Flags().BoolP("verbose", "v", false, "Show logs")
 	runCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
-	runCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
+	runCmd.Flags().Bool("small-model", false, "Use the small-tier model for this session")
 	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	runCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")

@@ -71,10 +71,6 @@
           "$ref": "#/$defs/Options",
           "description": "General application options"
         },
-        "permissions": {
-          "$ref": "#/$defs/Permissions",
-          "description": "Permission settings for tool usage"
-        },
         "tools": {
           "$ref": "#/$defs/Tools",
           "description": "Tool configurations"
@@ -215,23 +211,6 @@
           "type": "boolean",
           "description": "Disable desktop notifications",
           "default": false
-        }
-      },
-      "additionalProperties": false,
-      "type": "object"
-    },
-    "Permissions": {
-      "properties": {
-        "allowed_tools": {
-          "items": {
-            "type": "string",
-            "examples": [
-              "bash",
-              "view"
-            ]
-          },
-          "type": "array",
-          "description": "List of tools that don't require permission prompts"
         }
       },
       "additionalProperties": false,

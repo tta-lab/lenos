@@ -173,10 +173,6 @@ func (c Completions) Limits() (depth, items int) {
 	return ptrValOr(c.MaxDepth, 0), ptrValOr(c.MaxItems, 0)
 }
 
-type Permissions struct {
-	AllowedTools []string `json:"allowed_tools,omitempty" jsonschema:"description=List of tools that don't require permission prompts,example=bash,example=view"`
-}
-
 type TrailerStyle string
 
 const (
@@ -301,8 +297,6 @@ type Config struct {
 	Providers *csync.Map[string, ProviderConfig] `json:"providers,omitempty" jsonschema:"description=AI provider configurations"`
 
 	Options *Options `json:"options,omitempty" jsonschema:"description=General application options"`
-
-	Permissions *Permissions `json:"permissions,omitempty" jsonschema:"description=Permission settings for tool usage"`
 
 	Tools Tools `json:"tools,omitzero" jsonschema:"description=Tool configurations"`
 

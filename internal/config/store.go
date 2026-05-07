@@ -37,6 +37,10 @@ type RuntimeOverrides struct {
 	// Callers MUST verify temenos sandbox is connected before setting ReadOnly;
 	// see internal/cmd/run.go sandbox guard for the pattern.
 	ReadOnly bool
+	// ActiveTier is the model tier selected for this session via CLI flags.
+	// Set by ApplyEphemeralModelOverride. Zero-value (empty string) is
+	// treated as Large by the coordinator for backward compat.
+	ActiveTier SelectedModelType
 }
 
 // ConfigStore is the single entry point for all config access. It owns the
@@ -176,7 +180,9 @@ func (s *ConfigStore) RemoveConfigField(scope Scope, key string) error {
 }
 
 // UpdatePreferredModel updates the preferred model for the given type and
-// persists it to the config file at the given scope.
+// persists it to the config file at the given scope. Used only by the
+// load-time recovery path in configureSelectedModels. TUI dialog actions
+// should use SetActiveModel instead to avoid persistence side effects.
 func (s *ConfigStore) UpdatePreferredModel(scope Scope, modelType SelectedModelType, model SelectedModel) error {
 	s.config.Models[modelType] = model
 	if err := s.SetConfigField(scope, fmt.Sprintf("models.%s", modelType), model); err != nil {
@@ -186,6 +192,13 @@ func (s *ConfigStore) UpdatePreferredModel(scope Scope, modelType SelectedModelT
 		return err
 	}
 	return nil
+}
+
+// SetActiveModel sets the active model for the given type in memory only.
+// It does not persist to disk or record to recent models. This is the safe
+// path for TUI dialog actions that should not leak state to future sessions.
+func (s *ConfigStore) SetActiveModel(modelType SelectedModelType, model SelectedModel) {
+	s.config.Models[modelType] = model
 }
 
 // SetTransparentBackground sets the transparent background setting and persists it.
