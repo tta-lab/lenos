@@ -5,6 +5,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/csync"
 )
 
 func TestParseModelStr(t *testing.T) {
@@ -203,6 +204,75 @@ func TestFindModels(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, tt.expectedProvider, match.Provider)
 				require.Equal(t, tt.expectedModelID, match.ModelID)
+			}
+		})
+	}
+}
+
+func TestApplyEphemeralModelOverride(t *testing.T) {
+	t.Parallel()
+
+	providerSet := map[string]ProviderConfig{
+		"openai": {
+			ID:     "openai",
+			Models: []catwalk.Model{{ID: "gpt-4o"}, {ID: "shared-model"}},
+		},
+		"anthropic": {
+			ID:     "anthropic",
+			Models: []catwalk.Model{{ID: "claude"}, {ID: "shared-model"}},
+		},
+	}
+
+	cases := []struct {
+		name          string
+		modelOverride string
+		useSmallTier  bool
+		wantTier      SelectedModelType
+		wantModel     *SelectedModel
+		wantErr       string
+	}{
+		{name: "no-op", modelOverride: "", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: ""},
+		{name: "small-tier-only", modelOverride: "", useSmallTier: true, wantTier: SelectedModelTypeSmall, wantModel: nil, wantErr: ""},
+		{name: "large-override-name-only", modelOverride: "gpt-4o", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
+		{name: "small-override-with-flag", modelOverride: "gpt-4o", useSmallTier: true, wantTier: SelectedModelTypeSmall, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
+		{name: "provider-prefixed", modelOverride: "openai/gpt-4o", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
+		{name: "case-insensitive", modelOverride: "GPT-4O", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
+		{name: "ambiguous", modelOverride: "shared-model", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: "multiple providers"},
+		{name: "not-found", modelOverride: "nonexistent", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: "not found"},
+		{name: "unknown-provider", modelOverride: "bogus/gpt-4o", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: "not found"},
+		{name: "large-flag-with-override", modelOverride: "claude", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "anthropic", Model: "claude"}, wantErr: ""},
+	}
+
+	for _, tt := range cases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			store := &ConfigStore{
+				overrides: RuntimeOverrides{},
+				config: &Config{
+					Models:    make(map[SelectedModelType]SelectedModel),
+					Providers: csync.NewMapFrom(providerSet),
+				},
+			}
+
+			err := ApplyEphemeralModelOverride(store, tt.modelOverride, tt.useSmallTier)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			require.Equal(t, tt.wantTier, store.Overrides().ActiveTier, "ActiveTier mismatch")
+
+			if tt.wantModel == nil {
+				_, exists := store.config.Models[tt.wantTier]
+				require.False(t, exists, "expected no model mutation for tier %s", tt.wantTier)
+			} else {
+				got, exists := store.config.Models[tt.wantTier]
+				require.True(t, exists, "expected model entry for tier %s", tt.wantTier)
+				require.Equal(t, *tt.wantModel, got)
 			}
 		})
 	}
