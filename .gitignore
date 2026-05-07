@@ -55,3 +55,4 @@ manpages/
 completions/crush.*sh
 .prettierignore
 .task
+scripts/__pycache__
