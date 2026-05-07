@@ -1,5 +1,14 @@
 # UI Development Instructions
 
+## Model selection
+
+TUI dialog actions (model picker, thinking toggle, reasoning effort) MUST use
+`Workspace.SetActiveModel`. Never persist to disk from a TUI handler. The
+`Workspace` interface exposes only `SetActiveModel` — there is no persistent
+write path through it. If you find yourself reaching for
+`UpdatePreferredModel` from a UI handler, you are re-introducing the
+state-leakage bug.
+
 ## General Guidelines
 
 - Never use commands to send messages when you can directly mutate children

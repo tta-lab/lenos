@@ -47,7 +47,36 @@ lenos --continue
 
 # Use a custom data directory
 lenos --data-dir /path/to/custom/.lenos
+
+# Run with an explicit model override (ephemeral, no config write)
+lenos -m gpt-4o
+lenos run -m claude-sonnet-4
+
+# Use the small-tier model (flag alone selects tier — no value)
+lenos --small-model
+lenos run --small-model
+
+# Combine: small tier with a specific model override
+lenos --small-model -m haiku-3.5
+
+# Persist a default model (writes to ~/.local/share/lenos/config.json)
+lenos config set-model large gpt-4o
+lenos config set-model small claude-haiku-3.5
 ```
+
+### Migration Notes (Breaking Changes)
+
+- **`--yolo` flag removed**: No replacement. All permission prompts now obey
+  the temenos sandbox or the per-tool default. If `--yolo` behavior is
+  desired, run lenos under temenos with `--readonly` disabled.
+- **`permissions.allowed_tools` config field removed**: The `permissions`
+  block is no longer recognized in `config.json`. All tool permissions are
+  now managed by the temenos sandbox.
+- **`lenos run --small-model haiku` syntax broken**: The `--small-model` flag
+  was previously a String (taking a model ID). It is now a Bool — the flag
+  alone selects the small tier. To use a specific small-tier model with an
+  override, combine: `lenos run --small-model -m haiku`. Existing scripts
+  must update.
 
 ## Configuration
 
