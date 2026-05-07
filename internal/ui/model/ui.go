@@ -1143,7 +1143,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			currentModel := cfg.Models[agentCfg.Model]
 			currentModel.Think = !currentModel.Think
 			m.com.Workspace.SetActiveModel(agentCfg.Model, currentModel)
-			m.com.Workspace.UpdateAgentModel(context.TODO())
+			if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
+				return util.ReportError(err)()
+			}
 			status := "disabled"
 			if currentModel.Think {
 				status = "enabled"
@@ -1264,7 +1266,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		m.com.Workspace.SetActiveModel(agentCfg.Model, currentModel)
 
 		cmds = append(cmds, func() tea.Msg {
-			m.com.Workspace.UpdateAgentModel(context.TODO())
+			if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
+				return util.ReportError(err)()
+			}
 			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
 		})
 		m.dialog.CloseDialog(dialog.ReasoningID)
