@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/sha256"
 	"errors"
 	"os"
 	"path/filepath"
@@ -124,54 +125,60 @@ func TestScope_String(t *testing.T) {
 	require.Contains(t, Scope(99).String(), "Scope(99)")
 }
 
-func TestConfigStore_SetActiveModel_SetsInMemoryOnly(t *testing.T) {
+func TestConfigStore_SetActiveModel_DoesNotWriteConfigFile(t *testing.T) {
 	t.Parallel()
 
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"existing":"data"}`), 0o600))
+	statBefore, _ := os.Stat(path)
+	contentBefore, _ := os.ReadFile(path)
+
 	store := &ConfigStore{
-		config: &Config{
-			Models: make(map[SelectedModelType]SelectedModel),
-		},
+		config:         &Config{Models: make(map[SelectedModelType]SelectedModel)},
+		globalDataPath: path,
 	}
+	store.SetActiveModel(SelectedModelTypeLarge, SelectedModel{Provider: "openai", Model: "gpt-4o"})
 
-	model := SelectedModel{Provider: "openai", Model: "gpt-4o"}
-	store.SetActiveModel(SelectedModelTypeLarge, model)
-
-	// Verify in-memory state.
-	require.Equal(t, model, store.config.Models[SelectedModelTypeLarge])
-
-	// Verify no persistence artifacts (nil fields that would have been
-	// set by SetConfigField or recordRecentModel).
-	require.Nil(t, store.config.RecentModels)
+	statAfter, _ := os.Stat(path)
+	contentAfter, _ := os.ReadFile(path)
+	require.Equal(t, statBefore.ModTime(), statAfter.ModTime(), "mtime must not change")
+	require.Equal(t, sha256.Sum256(contentBefore), sha256.Sum256(contentAfter), "content must not change")
 }
 
-func TestConfigStore_SetActiveModel_OverridesExisting(t *testing.T) {
+func TestConfigStore_SetActiveModel_DoesNotRecordRecents(t *testing.T) {
 	t.Parallel()
 
+	existing := []SelectedModel{{Provider: "anthropic", Model: "claude-3-opus"}}
 	store := &ConfigStore{
 		config: &Config{
-			Models: map[SelectedModelType]SelectedModel{
-				SelectedModelTypeLarge: {Provider: "anthropic", Model: "claude-3-opus"},
-			},
+			Models:       map[SelectedModelType]SelectedModel{},
+			RecentModels: map[SelectedModelType][]SelectedModel{SelectedModelTypeLarge: existing},
 		},
 	}
+	store.SetActiveModel(SelectedModelTypeLarge, SelectedModel{Provider: "openai", Model: "gpt-4o"})
+	require.Equal(t, existing, store.config.RecentModels[SelectedModelTypeLarge], "recents must be byte-identical")
+}
 
+func TestConfigStore_SetActiveModel_UpdatesInMemoryOnly(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"models":{"large":{"provider":"old","model":"old-model"}}}`), 0o600))
+
+	store := &ConfigStore{
+		config:         &Config{Models: map[SelectedModelType]SelectedModel{SelectedModelTypeLarge: {Provider: "old", Model: "old-model"}}},
+		globalDataPath: path,
+	}
 	newModel := SelectedModel{Provider: "openai", Model: "gpt-4o"}
 	store.SetActiveModel(SelectedModelTypeLarge, newModel)
 
+	// In-memory updated.
 	require.Equal(t, newModel, store.config.Models[SelectedModelTypeLarge])
-}
 
-func TestConfigStore_SetActiveModel_SmallModel(t *testing.T) {
-	t.Parallel()
-
-	store := &ConfigStore{
-		config: &Config{
-			Models: make(map[SelectedModelType]SelectedModel),
-		},
-	}
-
-	model := SelectedModel{Provider: "openai", Model: "gpt-4o-mini"}
-	store.SetActiveModel(SelectedModelTypeSmall, model)
-
-	require.Equal(t, model, store.config.Models[SelectedModelTypeSmall])
+	// File still shows old.
+	data, _ := os.ReadFile(path)
+	require.Contains(t, string(data), "old-model")
+	require.NotContains(t, string(data), "gpt-4o")
 }
