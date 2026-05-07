@@ -142,11 +142,22 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyToolCall:
+			// Design choice: drop the assistant row for tool-call-shaped emits
+			// instead of preserving it in DB/history. This is a pure format error,
+			// not a content error: the model has not produced a valid bash action,
+			// only a hallucinated wrapper schema. Replaying that wrapper teaches the
+			// next turn to imitate it again. We do NOT apply this to branches like
+			// invalid-bash, where seeing the exact broken shell text helps the model
+			// repair quoting/syntax on the next turn. Safe in lenos because there is
+			// no tool_use_id / tool-result pairing invariant to preserve. See
+			// flicknote 4ddde3f1 for the regression analysis behind this asymmetry.
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
 				"tool-call format detected; re-prompted")
 			obs := rePromptToolCall()
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete tool-call assistant message", "error", err)
+				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
+					"history mutation failed; bad emit remains in DB")
 			}
 			msgs = append(msgs, fantasy.NewUserMessage(obs))
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
@@ -169,6 +180,12 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyProsePrefix:
+			// Same asymmetry as classifyToolCall above: prose-prefix is a shape
+			// error at the transport boundary ("English sentence in bash slot"),
+			// so preserving it in history hurts more than it helps. The runtime
+			// keeps the raw emit in the transcript for auditability but deletes the
+			// assistant row so the next prompt only contains the corrective user
+			// observation. See flicknote 4ddde3f1.
 			// aux carries the first prose word from classify(); call detectProsePrefix
 			// again to also obtain the full offending line for the re-prompt body.
 			// The second call is a cheap linear scan with early termination.
@@ -179,6 +196,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			obs := rePromptProsePrefix(proseWord, proseLine)
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete prose-prefix assistant message", "error", err)
+				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
+					"history mutation failed; bad emit remains in DB")
 			}
 			msgs = append(msgs, fantasy.NewUserMessage(obs))
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {

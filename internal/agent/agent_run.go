@@ -258,6 +258,13 @@ runLoopReentry:
 // loop's run error. The loop creates assistant rows as it streams; this
 // follow-up replaces any tool-use/end-turn finish on the LAST one with an
 // error-flavored finish so the UI banner makes sense.
+//
+// Boundary note: "most recent assistant" no longer implies "assistant from
+// the immediately previous streamed turn". The loop may delete assistant rows
+// for transport-shape failures such as tool-call / prose-prefix emits before
+// re-prompting, so the latest surviving assistant can be an earlier message.
+// That is intentional: attach the error banner to the newest durable
+// assistant row rather than assuming every streamed emit still exists.
 func (a *sessionAgent) attachErrorFinish(ctx context.Context, sessionID string, runErr error, model string) {
 	all, listErr := a.messages.List(ctx, sessionID)
 	if listErr != nil {
