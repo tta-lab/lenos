@@ -238,6 +238,15 @@ func TestClassify_ProsePrefix(t *testing.T) {
 	}
 }
 
+func TestClassify_ProsePrefixBeatsInvalidBash(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	emit := "Read the file and tell me what's wrong with $('"
+	cls, aux := classify(ctx, emit)
+	require.Equal(t, classifyProsePrefix, cls)
+	require.Equal(t, "Read", aux)
+}
+
 // TestDetectProsePrefix locks the cap-letter heuristic contract. Asserts both
 // the captured first word AND the full offending line — re-prompts use the
 // line to quote the model's prose verbatim and show in-place conversion.

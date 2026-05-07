@@ -92,7 +92,18 @@ func (m *mockMessageService) ListAllUserMessages(context.Context) ([]message.Mes
 	return nil, nil
 }
 
-func (m *mockMessageService) Delete(_ context.Context, _ string) error                { return nil }
+func (m *mockMessageService) Delete(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.messages, id)
+	for i, existingID := range m.order {
+		if existingID == id {
+			m.order = append(m.order[:i], m.order[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
 func (m *mockMessageService) DeleteSessionMessages(_ context.Context, _ string) error { return nil }
 
 // mockLanguageModel implements fantasy.LanguageModel for tests that just need

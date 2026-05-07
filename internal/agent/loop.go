@@ -145,14 +145,13 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
 				"tool-call format detected; re-prompted")
 			obs := rePromptToolCall()
-			msgs = append(msgs,
-				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
-				fantasy.NewUserMessage(obs),
-			)
+			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
+				slog.Warn("loop: delete tool-call assistant message", "error", err)
+			}
+			msgs = append(msgs, fantasy.NewUserMessage(obs))
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
 				slog.Warn("loop: persist tool-call re-prompt", "error", obsErr)
 			}
-			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyInvalidBash:
@@ -178,14 +177,13 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
 				fmt.Sprintf("prose-prefix detected (first word %q); re-prompted", proseWord))
 			obs := rePromptProsePrefix(proseWord, proseLine)
-			msgs = append(msgs,
-				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
-				fantasy.NewUserMessage(obs),
-			)
+			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
+				slog.Warn("loop: delete prose-prefix assistant message", "error", err)
+			}
+			msgs = append(msgs, fantasy.NewUserMessage(obs))
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
 				slog.Warn("loop: persist prose-prefix re-prompt", "error", obsErr)
 			}
-			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyBanned:

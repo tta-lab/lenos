@@ -56,14 +56,13 @@ var blockedCmdPatterns = []*regexp.Regexp{
 // auxiliary string (bash stderr for classifyInvalidBash; first Title-Cased
 // word for classifyProsePrefix; "" otherwise).
 //
-// Classification order: empty → exit → banned → tool-call → bash-syntax → prose-prefix → trailing-exit → exec.
+// Classification order: empty → exit → banned → tool-call → prose-prefix → bash-syntax → trailing-exit → exec.
 // Empty short-circuits before exit so `   ` doesn't accidentally pass the
 // trim+exitRe check; banned runs before bash-syntax so we never invoke
-// `bash -n` on a refused pattern; tool-call runs before bash-syntax so
-// XML/bracket shapes get a dedicated correction instead of a generic bash
-// error; prose-prefix runs after bash-syntax so true syntax errors still
-// win; prose-prefix runs before trailing-exit so prose shapes like
-// "Read files && exit" are caught as prose, not executed.
+// `bash -n` on a refused pattern; tool-call and prose-prefix both run before
+// bash-syntax so obviously wrong non-bash shapes get dedicated corrections
+// instead of generic shell errors; prose-prefix runs before trailing-exit so
+// prose shapes like "Read files && exit" are caught as prose, not executed.
 func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {
 	trimmed := strings.TrimSpace(emit)
 	if trimmed == "" {
@@ -78,14 +77,11 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 	if containsToolCallPattern(emit) {
 		return classifyToolCall, ""
 	}
-	if err := bashSyntaxCheck(ctx, emit); err != "" {
-		return classifyInvalidBash, err
-	}
-	// Pre-exec prose detection. Catches "Read the file..." shape that
-	// passes bash -n but starts with English prose. Word returned via
-	// aux slot; loop calls detectProsePrefix again for the full line.
 	if word, _ := detectProsePrefix(emit); word != "" {
 		return classifyProsePrefix, word
+	}
+	if err := bashSyntaxCheck(ctx, emit); err != "" {
+		return classifyInvalidBash, err
 	}
 	if trailingExitRe.MatchString(trimmed) {
 		return classifyExecExit, ""
