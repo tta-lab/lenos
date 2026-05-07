@@ -1371,7 +1371,8 @@ func TestScanFirstCmdNotFound_BothBashErrorFormats(t *testing.T) {
 // created (the runtime bypasses bash entirely for this shape).
 func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{"Read the files I need", "exit"}}
+	inner := &scriptedModel{emits: []string{"Read the files I need", "exit"}}
+	model := &streamCapturingModel{inner: inner}
 	runner := &fakeRunner{} // no canned results — runner must NOT be called
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
@@ -1391,12 +1392,28 @@ func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
 	results := messagesByRole(ms, message.Result)
 	assert.Empty(t, results, "no result row when prose-prefix bypasses exec")
 
+	assistants := messagesByRole(ms, message.Assistant)
+	require.Len(t, assistants, 1, "bad prose-prefix assistant emit must be dropped from persistence")
+	assert.Equal(t, "exit", strings.TrimSpace(assistants[0].Content().Text))
+
 	// Re-prompt persisted as User row.
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
 	obs := users[0].Content().Text
 	assert.Contains(t, obs, alertPrefix)
 	assert.Contains(t, obs, "`Read`")
+
+	require.Len(t, model.captured, 2, "expected initial prompt and one re-prompt turn")
+	for _, m := range model.captured[1] {
+		if m.Role != fantasy.MessageRoleAssistant {
+			continue
+		}
+		for _, part := range m.Content {
+			if tp, ok := part.(fantasy.TextPart); ok {
+				assert.NotContains(t, tp.Text, "Read the files I need", "bad prose emit must not be replayed to model")
+			}
+		}
+	}
 }
 
 // TestRunLoop_ProsePrefix_LowercaseAccepted verifies a lowercase first word
@@ -1416,6 +1433,73 @@ func TestRunLoop_ProsePrefix_LowercaseAccepted(t *testing.T) {
 
 	// Exec ran — lowercase first word is fine.
 	assert.Equal(t, []string{"ls -la"}, runner.bash, "lowercase first word must reach exec")
+}
+
+// TestRunLoop_ToolCall_FiresPreExec verifies tool-call shaped emits are
+// rejected before bash exec and persist a high-salience re-prompt.
+func TestRunLoop_ToolCall_FiresPreExec(t *testing.T) {
+	t.Parallel()
+	inner := &scriptedModel{emits: []string{"<tool_call>{\"name\":\"bash\"}</tool_call>", "exit"}}
+	model := &streamCapturingModel{inner: inner}
+	runner := &fakeRunner{} // runner must NOT be called
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	assert.Empty(t, runner.bash, "tool-call branch must not invoke runner")
+
+	require.Greater(t, len(rec.calls), 2, "expected recorder calls for emit + skip")
+	assert.Contains(t, rec.calls[2], "BashSkipped:warn:tool-call format detected")
+
+	results := messagesByRole(ms, message.Result)
+	assert.Empty(t, results, "no result row when tool-call branch bypasses exec")
+
+	assistants := messagesByRole(ms, message.Assistant)
+	require.Len(t, assistants, 1, "bad tool-call assistant emit must be dropped from persistence")
+	assert.Equal(t, "exit", strings.TrimSpace(assistants[0].Content().Text))
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1)
+	obs := users[0].Content().Text
+	assert.Contains(t, obs, alertPrefix)
+	assert.Contains(t, obs, "There is NO tool/function calling API")
+	assert.Contains(t, obs, "emit plain bash")
+
+	require.Len(t, model.captured, 2, "expected initial prompt and one re-prompt turn")
+	prompt := model.captured[1]
+	require.NotEmpty(t, prompt)
+	last := prompt[len(prompt)-1]
+	require.Equal(t, fantasy.MessageRoleUser, last.Role)
+	for _, m := range prompt {
+		if m.Role != fantasy.MessageRoleAssistant {
+			continue
+		}
+		for _, part := range m.Content {
+			if tp, ok := part.(fantasy.TextPart); ok {
+				assert.NotContains(t, tp.Text, "<tool_call>", "bad tool-call emit must not be replayed to model")
+			}
+		}
+	}
+}
+
+// TestRunLoop_DrainOnToolCall ensures queued user input still drains after the
+// tool-call re-prompt branch, matching other non-exec re-prompt paths.
+func TestRunLoop_DrainOnToolCall(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"[tool_call]{\"name\":\"bash\"}[/tool_call]", "exit"}}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
+
+	_, err := runLoop(context.Background(), deps, nil, "go")
+	require.NoError(t, err)
+
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 2)
+	assert.Contains(t, users[0].Content().Text, alertPrefix)
+	assert.Contains(t, users[0].Content().Text, "There is NO tool/function calling API")
+	assert.Equal(t, "q1", users[1].Content().Text)
 }
 
 // TestRunLoop_DrainOnProsePrefix is the drain peer for the prose-prefix branch.

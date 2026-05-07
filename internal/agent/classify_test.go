@@ -72,6 +72,32 @@ func TestClassify_Banned(t *testing.T) {
 	}
 }
 
+func TestClassify_ToolCall(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		emit string
+	}{
+		{"xml tool_call", "<tool_call>\n{\"name\":\"bash\"}\n</tool_call>"},
+		{"xml minimax tool_call", "<minimax:tool_call>\n<invoke name=\"rg\" />\n</minimax:tool_call>"},
+		{"function call tag", "<function_call>{}</function_call>"},
+		{"tool use tag", "<tool_use name=\"bash\">"},
+		{"invoke tag", "<invoke name=\"bash\">"},
+		{"bracket tool_call", "[tool_call]{\"name\":\"bash\"}[/tool_call]"},
+		{"bracket function_call uppercase", "[FUNCTION_CALL]{}[/FUNCTION_CALL]"},
+		{"bracket tool_use", "[tool_use]rg[/tool_use]"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cls, aux := classify(ctx, tc.emit)
+			assert.Equal(t, classifyToolCall, cls)
+			assert.Empty(t, aux)
+		})
+	}
+}
+
 func TestClassify_InvalidBash(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/bash"); err != nil {
@@ -88,6 +114,14 @@ func TestClassify_InvalidBash(t *testing.T) {
 		assert.Equalf(t, classifyInvalidBash, cls, "expected invalid for %q (got %v)", in, cls)
 		assert.NotEmptyf(t, errOut, "expected bash -n stderr for %q", in)
 	}
+}
+
+func TestClassify_ToolCallBeatsInvalidBash(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	emit := "<tool_call>\n{\"name\":\"bash\",\"arguments\":{\"command\":\"echo $(\"}}\n</tool_call>"
+	cls, _ := classify(ctx, emit)
+	require.Equal(t, classifyToolCall, cls)
 }
 
 func TestClassify_Exec(t *testing.T) {
@@ -202,6 +236,15 @@ func TestClassify_ProsePrefix(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestClassify_ProsePrefixBeatsInvalidBash(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	emit := "Read the file and tell me what's wrong with $('"
+	cls, aux := classify(ctx, emit)
+	require.Equal(t, classifyProsePrefix, cls)
+	require.Equal(t, "Read", aux)
 }
 
 // TestDetectProsePrefix locks the cap-letter heuristic contract. Asserts both
