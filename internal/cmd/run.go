@@ -51,12 +51,10 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var (
-			quiet, _      = cmd.Flags().GetBool("quiet")
-			verbose, _    = cmd.Flags().GetBool("verbose")
-			largeModel, _ = cmd.Flags().GetString("model")
-			smallModel, _ = cmd.Flags().GetString("small-model")
-			sessionID, _  = cmd.Flags().GetString("session")
-			useLast, _    = cmd.Flags().GetBool("continue")
+			quiet, _     = cmd.Flags().GetBool("quiet")
+			verbose, _   = cmd.Flags().GetBool("verbose")
+			sessionID, _ = cmd.Flags().GetString("session")
+			useLast, _   = cmd.Flags().GetBool("continue")
 		)
 
 		// Cancel on SIGINT or SIGTERM.
@@ -108,7 +106,7 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
 			slog.SetDefault(slog.New(log.New(os.Stderr)))
 		}
 
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, quiet || verbose, sessionID, useLast)
+		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, quiet || verbose, sessionID, useLast)
 	},
 }
 

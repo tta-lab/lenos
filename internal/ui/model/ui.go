@@ -1143,9 +1143,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 
 			currentModel := cfg.Models[agentCfg.Model]
 			currentModel.Think = !currentModel.Think
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
-				return util.ReportError(err)()
-			}
+			m.com.Workspace.SetActiveModel(agentCfg.Model, currentModel)
 			m.com.Workspace.UpdateAgentModel(context.TODO())
 			status := "disabled"
 			if currentModel.Think {
@@ -1216,14 +1214,11 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			break
 		}
 
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		} else if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
-			// Ensure small model is set is unset.
+		m.com.Workspace.SetActiveModel(msg.ModelType, msg.Model)
+		if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
+			// Ensure small model is set if unset.
 			smallModel := m.com.Workspace.GetDefaultSmallModel(providerID)
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, smallModel); err != nil {
-				cmds = append(cmds, util.ReportError(err))
-			}
+			m.com.Workspace.SetActiveModel(config.SelectedModelTypeSmall, smallModel)
 		}
 
 		cmds = append(cmds, func() tea.Msg {
@@ -1267,10 +1262,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 
 		currentModel := cfg.Models[agentCfg.Model]
 		currentModel.ReasoningEffort = msg.Effort
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
+		m.com.Workspace.SetActiveModel(agentCfg.Model, currentModel)
 
 		cmds = append(cmds, func() tea.Msg {
 			m.com.Workspace.UpdateAgentModel(context.TODO())

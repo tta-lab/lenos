@@ -123,3 +123,55 @@ func TestScope_String(t *testing.T) {
 	require.Equal(t, "workspace", ScopeWorkspace.String())
 	require.Contains(t, Scope(99).String(), "Scope(99)")
 }
+
+func TestConfigStore_SetActiveModel_SetsInMemoryOnly(t *testing.T) {
+	t.Parallel()
+
+	store := &ConfigStore{
+		config: &Config{
+			Models: make(map[SelectedModelType]SelectedModel),
+		},
+	}
+
+	model := SelectedModel{Provider: "openai", Model: "gpt-4o"}
+	store.SetActiveModel(SelectedModelTypeLarge, model)
+
+	// Verify in-memory state.
+	require.Equal(t, model, store.config.Models[SelectedModelTypeLarge])
+
+	// Verify no persistence artifacts (nil fields that would have been
+	// set by SetConfigField or recordRecentModel).
+	require.Nil(t, store.config.RecentModels)
+}
+
+func TestConfigStore_SetActiveModel_OverridesExisting(t *testing.T) {
+	t.Parallel()
+
+	store := &ConfigStore{
+		config: &Config{
+			Models: map[SelectedModelType]SelectedModel{
+				SelectedModelTypeLarge: {Provider: "anthropic", Model: "claude-3-opus"},
+			},
+		},
+	}
+
+	newModel := SelectedModel{Provider: "openai", Model: "gpt-4o"}
+	store.SetActiveModel(SelectedModelTypeLarge, newModel)
+
+	require.Equal(t, newModel, store.config.Models[SelectedModelTypeLarge])
+}
+
+func TestConfigStore_SetActiveModel_SmallModel(t *testing.T) {
+	t.Parallel()
+
+	store := &ConfigStore{
+		config: &Config{
+			Models: make(map[SelectedModelType]SelectedModel),
+		},
+	}
+
+	model := SelectedModel{Provider: "openai", Model: "gpt-4o-mini"}
+	store.SetActiveModel(SelectedModelTypeSmall, model)
+
+	require.Equal(t, model, store.config.Models[SelectedModelTypeSmall])
+}

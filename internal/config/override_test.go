@@ -1,11 +1,10 @@
-package app
+package config
 
 import (
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/stretchr/testify/require"
-	"github.com/tta-lab/lenos/internal/config"
 )
 
 func TestParseModelStr(t *testing.T) {
@@ -14,7 +13,7 @@ func TestParseModelStr(t *testing.T) {
 		modelStr        string
 		expectedFilter  string
 		expectedModelID string
-		setupProviders  func() map[string]config.ProviderConfig
+		setupProviders  func() map[string]ProviderConfig
 	}{
 		{
 			name:            "simple model with no slashes",
@@ -71,8 +70,8 @@ func TestParseModelStr(t *testing.T) {
 	}
 }
 
-func setupMockProviders() map[string]config.ProviderConfig {
-	return map[string]config.ProviderConfig{
+func setupMockProviders() map[string]ProviderConfig {
+	return map[string]ProviderConfig{
 		"openai": {
 			ID:     "openai",
 			Name:   "OpenAI",
@@ -86,8 +85,8 @@ func setupMockProviders() map[string]config.ProviderConfig {
 	}
 }
 
-func setupMockProvidersWithSlashes() map[string]config.ProviderConfig {
-	return map[string]config.ProviderConfig{
+func setupMockProvidersWithSlashes() map[string]ProviderConfig {
+	return map[string]ProviderConfig{
 		"synthetic": {
 			ID:   "synthetic",
 			Name: "Synthetic",
@@ -112,7 +111,7 @@ func TestFindModels(t *testing.T) {
 		expectedModelID  string
 		expectError      bool
 		errorContains    string
-		setupProviders   func() map[string]config.ProviderConfig
+		setupProviders   func() map[string]ProviderConfig
 	}{
 		{
 			name:             "simple model found in one provider",
@@ -157,8 +156,8 @@ func TestFindModels(t *testing.T) {
 			modelStr:      "shared-model",
 			expectError:   true,
 			errorContains: "multiple providers",
-			setupProviders: func() map[string]config.ProviderConfig {
-				return map[string]config.ProviderConfig{
+			setupProviders: func() map[string]ProviderConfig {
+				return map[string]ProviderConfig{
 					"openai": {
 						ID:     "openai",
 						Models: []catwalk.Model{{ID: "shared-model"}},

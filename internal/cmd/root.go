@@ -39,6 +39,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
+	rootCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
+	rootCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	rootCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	rootCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
@@ -259,6 +261,14 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 
 	// Re-run SetupAgents now that overrides are set.
 	store.SetupAgents()
+
+	// Apply ephemeral model overrides from CLI flags.
+	if largeModel, _ := cmd.Flags().GetString("model"); largeModel != "" {
+		smallModel, _ := cmd.Flags().GetString("small-model")
+		if err := config.ApplyEphemeralModelOverride(store, largeModel, smallModel); err != nil {
+			return nil, nil, fmt.Errorf("failed to apply model override: %w", err)
+		}
+	}
 
 	if err := os.MkdirAll(cfg.Options.DataDirectory, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("failed to create data directory: %q %w", cfg.Options.DataDirectory, err)

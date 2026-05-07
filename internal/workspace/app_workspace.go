@@ -159,7 +159,7 @@ func (w *AppWorkspace) InitCoderAgent(ctx context.Context) error {
 }
 
 func (w *AppWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	return w.app.GetDefaultSmallModel(providerID)
+	return w.store.GetDefaultSmallModel(providerID)
 }
 
 // -- Config (read-only) --
@@ -178,8 +178,8 @@ func (w *AppWorkspace) Resolver() config.VariableResolver {
 
 // -- Config mutations --
 
-func (w *AppWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
-	return w.store.UpdatePreferredModel(scope, modelType, model)
+func (w *AppWorkspace) SetActiveModel(modelType config.SelectedModelType, model config.SelectedModel) {
+	w.store.SetActiveModel(modelType, model)
 }
 
 func (w *AppWorkspace) SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error {
