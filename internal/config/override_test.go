@@ -62,7 +62,7 @@ func TestParseModelStr(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			providers := tt.setupProviders()
-			filter, modelID := parseModelStr(providers, tt.modelStr)
+			filter, modelID := ParseModelStrForCLI(providers, tt.modelStr)
 
 			require.Equal(t, tt.expectedFilter, filter, "provider filter mismatch")
 			require.Equal(t, tt.expectedModelID, modelID, "model ID mismatch")
@@ -201,8 +201,8 @@ func TestFindModels(t *testing.T) {
 				require.Contains(t, err.Error(), tt.errorContains)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tt.expectedProvider, match.provider)
-				require.Equal(t, tt.expectedModelID, match.modelID)
+				require.Equal(t, tt.expectedProvider, match.Provider)
+				require.Equal(t, tt.expectedModelID, match.ModelID)
 			}
 		})
 	}

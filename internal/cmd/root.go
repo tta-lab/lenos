@@ -50,6 +50,7 @@ func init() {
 
 	rootCmd.AddCommand(
 		runCmd,
+		configCmd,
 		dirsCmd,
 		updateProvidersCmd,
 		logsCmd,

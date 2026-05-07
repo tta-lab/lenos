@@ -40,11 +40,11 @@ func ApplyEphemeralModelOverride(store *ConfigStore, largeModel, smallModel stri
 		if err != nil {
 			return err
 		}
-		largeProviderID = found.provider
-		slog.Info("Overriding large model for session", "provider", found.provider, "model", found.modelID)
+		largeProviderID = found.Provider
+		slog.Info("Overriding large model for session", "provider", found.Provider, "model", found.ModelID)
 		store.config.Models[SelectedModelTypeLarge] = SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
+			Provider: found.Provider,
+			Model:    found.ModelID,
 		}
 	}
 
@@ -55,10 +55,10 @@ func ApplyEphemeralModelOverride(store *ConfigStore, largeModel, smallModel stri
 		if err != nil {
 			return err
 		}
-		slog.Info("Overriding small model for session", "provider", found.provider, "model", found.modelID)
+		slog.Info("Overriding small model for session", "provider", found.Provider, "model", found.ModelID)
 		store.config.Models[SelectedModelTypeSmall] = SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
+			Provider: found.Provider,
+			Model:    found.ModelID,
 		}
 
 	case largeModel != "":
@@ -108,11 +108,11 @@ func (s *ConfigStore) GetDefaultSmallModel(providerID string) SelectedModel {
 	}
 }
 
-// parseModelStr parses a model string into provider filter and model ID.
+// ParseModelStrForCLI parses a model string into provider filter and model ID.
 // Format: "model-name" or "provider/model-name" or "synthetic/moonshot/kimi-k2".
 // This function only checks if the first component is a valid provider name; if not,
 // it treats the entire string as a model ID (which may contain slashes).
-func parseModelStr(providers map[string]ProviderConfig, modelStr string) (providerFilter, modelID string) {
+func ParseModelStrForCLI(providers map[string]ProviderConfig, modelStr string) (providerFilter, modelID string) {
 	parts := strings.Split(modelStr, "/")
 	if len(parts) == 1 {
 		return "", parts[0]
@@ -126,15 +126,15 @@ func parseModelStr(providers map[string]ProviderConfig, modelStr string) (provid
 	return "", modelStr
 }
 
-// modelMatch represents a found model.
-type modelMatch struct {
-	provider string
-	modelID  string
+// ModelMatch represents a found model.
+type ModelMatch struct {
+	Provider string
+	ModelID  string
 }
 
-func findModels(providers map[string]ProviderConfig, largeModel, smallModel string) ([]modelMatch, []modelMatch, error) {
-	largeProviderFilter, largeModelID := parseModelStr(providers, largeModel)
-	smallProviderFilter, smallModelID := parseModelStr(providers, smallModel)
+func findModels(providers map[string]ProviderConfig, largeModel, smallModel string) ([]ModelMatch, []ModelMatch, error) {
+	largeProviderFilter, largeModelID := ParseModelStrForCLI(providers, largeModel)
+	smallProviderFilter, smallModelID := ParseModelStrForCLI(providers, smallModel)
 
 	// Validate provider filters exist.
 	for _, pf := range []struct {
@@ -151,17 +151,17 @@ func findModels(providers map[string]ProviderConfig, largeModel, smallModel stri
 	}
 
 	// Find matching models in a single pass.
-	var largeMatches, smallMatches []modelMatch
+	var largeMatches, smallMatches []ModelMatch
 	for name, provider := range providers {
 		if provider.Disable {
 			continue
 		}
 		for _, m := range provider.Models {
 			if filter(largeModelID, largeProviderFilter, m.ID, name) {
-				largeMatches = append(largeMatches, modelMatch{provider: name, modelID: m.ID})
+				largeMatches = append(largeMatches, ModelMatch{Provider: name, ModelID: m.ID})
 			}
 			if filter(smallModelID, smallProviderFilter, m.ID, name) {
-				smallMatches = append(smallMatches, modelMatch{provider: name, modelID: m.ID})
+				smallMatches = append(smallMatches, ModelMatch{Provider: name, ModelID: m.ID})
 			}
 		}
 	}
@@ -175,16 +175,16 @@ func filter(modelFilter, providerFilter, model, provider string) bool {
 }
 
 // Validate and return a single match.
-func validateMatches(matches []modelMatch, modelID, label string) (modelMatch, error) {
+func validateMatches(matches []ModelMatch, modelID, label string) (ModelMatch, error) {
 	switch {
 	case len(matches) == 0:
-		return modelMatch{}, fmt.Errorf("%s model %q not found", label, modelID)
+		return ModelMatch{}, fmt.Errorf("%s model %q not found", label, modelID)
 	case len(matches) > 1:
 		names := make([]string, len(matches))
 		for i, m := range matches {
-			names[i] = m.provider
+			names[i] = m.Provider
 		}
-		return modelMatch{}, fmt.Errorf(
+		return ModelMatch{}, fmt.Errorf(
 			"%s model: model %q found in multiple providers: %s. Please specify provider using 'provider/model' format",
 			label,
 			modelID,
