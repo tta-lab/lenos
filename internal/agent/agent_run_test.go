@@ -706,8 +706,6 @@ func TestAgent_Summarize_AlwaysUsesLargeModel(t *testing.T) {
 	}).(*sessionAgent)
 
 	// Wrap largeModel to record calls
-	originalLarge := largeModel
-	*originalLarge = *largeModel
 	wrapped := &scriptedModel{
 		emits:  []string{"summary content"},
 		usages: []fantasy.Usage{{InputTokens: 100, OutputTokens: 50}},
