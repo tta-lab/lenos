@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"charm.land/fantasy"
@@ -64,7 +65,8 @@ type minimalCoordinator struct {
 }
 
 func (m *minimalCoordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) error {
-	runErr := m.currentAgent.Run(ctx, SessionAgentCall{})
+	prompt = message.PromptWithTextAttachments(prompt, attachments)
+	runErr := m.currentAgent.Run(ctx, SessionAgentCall{Prompt: prompt})
 	if runErr == nil {
 		return nil
 	}
@@ -131,6 +133,78 @@ func TestCoordinator_Run_StopReasonMapping(t *testing.T) {
 // different sessionIDs produce different recorders. Pre-creates the .md files
 // so the os.Stat guard skips Open (which would call into a nil fantasy model
 // on the stub agent).
+// capturingAgent records the SessionAgentCall it receives.
+type capturingAgent struct {
+	SessionAgent
+	captured  chan SessionAgentCall
+	modelName string
+}
+
+func (c *capturingAgent) Run(_ context.Context, call SessionAgentCall) error {
+	c.captured <- call
+	return nil
+}
+
+func (c *capturingAgent) Model() Model {
+	return Model{
+		ModelCfg: config.SelectedModel{Model: c.modelName, Provider: "test"},
+		Model:    &stubFantasyModel{modelName: c.modelName},
+	}
+}
+
+func TestCoordinator_Run_TextAttachmentPassthrough(t *testing.T) {
+	t.Parallel()
+
+	captured := make(chan SessionAgentCall, 1)
+	agent := &capturingAgent{captured: captured, modelName: "test-model"}
+	c := &minimalCoordinator{currentAgent: agent}
+
+	attachments := []message.Attachment{
+		{
+			FilePath: "/path/to/test.txt",
+			MimeType: "text/plain",
+			Content:  []byte("hello world"),
+		},
+		{
+			FilePath: "/path/to/notes.md",
+			MimeType: "text/markdown",
+			Content:  []byte("# notes"),
+		},
+	}
+
+	err := c.Run(context.Background(), "sess-1", "my prompt", attachments...)
+	require.NoError(t, err)
+
+	call := <-captured
+	prompt := call.Prompt
+
+	assert.Contains(t, prompt, `<file path='/path/to/test.txt'>`)
+	assert.Contains(t, prompt, "hello world")
+	assert.Contains(t, prompt, `<file path='/path/to/notes.md'>`)
+	assert.Contains(t, prompt, "# notes")
+	assert.Contains(t, prompt, "</file>")
+	assert.Contains(t, prompt, "<system_info>")
+	// Verify header appears exactly once (both attachments share it)
+	assert.Equal(t, 1, strings.Count(prompt, "<system_info>"))
+}
+
+func TestCoordinator_Run_EmptyAttachments(t *testing.T) {
+	t.Parallel()
+
+	captured := make(chan SessionAgentCall, 1)
+	agent := &capturingAgent{captured: captured, modelName: "test-model"}
+	c := &minimalCoordinator{currentAgent: agent}
+
+	const input = "plain prompt without attachments"
+	err := c.Run(context.Background(), "sess-1", input)
+	require.NoError(t, err)
+
+	call := <-captured
+	assert.Equal(t, input, call.Prompt)
+	assert.NotContains(t, call.Prompt, "<file")
+	assert.NotContains(t, call.Prompt, "<system_info>")
+}
+
 func TestCoordinator_recorderFor_cachesPerSession(t *testing.T) {
 	t.Parallel()
 
