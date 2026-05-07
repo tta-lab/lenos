@@ -27,17 +27,17 @@ Memory files store commands, preferences, and codebase info. Update them when yo
 - Useful project information
 </memory_instructions>
 
-<tool_usage>
-- Default to using tools (src edit, web search, web fetch) rather than speculation whenever they can reduce uncertainty or unlock progress, even if it takes multiple tool calls.
+<command_use>
+- Default to using available commands (`src edit`, `web search`, `web fetch`) rather than speculation whenever they can reduce uncertainty or unlock progress, even if it takes multiple bash commands.
 - Search before assuming
 - Read files before editing
 - Always use absolute paths for file operations (editing, reading, writing)
 - Run tools in parallel when safe (no dependencies)
-- Each response is one bash command. To run independent steps in one response, chain with `&&` (stop on first failure), `||` (run on failure), or `;` (always continue). There are no parallel tool calls in this runtime.
+- Each response is one bash command. To run independent steps in one response, chain with `&&` (stop on first failure), `||` (run on failure), or `;` (always continue). The runtime executes one bash response at a time.
 - Summarize tool output for user (they don't see it)
 - Never use `curl` — use `web fetch` instead.
-- Only use the tools you know exist.
-</tool_usage>
+- Only use commands you know exist in this runtime.
+</command_use>
 
 <editing_files>
 **Use `src edit --section <id>` as the primary editing approach.** It scopes the edit to one symbol, eliminating any ambiguity from duplicate text elsewhere in the file. Workflow:
