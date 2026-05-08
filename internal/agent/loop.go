@@ -129,8 +129,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			return stopExit, nil
 
 		case classifyEmpty:
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "empty emit; re-prompted")
 			obs := rePromptEmpty()
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -151,9 +151,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// repair quoting/syntax on the next turn. Safe in lenos because there is
 			// no tool_use_id / tool-result pairing invariant to preserve. See
 			// flicknote 4ddde3f1 for the regression analysis behind this asymmetry.
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
-				"tool-call format detected; re-prompted")
 			obs := rePromptToolCall()
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete tool-call assistant message", "error", err)
 				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
@@ -166,9 +165,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyInvalidBash:
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
-				fmt.Sprintf("invalid bash; bash -n said: %s; re-prompted", oneLine(aux)))
 			obs := rePromptInvalidBash(aux)
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -191,9 +189,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// The second call is a cheap linear scan with early termination.
 			proseWord, proseLine := detectProsePrefix(emit)
 			_ = aux // aux == proseWord; acknowledged, full line obtained above
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
-				fmt.Sprintf("prose-prefix detected (first word %q); re-prompted", proseWord))
 			obs := rePromptProsePrefix(proseWord, proseLine)
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete prose-prefix assistant message", "error", err)
 				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
@@ -206,8 +203,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyBanned:
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, "blocked: sed -i / perl -i not allowed; use src edit")
 			obs := rePromptBlockedPattern()
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -241,11 +238,16 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			_ = deps.recorder.BashResult(ctx, tok, combine(res.Stdout, res.Stderr), res.ExitCode, res.Duration)
 
 			exitCode := res.ExitCode
+			stderr := string(res.Stderr)
+			envelope := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
+			body := strings.TrimPrefix(envelope, "<result>\n")
+			body = strings.TrimSuffix(body, "\n</result>")
 			resultMsg.Parts = []message.ContentPart{message.CommandContent{
-				Command:  emit,
-				Output:   string(combine(res.Stdout, res.Stderr)),
-				ExitCode: &exitCode,
-				Pending:  false,
+				Command:     emit,
+				Output:      string(combine(res.Stdout, res.Stderr)),
+				ExitCode:    &exitCode,
+				Pending:     false,
+				Observation: body,
 			}}
 			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 				slog.Warn("loop: persist result row", "error", updateErr)
@@ -254,9 +256,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 
 			if errors.Is(res.Err, context.DeadlineExceeded) {
-				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
-					"timeout after 120s; subprocess killed; partial output captured")
 				obs := rePromptTimeout(int(DefaultPerCmdTimeout / time.Second))
+				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn, obs)
 				msgs = append(msgs,
 					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 					fantasy.NewUserMessage(obs),
@@ -281,22 +282,26 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopExit, nil
 			}
 
-			stderr := string(res.Stderr)
-			envelope := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
 			obs := envelope
 			if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
-				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
-					fmt.Sprintf("stderr matched 'command not found' on %q (exit %d); re-prompted",
-						firstNotFound, res.ExitCode))
 				rePrompt := rePromptCmdNotFound(firstNotFound)
 				// SALIENCE FLIP: alert FIRST so the model sees the correction before the
 				// (potentially success-looking) result envelope. Validated via worker session
 				// d2f0a207: model reasoning ignored 20 trailing [runtime] re-prompts because
 				// the envelope showed exit-0 with apparently-successful trailing command output.
 				obs = rePrompt + "\n\n" + envelope
-				if obsErr := persistObservation(ctx, deps, rePrompt); obsErr != nil {
-					slog.Warn("loop: persist cmd-not-found re-prompt", "error", obsErr)
+
+				// DELETE the result row — cmd-not-found is handled as a single TextContent
+				// User message, not a result row. This avoids the nested-envelope problem.
+				abandonPending(ctx, deps.messages, &resultMsg)
+
+				// Persist the EXACT observation the model received as a TextContent User message.
+				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+					slog.Warn("loop: persist cmd-not-found observation", "error", obsErr)
 				}
+
+				// Transcript: carry the actual model-facing observation text.
+				_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			}
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
@@ -491,17 +496,6 @@ func combine(stdout, stderr []byte) []byte {
 	}
 	buf.Write(stderr)
 	return buf.Bytes()
-}
-
-// oneLine collapses bash -n's multi-line stderr into a single line for
-// runtime-event descriptions (the full text is still in the re-prompt).
-func oneLine(s string) string {
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.TrimSpace(s)
-	if len(s) > 200 {
-		return s[:197] + "..."
-	}
-	return s
 }
 
 // cmdNotFoundRe matches the bash diagnostic for an unknown command. Bash uses two

@@ -70,10 +70,11 @@ func (TextContent) isPart() {}
 
 // CommandContent represents a command execution result in a message.
 type CommandContent struct {
-	Command  string `json:"command"`
-	Output   string `json:"output"`
-	ExitCode *int   `json:"exit_code,omitempty"`
-	Pending  bool   `json:"pending"`
+	Command     string `json:"command"`
+	Output      string `json:"output"`
+	ExitCode    *int   `json:"exit_code,omitempty"`
+	Pending     bool   `json:"pending"`
+	Observation string `json:"observation,omitempty"`
 }
 
 func (CommandContent) isPart() {}
@@ -479,6 +480,9 @@ func FormatResults(results []CommandContent) string {
 }
 
 func formatOneResult(r CommandContent) string {
+	if r.Observation != "" {
+		return r.Observation
+	}
 	output := html.EscapeString(r.Output)
 	if output == "" {
 		output = "(no output)"
