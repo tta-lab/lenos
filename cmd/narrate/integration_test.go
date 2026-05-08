@@ -107,3 +107,14 @@ func TestNarrateBinary_FailsOnEmptyStdin(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	assertStderrPrefix(t, out, err, "content required")
 }
+
+func TestNarrateBinary_FailsWithoutRuntimeInit(t *testing.T) {
+	root := t.TempDir()
+	bin := buildNarrateBinary(t, t.TempDir())
+
+	cmd := exec.Command(bin, "hello")
+	cmd.Env = append(os.Environ(), "LENOS_SESSION_ID=test-session")
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	assertStderrPrefix(t, out, err, "runtime init")
+}

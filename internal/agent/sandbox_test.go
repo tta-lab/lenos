@@ -132,15 +132,14 @@ func TestBuildAllowedPaths(t *testing.T) {
 		require.True(t, found, "sessions carve-out should appear regardless of access mode")
 	})
 
-	t.Run("sessions dir is created on host", func(t *testing.T) {
+	t.Run("sessions dir is not created on host", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		ctx := context.Background()
 		_ = BuildAllowedPaths(ctx, tmpDir, AccessModeRO)
 
 		expected := filepath.Join(tmpDir, ".lenos", "sessions")
-		info, err := os.Stat(expected)
-		require.NoError(t, err, "BuildAllowedPaths should MkdirAll the sessions dir")
-		require.True(t, info.IsDir(), "sessions path should be a directory")
+		_, err := os.Stat(expected)
+		require.ErrorIs(t, err, os.ErrNotExist, "BuildAllowedPaths should not bootstrap runtime directories")
 	})
 }
 

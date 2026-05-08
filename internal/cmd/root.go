@@ -268,15 +268,8 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 		}
 	}
 
-	if err := os.MkdirAll(cfg.Options.DataDirectory, 0o700); err != nil {
-		return nil, nil, fmt.Errorf("failed to create data directory: %q %w", cfg.Options.DataDirectory, err)
-	}
-
-	gitIgnorePath := filepath.Join(cfg.Options.DataDirectory, ".gitignore")
-	if _, err := os.Stat(gitIgnorePath); os.IsNotExist(err) {
-		if err := os.WriteFile(gitIgnorePath, []byte("*\n"), 0o644); err != nil {
-			return nil, nil, fmt.Errorf("failed to create .gitignore file: %q %w", gitIgnorePath, err)
-		}
+	if err := createDotLenosDir(cfg.Options.DataDirectory); err != nil {
+		return nil, nil, err
 	}
 
 	conn, err := db.Connect(ctx, cfg.Options.DataDirectory)
@@ -427,6 +420,14 @@ func resolveAgentFile(agentName string, agentPaths []string) (string, error) {
 func createDotLenosDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("failed to create data directory: %q %w", dir, err)
+	}
+	for _, subdir := range []string{
+		filepath.Join(dir, "sessions"),
+		filepath.Join(dir, "logs"),
+	} {
+		if err := os.MkdirAll(subdir, 0o700); err != nil {
+			return fmt.Errorf("failed to create runtime directory: %q %w", subdir, err)
+		}
 	}
 
 	gitIgnorePath := filepath.Join(dir, ".gitignore")

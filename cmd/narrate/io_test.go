@@ -33,14 +33,15 @@ func TestResolveSessionPath(t *testing.T) {
 		require.Contains(t, err.Error(), "LENOS_SESSION_ID")
 	})
 
-	t.Run("plain cwd → <cwd>/.lenos", func(t *testing.T) {
+	t.Run("missing .lenos errors", func(t *testing.T) {
 		t.Setenv("LENOS_SESSION_ID", "abc123")
 		dir := t.TempDir()
 		t.Chdir(dir)
 
-		path, err := resolveSessionPath()
-		require.NoError(t, err)
-		require.Equal(t, filepath.Join(dir, ".lenos", "sessions", "abc123.md"), path)
+		_, err := resolveSessionPath()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), ".lenos")
+		require.Contains(t, err.Error(), "runtime init")
 	})
 
 	t.Run("ancestor .lenos wins via LookupClosest", func(t *testing.T) {
@@ -48,7 +49,7 @@ func TestResolveSessionPath(t *testing.T) {
 		// the ancestor's .lenos, not create a new one in sub.
 		t.Setenv("LENOS_SESSION_ID", "abc123")
 		root := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(root, ".lenos"), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(root, ".lenos", "sessions"), 0o755))
 		sub := filepath.Join(root, "sub")
 		require.NoError(t, os.MkdirAll(sub, 0o755))
 		t.Chdir(sub)
@@ -56,6 +57,18 @@ func TestResolveSessionPath(t *testing.T) {
 		path, err := resolveSessionPath()
 		require.NoError(t, err)
 		require.Equal(t, filepath.Join(root, ".lenos", "sessions", "abc123.md"), path)
+	})
+
+	t.Run("missing sessions dir errors", func(t *testing.T) {
+		t.Setenv("LENOS_SESSION_ID", "abc123")
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, ".lenos"), 0o755))
+		t.Chdir(root)
+
+		_, err := resolveSessionPath()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), ".lenos/sessions")
+		require.Contains(t, err.Error(), "runtime init")
 	})
 }
 
