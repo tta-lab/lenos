@@ -20,8 +20,10 @@ import (
 //     auto-derived without a state file; multiple session.md files can
 //     coexist in the same data dir).
 //   - The data directory is found via fsext.LookupClosest from cwd,
-//     matching how lenos's main process resolves DataDirectory. When no
-//     ancestor .lenos/ exists, falls back to <cwd>/.lenos.
+//     matching how lenos's main process resolves DataDirectory.
+//   - narrate never bootstraps runtime directories. If .lenos/ or
+//     .lenos/sessions/ is missing, runtime init did not complete and this
+//     command must fail loudly.
 func resolveSessionPath() (string, error) {
 	sessionID := os.Getenv("LENOS_SESSION_ID")
 	if sessionID == "" {
@@ -33,9 +35,20 @@ func resolveSessionPath() (string, error) {
 	}
 	dataDir, ok := fsext.LookupClosest(cwd, ".lenos")
 	if !ok {
-		dataDir = filepath.Join(cwd, ".lenos")
+		return "", fmt.Errorf("runtime init not complete: no .lenos directory found from %s upward", cwd)
 	}
-	return filepath.Join(dataDir, "sessions", sessionID+".md"), nil
+	sessionsDir := filepath.Join(dataDir, "sessions")
+	info, err := os.Stat(sessionsDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("runtime init not complete: missing %s", sessionsDir)
+		}
+		return "", fmt.Errorf("stat %s: %w", sessionsDir, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("runtime init not complete: %s is not a directory", sessionsDir)
+	}
+	return filepath.Join(sessionsDir, sessionID+".md"), nil
 }
 
 // resolveInput picks the message body from positional args first, falling

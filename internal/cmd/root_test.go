@@ -210,3 +210,21 @@ func TestResolveAgentFile_CoderFoundInFolderFormat(t *testing.T) {
 		t.Errorf("expected AGENTS.md, got: %s", path)
 	}
 }
+
+func TestCreateDotLenosDir_CreatesRuntimeDirs(t *testing.T) {
+	td := t.TempDir()
+	dataDir := filepath.Join(td, ".lenos")
+
+	err := createDotLenosDir(dataDir)
+	require.NoError(t, err)
+
+	require.DirExists(t, dataDir)
+	require.DirExists(t, filepath.Join(dataDir, "sessions"))
+	require.DirExists(t, filepath.Join(dataDir, "logs"))
+
+	gitignorePath := filepath.Join(dataDir, ".gitignore")
+	require.FileExists(t, gitignorePath)
+	content, readErr := os.ReadFile(gitignorePath)
+	require.NoError(t, readErr)
+	require.Equal(t, defaultGitIgnore, string(content))
+}
