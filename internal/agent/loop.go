@@ -241,11 +241,16 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			_ = deps.recorder.BashResult(ctx, tok, combine(res.Stdout, res.Stderr), res.ExitCode, res.Duration)
 
 			exitCode := res.ExitCode
+			stderr := string(res.Stderr)
+			envelope := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
+			body := strings.TrimPrefix(envelope, "<result>\n")
+			body = strings.TrimSuffix(body, "\n</result>")
 			resultMsg.Parts = []message.ContentPart{message.CommandContent{
-				Command:  emit,
-				Output:   string(combine(res.Stdout, res.Stderr)),
-				ExitCode: &exitCode,
-				Pending:  false,
+				Command:     emit,
+				Output:      string(combine(res.Stdout, res.Stderr)),
+				ExitCode:    &exitCode,
+				Pending:     false,
+				Observation: body,
 			}}
 			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 				slog.Warn("loop: persist result row", "error", updateErr)
@@ -281,22 +286,26 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopExit, nil
 			}
 
-			stderr := string(res.Stderr)
-			envelope := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
 			obs := envelope
 			if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
-				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
-					fmt.Sprintf("stderr matched 'command not found' on %q (exit %d); re-prompted",
-						firstNotFound, res.ExitCode))
 				rePrompt := rePromptCmdNotFound(firstNotFound)
 				// SALIENCE FLIP: alert FIRST so the model sees the correction before the
 				// (potentially success-looking) result envelope. Validated via worker session
 				// d2f0a207: model reasoning ignored 20 trailing [runtime] re-prompts because
 				// the envelope showed exit-0 with apparently-successful trailing command output.
 				obs = rePrompt + "\n\n" + envelope
-				if obsErr := persistObservation(ctx, deps, rePrompt); obsErr != nil {
-					slog.Warn("loop: persist cmd-not-found re-prompt", "error", obsErr)
+
+				// DELETE the result row — cmd-not-found is handled as a single TextContent
+				// User message, not a result row. This avoids the nested-envelope problem.
+				abandonPending(ctx, deps.messages, &resultMsg)
+
+				// Persist the EXACT observation the model received as a TextContent User message.
+				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+					slog.Warn("loop: persist cmd-not-found observation", "error", obsErr)
 				}
+
+				// Transcript: carry the actual model-facing observation text.
+				_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			}
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
