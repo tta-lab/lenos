@@ -177,20 +177,25 @@ func TestAppendWithRetry_Exhaustion(t *testing.T) {
 	w := transcript.NewMdWriter(path)
 
 	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
 			return
 		}
 		flock(f, true)
 		close(started)
-		time.Sleep(50 * time.Millisecond)
+		<-release
 		funlock(f)
 		f.Close()
 	}()
 
 	<-started
 	err := appendWithRetry(w, []byte("blocked\n"))
+	close(release)
+	<-done
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "lock contention")
 }

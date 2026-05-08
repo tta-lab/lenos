@@ -323,7 +323,7 @@ func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {
 	assert.Equal(t, stopExit, stop)
 
 	// calls[1] is AgentEmit; calls[2] is BashSkipped; final is TurnEnd.
-	require.Contains(t, rec.calls[2], "BashSkipped:normal:empty emit")
+	require.Contains(t, rec.calls[2], "BashSkipped:warn:[runtime] your last response was empty")
 	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
 
 	// Observation persisted as User row.
@@ -343,7 +343,7 @@ func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 	assert.Equal(t, stopExit, stop)
 
 	// calls[1] is AgentEmit; calls[2] is BashSkipped.
-	require.Contains(t, rec.calls[2], "BashSkipped:warn:invalid bash")
+	require.Contains(t, rec.calls[2], "BashSkipped:warn:[runtime] your last response was not valid bash")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
 	assert.Contains(t, users[0].Content().Text, "[runtime] your last response was not valid bash")
@@ -385,7 +385,7 @@ func TestRunLoop_TimeoutRecordsResultAndRePrompts(t *testing.T) {
 		if strings.HasPrefix(c, "BashResult:") {
 			sawResult = true
 		}
-		if strings.Contains(c, "RuntimeEvent:warn:timeout") {
+		if strings.Contains(c, "RuntimeEvent:warn:[runtime] your last command exceeded the per-call timeout") {
 			sawTimeoutEvent = true
 		}
 	}
@@ -827,7 +827,7 @@ func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	// order: original prompt, AgentEmit, BashSkipped, drained followup, exit announce, BashSkipped, turn-end.
-	require.Contains(t, rec.calls[2], "BashSkipped:normal:empty emit")
+	require.Contains(t, rec.calls[2], "BashSkipped:warn:[runtime] your last response was empty")
 	require.Contains(t, rec.calls[3], "UserMessage:q1")
 	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
 	users := messagesByRole(ms, message.User)
@@ -845,7 +845,7 @@ func TestRunLoop_DrainOnInvalidBash(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	require.Contains(t, rec.calls[2], "BashSkipped:warn:invalid bash")
+	require.Contains(t, rec.calls[2], "BashSkipped:warn:[runtime] your last response was not valid bash")
 	require.Contains(t, rec.calls[3], "UserMessage:q1")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 2)
@@ -887,7 +887,7 @@ func TestRunLoop_DrainOnTimeout(t *testing.T) {
 	// order: original prompt, announce, bash result, timeout event, drained, turn-end.
 	require.Contains(t, rec.calls[1], "AgentEmit:sleep 5")
 	require.Contains(t, rec.calls[2], "BashResult:")
-	require.Contains(t, rec.calls[3], "RuntimeEvent:warn:timeout")
+	require.Contains(t, rec.calls[3], "RuntimeEvent:warn:[runtime] your last command exceeded the per-call timeout")
 	require.Contains(t, rec.calls[4], "UserMessage:q1")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 2)
@@ -910,7 +910,7 @@ func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
 
 	require.Contains(t, rec.calls[1], "AgentEmit:nopebinary")
 	require.Contains(t, rec.calls[2], "BashResult:")
-	require.Contains(t, rec.calls[3], "RuntimeEvent:warn:")
+	require.Contains(t, rec.calls[3], "BashSkipped:warn:")
 	require.Contains(t, rec.calls[3], "command not found")
 	require.Contains(t, rec.calls[4], "UserMessage:q1")
 	users := messagesByRole(ms, message.User)
@@ -1148,7 +1148,7 @@ func TestRunLoop_InvalidBash_EmitVisibleInTranscript(t *testing.T) {
 		if strings.HasPrefix(c, "AgentEmit:") && strings.Contains(c, "if true then") {
 			emitIdx = i
 		}
-		if strings.Contains(c, "BashSkipped:warn:invalid bash") {
+		if strings.Contains(c, "BashSkipped:warn:[runtime] your last response was not valid bash") {
 			skippedIdx = i
 		}
 	}
@@ -1386,7 +1386,7 @@ func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
 	// BashSkipped recorded with the right severity and description (parity with
 	// classifyEmpty / classifyInvalidBash / classifyBanned).
 	require.Greater(t, len(rec.calls), 2, "expected at least 3 recorder calls")
-	assert.Contains(t, rec.calls[2], "BashSkipped:warn:prose-prefix detected")
+	assert.Contains(t, rec.calls[2], "BashSkipped:warn:[ALERT from runtime] your last emit started with English prose")
 
 	// No result row created.
 	results := messagesByRole(ms, message.Result)
@@ -1451,7 +1451,7 @@ func TestRunLoop_ToolCall_FiresPreExec(t *testing.T) {
 	assert.Empty(t, runner.bash, "tool-call branch must not invoke runner")
 
 	require.Greater(t, len(rec.calls), 2, "expected recorder calls for emit + skip")
-	assert.Contains(t, rec.calls[2], "BashSkipped:warn:tool-call format detected")
+	assert.Contains(t, rec.calls[2], "BashSkipped:warn:[ALERT from runtime] your last emit used a tool/function call format.")
 
 	results := messagesByRole(ms, message.Result)
 	assert.Empty(t, results, "no result row when tool-call branch bypasses exec")
@@ -1688,6 +1688,8 @@ func TestObservationSSOT_RePromptRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			// Persist the observation as a User-role TextContent message.
 			ms := newMockMessageService()
 			msg, err := ms.Create(context.Background(), "s-test", message.CreateMessageParams{
@@ -1705,6 +1707,182 @@ func TestObservationSSOT_RePromptRoundTrip(t *testing.T) {
 			require.True(t, ok, "expected TextPart")
 			assert.Equal(t, tt.obs, tp.Text,
 				"re-prompt %q: ToAIMessage must preserve observation verbatim", tt.name)
+		})
+	}
+}
+
+// --- Transcript tests for re-prompt observation rendering ---
+
+// TestTranscript_RePromptRendersActualObservation verifies that re-prompt
+// paths (empty emit, tool-call, invalid bash, prose prefix, banned, timeout)
+// write the actual model-facing observation text to transcript via
+// BashSkipped/RuntimeEvent, not hard-coded summaries.
+func TestTranscript_RePromptRendersActualObservation(t *testing.T) {
+	tests := []struct {
+		name       string
+		emits      []string
+		runnerRes  []ExecResult
+		checkEvent func(t *testing.T, calls []string)
+	}{
+		{
+			name:  "empty emit",
+			emits: []string{"", "exit"},
+			checkEvent: func(t *testing.T, calls []string) {
+				for _, c := range calls {
+					if strings.HasPrefix(c, "BashSkipped:warn:") {
+						assert.Contains(t, c, "your last response was empty",
+							"transcript must carry actual empty re-prompt text, not summary")
+						assert.NotContains(t, c, "empty emit; re-prompted",
+							"transcript must NOT contain hard-coded summary")
+						return
+					}
+				}
+				t.Error("expected BashSkipped event")
+			},
+		},
+		{
+			name:  "tool-call format",
+			emits: []string{"<tool_call>{\"name\":\"bash\"}</tool_call>", "exit"},
+			checkEvent: func(t *testing.T, calls []string) {
+				for _, c := range calls {
+					if strings.HasPrefix(c, "BashSkipped:warn:") {
+						assert.Contains(t, c, "tool/function call format",
+							"transcript must carry actual tool-call re-prompt text")
+						assert.NotContains(t, c, "tool-call format detected; re-prompted",
+							"transcript must NOT contain hard-coded summary")
+						return
+					}
+				}
+				t.Error("expected BashSkipped event")
+			},
+		},
+		{
+			name:  "invalid bash",
+			emits: []string{"if true then", "exit"},
+			checkEvent: func(t *testing.T, calls []string) {
+				for _, c := range calls {
+					if strings.HasPrefix(c, "BashSkipped:warn:") {
+						assert.Contains(t, c, "not valid bash",
+							"transcript must carry actual invalid-bash re-prompt text")
+						assert.NotContains(t, c, "BashSkipped:warn:invalid bash;",
+							"transcript must NOT contain hard-coded summary")
+						return
+					}
+				}
+				t.Error("expected BashSkipped event")
+			},
+		},
+		{
+			name:  "prose prefix",
+			emits: []string{"Let me start working", "exit"},
+			checkEvent: func(t *testing.T, calls []string) {
+				for _, c := range calls {
+					if strings.HasPrefix(c, "BashSkipped:warn:") {
+						assert.Contains(t, c, "English sentence",
+							"transcript must carry actual prose-prefix re-prompt text")
+						assert.NotContains(t, c, "prose-prefix detected",
+							"transcript must NOT contain hard-coded summary")
+						return
+					}
+				}
+				t.Error("expected BashSkipped event")
+			},
+		},
+		{
+			name:  "banned pattern",
+			emits: []string{"sed -i 's/foo/bar/g' file", "exit"},
+			checkEvent: func(t *testing.T, calls []string) {
+				for _, c := range calls {
+					if strings.HasPrefix(c, "BashSkipped:warn:") {
+						assert.Contains(t, c, "not allowed",
+							"transcript must carry actual banned re-prompt text")
+						assert.NotContains(t, c, "sed -i / perl -i not allowed",
+							"transcript must NOT contain hard-coded summary")
+						return
+					}
+				}
+				t.Error("expected BashSkipped event")
+			},
+		},
+		{
+			name:  "timeout",
+			emits: []string{"sleep 999", "exit"},
+			runnerRes: []ExecResult{
+				{Err: context.DeadlineExceeded, Stdout: []byte("partial output"), ExitCode: -1, Duration: 120 * time.Second},
+			},
+			checkEvent: func(t *testing.T, calls []string) {
+				for _, c := range calls {
+					if strings.HasPrefix(c, "RuntimeEvent:warn:") {
+						assert.Contains(t, c, "exceeded the per-call timeout",
+							"transcript must carry actual timeout re-prompt text")
+						assert.NotContains(t, c, "timeout after 120s; subprocess killed",
+							"transcript must NOT contain hard-coded summary")
+						return
+					}
+				}
+				t.Error("expected RuntimeEvent")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := &scriptedModel{emits: tt.emits}
+			res := tt.runnerRes
+			if res == nil {
+				res = []ExecResult{{ExitCode: 0, Duration: time.Millisecond}}
+			}
+			runner := &fakeRunner{results: res}
+			rec := &recordingRecorder{}
+			deps, _ := newDeps(t, model, runner, rec)
+
+			_, err := runLoop(context.Background(), deps, nil, "")
+			require.NoError(t, err)
+
+			tt.checkEvent(t, rec.calls)
+		})
+	}
+}
+
+// TestTranscript_SuccessStaysQuiet verifies that successful bash exits
+// (exit 0, even with stderr output) are not accompanied by BashSkipped
+// or RuntimeEvent WARN events, preserving the success-quiet contract.
+func TestTranscript_SuccessStaysQuiet(t *testing.T) {
+	tests := []struct {
+		name string
+		emit string
+		res  ExecResult
+	}{
+		{
+			name: "exit 0 no output",
+			emit: "echo -n",
+			res:  ExecResult{ExitCode: 0, Duration: time.Millisecond},
+		},
+		{
+			name: "exit 0 with stderr diagnostics",
+			emit: "some-tool",
+			res:  ExecResult{Stdout: []byte("result"), Stderr: []byte("WARNING: deprecated flag --old"), ExitCode: 0, Duration: time.Millisecond},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := &scriptedModel{emits: []string{tt.emit, "exit"}}
+			runner := &fakeRunner{results: []ExecResult{tt.res}}
+			rec := &recordingRecorder{}
+			deps, _ := newDeps(t, model, runner, rec)
+
+			_, err := runLoop(context.Background(), deps, nil, "")
+			require.NoError(t, err)
+
+			for _, c := range rec.calls {
+				if strings.HasPrefix(c, "BashSkipped:warn:") {
+					t.Errorf("unexpected BashSkipped warning event for successful command: %s", c)
+				}
+				if strings.HasPrefix(c, "RuntimeEvent:warn:") {
+					t.Errorf("unexpected RuntimeEvent warning for successful command: %s", c)
+				}
+			}
 		})
 	}
 }
