@@ -1520,3 +1520,191 @@ func TestRunLoop_DrainOnProsePrefix(t *testing.T) {
 	assert.Contains(t, users[0].Content().Text, "`Now`", "must reference the offending first word")
 	assert.Equal(t, "q1", users[1].Content().Text)
 }
+
+// --- SSOT equivalence tests ---
+
+// TestObservationSSOT_EmptySuccess proves a command with no output carries
+// the same Observation body text that formatResultForModel produces, and
+// that replay via FormatResults wraps it in a single <result> envelope
+// matching the live observation.
+func TestObservationSSOT_EmptySuccess(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"echo -n", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+
+	// Observation should be the body of formatResultForModel output.
+	expectedBody := "Bash completed with no output"
+	assert.Equal(t, expectedBody, cc.Observation,
+		"Observation must match formatResultForModel body for empty output")
+
+	// FormatResults should produce the same envelope the live loop sends.
+	envelope := message.FormatResults([]message.CommandContent{cc})
+	assert.Equal(t, "<result>\n"+expectedBody+"\n</result>", envelope,
+		"FormatResults must wrap Observation in single <result> envelope")
+
+	// Legacy fallback fields still set correctly.
+	assert.Equal(t, "echo -n", cc.Command)
+	assert.Equal(t, "", cc.Output)
+	require.NotNil(t, cc.ExitCode)
+	assert.Equal(t, 0, *cc.ExitCode)
+}
+
+// TestObservationSSOT_FailureWithStderr proves a failing command's
+// Observation includes stderr text and exit code appendix, and replay
+// matches live.
+func TestObservationSSOT_FailureWithStderr(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"ls /nonexistent", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stderr: []byte("ls: /nonexistent: No such file or directory\n"), ExitCode: 1, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+
+	// Observation includes stderr text and exit code.
+	assert.Contains(t, cc.Observation, "ls: /nonexistent: No such file or directory")
+	assert.Contains(t, cc.Observation, "(exit code: 1)")
+
+	// Replay via FormatResults wraps body in envelope.
+	envelope := message.FormatResults([]message.CommandContent{cc})
+	// The envelope should contain the observation body inside <result> tags.
+	wantHead := "<result>\n" + cc.Observation + "\n</result>"
+	assert.Equal(t, wantHead, envelope,
+		"FormatResults must use Observation verbatim, not fall back to Output")
+
+	// Legacy fields still set.
+	assert.Equal(t, "ls /nonexistent", cc.Command)
+	assert.NotEmpty(t, cc.Output)
+}
+
+// TestObservationSSOT_CmdNotFound proves that when bash prints "command not found"
+// the result row is NOT persisted. Instead, the combined rePrompt + envelope is
+// persisted as a single TextContent User message. Replay via ToAIMessage reads it
+// back as one User message with the exact observation text.
+func TestObservationSSOT_CmdNotFound(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"xyzzy", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stderr: []byte("bash: xyzzy: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	// Result row is abandoned (exitCode=-1) — not deleted from mock store.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1, "abandoned result row must still exist")
+	cc := results[0].CommandContent()
+	assert.Equal(t, "xyzzy", cc.Command)
+	assert.Equal(t, "canceled before result", cc.Output)
+	require.NotNil(t, cc.ExitCode)
+	assert.Equal(t, -1, *cc.ExitCode, "abandoned result has exit code -1")
+	assert.False(t, cc.Pending)
+	assert.Empty(t, cc.Observation, "abandoned result has no Observation")
+
+	// One User message with the combined observation (alert + envelope).
+	users := messagesByRole(ms, message.User)
+	require.Len(t, users, 1, "exactly one User message for cmd-not-found")
+	obs := users[0].Content().Text
+
+	// Verify it contains the re-prompt text (alert prefix + word).
+	assert.Contains(t, obs, "[ALERT from runtime]")
+	assert.Contains(t, obs, "`xyzzy`")
+	assert.Contains(t, obs, "command not found")
+
+	// Verify it contains the stderr in the envelope body (exit code 127).
+	assert.Contains(t, obs, "STDERR:")
+	assert.Contains(t, obs, "bash: xyzzy: command not found")
+	assert.Contains(t, obs, "(exit code: 127)")
+
+	// ToAIMessage must replay it as one User message.
+	aiMsgs := users[0].ToAIMessage()
+	require.Len(t, aiMsgs, 1, "ToAIMessage produces one message")
+	assert.Equal(t, fantasy.MessageRoleUser, aiMsgs[0].Role)
+	require.Len(t, aiMsgs[0].Content, 1)
+	tp, ok := aiMsgs[0].Content[0].(fantasy.TextPart)
+	require.True(t, ok, "expected TextPart")
+	assert.Equal(t, obs, tp.Text, "ToAIMessage must preserve observation text verbatim")
+}
+
+// TestObservationSSOT_RePromptRoundTrip verifies that each re-prompt type
+// persists as a TextContent User message and replays identically through
+// ToAIMessage, matching the original rePromptX() function output.
+func TestObservationSSOT_RePromptRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		obs  string
+		emit string
+	}{
+		{
+			name: "empty",
+			obs:  rePromptEmpty(),
+			emit: "",
+		},
+		{
+			name: "tool-call",
+			obs:  rePromptToolCall(),
+			emit: "```\nsome\n```",
+		},
+		{
+			name: "invalid-bash",
+			obs:  rePromptInvalidBash("syntax error near unexpected token"),
+			emit: "echo 'unclosed",
+		},
+		{
+			name: "prose-prefix",
+			obs:  rePromptProsePrefix("Hello", "Hello world"),
+			emit: "Hello world",
+		},
+		{
+			name: "banned",
+			obs:  rePromptBlockedPattern(),
+			emit: "sed -i 's/foo/bar/g' file",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Persist the observation as a User-role TextContent message.
+			ms := newMockMessageService()
+			msg, err := ms.Create(context.Background(), "s-test", message.CreateMessageParams{
+				Role:  message.User,
+				Parts: []message.ContentPart{message.TextContent{Text: tt.obs}},
+			})
+			require.NoError(t, err)
+
+			// Read back through ToAIMessage.
+			aiMsgs := msg.ToAIMessage()
+			require.Len(t, aiMsgs, 1)
+			assert.Equal(t, fantasy.MessageRoleUser, aiMsgs[0].Role)
+			require.Len(t, aiMsgs[0].Content, 1)
+			tp, ok := aiMsgs[0].Content[0].(fantasy.TextPart)
+			require.True(t, ok, "expected TextPart")
+			assert.Equal(t, tt.obs, tp.Text,
+				"re-prompt %q: ToAIMessage must preserve observation verbatim", tt.name)
+		})
+	}
+}
