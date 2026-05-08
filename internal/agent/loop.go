@@ -129,8 +129,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			return stopExit, nil
 
 		case classifyEmpty:
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "empty emit; re-prompted")
 			obs := rePromptEmpty()
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -151,9 +151,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// repair quoting/syntax on the next turn. Safe in lenos because there is
 			// no tool_use_id / tool-result pairing invariant to preserve. See
 			// flicknote 4ddde3f1 for the regression analysis behind this asymmetry.
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
-				"tool-call format detected; re-prompted")
 			obs := rePromptToolCall()
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete tool-call assistant message", "error", err)
 				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
@@ -166,9 +165,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyInvalidBash:
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
-				fmt.Sprintf("invalid bash; bash -n said: %s; re-prompted", oneLine(aux)))
 			obs := rePromptInvalidBash(aux)
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -191,9 +189,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// The second call is a cheap linear scan with early termination.
 			proseWord, proseLine := detectProsePrefix(emit)
 			_ = aux // aux == proseWord; acknowledged, full line obtained above
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn,
-				fmt.Sprintf("prose-prefix detected (first word %q); re-prompted", proseWord))
 			obs := rePromptProsePrefix(proseWord, proseLine)
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete prose-prefix assistant message", "error", err)
 				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
@@ -206,8 +203,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyBanned:
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, "blocked: sed -i / perl -i not allowed; use src edit")
 			obs := rePromptBlockedPattern()
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -259,9 +256,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 
 			if errors.Is(res.Err, context.DeadlineExceeded) {
-				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
-					"timeout after 120s; subprocess killed; partial output captured")
 				obs := rePromptTimeout(int(DefaultPerCmdTimeout / time.Second))
+				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn, obs)
 				msgs = append(msgs,
 					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 					fantasy.NewUserMessage(obs),
@@ -500,17 +496,6 @@ func combine(stdout, stderr []byte) []byte {
 	}
 	buf.Write(stderr)
 	return buf.Bytes()
-}
-
-// oneLine collapses bash -n's multi-line stderr into a single line for
-// runtime-event descriptions (the full text is still in the re-prompt).
-func oneLine(s string) string {
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.TrimSpace(s)
-	if len(s) > 200 {
-		return s[:197] + "..."
-	}
-	return s
 }
 
 // cmdNotFoundRe matches the bash diagnostic for an unknown command. Bash uses two
