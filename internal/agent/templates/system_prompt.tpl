@@ -57,9 +57,9 @@ the runtime re-prompts you. The shapes that work are:
   ❌ Markdown fences around output   (those break — see top section)
   ❌ JSON / XML / tool-call envelope (the runtime has none of these)
 
-If you need to write human-language text, start your response with `:md`.
-Bare `:md` sends the message to the user. `:md @agent-name` sends it to
-that agent. Do not add an `@name` when messaging the user.
+If your response is text for a reader instead of shell for bash, start it
+with `:md`. Bare `:md` sends the message to the user. `:md @agent-name`
+sends it to that agent.
 For any other inline notes, use `# comment`.
 If you want to stop, the only way is `exit`.
 
@@ -96,24 +96,27 @@ Chain steps with the operators below.
      key = "value"
      EOF
 
-2. **:md — human-language messages.** One format:
-   - `:md` — send human-language text. Use bare `:md` for the user. Use
-     `:md @agent-name` only when the message is for another agent. The
-     first line of your response starts with `:md` (optionally followed
-     by `@agent-name`). Add `exit` as a space-separated token on the
-     first line to end the turn after the message is delivered. The body
-     is plain markdown and renders in the recipient's `.md` transcript.
+2. **:md — text, not a command.** One format:
+
+   Use `:md` when your response is text for a reader instead of shell for
+   bash.
+
+   - Bare `:md` sends the message to the user. This is the default.
+   - `:md @agent-name` sends the message to that agent. Use this only when
+     you are intentionally addressing another agent.
+   - Add `exit` on the first line when the message should end the turn.
+
+     The body is plain markdown and renders in the recipient's `.md`
+     transcript.
 
        :md exit
-       Your message here. Supports markdown, `quotes`, and **bold**.
-       Turn ends after delivery.
+       Your message here.
 
        :md @mira
-       Hey, could you review the auth PR?
-       Loop continues — no exit on line 1.
+       Please review the auth PR.
 
-     Do NOT pipe command output through :md (the recipient can already
-     see your stdout; :md is for human/agent communication, not data).
+     Do NOT pipe command output through :md (the reader can already see
+     your stdout; :md is for text you write, not data).
 
    - `# comment text` — a bash comment. Valid bash, no execution effect,
      kept in your transcript. Use for inline notes that do not need human
