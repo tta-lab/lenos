@@ -113,11 +113,17 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 		}
 
-		// SSOT for emit visibility: record the model's emit BEFORE classification
-		// so every emit reaches the .md transcript regardless of how it routes.
-		tok, _ := deps.recorder.AgentEmit(ctx, deps.sessionID, emit)
-
+		// Classify first, then emit to transcript: :md results use ProseMessage
+		// (raw markdown, no fence), all other results use AgentEmit (lenos-bash fence).
 		cls, aux := classify(ctx, emit)
+
+		var tok transcript.TrailerToken
+		if cls == classifyMd || cls == classifyMdExit {
+			// :md protocol messages write raw prose via ProseMessage in the switch
+			// case below — no AgentEmit needed, no bash fence wrapping.
+		} else {
+			tok, _ = deps.recorder.AgentEmit(ctx, deps.sessionID, emit)
+		}
 		switch cls {
 		case classifyExit:
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "exit — turn ends")
