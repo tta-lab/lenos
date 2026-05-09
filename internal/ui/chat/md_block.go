@@ -114,7 +114,7 @@ func (i *MdBlockItem) linePrefix() string {
 	if i.kind == MdBlockMdMessage {
 		addressee := transcript.ParseMdAddressee(i.rawSource)
 		if addressee == "" {
-			addressee = "neil"
+			return ""
 		}
 		raw := fmt.Sprintf("→ %s", addressee)
 		// Pad to fixed width so gutter is stable

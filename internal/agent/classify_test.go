@@ -222,7 +222,7 @@ func TestClassify_MdMessage(t *testing.T) {
 		// Whitespace before :md is allowed (trimmed).
 		{"  :md\nhello", classifyMd},
 		// :md must beat prose-prefix (the @agent part starts with non-alpha).
-		{":md @mira && exit", classifyMd},
+		{":md @mira && exit", classifyMdExit},
 		// :md must beat trailing-exit.
 		{":md\nhello\nexit", classifyMd},
 	}
@@ -231,6 +231,31 @@ func TestClassify_MdMessage(t *testing.T) {
 			t.Parallel()
 			cls, _ := classify(ctx, tc.emit)
 			assert.Equal(t, tc.want, cls, "classify for :md emit")
+		})
+	}
+}
+
+func TestClassify_MdExit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	cases := []struct {
+		emit string
+		want classifyResult
+	}{
+		{":md exit\nhello", classifyMdExit},
+		{":md @neil exit\nhello world", classifyMdExit},
+		{":md @neil\nbody has exit inside", classifyMd},
+		{":md exit @neil\nhello", classifyMdExit},
+		{":md\nbody\nexit", classifyMd},
+		{":md exit", classifyMdExit},
+		// exit as substring in agent name must NOT match
+		{":md @agent-exit\nbody", classifyMd},
+	}
+	for _, tc := range cases {
+		t.Run(tc.emit, func(t *testing.T) {
+			t.Parallel()
+			cls, _ := classify(ctx, tc.emit)
+			assert.Equal(t, tc.want, cls, "classify for :md exit emit: %q", tc.emit)
 		})
 	}
 }

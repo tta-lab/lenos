@@ -113,11 +113,17 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 		}
 
-		// SSOT for emit visibility: record the model's emit BEFORE classification
-		// so every emit reaches the .md transcript regardless of how it routes.
-		tok, _ := deps.recorder.AgentEmit(ctx, deps.sessionID, emit)
-
+		// Classify first, then emit to transcript: :md results use ProseMessage
+		// (raw markdown, no fence), all other results use AgentEmit (lenos-bash fence).
 		cls, aux := classify(ctx, emit)
+
+		var tok transcript.TrailerToken
+		if cls == classifyMd || cls == classifyMdExit {
+			// :md protocol messages write raw prose via ProseMessage in the switch
+			// case below — no AgentEmit needed, no bash fence wrapping.
+		} else {
+			tok, _ = deps.recorder.AgentEmit(ctx, deps.sessionID, emit)
+		}
 		switch cls {
 		case classifyExit:
 			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "exit — turn ends")
@@ -215,7 +221,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
-		case classifyMd:
+		case classifyMd, classifyMdExit:
 			// :md protocol message — route, persist, acknowledge.
 			// Three-step pattern: (1) write :md text to .md transcript verbatim,
 			// (2) route via ttal send if @agent, (3) write ack into model history.
@@ -224,7 +230,10 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 			// (1) Persist the full :md text to the .md transcript as raw markdown
 			// so SplitBlocks() classifies it as BlockMdMessage.
-			_ = deps.recorder.ProseMessage(ctx, deps.sessionID, emit)
+			// Skip if body is empty (e.g. `:md exit` with no message body).
+			if body != "" {
+				_ = deps.recorder.ProseMessage(ctx, deps.sessionID, emit)
+			}
 
 			// (2) Route: if :md @agent with body, send via ttal send.
 			var sendFailed bool
@@ -256,6 +265,16 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
+
+			// If :md had exit on first line, end the loop after delivering the message.
+			if cls == classifyMdExit {
+				_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
+				assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
+				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+					slog.Warn("loop: persist :md exit finish", "error", updateErr)
+				}
+				return stopExit, nil
+			}
 
 		case classifyExec, classifyExecExit:
 			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{

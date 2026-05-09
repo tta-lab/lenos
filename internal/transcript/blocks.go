@@ -252,7 +252,7 @@ func isLenosBashFence(line string) bool {
 // output anymore."
 func isCompositeBoundary(kind BlockKind, text string) bool {
 	switch kind {
-	case BlockUserMsg, BlockRuntime, BlockTurnEnd:
+	case BlockUserMsg, BlockRuntime, BlockTurnEnd, BlockMdMessage:
 		return true
 	case BlockBashCmd:
 		first := text

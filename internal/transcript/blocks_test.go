@@ -221,3 +221,38 @@ func TestParseMdAddressee_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestIsCompositeBoundary(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		kind BlockKind
+		text string
+		want bool
+	}{
+		{"BlockUserMsg", BlockUserMsg, "", true},
+		{"BlockRuntime", BlockRuntime, "", true},
+		{"BlockTurnEnd", BlockTurnEnd, "", true},
+		{"BlockMdMessage", BlockMdMessage, ":md\nhello", true},
+		{"BlockBashCmd_lenosbash", BlockBashCmd, "```lenos-bash", true},
+		{"BlockBashCmd_plain", BlockBashCmd, "```bash\necho hi", false},
+		{"BlockOutput", BlockOutput, "some output", false},
+		{"BlockProse", BlockProse, "some prose", false},
+		{"BlockTrailer", BlockTrailer, "*trailer*", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, isCompositeBoundary(tc.kind, tc.text))
+		})
+	}
+}
+
+func TestSplitBlocks_LenosBashThenMdMessage(t *testing.T) {
+	t.Parallel()
+	src := []byte("```lenos-bash\necho ok\n```\n\noutput\n\n:md\nhello\n")
+	blocks := SplitBlocks(src)
+	require.Len(t, blocks, 2, "lenos-bash block followed by :md block must produce 2 blocks")
+	assert.Equal(t, BlockBashCmd, blocks[0].Kind, "first block is bash")
+	assert.Equal(t, BlockMdMessage, blocks[1].Kind, "second block is :md message")
+}
