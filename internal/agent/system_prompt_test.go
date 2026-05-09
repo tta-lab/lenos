@@ -382,9 +382,12 @@ func TestSystemPrompt_RenderedTemplate_ContainsMdExitPattern(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The template must teach :md @agent exit as the single-emission pattern.
-	assert.Contains(t, got, ":md @neil exit",
-		"rendered prompt must contain the new atomic pattern")
+	// The template must teach bare :md exit as the default owner message
+	// pattern. @agent is only for explicit agent routing.
+	assert.Contains(t, got, ":md exit",
+		"rendered prompt must contain the default owner message pattern")
+	assert.NotContains(t, got, "@neil",
+		"rendered prompt must not teach owner routing with @neil")
 
 	// The template must NOT contain the old two-emission pattern where
 	// :md and exit appear as separate unrelated code blocks.
