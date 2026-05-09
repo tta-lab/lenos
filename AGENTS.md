@@ -15,7 +15,7 @@ The module path is `github.com/tta-lab/lenos`.
 ```
 main.go                            CLI entry point (cobra via internal/cmd)
 cmd/
-  narrate/                         narrate CLI binary — bash subprocesses use this to append prose to the session .md transcript (Phase 3, bash-first agent loop)
+  narrate/                         narrate CLI binary — bash subprocesses use this to append prose to the session podcast (Phase 3, bash-first agent loop)
 internal/
   app/app.go                       Top-level wiring: DB, config, agents, events
   cmd/                             CLI commands (root, run, login, models, stats, sessions)
@@ -25,7 +25,7 @@ internal/
     provider.go                    Provider configuration and model resolution
   agent/
     agent.go                       Types, NewSessionAgent, package doc
-    agent_run.go                  Run + bash-first loop + transcript.Recorder integration
+    agent_run.go                  Run + bash-first loop + recorder integration
     loop.go                       Bash-first agent loop (subprocess-per-call, exit intercept, step cap)
     classify.go                   Emit classifier (exit/empty/invalid/banned/exec)
     exec.go                       Runner interface + LocalRunner / SandboxRunner
@@ -36,7 +36,7 @@ internal/
     prompts.go                     Loads Go-template system prompts
     templates/                     System prompt templates (coder.md.tpl, system_prompt.tpl, initialize.md.tpl, summary.md, cmd-git.tpl)
   session/session.go               Session CRUD + Todo persistence backed by SQLite (model SSOT per bash-first orientation 7015e7aa §4)
-  transcript/                      Bash-first session .md render artifact. Pure stdlib formatter, flock-guarded append writer (consumed by lenos main and cmd/narrate via AppendStrict), Recorder seam consumed by the agent loop
+  (removed - DB as SSOT for session storage)
   message/                         Message model and content types
   db/                              SQLite via sqlc, with migrations
     sql/                           Raw SQL queries (consumed by sqlc)
@@ -142,8 +142,8 @@ explicit persistence. Summarize always uses the large model regardless of
 - **Update Golden Files**: `go test ./... -update` (regenerates `.golden`
   files when test output changes)
   - Update specific package:
-    `go test ./internal/transcript -update` (in this case,
-    we're updating transcript golden files)
+    `go test ./internal/agent -update` (in this case,
+    we're updating test golden files)
 - **Lint**: `task lint:fix`
 - **Format**: `task fmt` (`gofumpt -w .`)
 - **Modernize**: `task modernize` (runs `modernize` which makes code
