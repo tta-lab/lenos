@@ -294,14 +294,22 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 
 			if errors.Is(res.Err, context.DeadlineExceeded) {
+				exitCode := 124
 				obs := rePromptTimeout(int(DefaultPerCmdTimeout / time.Second))
+				resultMsg.Parts = []message.ContentPart{message.CommandContent{
+					Command:     emit,
+					Output:      obs,
+					ExitCode:    &exitCode,
+					Pending:     false,
+					Observation: obs,
+				}}
+				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+					slog.Warn("loop: persist timeout result row", "error", updateErr)
+				}
 				msgs = append(msgs,
 					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 					fantasy.NewUserMessage(obs),
 				)
-				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-					slog.Warn("loop: persist timeout re-prompt", "error", obsErr)
-				}
 				msgs = drainAndAppend(ctx, deps, msgs)
 				continue
 			}
@@ -326,14 +334,18 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				// d2f0a207: model reasoning ignored 20 trailing [runtime] re-prompts because
 				// the envelope showed exit-0 with apparently-successful trailing command output.
 				obs = rePrompt + "\n\n" + envelope
+				exitCode := 1
 
-				// DELETE the result row — cmd-not-found is handled as a single TextContent
-				// User message, not a result row. This avoids the nested-envelope problem.
-				abandonPending(ctx, deps.messages, &resultMsg)
-
-				// Persist the EXACT observation the model received as a TextContent User message.
-				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-					slog.Warn("loop: persist cmd-not-found observation", "error", obsErr)
+				// Keep the result row with non-zero exit code instead of abandoning it.
+				resultMsg.Parts = []message.ContentPart{message.CommandContent{
+					Command:     emit,
+					Output:      obs,
+					ExitCode:    &exitCode,
+					Pending:     false,
+					Observation: obs,
+				}}
+				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+					slog.Warn("loop: persist cmd-not-found result row", "error", updateErr)
 				}
 			}
 			msgs = append(msgs,
