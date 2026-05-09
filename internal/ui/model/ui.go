@@ -480,6 +480,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadSessionMsg:
 		m.setState(uiChat, m.focus)
 		m.session = msg.session
+		// Load messages from DB.
+		if cmd := m.setSessionMessages(msg.messages); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		// Reload prompt history for the new session.
 		m.historyReset()
 		cmds = append(cmds, m.loadPromptHistory())
@@ -550,11 +554,11 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Logos doesn't use child sessions — foreign messages are ignored.
 			break
 		}
-		// 680e5b5d: message-event payloads no longer drive the chat list
-		// (the .md watcher does). Spinner / pill / agent-busy side effects
-		// below still need this branch to fire on every event, so the
-		// switch-on-Type stays as a side-effect-only no-op.
-		_ = msg.Type
+		// Restore DB-pubsub message rendering: append the incoming message
+		// to the chat list so the UI updates on pubsub events.
+		if cmd := m.appendSessionMessage(msg.Payload); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		// start the spinner if there is a new message
 		if hasInProgressTodo(m.effectiveTodos()) && m.isAgentBusy() && !m.todoIsSpinning {
 			m.todoIsSpinning = true
