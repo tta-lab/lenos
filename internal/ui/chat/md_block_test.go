@@ -21,10 +21,11 @@ func TestMdBlockItem_linePrefix_mdMessage(t *testing.T) {
 		focused  bool
 		wantPref string // prefix must contain this substring
 	}{
-		{"bare :md, blurred", ":md\nhello", false, "→ neil"},
-		{"bare :md, focused", ":md\nhello", true, "→ neil"},
+		{"bare :md, blurred", ":md\nhello", false, ""},
+		{"bare :md, focused", ":md\nhello", true, ""},
 		{":md @mira, blurred", ":md @mira\nhello", false, "→ mira"},
 		{":md @mira, focused", ":md @mira\nhello", true, "→ mira"},
+		{":md @athena, blurred", ":md @athena\nhello", false, "→ athena"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -34,9 +35,11 @@ func TestMdBlockItem_linePrefix_mdMessage(t *testing.T) {
 				item.SetFocused(true)
 			}
 			got := item.linePrefix()
-			assert.Contains(t, got, tc.wantPref, "linePrefix must include → addressee")
-			// Must not be empty — gutter must be stable.
-			assert.NotEmpty(t, got, "linePrefix must never be empty")
+			if tc.wantPref == "" {
+				assert.Empty(t, got, "bare :md should have empty prefix")
+			} else {
+				assert.Contains(t, got, tc.wantPref, "linePrefix must include → addressee")
+			}
 		})
 	}
 }
