@@ -42,7 +42,6 @@ internal/
     sql/                           Raw SQL queries (consumed by sqlc)
     migrations/                    Schema migrations
   ui/                              Bubble Tea v2 TUI (see internal/ui/AGENTS.md)
-  transcript/                      Bash-first .md transcript: writer + parser + fsnotify watcher
   permission/                      Tool permission checking and allow-lists
   event/                           Telemetry (PostHog)
   pubsub/                          Internal pub/sub for cross-component messaging

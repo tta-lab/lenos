@@ -163,7 +163,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// Same asymmetry as classifyToolCall above: prose-prefix is a shape
 			// error at the transport boundary ("English sentence in bash slot"),
 			// so preserving it in history hurts more than it helps. The runtime
-			// keeps the raw emit in the transcript for auditability but deletes the
+			// keeps the raw emit for auditability but deletes the
 			// assistant row so the next prompt only contains the corrective user
 			// observation. See flicknote 4ddde3f1.
 			// aux carries the first prose word from classify(); call detectProsePrefix
@@ -291,7 +291,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				slog.Warn("loop: persist result row", "error", updateErr)
 			}
 
-			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			markStepFinishedWithTitle(ctx, deps, &assistantMsg, message.FinishReasonToolUse, "bash")
 
 			if errors.Is(res.Err, context.DeadlineExceeded) {
 				exitCode := 124
@@ -494,10 +494,15 @@ func persistObservation(ctx context.Context, deps loopDeps, obs string) error {
 // the step boundary. Errors are logged; persistence failures should not abort
 // the loop.
 func markStepFinished(ctx context.Context, deps loopDeps, msg *message.Message, reason message.FinishReason) {
+	markStepFinishedWithTitle(ctx, deps, msg, reason, "")
+}
+
+// markStepFinishedWithTitle sets the finish reason with a Title for emit-type dispatch.
+func markStepFinishedWithTitle(ctx context.Context, deps loopDeps, msg *message.Message, reason message.FinishReason, title string) {
 	if msg.IsFinished() {
 		return
 	}
-	msg.AddFinish(reason, "", "")
+	msg.AddFinish(reason, title, "")
 	if err := deps.messages.Update(ctx, *msg); err != nil {
 		slog.Warn("loop: persist step finish", "error", err)
 	}
@@ -571,7 +576,7 @@ func isCanceled(err error) bool {
 }
 
 // drainAndAppend pulls any queued user prompts off the session queue,
-// persists each as a User-role message + transcript line, and appends them
+// persists each as a User-role message and appends them
 // as separate fantasy.NewUserMessage entries to msgs.
 //
 // Called after the bash result / re-prompt observation has already been

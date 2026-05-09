@@ -1639,7 +1639,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			case key.Matches(msg, m.keyMap.Chat.Copy):
 				// y / c / Y / C: copy selection. If the user has a mouse-drag
 				// highlight, copy that range; otherwise copy the focused block's
-				// raw .md source (the verbatim transcript text — what the user
+				// raw source (the verbatim text — what the user
 				// expects when they hit y on a bash block).
 				cmds = append(cmds, m.copyChatBlockOrHighlight())
 			case key.Matches(msg, m.keyMap.Chat.End):
@@ -2985,7 +2985,7 @@ func (m *UI) copyChatHighlight() tea.Cmd {
 
 // copyChatBlockOrHighlight is the y/c keypress entry point. It copies the
 // mouse-drag highlight when one exists, otherwise the focused block's raw
-// .md source (verbatim transcript text — what users expect when yanking
+// verbatim text — what users expect when yanking
 // a bash or output block).
 func (m *UI) copyChatBlockOrHighlight() tea.Cmd {
 	if m.chat.HasHighlight() {

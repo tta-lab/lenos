@@ -15,7 +15,6 @@ import (
 	"github.com/tta-lab/temenos/client"
 
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/transcript"
 )
 
 // --- Test fakes ---
@@ -28,6 +27,19 @@ type scriptedModel struct {
 	usages []fantasy.Usage // optional: per-emit usage override; default Usage{1,1}
 	errOn  []int           // call indices (pre-increment) where Stream yields an error
 	calls  int
+}
+
+// recorderIface is a local substitute for the removed transcript.Recorder.
+type recorderIface interface {
+	Open(context.Context) error
+	UserMessage(context.Context, string, string) error
+	AgentEmit(context.Context, string, string) error
+	ProseMessage(context.Context, string, string) error
+	BashResult(context.Context, string, []byte, int, time.Duration) error
+	BashSkipped(context.Context, string, string, string) error
+	RuntimeEvent(context.Context, string, string, string) error
+	TurnEnd(context.Context, string) error
+	Close() error
 }
 
 func (m *scriptedModel) Model() string    { return "test-model" }
@@ -137,11 +149,11 @@ func (r *fakeRunner) Run(_ context.Context, bash string, _ map[string]string, _ 
 
 // --- Helpers ---
 
-func newDeps(t *testing.T, model fantasy.LanguageModel, runner Runner, rec transcript.Recorder) (loopDeps, *mockMessageService) {
+func newDeps(t *testing.T, model fantasy.LanguageModel, runner Runner, rec recorderIface) (loopDeps, *mockMessageService) {
 	return newDepsWithDrain(t, model, runner, rec, nil)
 }
 
-func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, rec transcript.Recorder, drain func() []string) (loopDeps, *mockMessageService) {
+func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, rec recorderIface, drain func() []string) (loopDeps, *mockMessageService) {
 	t.Helper()
 	ms := newMockMessageService()
 	return loopDeps{
@@ -1499,7 +1511,7 @@ func TestObservationSSOT_RePromptRoundTrip(t *testing.T) {
 	}
 }
 
-// recordingRecorder implements transcript.Recorder for test assertions.
+// recordingRecorder implements recorderIface for test assertions.
 type recordingRecorder struct {
 	mu    sync.Mutex
 	calls []string
@@ -1511,16 +1523,16 @@ func (r *recordingRecorder) record(s string) {
 	r.calls = append(r.calls, s)
 }
 
-func (r *recordingRecorder) Open(context.Context, transcript.Meta) error { return nil }
+func (r *recordingRecorder) Open(context.Context) error { return nil }
 
 func (r *recordingRecorder) UserMessage(_ context.Context, _, text string) error {
 	r.record("UserMessage:" + truncate(text, 30))
 	return nil
 }
 
-func (r *recordingRecorder) AgentEmit(_ context.Context, _, emit string) (transcript.TrailerToken, error) {
+func (r *recordingRecorder) AgentEmit(_ context.Context, _, emit string) error {
 	r.record("AgentEmit:" + truncate(emit, 30))
-	return transcript.TrailerToken{}, nil
+	return nil
 }
 
 func (r *recordingRecorder) ProseMessage(_ context.Context, _, text string) error {
@@ -1528,18 +1540,18 @@ func (r *recordingRecorder) ProseMessage(_ context.Context, _, text string) erro
 	return nil
 }
 
-func (r *recordingRecorder) BashResult(_ context.Context, _ transcript.TrailerToken, out []byte, exitCode int, _ time.Duration) error {
+func (r *recordingRecorder) BashResult(_ context.Context, _ string, out []byte, exitCode int, _ time.Duration) error {
 	r.record("BashResult:" + truncate(string(out), 20) + ":exit=" + itoa(exitCode))
 	return nil
 }
 
-func (r *recordingRecorder) BashSkipped(_ context.Context, _ transcript.TrailerToken, sev transcript.Severity, desc string) error {
-	r.record("BashSkipped:" + sevName(sev) + ":" + desc)
+func (r *recordingRecorder) BashSkipped(_ context.Context, _ string, sev, desc string) error {
+	r.record("BashSkipped:" + sev + ":" + desc)
 	return nil
 }
 
-func (r *recordingRecorder) RuntimeEvent(_ context.Context, _ string, sev transcript.Severity, desc string) error {
-	r.record("RuntimeEvent:" + sevName(sev) + ":" + desc)
+func (r *recordingRecorder) RuntimeEvent(_ context.Context, _ string, sev, desc string) error {
+	r.record("RuntimeEvent:" + sev + ":" + desc)
 	return nil
 }
 
@@ -1550,18 +1562,7 @@ func (r *recordingRecorder) TurnEnd(context.Context, string) error {
 
 func (r *recordingRecorder) Close() error { return nil }
 
-var _ transcript.Recorder = (*recordingRecorder)(nil)
-
-func sevName(s transcript.Severity) string {
-	switch s {
-	case transcript.SevWarn:
-		return "warn"
-	case transcript.SevError:
-		return "error"
-	default:
-		return "normal"
-	}
-}
+// local interface — no longer needs transcript import
 
 func truncate(s string, n int) string {
 	if len(s) <= n {

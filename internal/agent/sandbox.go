@@ -20,7 +20,7 @@ const (
 
 // sessionsDirSubpath is the cwd-relative subpath that always gets RW access
 // inside the sandbox, regardless of the cwd access mode. This lets lenos's
-// own session machinery (transcript writers) record session.md
+// own session machinery records session data
 // files even when the agent is running --readonly.
 const sessionsDirSubpath = ".lenos/sessions"
 
@@ -29,7 +29,7 @@ const sessionsDirSubpath = ".lenos/sessions"
 // additionalReadOnlyPaths are added as read-only paths (useful for granting cross-project read access).
 //
 // Carve-out: cwd/.lenos/sessions is always appended as RW. Lenos's session writers
-// transcript) need to append to <cwd>/.lenos/sessions/<session-id>.md throughout the agent
+// need to append to <cwd>/.lenos/sessions/<session-id>.md throughout the agent
 // loop; without this carve-out, --readonly would block the agent's own session log writes.
 // Runtime init is responsible for creating the directory before any agent run.
 func BuildAllowedPaths(ctx context.Context, cwd string, access AccessMode, additionalReadOnlyPaths ...string) []client.AllowedPath {

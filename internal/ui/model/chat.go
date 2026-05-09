@@ -33,8 +33,7 @@ type DelayedClickMsg struct {
 // Chat represents the chat UI model that handles chat interactions and
 // messages.
 //
-// Per the 680e5b5d audit, items are sourced from the session .md transcript
-// (via transcript.SplitBlocks → chat.MdBlockItem) instead of pubsub message
+// Items are sourced from DB messages via pubsub (no .md transcript)
 // events. The list infrastructure stays unchanged: each block is one
 // navigable / focusable / highlightable / copyable item.
 type Chat struct {
