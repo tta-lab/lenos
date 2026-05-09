@@ -153,7 +153,7 @@ func classifyAndRenderBlock(b transcript.Block, renderer *glamour.TermRenderer, 
 	if b.Kind == transcript.BlockMdMessage {
 		// Strip the :md @agent first line — the addressee is rendered by
 		// linePrefix() in md_block.go, not shown in the body text.
-		body := stripMdPrefixLine(b.Source)
+		body := transcript.StripMdPrefixLine(b.Source)
 		rendered := body
 		if rerr == nil {
 			out, err := renderer.Render(body)
@@ -183,13 +183,6 @@ func classifyAndRenderBlock(b transcript.Block, renderer *glamour.TermRenderer, 
 		return chat.MdBlockUserMsg, rendered
 	}
 	return chat.MdBlockOther, rendered
-}
-
-// stripMdPrefixLine removes the first line from a block's source if it
-// starts with the :md prefix. Delegates to the transcript package's
-// exported StripMdPrefixLine.
-func stripMdPrefixLine(source string) string {
-	return transcript.StripMdPrefixLine(source)
 }
 
 // isLenosBashSource returns true if the block source begins with the

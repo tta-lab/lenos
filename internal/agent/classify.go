@@ -87,7 +87,13 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 		// :md at the very start of the emit (bare or followed by @agent).
 		// Must fire before prose-prefix so `:md @agent` is not caught by
 		// the Title-Case detector on the `@agent` portion.
-		return classifyMd, ""
+		// Require space, tab, or newline after :md to avoid matching
+		// commands like `:mdata` or `:md5sum`. The trimmed emit may start
+		// with `:md`, `:md @agent`, or `:md\nbody` — all valid forms.
+		rest := strings.TrimPrefix(trimmed, transcript.MdPrefix)
+		if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
+			return classifyMd, ""
+		}
 	}
 	if word, _ := detectProsePrefix(emit); word != "" {
 		return classifyProsePrefix, word

@@ -51,11 +51,11 @@ the runtime re-prompts you. The shapes that work are:
   ✅ A bash command:                 ls -la
   ✅ Inline annotation:              # check README first
   ✅ Prose to the human:             :md
-✅ End the turn:                   exit
+  ✅ End the turn:                   exit
 
-❌ Plain text greeting             ("Hi! How can I help?")
-❌ Markdown fences around output   (those break — see top section)
-❌ JSON / XML / tool-call envelope (the runtime has none of these)
+  ❌ Plain text greeting             ("Hi! How can I help?")
+  ❌ Markdown fences around output   (those break — see top section)
+  ❌ JSON / XML / tool-call envelope (the runtime has none of these)
 
 If you find yourself wanting to "say" something, start your response with `:md`.
 :md routes to the session's owner. :md @agent routes to a specific agent.
