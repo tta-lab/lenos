@@ -95,7 +95,7 @@ Chain steps with the operators below.
      key = "value"
      EOF
 
-2. **Text to the human.** One channel:
+2. **:md — agent communication.** One channel:
    - `:md` — send a message to the session owner (bare `:md`) or to a
      specific agent (`:md @agent-name`). The first line of your response
      starts with `:md` (optionally followed by `@agent-name`), and the
