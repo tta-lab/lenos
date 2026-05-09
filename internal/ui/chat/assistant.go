@@ -133,21 +133,39 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 	var messageParts []string
 	thinking := strings.TrimSpace(a.message.ReasoningContent().Thinking)
 	content := strings.TrimSpace(a.message.Content().Text)
-	// if the massage has reasoning content add that first
+
+	// Branch on Finish.Title for emit-type dispatch.
+	if fp := a.message.FinishPart(); fp != nil {
+		if fp.Reason == message.FinishReasonToolUse && fp.Title == "bash" {
+			if content != "" {
+				messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render("$ "+content))
+			}
+			return strings.Join(messageParts, "\n")
+		}
+		if fp.Title == ":md" {
+			if thinking != "" && a.showThinking {
+				messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))
+			}
+			if content != "" {
+				if thinking != "" && a.showThinking {
+					messageParts = append(messageParts, "")
+				}
+				messageParts = append(messageParts, a.renderMarkdown(content, width))
+			}
+			return strings.Join(messageParts, "\n")
+		}
+	}
+
+	// Default path: existing rendering with thinking + markdown + finish info.
 	if thinking != "" && a.showThinking {
 		messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))
 	}
-
-	// then add the main content
 	if content != "" {
-		// add a spacer between thinking and content
 		if thinking != "" && a.showThinking {
 			messageParts = append(messageParts, "")
 		}
 		messageParts = append(messageParts, a.renderMarkdown(content, width))
 	}
-
-	// finally add any finish reason info
 	if a.message.IsFinished() {
 		switch a.message.FinishReason() {
 		case message.FinishReasonCanceled:
