@@ -215,6 +215,37 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
+		case classifyMd:
+			// :md protocol message — route and acknowledge.
+			body := transcript.StripMdPrefixLine(emit)
+			addressee := transcript.ParseMdAddressee(emit)
+
+			// Route: if :md @agent, send via ttal send.
+			if addressee != "" {
+				res := deps.runner.Run(ctx,
+					"cat <<'EOF' | ttal send --to "+addressee+"\n"+body+"\nEOF",
+					deps.env, deps.paths)
+				if res.ExitCode != 0 {
+					slog.Warn("loop: route :md @agent", "addressee", addressee, "exit", res.ExitCode, "stderr", string(res.Stderr))
+				}
+			}
+
+			// Runtime acknowledgment — mirrors the pattern from ttal send stdout injection.
+			var ack string
+			if addressee != "" {
+				ack = "[runtime] message sent to " + addressee + ". you may use exit to enter sleep if you finish your work / waiting for reply..."
+			} else {
+				ack = "[runtime] message written. you may use exit to enter sleep if you finish your work / waiting for reply..."
+			}
+			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, ack)
+			msg := assistantTextMessage(emit, assistantMsg.ReasoningContent())
+			msgs = append(msgs, msg, fantasy.NewUserMessage(ack))
+			if obsErr := persistObservation(ctx, deps, ack); obsErr != nil {
+				slog.Warn("loop: persist :md ack", "error", obsErr)
+			}
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
+
 		case classifyExec, classifyExecExit:
 			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 				Role:  message.Result,

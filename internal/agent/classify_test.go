@@ -207,6 +207,34 @@ func TestClassify_BareExitStillBareExit(t *testing.T) {
 // must win over classifyExecExit when the emit starts with a Title-Cased word
 // AND ends with `&& exit`. If the two checks were accidentally swapped, the
 // trailing-exit path would run bash before the prose gate fires.
+func TestClassify_MdMessage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	cases := []struct {
+		emit string
+		want classifyResult
+	}{
+		{":md", classifyMd},
+		{":md\nhello world", classifyMd},
+		{":md @mira", classifyMd},
+		{":md @mira\nhello world", classifyMd},
+		{":md @mira\nmulti\nline", classifyMd},
+		// Whitespace before :md is allowed (trimmed).
+		{"  :md\nhello", classifyMd},
+		// :md must beat prose-prefix (the @agent part starts with non-alpha).
+		{":md @mira && exit", classifyMd},
+		// :md must beat trailing-exit.
+		{":md\nhello\nexit", classifyMd},
+	}
+	for _, tc := range cases {
+		t.Run(tc.emit, func(t *testing.T) {
+			t.Parallel()
+			cls, _ := classify(ctx, tc.emit)
+			assert.Equal(t, tc.want, cls, "classify for :md emit")
+		})
+	}
+}
+
 func TestClassify_ProsePrefix(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/bash"); err != nil {

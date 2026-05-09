@@ -186,22 +186,10 @@ func classifyAndRenderBlock(b transcript.Block, renderer *glamour.TermRenderer, 
 }
 
 // stripMdPrefixLine removes the first line from a block's source if it
-// starts with the :md prefix. Used to strip the protocol prefix before
-// rendering the body through Glamour — the addressee is shown via
-// linePrefix() in the chat item, not repeated in the body text.
+// starts with the :md prefix. Delegates to the transcript package's
+// exported StripMdPrefixLine.
 func stripMdPrefixLine(source string) string {
-	first, rest, found := strings.Cut(source, "\n")
-	if !found {
-		// Single line with only the :md prefix — empty body.
-		if strings.HasPrefix(strings.TrimSpace(first), transcript.MdPrefix) {
-			return ""
-		}
-		return source
-	}
-	if strings.HasPrefix(strings.TrimSpace(first), transcript.MdPrefix) {
-		return strings.TrimLeft(rest, "\n")
-	}
-	return source
+	return transcript.StripMdPrefixLine(source)
 }
 
 // isLenosBashSource returns true if the block source begins with the
