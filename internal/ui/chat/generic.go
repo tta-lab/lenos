@@ -67,28 +67,22 @@ func (m *ResultMessageItem) RawRender(width int) string {
 
 // renderCommandResult renders a command result with header and output.
 func (m *ResultMessageItem) renderCommandResult(width int, cmd message.CommandContent) string {
-	var sb strings.Builder
-
-	// Render command header: $ <command>
-	header := m.sty.Chat.Message.ResultHeader.Render("$ " + cmd.Command)
-	sb.WriteString(header)
-
 	if cmd.Pending {
-		sb.WriteString("\n")
 		pendingStyle := m.sty.Tool.StateWaiting.Width(width)
-		sb.WriteString(pendingStyle.Render("running..."))
-	} else if cmd.ExitCode != nil && *cmd.ExitCode != 0 {
-		// Non-zero exit: show output body and exit badge.
-		sb.WriteString("\n")
-		if cmd.Output != "" {
-			bodyStyle := m.sty.Tool.Body.Width(width)
-			sb.WriteString(bodyStyle.Render(cmd.Output))
-		}
-		sb.WriteString(" ")
-		sb.WriteString(m.sty.Tool.IconError.Render(fmt.Sprintf("exit code: %d", *cmd.ExitCode)))
+		return pendingStyle.Render("running...")
 	}
-	// Exit 0 is compact: only "$ command" with no output block and no badge.
-
+	if cmd.ExitCode == nil || *cmd.ExitCode == 0 {
+		// Exit 0: assistant already shows the command — nothing extra to render.
+		return ""
+	}
+	// Non-zero exit: output body and compact × N badge.
+	var sb strings.Builder
+	if cmd.Output != "" {
+		bodyStyle := m.sty.Tool.Body.Width(width)
+		sb.WriteString(bodyStyle.Render(cmd.Output))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(m.sty.Tool.IconError.Render(fmt.Sprintf("%d", *cmd.ExitCode)))
 	return sb.String()
 }
 
@@ -136,9 +130,9 @@ func (m *ResultMessageItem) formatCommandForCopy() string {
 
 	// Append exit code for non-zero exits on its own line.
 	if cmd.ExitCode != nil && *cmd.ExitCode != 0 {
-		sb.WriteString("\n(exit code: ")
+		sb.WriteString("\n[")
 		fmt.Fprintf(&sb, "%d", *cmd.ExitCode)
-		sb.WriteString(")")
+		sb.WriteString("]")
 	}
 
 	return sb.String()

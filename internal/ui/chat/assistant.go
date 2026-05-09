@@ -134,29 +134,20 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 	thinking := strings.TrimSpace(a.message.ReasoningContent().Thinking)
 	content := strings.TrimSpace(a.message.Content().Text)
 
-	// Branch on Finish.Title for emit-type dispatch.
-	if fp := a.message.FinishPart(); fp != nil {
-		if fp.Reason == message.FinishReasonToolUse && fp.Title == "bash" {
-			if content != "" {
-				messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render("$ "+content))
-			}
-			return strings.Join(messageParts, "\n")
+	// Dispatch on content prefix: ":" = :md (prose), anything else = bash.
+	if content != "" && strings.HasPrefix(content, ":") {
+		// :md — render as Glamour markdown.
+		if thinking != "" && a.showThinking {
+			messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))
 		}
-		if fp.Title == ":md" {
-			if thinking != "" && a.showThinking {
-				messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))
-			}
-			if content != "" {
-				if thinking != "" && a.showThinking {
-					messageParts = append(messageParts, "")
-				}
-				messageParts = append(messageParts, a.renderMarkdown(content, width))
-			}
-			return strings.Join(messageParts, "\n")
+		if thinking != "" && a.showThinking {
+			messageParts = append(messageParts, "")
 		}
+		messageParts = append(messageParts, a.renderMarkdown(content, width))
+		return strings.Join(messageParts, "\n")
 	}
 
-	// Default path: existing rendering with thinking + markdown + finish info.
+	// Default path: bash emits or fallback markdown.
 	if thinking != "" && a.showThinking {
 		messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))
 	}
@@ -164,7 +155,13 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 		if thinking != "" && a.showThinking {
 			messageParts = append(messageParts, "")
 		}
-		messageParts = append(messageParts, a.renderMarkdown(content, width))
+		if fp := a.message.FinishPart(); fp != nil && fp.Reason == message.FinishReasonToolUse {
+			// Tool-use finish = bash emit: render as "$ cmd"
+			messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render("$ "+content))
+		} else {
+			// Other (EndTurn, etc.): render as markdown
+			messageParts = append(messageParts, a.renderMarkdown(content, width))
+		}
 	}
 	if a.message.IsFinished() {
 		switch a.message.FinishReason() {

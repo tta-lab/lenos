@@ -65,14 +65,14 @@ func TestResultMessageItem_HandleKeyEvent(t *testing.T) {
 		item := makeItem("exit 1", "command failed", intPtr(1), false)
 		_, cmd := item.HandleKeyEvent(fakeKeyMsg{s: "y"})
 		require.NotNil(t, cmd)
-		assert.Equal(t, "$ exit 1\ncommand failed\n(exit code: 1)", item.formatCommandForCopy())
+		assert.Equal(t, "$ exit 1\ncommand failed\n[1]", item.formatCommandForCopy())
 	})
 
 	t.Run("non-zero exit no output", func(t *testing.T) {
 		item := makeItem("false", "", intPtr(42), false)
 		_, cmd := item.HandleKeyEvent(fakeKeyMsg{s: "y"})
 		require.NotNil(t, cmd)
-		assert.Equal(t, "$ false\n(exit code: 42)", item.formatCommandForCopy())
+		assert.Equal(t, "$ false\n[42]", item.formatCommandForCopy())
 	})
 
 	t.Run("pending command copies command only", func(t *testing.T) {
@@ -133,14 +133,14 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 	t.Run("non-zero exit includes suffix", func(t *testing.T) {
 		item := makeItem("f2", "false", "failed", intPtr(1), false)
 		got := item.formatCommandForCopy()
-		assert.Contains(t, got, "(exit code: 1)")
+		assert.Contains(t, got, "[1]")
 	})
 
 	t.Run("non-zero exit no output includes exit suffix", func(t *testing.T) {
 		item := makeItem("f2b", "false", "", intPtr(1), false)
 		got := item.formatCommandForCopy()
 		assert.Contains(t, got, "$ false")
-		assert.Contains(t, got, "\n(exit code: 1)")
+		assert.Contains(t, got, "\n[1]")
 	})
 
 	t.Run("pending command is command-only", func(t *testing.T) {
