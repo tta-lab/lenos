@@ -216,11 +216,17 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 		case classifyMd:
-			// :md protocol message — route and acknowledge.
+			// :md protocol message — route, persist, acknowledge.
+			// Three-step pattern: (1) write :md text to .md transcript verbatim,
+			// (2) route via ttal send if @agent, (3) write ack into model history.
 			body := transcript.StripMdPrefixLine(emit)
 			addressee := transcript.ParseMdAddressee(emit)
 
-			// Route: if :md @agent, send via ttal send.
+			// (1) Persist the full :md text to the .md transcript as raw markdown
+			// so SplitBlocks() classifies it as BlockMdMessage.
+			_ = deps.recorder.ProseMessage(ctx, deps.sessionID, emit)
+
+			// (2) Route: if :md @agent, send via ttal send.
 			if addressee != "" {
 				res := deps.runner.Run(ctx,
 					"cat <<'EOF' | ttal send --to "+addressee+"\n"+body+"\nEOF",
@@ -230,14 +236,13 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				}
 			}
 
-			// Runtime acknowledgment — mirrors the pattern from ttal send stdout injection.
+			// (3) Inject runtime acknowledgment into model's history.
 			var ack string
 			if addressee != "" {
 				ack = "[runtime] message sent to " + addressee + ". you may use exit to enter sleep if you finish your work / waiting for reply..."
 			} else {
 				ack = "[runtime] message written. you may use exit to enter sleep if you finish your work / waiting for reply..."
 			}
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, ack)
 			msg := assistantTextMessage(emit, assistantMsg.ReasoningContent())
 			msgs = append(msgs, msg, fantasy.NewUserMessage(ack))
 			if obsErr := persistObservation(ctx, deps, ack); obsErr != nil {

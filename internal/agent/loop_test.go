@@ -165,6 +165,11 @@ func (r *recordingRecorder) AgentEmit(_ context.Context, _, emit string) (transc
 	return transcript.TrailerToken{}, nil
 }
 
+func (r *recordingRecorder) ProseMessage(_ context.Context, _, text string) error {
+	r.record("ProseMessage:" + truncate(text, 30))
+	return nil
+}
+
 func (r *recordingRecorder) BashResult(_ context.Context, _ transcript.TrailerToken, out []byte, exitCode int, _ time.Duration) error {
 	r.record("BashResult:" + truncate(string(out), 20) + ":exit=" + itoa(exitCode))
 	return nil
