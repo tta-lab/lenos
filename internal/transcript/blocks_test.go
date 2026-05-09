@@ -152,3 +152,72 @@ func TestBlockID_StableAndKindAware(t *testing.T) {
 	assert.Equal(t, a.ID(), b.ID(), "same kind+source → same id")
 	assert.NotEqual(t, a.ID(), c.ID(), "kind differentiates collisions")
 }
+
+func TestSplitBlocks_MdMessages(t *testing.T) {
+	t.Parallel()
+
+	// Bare :md — message to owner.
+	src := []byte(":md\nHello, world.\n")
+	blocks := SplitBlocks(src)
+	require.Len(t, blocks, 1)
+	assert.Equal(t, BlockMdMessage, blocks[0].Kind, "bare :md must classify as BlockMdMessage")
+	assert.Contains(t, blocks[0].Source, ":md")
+
+	// :md @agent — message to a specific agent.
+	src = []byte(":md @mira\nHey, review the PR?\n")
+	blocks = SplitBlocks(src)
+	require.Len(t, blocks, 1)
+	assert.Equal(t, BlockMdMessage, blocks[0].Kind, ":md @mira must classify as BlockMdMessage")
+	assert.Contains(t, blocks[0].Source, "@mira")
+
+	// :md with multi-line body.
+	src = []byte(":md\nLine one\nLine two\nLine three\n")
+	blocks = SplitBlocks(src)
+	require.Len(t, blocks, 1)
+	assert.Equal(t, BlockMdMessage, blocks[0].Kind, "multi-line :md must classify as BlockMdMessage")
+	assert.Contains(t, blocks[0].Source, "Line one")
+	assert.Contains(t, blocks[0].Source, "Line three")
+
+	// :md in a mixed transcript.
+	src = []byte("**λ** hi\n\n" +
+		":md\nsome message\n\n" +
+		"```bash\necho ok\n```\n\n" +
+		":md @mira\nanother\n")
+	blocks = SplitBlocks(src)
+	require.Len(t, blocks, 4, "mixed transcript: user msg, :md, bash, :md")
+	assert.Equal(t, BlockUserMsg, blocks[0].Kind)
+	assert.Equal(t, BlockMdMessage, blocks[1].Kind, ":md block in mixed transcript")
+	assert.Equal(t, BlockBashCmd, blocks[2].Kind)
+	assert.Equal(t, BlockMdMessage, blocks[3].Kind, "second :md block in mixed transcript")
+
+	// Prose without :md prefix classifies as BlockProse.
+	src = []byte("Hello, just some prose.\nNo :md prefix here.\n")
+	blocks = SplitBlocks(src)
+	require.Len(t, blocks, 1)
+	assert.Equal(t, BlockProse, blocks[0].Kind, "text without :md prefix must classify as BlockProse")
+}
+
+func TestParseMdAddressee_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"empty string", "", ""},
+		{"bare :md", ":md", ""},
+		{"bare :md with body", ":md\nhello world", ""},
+		{":md @mira", ":md @mira", "mira"},
+		{":md @mira with body", ":md @mira\nhello world", "mira"},
+		{":md @ with no name", ":md @", ""},
+		{"text without :md", "hello world", ""},
+		{"λ user msg not :md", "**λ** hi", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, ParseMdAddressee(tc.text))
+		})
+	}
+}

@@ -60,9 +60,6 @@ func TestMdRecorder_FullSession(t *testing.T) {
 	tok2, err := r.AgentEmit(ctx, sid,
 		"narrate <<EOF\nexpiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After\nEOF")
 	require.NoError(t, err)
-	// narrate prose written by cmd/narrate directly via RenderProse — simulate it.
-	require.NoError(t, r.writer.Append([]byte(RenderProse(
-		"expiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After"))))
 	require.NoError(t, r.BashResult(ctx, tok2, nil, 0, 1*time.Millisecond))
 
 	tok3, err := r.AgentEmit(ctx, sid, "sed -i 's/Before/After/' src/auth.go")
@@ -71,7 +68,6 @@ func TestMdRecorder_FullSession(t *testing.T) {
 
 	tok4, err := r.AgentEmit(ctx, sid, `narrate "switching approach — using src edit"`)
 	require.NoError(t, err)
-	require.NoError(t, r.writer.Append([]byte(RenderProse("switching approach — using src edit"))))
 	require.NoError(t, r.BashResult(ctx, tok4, nil, 0, 1*time.Millisecond))
 
 	tok5, err := r.AgentEmit(ctx, sid, "src edit src/auth.go <<EOF\n... edit ...\nEOF")

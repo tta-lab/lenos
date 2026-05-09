@@ -165,6 +165,11 @@ func (r *recordingRecorder) AgentEmit(_ context.Context, _, emit string) (transc
 	return transcript.TrailerToken{}, nil
 }
 
+func (r *recordingRecorder) ProseMessage(_ context.Context, _, text string) error {
+	r.record("ProseMessage:" + truncate(text, 30))
+	return nil
+}
+
 func (r *recordingRecorder) BashResult(_ context.Context, _ transcript.TrailerToken, out []byte, exitCode int, _ time.Duration) error {
 	r.record("BashResult:" + truncate(string(out), 20) + ":exit=" + itoa(exitCode))
 	return nil
@@ -1082,7 +1087,7 @@ func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
 	require.Len(t, users, 1)
 	obs := users[0].Content().Text
 	assert.Contains(t, obs, "`Hello`")
-	assert.Contains(t, obs, "narrate <<'EOF'")
+	assert.Contains(t, obs, ":md")
 }
 
 // TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance tests that the

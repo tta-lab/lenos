@@ -62,7 +62,7 @@ func TestMdWriter_ConcurrentWriteReturnsError(t *testing.T) {
 
 // TestCrossProcessFlock verifies the cross-process advisory flock contract:
 // MdWriter.Append MUST observe locks held on independent file descriptors,
-// because cmd/narrate (Phase 3) opens its own fd to the same .md file. Since
+// because the :md protocol handler opens its own fd to the same .md file. Since
 // flock is per-fd (not per-process), a separate fd in this same process
 // faithfully simulates a separate process — there is no semantic difference
 // at the kernel level.

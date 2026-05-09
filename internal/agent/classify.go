@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/tta-lab/lenos/internal/transcript"
 )
 
 // classifyResult enumerates how the loop should handle a model emit.
@@ -19,6 +21,7 @@ const (
 	classifyToolCall
 	classifyInvalidBash
 	classifyBanned
+	classifyMd          // emit starts with :md protocol prefix
 	classifyProsePrefix // emit starts with Title-Cased prose word
 )
 
@@ -31,7 +34,7 @@ var exitRe = regexp.MustCompile(`^\s*exit(\s+-?\d+)?\s*$`)
 // trailingExitRe matches an emit whose final command is `exit` joined by a
 // shell separator: `... && exit`, `... ; exit`, `... || exit`, or a newline
 // (e.g. heredoc body followed by `exit` on the next line). The model uses
-// this idiom to combine an action (typically `narrate "..."`) with turn-end
+// this idiom to combine an action (typically `:md`) with turn-end
 // in a single response — common enough that ignoring the exit signal would
 // force every turn into a redundant follow-up emit. We strip the trailing
 // exit clause and run the command portion via classifyExec, then the loop
@@ -56,12 +59,15 @@ var blockedCmdPatterns = []*regexp.Regexp{
 // auxiliary string (bash stderr for classifyInvalidBash; first Title-Cased
 // word for classifyProsePrefix; "" otherwise).
 //
-// Classification order: empty → exit → banned → tool-call → prose-prefix → bash-syntax → trailing-exit → exec.
+// Classification order: empty → exit → banned → tool-call → :md → prose-prefix → bash-syntax → trailing-exit → exec.
 // Empty short-circuits before exit so `   ` doesn't accidentally pass the
 // trim+exitRe check; banned runs before bash-syntax so we never invoke
 // `bash -n` on a refused pattern; tool-call and prose-prefix both run before
 // bash-syntax so obviously wrong non-bash shapes get dedicated corrections
-// instead of generic shell errors; prose-prefix runs before trailing-exit so
+// instead of generic shell errors; :md fires BEFORE prose-prefix so
+// `:md @agent` doesn't match prose-prefix's Title-Case detection (the `:`
+// is not a capital letter, but `@agent` contains `@` which is not alphabetic
+// — safe guard regardless). prose-prefix runs before trailing-exit so
 // prose shapes like "Read files && exit" are caught as prose, not executed.
 func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {
 	trimmed := strings.TrimSpace(emit)
@@ -76,6 +82,18 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 	}
 	if containsToolCallPattern(emit) {
 		return classifyToolCall, ""
+	}
+	if strings.HasPrefix(trimmed, transcript.MdPrefix) {
+		// :md at the very start of the emit (bare or followed by @agent).
+		// Must fire before prose-prefix so `:md @agent` is not caught by
+		// the Title-Case detector on the `@agent` portion.
+		// Require space, tab, or newline after :md to avoid matching
+		// commands like `:mdata` or `:md5sum`. The trimmed emit may start
+		// with `:md`, `:md @agent`, or `:md\nbody` — all valid forms.
+		rest := strings.TrimPrefix(trimmed, transcript.MdPrefix)
+		if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
+			return classifyMd, ""
+		}
 	}
 	if word, _ := detectProsePrefix(emit); word != "" {
 		return classifyProsePrefix, word
@@ -116,7 +134,7 @@ var proseFirstWordRe = regexp.MustCompile(`^([A-Z][a-z]+)\b`)
 //
 // The full line is returned alongside the first word so re-prompts can quote
 // the model's exact prose verbatim and show the in-place conversion to bash
-// comment + narrate forms — direct conversion lowers the cognitive friction
+// comment + :md forms — direct conversion lowers the cognitive friction
 // in correcting next turn vs an abstract rule restatement.
 //
 // Heuristic: false positives possible on cap-named binaries (e.g. macOS

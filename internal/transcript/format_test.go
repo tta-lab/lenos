@@ -280,29 +280,3 @@ func TestRenderTurnEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(golden), RenderTurnEnd())
 }
-
-func TestRenderProse(t *testing.T) {
-	t.Parallel()
-
-	t.Run("basic prose", func(t *testing.T) {
-		t.Parallel()
-
-		golden, err := os.ReadFile("testdata/prose.md")
-		require.NoError(t, err)
-		require.Equal(t, string(golden), RenderProse("expiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After"))
-	})
-
-	t.Run("trailing newlines trimmed", func(t *testing.T) {
-		t.Parallel()
-
-		result := RenderProse("hello world\n\n\n")
-		require.Equal(t, "hello world\n\n", result)
-	})
-
-	t.Run("multi-line with blank lines", func(t *testing.T) {
-		t.Parallel()
-
-		result := RenderProse("line one\n\nline two\n")
-		require.Equal(t, "line one\n\nline two\n\n", result)
-	})
-}

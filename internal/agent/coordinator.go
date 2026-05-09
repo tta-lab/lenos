@@ -299,12 +299,6 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		}
 	}
 
-	// narrate (cmd/narrate) needs LENOS_SESSION_ID to know which session.md
-	// to append to. The data directory is auto-discovered via the same
-	// fsext.LookupClosest walk-up from cwd that lenos's main process uses,
-	// so the two always converge — no LENOS_DATA_DIR export required.
-	sandboxEnv["LENOS_SESSION_ID"] = sessionID
-
 	cwd := c.cfg.WorkingDir()
 	var additionalReadOnlyPaths []string
 	if projects, err := project.List(ctx); err == nil {

@@ -1,10 +1,12 @@
 package chat
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/tta-lab/lenos/internal/transcript"
 	"github.com/tta-lab/lenos/internal/ui/list"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
@@ -20,6 +22,7 @@ const (
 	MdBlockOther     MdBlockKind = iota // output / trailer / runtime / prose / legacy bash
 	MdBlockUserMsg                      // **λ** user message — gets the left bar
 	MdBlockLenosBash                    // ```lenos-bash composite — cmd + output rendered together
+	MdBlockMdMessage                    // :md protocol message — shown with → addressee prefix
 )
 
 // MdBlockItem is a list.List item that renders one block of the session
@@ -97,11 +100,34 @@ func (i *MdBlockItem) Render(width int) string {
 //   - UserMsg: UserBlurred (faint bar) or UserFocused (solid bar) — the
 //     terracotta vertical bar that marks turns the user owns. Always shown
 //     so the eye can scan turn boundaries even when focus lives elsewhere.
+//   - MdBlockMdMessage: a styled → addressee prefix (dim/cyan). Bare :md
+//     (no addressee) renders as → neil.
 //   - Other (bash / output / runtime / prose / lenos-bash composite):
 //     BlockBlurred (transparent 2-char gutter) at rest, BlockFocused
 //     (subtle slate bar in the same 2-char slot) when focused. Visual
 //     change is the bar appearing, not the content moving.
+//
+// The → addressee prefix for MdBlockMdMessage is padded to a fixed width
+// so the content doesn't shift on focus toggle.
+const mdPrefixWidth = 8 // fixed width for "→ addressee" prefix
 func (i *MdBlockItem) linePrefix() string {
+	if i.kind == MdBlockMdMessage {
+		addressee := transcript.ParseMdAddressee(i.rawSource)
+		if addressee == "" {
+			addressee = "neil"
+		}
+		raw := fmt.Sprintf("→ %s", addressee)
+		// Pad to fixed width so gutter is stable
+		if len(raw) < mdPrefixWidth {
+			raw += strings.Repeat(" ", mdPrefixWidth-len(raw))
+		}
+		// Focused: use fgBase (bright text); blurred: use fgSubtle (dim text).
+		fg := i.sty.FgSubtle
+		if i.focused {
+			fg = i.sty.FgBase
+		}
+		return lipgloss.NewStyle().Foreground(fg).Render(raw)
+	}
 	if i.kind == MdBlockUserMsg {
 		if i.focused {
 			return i.sty.Chat.Message.UserFocused.Render()

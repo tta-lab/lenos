@@ -150,6 +150,22 @@ func classifyAndRenderBlock(b transcript.Block, renderer *glamour.TermRenderer, 
 		return chat.MdBlockLenosBash, renderLenosBashSource(b.Source, renderer, rerr)
 	}
 
+	if b.Kind == transcript.BlockMdMessage {
+		// Strip the :md @agent first line — the addressee is rendered by
+		// linePrefix() in md_block.go, not shown in the body text.
+		body := transcript.StripMdPrefixLine(b.Source)
+		rendered := body
+		if rerr == nil {
+			out, err := renderer.Render(body)
+			if err != nil {
+				slog.Warn("Render block", "kind", b.Kind, "err", err)
+			} else {
+				rendered = strings.Trim(out, "\n")
+			}
+		}
+		return chat.MdBlockMdMessage, rendered
+	}
+
 	rendered := b.Source
 	if rerr == nil {
 		out, err := renderer.Render(b.Source)

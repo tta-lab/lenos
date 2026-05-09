@@ -215,6 +215,48 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
+		case classifyMd:
+			// :md protocol message — route, persist, acknowledge.
+			// Three-step pattern: (1) write :md text to .md transcript verbatim,
+			// (2) route via ttal send if @agent, (3) write ack into model history.
+			body := transcript.StripMdPrefixLine(emit)
+			addressee := transcript.ParseMdAddressee(emit)
+
+			// (1) Persist the full :md text to the .md transcript as raw markdown
+			// so SplitBlocks() classifies it as BlockMdMessage.
+			_ = deps.recorder.ProseMessage(ctx, deps.sessionID, emit)
+
+			// (2) Route: if :md @agent with body, send via ttal send.
+			var sendFailed bool
+			var sendExitCode int
+			if addressee != "" && body != "" {
+				res := deps.runner.Run(ctx,
+					"cat <<'EOF' | ttal send --to "+addressee+"\n"+body+"\nEOF",
+					deps.env, deps.paths)
+				sendExitCode = res.ExitCode
+				if res.ExitCode != 0 {
+					slog.Warn("loop: route :md @agent", "addressee", addressee, "exit", res.ExitCode, "stderr", string(res.Stderr))
+					sendFailed = true
+				}
+			}
+
+			// (3) Inject runtime acknowledgment into model's history.
+			var ack string
+			if sendFailed {
+				ack = "[runtime] message delivery to " + addressee + " failed (exit " + fmt.Sprintf("%d", sendExitCode) + "). you may try again or use exit to sleep."
+			} else if addressee != "" {
+				ack = "[runtime] message sent to " + addressee + ". you may use exit to enter sleep if you finish your work / waiting for reply..."
+			} else {
+				ack = "[runtime] message written. you may use exit to enter sleep if you finish your work / waiting for reply..."
+			}
+			msg := assistantTextMessage(emit, assistantMsg.ReasoningContent())
+			msgs = append(msgs, msg, fantasy.NewUserMessage(ack))
+			if obsErr := persistObservation(ctx, deps, ack); obsErr != nil {
+				slog.Warn("loop: persist :md ack", "error", obsErr)
+			}
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
+
 		case classifyExec, classifyExecExit:
 			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 				Role:  message.Result,

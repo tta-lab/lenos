@@ -29,6 +29,12 @@ type Recorder interface {
 	// Returns a TrailerToken that must be passed to BashResult or BashSkipped.
 	AgentEmit(ctx context.Context, sessionID, emit string) (TrailerToken, error)
 
+	// ProseMessage writes a block of raw markdown text to the transcript, NOT wrapped
+	// in any fence. Used for :md protocol messages and other non-bash prose that should
+	// appear in the transcript as plain text (the TUI renders it as-is or via Glamour).
+	// No TrailerToken is returned — prose blocks don't have bash-result output.
+	ProseMessage(ctx context.Context, sessionID, text string) error
+
 	// BashResult writes the output block and trailer for a completed command.
 	// On exit==0: trailer only (success-quiet). On exit!=0: output block +
 	// failure trailer with ❌ exit N (spec 57a09f51 §Error Visibility).
@@ -59,6 +65,10 @@ func (NoopRecorder) Open(_ context.Context, _ Meta) error             { return n
 func (NoopRecorder) UserMessage(_ context.Context, _, _ string) error { return nil }
 func (NoopRecorder) AgentEmit(_ context.Context, _, _ string) (TrailerToken, error) {
 	return TrailerToken{}, nil
+}
+
+func (NoopRecorder) ProseMessage(_ context.Context, _, _ string) error {
+	return nil
 }
 
 func (NoopRecorder) BashResult(_ context.Context, _ TrailerToken, _ []byte, _ int, _ time.Duration) error {
@@ -106,6 +116,10 @@ func (r *MdRecorder) UserMessage(_ context.Context, _, text string) error {
 func (r *MdRecorder) AgentEmit(_ context.Context, sessionID, emit string) (TrailerToken, error) {
 	startedAt := r.now()
 	return TrailerToken{sessionID: sessionID, startedAt: startedAt}, r.writer.Append([]byte(RenderBashBlock(emit)))
+}
+
+func (r *MdRecorder) ProseMessage(_ context.Context, _, text string) error {
+	return r.writer.Append([]byte(RenderProseBlock(text)))
 }
 
 func (r *MdRecorder) BashResult(_ context.Context, tok TrailerToken, out []byte, exitCode int, dur time.Duration) error {
@@ -182,6 +196,12 @@ func (r *loggingRecorder) AgentEmit(ctx context.Context, sessionID, emit string)
 	tok, err := r.inner.AgentEmit(ctx, sessionID, emit)
 	r.logErr("AgentEmit", err)
 	return tok, err
+}
+
+func (r *loggingRecorder) ProseMessage(ctx context.Context, sessionID, text string) error {
+	err := r.inner.ProseMessage(ctx, sessionID, text)
+	r.logErr("ProseMessage", err)
+	return err
 }
 
 func (r *loggingRecorder) BashResult(ctx context.Context, tok TrailerToken, out []byte, exitCode int, dur time.Duration) error {

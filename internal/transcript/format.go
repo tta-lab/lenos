@@ -31,6 +31,18 @@ func RenderFrontmatter(m Meta) string {
 	return b.String()
 }
 
+// RenderProseBlock renders a block of plain markdown text (not wrapped in any
+// fence or prefix). Used for :md protocol messages and other non-bash text that
+// should appear verbatim in the .md transcript. Strips trailing newlines and
+// adds a single trailing blank line to match the block-separator convention.
+func RenderProseBlock(text string) string {
+	text = strings.TrimRight(text, "\n")
+	if text == "" {
+		return ""
+	}
+	return text + "\n\n"
+}
+
 // RenderUserMessage renders a user message line.
 // The λ marker prefixes only the first line; multi-line text passes through
 // verbatim with no per-line marker.
@@ -112,12 +124,4 @@ func RenderRuntimeEvent(sev Severity, description string) string {
 // RenderTurnEnd renders the *(turn ended)* italic line.
 func RenderTurnEnd() string {
 	return "*(turn ended)*\n\n"
-}
-
-// RenderProse renders plain prose text (used by cmd/narrate for prose content).
-// Ensures a single trailing blank line; strips any existing trailing newlines
-// from the input first.
-func RenderProse(text string) string {
-	text = strings.TrimRight(text, "\n")
-	return text + "\n\n"
 }

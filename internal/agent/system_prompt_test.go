@@ -29,15 +29,10 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	// Bash-first protocol is described.
 	assert.Contains(t, got, "raw bash")
 	assert.Contains(t, got, "exit")
-	assert.Contains(t, got, "narrate")
-	// narrate is heredoc-only (the bash-quoting trap is the #1 cause of
-	// re-prompts; one canonical form eliminates the apostrophe edge cases).
-	assert.Contains(t, got, "narrate <<'EOF'",
-		"narrate examples must use the heredoc form")
-	assert.NotContains(t, got, `narrate "`,
-		"narrate must not be advertised in double-quoted form (apostrophe trap)")
-	assert.NotContains(t, got, `narrate '`,
-		"narrate must not be advertised in single-quoted form (apostrophe trap)")
+	assert.Contains(t, got, ":md")
+	// :md is the sole agent communication channel — single-line or multi-line.
+	assert.Contains(t, got, ":md @agent",
+		":md protocol must be advertised with @agent syntax")
 
 	// MUST NOT mention the legacy <cmd> markup — that's the whole point.
 	assert.False(t, strings.Contains(got, "<cmd>"),
@@ -45,7 +40,7 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.False(t, strings.Contains(got, "</cmd>"),
 		"base prompt must not reference legacy </cmd> markup")
 
-	// MUST NOT mention the legacy log CLI — narrate replaced it.
+	// MUST NOT mention the legacy log CLI — :md replaced it.
 	assert.False(t, strings.Contains(got, "log info"),
 		"base prompt must not reference legacy log info CLI")
 	assert.False(t, strings.Contains(got, "log warn"),
@@ -53,13 +48,7 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.False(t, strings.Contains(got, "log error"),
 		"base prompt must not reference legacy log error CLI")
 
-	// narrate is single-mode — no severity variants.
-	assert.False(t, strings.Contains(got, "narrate info"),
-		"narrate is single-mode; no severity variants")
-	assert.False(t, strings.Contains(got, "narrate warn"),
-		"narrate is single-mode; no severity variants")
-	assert.False(t, strings.Contains(got, "narrate error"),
-		"narrate is single-mode; no severity variants")
+	// :md is single-mode — no severity variants.
 }
 
 func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {
