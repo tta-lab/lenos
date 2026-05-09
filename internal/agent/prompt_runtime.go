@@ -16,7 +16,7 @@ const alertPrefix = "[ALERT from runtime]"
 
 // rePromptEmpty is the next-observation text after an empty/whitespace emit.
 func rePromptEmpty() string {
-	return `[runtime] your last response was empty. emit a bash command, a comment (# ...), a narrate heredoc, or "exit" to end the turn.`
+	return `[runtime] your last response was empty. emit a bash command, a comment (# ...), a :md message, or "exit" to end the turn.`
 }
 
 // rePromptInvalidBash is the next-observation text after `bash -n` rejected
@@ -33,17 +33,14 @@ func rePromptInvalidBash(bashErr string) string {
 
 THE MOST LIKELY CAUSE: you emitted natural-language prose (a greeting, an
 explanation, a markdown answer) instead of bash. Every response is run as
-bash -c — there is no chat channel. To say something to the human, wrap
-prose in a narrate heredoc:
+bash -c — there is no chat channel. To say something, start your response
+with :md on the first line:
 
-  narrate <<'EOF'
-  your message here — apostrophes, "quotes", $vars all pass through verbatim.
-  EOF
+  :md
+  your message here — apostrophes, "quotes", $vars all pass through.
+  exit
 
 To end the turn, emit literally:  exit
-To combine: end the heredoc, then  exit  on its own line, OR append  && exit
-to the heredoc opener (the heredoc body is the only thing the runtime
-parses as natural language; everywhere else, plain text fails).
 
 If you actually meant to run a command, fix the bash quoting. "unexpected
 EOF while looking for matching" errors come from unbalanced quotes —
@@ -62,12 +59,12 @@ See src --help for usage.`
 
 // rePromptToolCall is the next-observation text after the model emitted a
 // structured tool/function call shape. This runtime has no tool-calling API:
-// every turn is either plain bash, narrate, comments, or exit.
+// every turn is either plain bash, :md, comments, or exit.
 //
 // Body deliberately avoids spelling out the wrong shapes verbatim. Quoting
 // literal wrappers such as XML / bracket tool-call forms would re-inject the
 // same pattern we just deleted from assistant history in the tool-call branch.
-// The description stays abstract; the correct bash / narrate / comment / exit
+// The description stays abstract; the correct bash / :md / comment / exit
 // shapes are still demonstrated concretely because those are the patterns we
 // want the model to copy.
 func rePromptToolCall() string {
@@ -83,9 +80,10 @@ To act, emit plain bash only:
   src edit internal/agent/loop.go
 
 To talk to the human, use:
-  narrate <<'EOF'
+  :md
   your message here
-  EOF
+  :md @agent-name
+  message for a specific agent
 
 To leave a short note before a command, use a bash comment:
   # checking the agent loop
@@ -128,7 +126,7 @@ if `+"`%s`"+` looks like part of an English sentence ("Let me ...", "I'll ...",
     not chat-rendering boundaries
 
 to annotate one command (one line):  # this is a bash comment — bash ignores it
-to talk to the human (multi-line):   narrate <<'EOF' ... EOF
+to talk to the human (multi-line):   :md ...
 to end the turn:                     exit
 to act:                              emit pure bash (chained with && / ; / | as needed).`,
 		firstWord, firstWord, firstWord, firstWord)
@@ -141,7 +139,7 @@ to act:                              emit pure bash (chained with && / ; / | as 
 // signal that the shape was wrong before any side-effects could happen.
 //
 // Quotes the actual offending line and shows the in-place conversion to
-// bash comment + narrate forms — model sees the exact text it should have
+// bash comment + :md forms — model sees the exact text it should have
 // written instead of the abstract rule.
 func rePromptProsePrefix(firstWord, line string) string {
 	return fmt.Sprintf(alertPrefix+` your last emit started with English prose:
@@ -153,10 +151,10 @@ The runtime DID NOT execute it — every byte of your response is fed to bash -c
 If this was meant as a brief note before a command, convert to a bash comment:
   # %s
 
-If this was meant as a multi-line message to the human, wrap in narrate:
-  narrate <<'EOF'
+If this was meant as a multi-line message to the human, start with :md:
+  :md
   %s
-  EOF
+  exit
 
 To act, emit pure bash starting with a lowercase command (ls, grep, src, etc.).
 To end the turn, emit literally:  exit

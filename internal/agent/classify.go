@@ -31,7 +31,7 @@ var exitRe = regexp.MustCompile(`^\s*exit(\s+-?\d+)?\s*$`)
 // trailingExitRe matches an emit whose final command is `exit` joined by a
 // shell separator: `... && exit`, `... ; exit`, `... || exit`, or a newline
 // (e.g. heredoc body followed by `exit` on the next line). The model uses
-// this idiom to combine an action (typically `narrate "..."`) with turn-end
+// this idiom to combine an action (typically `:md`) with turn-end
 // in a single response — common enough that ignoring the exit signal would
 // force every turn into a redundant follow-up emit. We strip the trailing
 // exit clause and run the command portion via classifyExec, then the loop
@@ -116,7 +116,7 @@ var proseFirstWordRe = regexp.MustCompile(`^([A-Z][a-z]+)\b`)
 //
 // The full line is returned alongside the first word so re-prompts can quote
 // the model's exact prose verbatim and show the in-place conversion to bash
-// comment + narrate forms — direct conversion lowers the cognitive friction
+// comment + :md forms — direct conversion lowers the cognitive friction
 // in correcting next turn vs an abstract rule restatement.
 //
 // Heuristic: false positives possible on cap-named binaries (e.g. macOS

@@ -19,7 +19,7 @@ var ErrConcurrentWrite = errors.New("transcript: concurrent .md writer detected"
 // Two error policies:
 //
 //   - AppendStrict returns all I/O errors honestly. Callers that must not lose
-//     errors (e.g. cmd/narrate, E14) use this.
+//     errors (e.g. :md protocol handler, E14) use this.
 //   - Append calls AppendStrict and applies E8: non-ErrConcurrentWrite errors are
 //     logged via slog.Warn and returned as nil. Lenos main uses Append.
 type MdWriter struct {
@@ -35,7 +35,7 @@ func NewMdWriter(path string) *MdWriter {
 // AppendStrict opens the file with O_APPEND, acquires an exclusive advisory flock,
 // writes p, fsyncs, unlocks, and closes. Returns all errors honestly:
 // os.OpenFile failure, ErrConcurrentWrite, write error, fsync error. Callers
-// that must not silently swallow errors use this (e.g. cmd/narrate, E14).
+// that must not silently swallow errors use this (e.g. :md protocol handler, E14).
 func (w *MdWriter) AppendStrict(p []byte) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()

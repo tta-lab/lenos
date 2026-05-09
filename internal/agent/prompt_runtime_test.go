@@ -13,7 +13,7 @@ func TestRePromptEmpty(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got, "[runtime] "), "must start with [runtime] tag")
 	assert.Contains(t, got, "your last response was empty")
 	assert.Contains(t, got, `"exit"`)
-	assert.Contains(t, got, "narrate")
+	assert.Contains(t, got, ":md")
 	assert.Contains(t, got, "# ...")
 }
 
@@ -25,7 +25,7 @@ func TestRePromptInvalidBash(t *testing.T) {
 	assert.Contains(t, got, "bash -n said:")
 	assert.Contains(t, got, "syntax error near token `then'")
 	assert.Contains(t, got, "natural-language prose")
-	assert.Contains(t, got, "narrate <<'EOF'")
+	assert.Contains(t, got, ":md")
 	assert.Contains(t, got, "exit")
 }
 
@@ -66,7 +66,7 @@ func TestRePromptCmdNotFound_Format(t *testing.T) {
 	assert.Contains(t, got, "command -v lorem")
 	assert.Contains(t, got, "# ", "must offer bash comment for one-line inline annotation")
 	assert.Contains(t, got, "comment")
-	assert.Contains(t, got, "narrate <<'EOF'")
+	assert.Contains(t, got, ":md")
 	assert.Contains(t, got, "exit")
 	assert.Contains(t, got, "```bash")
 	assert.Contains(t, got, "```")
@@ -80,7 +80,7 @@ func TestRePromptCmdNotFound_EmptyInput(t *testing.T) {
 	got := rePromptCmdNotFound("")
 	assert.True(t, strings.HasPrefix(got, alertPrefix+" "))
 	assert.Contains(t, got, "command not found")
-	assert.Contains(t, got, "narrate")
+	assert.Contains(t, got, ":md")
 	assert.Contains(t, got, "exit")
 }
 
@@ -97,7 +97,7 @@ func TestRePromptProsePrefix_Format(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got, alertPrefix+" "), "must start with alert prefix")
 	assert.Contains(t, got, "Read the README first", "must quote the offending line verbatim")
 	assert.Contains(t, got, "# Read the README first", "must show comment-form conversion using the actual line")
-	assert.Contains(t, got, "narrate <<'EOF'", "must show narrate-form conversion")
+	assert.Contains(t, got, ":md", "must show :md-form conversion")
 	assert.Contains(t, got, "command -v Read", "must offer command -v probe for cap-named binary case")
 	assert.Contains(t, got, "DID NOT execute", "must signal that bash was bypassed")
 }

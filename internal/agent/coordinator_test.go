@@ -254,9 +254,9 @@ func TestSystemPrompt_BuildsNonEmptyPrompt(t *testing.T) {
 
 	// Spot-check the bash-first protocol marker is present so a future
 	// template restructure that drops the protocol section gets caught.
-	// "narrate <<" + "exit" together signal the heredoc-only contract is
+	// ":md" + "exit" together signal the :md protocol contract is
 	// rendered into the prompt.
-	assert.Contains(t, prompt, "narrate <<", "bash-first protocol must explain narrate heredoc form")
+	assert.Contains(t, prompt, ":md", "bash-first protocol must explain :md form")
 	assert.Contains(t, prompt, "Output Protocol", "bash-first output-protocol section must be in the rendered prompt")
 }
 
@@ -270,10 +270,9 @@ func TestCoordinator_SystemPromptGetterReturnsStored(t *testing.T) {
 	assert.Equal(t, "test-prompt-sentinel", c.SystemPrompt())
 }
 
-// TestBuildCall_SetsLenosEnvVars verifies buildCall injects LENOS_SESSION_ID
-// (the only env var narrate still needs — the data dir is auto-derived from
-// the subprocess cwd).
-func TestBuildCall_SetsLenosEnvVars(t *testing.T) {
+// TestBuildCall_NoLongerInjectsLenosEnvVars verifies buildCall does NOT
+// inject LENOS_SESSION_ID (removed with narrate CLI) or LENOS_DATA_DIR.
+func TestBuildCall_NoLongerInjectsLenosEnvVars(t *testing.T) {
 	tmp := t.TempDir()
 	configDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
@@ -298,9 +297,16 @@ func TestBuildCall_SetsLenosEnvVars(t *testing.T) {
 
 	call := c.buildCall(context.Background(), "sess-123", "hi", Model{}, config.ProviderConfig{})
 
-	assert.Equal(t, "sess-123", call.Env["LENOS_SESSION_ID"])
+	// buildCall copies all OS env vars (including any inherited LENOS_SESSION_ID
+	// from the parent process), so checking key presence won't work. Instead
+	// verify the coordinator no longer sets its OWN value "sess-123" — if the
+	// key exists from the OS env, its value will differ.
+	v, ok := call.Env["LENOS_SESSION_ID"]
+	if ok {
+		assert.NotEqual(t, "sess-123", v, "coordinator must not set LENOS_SESSION_ID to session ID")
+	}
 	_, hasDataDir := call.Env["LENOS_DATA_DIR"]
-	assert.False(t, hasDataDir, "LENOS_DATA_DIR no longer exported; narrate finds .lenos via cwd LookupClosest")
+	assert.False(t, hasDataDir, "LENOS_DATA_DIR no longer exported")
 }
 
 // testSessionService is a minimal session.Service for recorderFor unit tests.

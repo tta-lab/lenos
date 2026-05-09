@@ -23,8 +23,6 @@ expiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After
 EOF
 ```
 
-expiry comparison is reversed — t.ExpiresAt.Before(time.Now()) should be After
-
 ```lenos-bash
 sed -i 's/Before/After/' src/auth.go
 ```
@@ -34,8 +32,6 @@ sed -i 's/Before/After/' src/auth.go
 ```lenos-bash
 narrate "switching approach — using src edit"
 ```
-
-switching approach — using src edit
 
 ```lenos-bash
 src edit src/auth.go <<EOF

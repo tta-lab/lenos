@@ -6,14 +6,14 @@ to a human-readable `.md` file as they happen.
 ## What's in here
 
 - **`format.go`** — pure render functions (stdlib-only). Imported by Phase 3
-  `cmd/narrate` to write prose without pulling in db/agent dependencies.
+  The :md protocol handler writes prose without pulling in db/agent dependencies.
   Covers frontmatter, user message, bash block, output block, success/failure
   trailers, runtime-event blockquote, prose, and turn-end.
 - **`writer.go`** + `writer_unix.go` / `writer_windows.go` — `MdWriter`
   appends to the `.md` with per-call open → flock → write → fsync → close.
-  Cross-process serialization between lenos main and `cmd/narrate` is via
+  Cross-process serialization between lenos main and the :md protocol handler is via
   exclusive advisory `flock(2)`. `AppendStrict` returns errors honestly for
-  cmd/narrate (E14); `Append` applies E8 swallow for lenos main.
+  The :md protocol handler (E14); `Append` applies E8 swallow for lenos main.
 - **`recorder.go`** — the `Recorder` interface (the Phase 1 ↔ Phase 2 seam),
   `NoopRecorder` (zero-state default for standalone tests), and
   `MdRecorder` (concrete impl wiring formatter + writer).
@@ -49,7 +49,7 @@ composition root (Phase 5 `cmd/lenos`) supplies `transcript.NewMdRecorder(path)`
 The agent loop also writes the same events to sqlite via `internal/db` — the
 two destinations serve different consumers (model context vs. human render).
 
-### Phase 3 — narrate CLI (`cmd/narrate/`)
+### Phase 3 — :md protocol handler
 
 Import `transcript` for `RenderProse`, `RenderRuntimeEvent`, etc. Use
 `MdWriter.AppendStrict` to write prose to the same `.md` lenos main is
@@ -66,7 +66,7 @@ SSOT). That re-render path lives in Phase 4, not in this package.
 
 `internal/session/` holds the SQLite session + Todo CRUD service consumed by
 both the agent loop and the chat UI. `internal/transcript/` is the
-human-facing `.md` render artifact written by lenos main + cmd/narrate. The
+human-facing `.md` render artifact. The
 two have non-overlapping responsibilities and both stay.
 
 ## Spec references

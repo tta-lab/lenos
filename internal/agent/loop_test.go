@@ -1082,7 +1082,7 @@ func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
 	require.Len(t, users, 1)
 	obs := users[0].Content().Text
 	assert.Contains(t, obs, "`Hello`")
-	assert.Contains(t, obs, "narrate <<'EOF'")
+	assert.Contains(t, obs, ":md")
 }
 
 // TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance tests that the

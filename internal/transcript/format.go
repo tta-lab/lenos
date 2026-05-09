@@ -113,11 +113,3 @@ func RenderRuntimeEvent(sev Severity, description string) string {
 func RenderTurnEnd() string {
 	return "*(turn ended)*\n\n"
 }
-
-// RenderProse renders plain prose text (used by cmd/narrate for prose content).
-// Ensures a single trailing blank line; strips any existing trailing newlines
-// from the input first.
-func RenderProse(text string) string {
-	text = strings.TrimRight(text, "\n")
-	return text + "\n\n"
-}
