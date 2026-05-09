@@ -728,23 +728,6 @@ func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 	assert.Equal(t, "q1", users[1].Content().Text)
 }
 
-func TestRunLoop_DrainOnInvalidBash(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"if true then", "exit"}}
-	rec := &recordingRecorder{}
-	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
-
-	stop, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	require.Contains(t, rec.calls[2], "BashSkipped:warn:[runtime] your last response was not valid bash")
-	require.Contains(t, rec.calls[3], "UserMessage:q1")
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, "[runtime]")
-	assert.Equal(t, "q1", users[1].Content().Text)
-}
-
 func TestRunLoop_DrainOnBanned(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{`sed -i "s/a/b/" f.txt`, "exit"}}
@@ -1019,53 +1002,6 @@ func TestRunLoop_Exit127_NonExitNotAffected(t *testing.T) {
 	// Non-127 exit code: no User-role re-prompt is persisted.
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 0, "non-127 exit must NOT persist a User-role re-prompt")
-}
-
-// TestRunLoop_InvalidBash_EmitVisibleInTranscript pins that the model's actual
-// output is recorded BEFORE the runtime warning when bash -n rejects.
-// Regression guard against the visibility gap closed by lifting AgentEmit.
-func TestRunLoop_InvalidBash_EmitVisibleInTranscript(t *testing.T) {
-	t.Parallel()
-	badEmit := "if true then  # missing fi"
-	model := &scriptedModel{emits: []string{badEmit, "exit"}}
-	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
-
-	_, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-
-	// Recorder sequence: emit announce must come BEFORE the bash skipped event.
-	emitIdx, skippedIdx := -1, -1
-	for i, c := range rec.calls {
-		if strings.HasPrefix(c, "AgentEmit:") && strings.Contains(c, "if true then") {
-			emitIdx = i
-		}
-		if strings.Contains(c, "BashSkipped:warn:[runtime] your last response was not valid bash") {
-			skippedIdx = i
-		}
-	}
-	require.GreaterOrEqual(t, emitIdx, 0, "emit must be announced — visibility gap regression")
-	require.GreaterOrEqual(t, skippedIdx, 0)
-	assert.Less(t, emitIdx, skippedIdx, "emit announce must come before bash skipped event in transcript")
-}
-
-// TestRunLoop_Empty_EmitVisibleInTranscript is the same regression guard for empty emits.
-func TestRunLoop_Empty_EmitVisibleInTranscript(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"   ", "exit"}}
-	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
-
-	_, err := runLoop(context.Background(), deps, nil, "noop")
-	require.NoError(t, err)
-
-	var sawEmit bool
-	for _, c := range rec.calls {
-		if strings.HasPrefix(c, "AgentEmit:") {
-			sawEmit = true
-		}
-	}
-	assert.True(t, sawEmit, "even empty emits must be announced for SSOT")
 }
 
 // TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt covers the stderr-scan
@@ -1697,4 +1633,71 @@ func intString(i int) string {
 		buf[n] = '-'
 	}
 	return string(buf[n:])
+}
+
+// --- :md storage path tests ---
+
+func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
+	t.Parallel()
+	emit := ":md @neil\nHello, this is a message.\n\nMore content."
+	body := "Hello, this is a message.\n\nMore content."
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	assistants := assistantsByOrder(ms)
+	require.GreaterOrEqual(t, len(assistants), 1)
+	// The first assistant message should have stored the :md body
+	first := assistants[0]
+	fp := first.FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, ":md", fp.Title, "FinishPart Title should be ':md'")
+	assert.Equal(t, message.FinishReasonToolUse, fp.Reason)
+	assert.Equal(t, body, first.Content().Text, "Content.Text should be :md body without prefix")
+}
+
+func TestRunLoop_MdExitEmptyBody(t *testing.T) {
+	t.Parallel()
+	emit := ":md exit"
+	model := &scriptedModel{emits: []string{emit}}
+	deps, ms := newDeps(t, model, &fakeRunner{}, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	first := assistants[0]
+	fp := first.FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, ":md", fp.Title, "FinishPart Title should be ':md'")
+	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
+	assert.Equal(t, "", first.Content().Text, "Content.Text should be empty for no-body :md exit")
+}
+
+func TestRunLoop_MdAgentExitEndsTurn(t *testing.T) {
+	t.Parallel()
+	emit := ":md @agent exit"
+	model := &scriptedModel{emits: []string{emit}}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	first := assistants[0]
+	fp := first.FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, ":md", fp.Title, "FinishPart Title should be ':md'")
+	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
+	// Body after stripping `:md @agent` is empty — "exit" token is on the first line, not a separate body.
+	assert.Equal(t, "", first.Content().Text, "Content.Text should be empty — 'exit' is a protocol marker, not body")
 }

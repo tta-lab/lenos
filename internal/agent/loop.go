@@ -195,13 +195,25 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 		case classifyMd, classifyMdExit:
 			// :md protocol message — route, persist, acknowledge.
-			// Three-step pattern: (1) write :md text to .md transcript verbatim,
-			// (2) route via ttal send if @agent, (3) write ack into model history.
+			// Stores the :md body (after stripping the `:md @agent` first line) in the
+			// assistant message's Content().Text. The assistant message starts with empty
+			// TextContent — replace it with the body text and set Finish.Title == ":md".
 			body := StripMdPrefixLine(emit)
 			addressee := ParseMdAddressee(emit)
 
-			// (1) Persist the full :md text as raw markdown.
-			// Skip if body is empty (e.g. `:md exit` with no message body).
+			// (1) Store :md body in assistant message Content, preserving reasoning content.
+			var newParts []message.ContentPart
+			if rc := assistantMsg.ReasoningContent(); rc.Thinking != "" {
+				newParts = append(newParts, rc)
+			}
+			newParts = append(newParts,
+				message.TextContent{Text: body},
+				message.Finish{Reason: message.FinishReasonToolUse, Title: ":md", Time: time.Now().Unix()},
+			)
+			assistantMsg.Parts = newParts
+			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+				slog.Warn("loop: persist :md message", "error", updateErr)
+			}
 
 			// (2) Route: if :md @agent with body, send via ttal send.
 			var sendFailed bool
@@ -226,17 +238,19 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			} else {
 				ack = "[runtime] message written. you may use exit to enter sleep if you finish your work / waiting for reply..."
 			}
-			msg := assistantTextMessage(emit, assistantMsg.ReasoningContent())
+			msg := assistantTextMessage(body, assistantMsg.ReasoningContent())
 			msgs = append(msgs, msg, fantasy.NewUserMessage(ack))
 			if obsErr := persistObservation(ctx, deps, ack); obsErr != nil {
 				slog.Warn("loop: persist :md ack", "error", obsErr)
 			}
-			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 			// If :md had exit on first line, end the loop after delivering the message.
 			if cls == classifyMdExit {
-				assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
+				assistantMsg.Parts = []message.ContentPart{
+					message.TextContent{Text: body},
+					message.Finish{Reason: message.FinishReasonEndTurn, Title: ":md", Time: time.Now().Unix()},
+				}
 				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 					slog.Warn("loop: persist :md exit finish", "error", updateErr)
 				}
