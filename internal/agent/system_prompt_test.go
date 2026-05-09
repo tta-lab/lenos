@@ -382,12 +382,20 @@ func TestSystemPrompt_RenderedTemplate_ContainsMdExitPattern(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The template must teach bare :md exit as the default owner message
+	// The template must teach bare :md exit as the default user message
 	// pattern. @agent is only for explicit agent routing.
+	assert.Contains(t, got, "**:md — human-language messages.**",
+		"rendered prompt must name :md as human-language messages")
+	assert.Contains(t, got, "Use bare `:md` for the user",
+		"rendered prompt must make bare :md the user-message default")
+	assert.Contains(t, got, "Do not add an `@name` when messaging the user",
+		"rendered prompt must forbid @name for user messages")
 	assert.Contains(t, got, ":md exit",
-		"rendered prompt must contain the default owner message pattern")
+		"rendered prompt must contain the default user message pattern")
+	assert.NotContains(t, got, "session owner",
+		"rendered prompt must not use ambiguous session-owner wording")
 	assert.NotContains(t, got, "@neil",
-		"rendered prompt must not teach owner routing with @neil")
+		"rendered prompt must not teach user routing with @neil")
 
 	// The template must NOT contain the old two-emission pattern where
 	// :md and exit appear as separate unrelated code blocks.
