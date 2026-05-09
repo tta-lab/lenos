@@ -554,10 +554,18 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Logos doesn't use child sessions — foreign messages are ignored.
 			break
 		}
-		// Restore DB-pubsub message rendering: append the incoming message
-		// to the chat list so the UI updates on pubsub events.
-		if cmd := m.appendSessionMessage(msg.Payload); cmd != nil {
-			cmds = append(cmds, cmd)
+		// Dispatch based on event type to handle creation, update, and deletion.
+		switch msg.Type {
+		case pubsub.CreatedEvent:
+			if cmd := m.appendSessionMessage(msg.Payload); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		case pubsub.UpdatedEvent:
+			if cmd := m.updateSessionMessage(msg.Payload); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		case pubsub.DeletedEvent:
+			m.chat.RemoveMessage(msg.Payload.ID)
 		}
 		// start the spinner if there is a new message
 		if hasInProgressTodo(m.effectiveTodos()) && m.isAgentBusy() && !m.todoIsSpinning {
