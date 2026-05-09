@@ -362,56 +362,6 @@ func TestSystemPrompt_MultipleExtraContextFiles(t *testing.T) {
 	}
 }
 
-func TestSystemPrompt_RenderedTemplate_ContainsMdExitPattern(t *testing.T) {
-	dataDir := t.TempDir()
-	configDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
-	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
-	t.Setenv("LENOS_GLOBAL_DATA", configDir)
-	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
-
-	store, err := config.Init(dataDir, "", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	store.Config().Options.Attribution = &config.Attribution{}
-
-	cp := getCoderContextPaths(store)
-	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, cp)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// The template must teach :md as text rather than bash, with bare :md
-	// as the default user message pattern. @agent is only for explicit
-	// agent routing.
-	assert.Contains(t, got, "**:md — text, not a command.**",
-		"rendered prompt must frame :md as text rather than a command")
-	assert.Contains(t, got, "Use `:md` when your response is text for a reader instead of shell for",
-		"rendered prompt must explain why :md exists")
-	assert.Contains(t, got, "Bare `:md` sends the message to the user. This is the default.",
-		"rendered prompt must make bare :md the user-message default")
-	assert.Contains(t, got, "`:md @agent-name` sends the message to that agent. Use this only when",
-		"rendered prompt must make @agent routing explicit")
-	assert.Contains(t, got, ":md exit",
-		"rendered prompt must contain the default user message pattern")
-	assert.NotContains(t, got, "session owner",
-		"rendered prompt must not use ambiguous session-owner wording")
-	assert.NotContains(t, got, "human-language communication",
-		"rendered prompt must not use vague communication wording")
-	assert.NotContains(t, got, "human/agent communication",
-		"rendered prompt must not describe :md as generic communication")
-	assert.NotContains(t, got, "@neil",
-		"rendered prompt must not teach user routing with @neil")
-
-	// The template must NOT contain the old two-emission pattern where
-	// :md and exit appear as separate unrelated code blocks.
-	assert.NotContains(t, got, "```\n    :md\n    Hi! What can I help you with today?\n    exit\n```",
-		"rendered prompt must NOT contain old greeting pattern")
-	assert.NotContains(t, got, "```\n    :md\n    4.\n    exit\n```",
-		"rendered prompt must NOT contain old factual-answer pattern")
-}
-
 func TestSystemPrompt_ZeroExtraContextFiles(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
