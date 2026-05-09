@@ -22,7 +22,6 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/lenos/internal/transcript"
 	"github.com/tta-lab/lenos/internal/version"
 )
 
@@ -93,11 +92,6 @@ type SessionAgentCall struct {
 	// AllowedPaths is the read/write bound for the runner. The first entry
 	// also becomes the subprocess working directory.
 	AllowedPaths []client.AllowedPath
-
-	// Recorder is the per-session transcript recorder. When non-nil, the
-	// agent loop uses it instead of the agent-wide recorder so each session
-	// writes to its own .md file.
-	Recorder transcript.Recorder
 }
 
 type SessionAgent interface {
@@ -133,7 +127,6 @@ type sessionAgent struct {
 	messages             message.Service
 	disableAutoSummarize bool
 	notify               pubsub.Publisher[notify.Notification]
-	recorder             transcript.Recorder
 
 	messageQueue   *csync.Map[string, []SessionAgentCall]
 	activeRequests *csync.Map[string, context.CancelFunc]
@@ -151,11 +144,6 @@ type SessionAgentOptions struct {
 	Sessions             session.Service
 	Messages             message.Service
 	Notify               pubsub.Publisher[notify.Notification]
-	// Recorder is the transcript seam wired to the .md writer. When nil,
-	// the agent uses transcript.NoopRecorder so standalone tests run
-	// without writing a transcript artifact.
-	Recorder transcript.Recorder
-
 	// HookRunner is called after each model step with a JSON envelope on
 	// stdin. Nil-safe: when nil, no post-step hook runs.
 	HookRunner hooks.Runner
@@ -164,10 +152,6 @@ type SessionAgentOptions struct {
 func NewSessionAgent(
 	opts SessionAgentOptions,
 ) SessionAgent {
-	rec := opts.Recorder
-	if rec == nil {
-		rec = transcript.NoopRecorder{}
-	}
 	return &sessionAgent{
 		largeModel:           csync.NewValue(opts.LargeModel),
 		smallModel:           csync.NewValue(opts.SmallModel),
@@ -179,7 +163,6 @@ func NewSessionAgent(
 		messages:             opts.Messages,
 		disableAutoSummarize: opts.DisableAutoSummarize,
 		notify:               opts.Notify,
-		recorder:             rec,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
 		hookRunner:           opts.HookRunner,

@@ -19,7 +19,6 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/stringext"
-	"github.com/tta-lab/lenos/internal/transcript"
 )
 
 // buildHistory converts session messages to fantasy messages for the bash-first
@@ -139,7 +138,6 @@ runLoopReentry:
 	a.eventPromptSent(call.SessionID)
 
 	primaryModel := a.primaryModel.Get()
-	rec := call.Recorder
 
 	// postStepHook builds and fires the configured post_step hook, if any.
 	// Runs in a goroutine with hookTimeout deadline; errors are logged at
@@ -166,15 +164,11 @@ runLoopReentry:
 			}()
 		}
 	}
-	if rec == nil {
-		rec = a.recorder
-	}
 	deps := loopDeps{
 		model:        primaryModel.Model,
 		provOpts:     call.ProviderOptions,
 		messages:     a.messages,
 		runner:       resolveRunner(call),
-		recorder:     transcript.NewLoggingRecorder(rec),
 		sessionID:    call.SessionID,
 		sysPrompt:    a.systemPrompt.Get(),
 		providerID:   call.ProviderID,

@@ -18,11 +18,6 @@ import (
 	"github.com/tta-lab/lenos/internal/transcript"
 )
 
-// Compile-time guard: catches the SeverityNormal/SevNormal name skew
-// mentioned in the plan-review fixup. If transcript renames, the loop and
-// these tests fail to compile together.
-var _ = transcript.SevNormal
-
 // --- Test fakes ---
 
 // scriptedModel returns a sequence of canned emits via Stream(). Each call
@@ -140,102 +135,6 @@ func (r *fakeRunner) Run(_ context.Context, bash string, _ map[string]string, _ 
 	return out
 }
 
-// recordingRecorder captures call sequence so tests can assert on
-// announce-then-result ordering, severity, etc.
-type recordingRecorder struct {
-	mu    sync.Mutex
-	calls []string
-}
-
-func (r *recordingRecorder) record(s string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.calls = append(r.calls, s)
-}
-
-func (r *recordingRecorder) Open(context.Context, transcript.Meta) error { return nil }
-
-func (r *recordingRecorder) UserMessage(_ context.Context, _, text string) error {
-	r.record("UserMessage:" + truncate(text, 30))
-	return nil
-}
-
-func (r *recordingRecorder) AgentEmit(_ context.Context, _, emit string) (transcript.TrailerToken, error) {
-	r.record("AgentEmit:" + truncate(emit, 30))
-	return transcript.TrailerToken{}, nil
-}
-
-func (r *recordingRecorder) ProseMessage(_ context.Context, _, text string) error {
-	r.record("ProseMessage:" + truncate(text, 30))
-	return nil
-}
-
-func (r *recordingRecorder) BashResult(_ context.Context, _ transcript.TrailerToken, out []byte, exitCode int, _ time.Duration) error {
-	r.record("BashResult:" + truncate(string(out), 20) + ":exit=" + itoa(exitCode))
-	return nil
-}
-
-func (r *recordingRecorder) BashSkipped(_ context.Context, _ transcript.TrailerToken, sev transcript.Severity, desc string) error {
-	r.record("BashSkipped:" + sevName(sev) + ":" + desc)
-	return nil
-}
-
-func (r *recordingRecorder) RuntimeEvent(_ context.Context, _ string, sev transcript.Severity, desc string) error {
-	r.record("RuntimeEvent:" + sevName(sev) + ":" + desc)
-	return nil
-}
-
-func (r *recordingRecorder) TurnEnd(context.Context, string) error {
-	r.record("TurnEnd")
-	return nil
-}
-func (r *recordingRecorder) Close() error { return nil }
-
-var _ transcript.Recorder = (*recordingRecorder)(nil)
-
-func sevName(s transcript.Severity) string {
-	switch s {
-	case transcript.SevWarn:
-		return "warn"
-	case transcript.SevError:
-		return "error"
-	default:
-		return "normal"
-	}
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}
-
-func itoa(i int) string { return strings.TrimSpace(intString(i)) }
-
-func intString(i int) string {
-	// avoid strconv import
-	if i == 0 {
-		return "0"
-	}
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	var buf [20]byte
-	n := len(buf)
-	for i > 0 {
-		n--
-		buf[n] = byte('0' + i%10)
-		i /= 10
-	}
-	if neg {
-		n--
-		buf[n] = '-'
-	}
-	return string(buf[n:])
-}
-
 // --- Helpers ---
 
 func newDeps(t *testing.T, model fantasy.LanguageModel, runner Runner, rec transcript.Recorder) (loopDeps, *mockMessageService) {
@@ -249,7 +148,6 @@ func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, 
 		model:      model,
 		messages:   ms,
 		runner:     runner,
-		recorder:   rec,
 		sessionID:  "s-test",
 		sysPrompt:  "you are a test",
 		providerID: "test-provider-id",
@@ -280,7 +178,6 @@ func TestRunLoop_BareExit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "do nothing")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{"UserMessage:do nothing", "AgentEmit:exit", "BashSkipped:normal:exit — turn ends", "TurnEnd"}, rec.calls)
 
 	// One assistant row, finished EndTurn.
 	assistants := assistantsByOrder(ms)
@@ -301,16 +198,6 @@ func TestRunLoop_ExecThenExit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "say hi")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-
-	// Recorder saw original prompt → announce → result → exit announce → turn-end.
-	assert.Equal(t, []string{
-		"UserMessage:say hi",
-		"AgentEmit:echo hi",
-		"BashResult:hi\n:exit=0",
-		"AgentEmit:exit",
-		"BashSkipped:normal:exit — turn ends",
-		"TurnEnd",
-	}, rec.calls)
 
 	// DB has assistant rows + one result row, runner saw the bash.
 	assert.Equal(t, []string{"echo hi"}, runner.bash)
@@ -1890,4 +1777,100 @@ func TestTranscript_SuccessStaysQuiet(t *testing.T) {
 			}
 		})
 	}
+}
+
+// recordingRecorder implements transcript.Recorder for test assertions.
+type recordingRecorder struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (r *recordingRecorder) record(s string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, s)
+}
+
+func (r *recordingRecorder) Open(context.Context, transcript.Meta) error { return nil }
+
+func (r *recordingRecorder) UserMessage(_ context.Context, _, text string) error {
+	r.record("UserMessage:" + truncate(text, 30))
+	return nil
+}
+
+func (r *recordingRecorder) AgentEmit(_ context.Context, _, emit string) (transcript.TrailerToken, error) {
+	r.record("AgentEmit:" + truncate(emit, 30))
+	return transcript.TrailerToken{}, nil
+}
+
+func (r *recordingRecorder) ProseMessage(_ context.Context, _, text string) error {
+	r.record("ProseMessage:" + truncate(text, 30))
+	return nil
+}
+
+func (r *recordingRecorder) BashResult(_ context.Context, _ transcript.TrailerToken, out []byte, exitCode int, _ time.Duration) error {
+	r.record("BashResult:" + truncate(string(out), 20) + ":exit=" + itoa(exitCode))
+	return nil
+}
+
+func (r *recordingRecorder) BashSkipped(_ context.Context, _ transcript.TrailerToken, sev transcript.Severity, desc string) error {
+	r.record("BashSkipped:" + sevName(sev) + ":" + desc)
+	return nil
+}
+
+func (r *recordingRecorder) RuntimeEvent(_ context.Context, _ string, sev transcript.Severity, desc string) error {
+	r.record("RuntimeEvent:" + sevName(sev) + ":" + desc)
+	return nil
+}
+
+func (r *recordingRecorder) TurnEnd(context.Context, string) error {
+	r.record("TurnEnd")
+	return nil
+}
+
+func (r *recordingRecorder) Close() error { return nil }
+
+var _ transcript.Recorder = (*recordingRecorder)(nil)
+
+func sevName(s transcript.Severity) string {
+	switch s {
+	case transcript.SevWarn:
+		return "warn"
+	case transcript.SevError:
+		return "error"
+	default:
+		return "normal"
+	}
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+func itoa(i int) string { return strings.TrimSpace(intString(i)) }
+
+func intString(i int) string {
+	// avoid strconv import
+	if i == 0 {
+		return "0"
+	}
+	neg := i < 0
+	if neg {
+		i = -i
+	}
+	var buf [20]byte
+	n := len(buf)
+	for i > 0 {
+		n--
+		buf[n] = byte('0' + i%10)
+		i /= 10
+	}
+	if neg {
+		n--
+		buf[n] = '-'
+	}
+	return string(buf[n:])
 }

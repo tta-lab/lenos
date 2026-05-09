@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
@@ -22,7 +21,6 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/hooks"
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
@@ -30,7 +28,6 @@ import (
 	"github.com/tta-lab/lenos/internal/project"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/lenos/internal/transcript"
 	"github.com/tta-lab/temenos/client"
 	"golang.org/x/sync/errgroup"
 
@@ -83,14 +80,12 @@ type coordinator struct {
 	sessions      session.Service
 	messages      message.Service
 	notify        pubsub.Publisher[notify.Notification]
-	recorder      transcript.Recorder
 	sandboxClient *client.Client
 	currentAgent  SessionAgent
 	systemPrompt  string
 	readyWg       errgroup.Group
 
-	dataDir   string
-	recorders *csync.Map[string, transcript.Recorder]
+	dataDir string
 }
 
 func NewCoordinator(
@@ -99,12 +94,8 @@ func NewCoordinator(
 	sessions session.Service,
 	messages message.Service,
 	notify pubsub.Publisher[notify.Notification],
-	recorder transcript.Recorder,
 	sandboxClient *client.Client,
 ) (Coordinator, error) {
-	if recorder == nil {
-		recorder = transcript.NoopRecorder{}
-	}
 	absDataDir, err := filepath.Abs(cfg.Config().Options.DataDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("resolve data dir: %w", err)
@@ -115,10 +106,8 @@ func NewCoordinator(
 		sessions:      sessions,
 		messages:      messages,
 		notify:        notify,
-		recorder:      recorder,
 		sandboxClient: sandboxClient,
 		dataDir:       absDataDir,
-		recorders:     csync.NewMap[string, transcript.Recorder](),
 	}
 
 	large, small, err := c.buildAgentModels(ctx, false)
@@ -148,7 +137,6 @@ func NewCoordinator(
 		Sessions:             sessions,
 		Messages:             messages,
 		Notify:               notify,
-		Recorder:             recorder,
 		HookRunner:           hookRunner,
 	})
 
@@ -246,48 +234,6 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	return fmt.Errorf("agent.Run: %w", runErr)
 }
 
-// recorderFor returns a session-scoped MdRecorder, lazily constructed and
-// cached on first call. The returned recorder is bound to
-// ${dataDir}/sessions/${sessionID}.md. Open is non-idempotent (it appends a
-// fresh frontmatter via writer.Append), so we guard against double-open by
-// stat-ing the path first.
-func (c *coordinator) recorderFor(sessionID string) transcript.Recorder {
-	return c.recorders.GetOrSet(sessionID, func() transcript.Recorder {
-		path := filepath.Join(c.dataDir, "sessions", sessionID+".md")
-		r := transcript.NewMdRecorder(path)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
-			var sandboxState string
-			if useSandbox && c.sandboxClient != nil {
-				sandboxState = "on"
-			} else if useSandbox && c.sandboxClient == nil {
-				sandboxState = "degraded"
-			} else {
-				sandboxState = "off"
-			}
-			title := ""
-			if sess, err := c.sessions.Get(context.Background(), sessionID); err == nil {
-				title = sess.Title
-			} else {
-				// Cosmetic metadata only — recorder still opens with empty title.
-				// Logged so the silent-fallback path is observable when debugging
-				// "why did the transcript header lose the title?".
-				slog.Warn("recorderFor: session metadata fetch failed", "session", sessionID, "err", err)
-			}
-			_ = r.Open(context.Background(), transcript.Meta{
-				SessionID: sessionID,
-				Agent:     agentNameOr(c.cfg.Overrides().AgentName),
-				Model:     c.currentAgent.Model().Model.Model(),
-				StartedAt: time.Now().UTC(),
-				Sandbox:   sandboxState,
-				Title:     title,
-				Cwd:       c.cfg.WorkingDir(),
-			})
-		}
-		return r
-	})
-}
-
 // buildCall assembles the per-turn SessionAgentCall with sandbox env, allowed
 // paths, and provider options. Extracted so the OAuth/API-key refresh path
 // can rebuild a call with fresh credentials without duplicating wiring.
@@ -330,7 +276,6 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		SandboxClient:   sandboxClient,
 		Env:             sandboxEnv,
 		AllowedPaths:    BuildAllowedPaths(ctx, cwd, access, additionalReadOnlyPaths...),
-		Recorder:        c.recorderFor(sessionID),
 	}
 }
 
