@@ -34,7 +34,6 @@ import (
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/home"
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/transcript"
 
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
@@ -230,15 +229,6 @@ type UI struct {
 		index    int
 		draft    string
 	}
-
-	// .md transcript watcher (680e5b5d). Items are rebuilt from mdContent
-	// via transcript.SplitBlocks → chat.MdBlockItem on every Watch* event. mdPath
-	// is the absolute resolved path; nil watcher means the session has not
-	// been loaded yet (uiLanding state).
-	mdPath     string
-	mdContent  []byte
-	mdWatcher  *transcript.Watcher
-	mdWatchErr error
 }
 
 // New creates a new instance of the [UI] model.
@@ -490,44 +480,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadSessionMsg:
 		m.setState(uiChat, m.focus)
 		m.session = msg.session
-		// 680e5b5d: chat list items come from the session .md transcript
-		// (parsed into blocks), not from the in-memory message stream.
-		// attachMdView rebuilds the list from the on-disk content.
-		if cmd := m.attachMdView(m.session.ID); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 		// Reload prompt history for the new session.
 		m.historyReset()
 		cmds = append(cmds, m.loadPromptHistory())
 		m.updateLayoutAndSize()
-
-	case transcript.WatchAppend:
-		m.mdContent = append(m.mdContent, msg.Bytes...)
-		m.rebuildMdBlocks()
-		if m.chat.Follow() {
-			m.chat.ScrollToBottom()
-		}
-		if m.mdWatcher != nil {
-			cmds = append(cmds, mdWatchCmd(m.mdWatcher))
-		}
-
-	case transcript.WatchTruncate:
-		if data, err := os.ReadFile(m.mdPath); err == nil {
-			m.mdContent = data
-		} else {
-			slog.Warn(".md re-read after truncation failed", "err", err, "path", m.mdPath)
-			cmds = append(cmds, util.ReportError(fmt.Errorf("session transcript re-read failed: %w", err)))
-		}
-		m.rebuildMdBlocks()
-		m.chat.ScrollToBottom()
-		if m.mdWatcher != nil {
-			cmds = append(cmds, mdWatchCmd(m.mdWatcher))
-		}
-
-	case transcript.WatchError:
-		m.mdWatchErr = msg.Err
-		slog.Warn(".md watch error", "err", msg.Err, "path", m.mdPath)
-		cmds = append(cmds, util.ReportError(fmt.Errorf("session transcript watcher: %w", msg.Err)))
 
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
@@ -2131,10 +2087,6 @@ func (m *UI) updateSize() {
 	m.status.SetWidth(m.layout.status.Dx())
 
 	m.chat.SetSize(m.layout.main.Dx(), m.layout.main.Dy())
-	// Width changed → re-render blocks at new width (Glamour wraps to width).
-	if m.mdContent != nil {
-		m.rebuildMdBlocks()
-	}
 	m.textarea.MaxHeight = TextareaMaxHeight
 	m.textarea.SetWidth(m.layout.editor.Dx())
 	m.renderPills()
