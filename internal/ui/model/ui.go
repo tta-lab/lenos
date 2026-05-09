@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
@@ -1649,7 +1651,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				// highlight, copy that range; otherwise copy the focused block's
 				// raw source (the verbatim text — what the user
 				// expects when they hit y on a bash block).
-				cmds = append(cmds, m.copyChatBlockOrHighlight())
+				cmds = append(cmds, m.copyChatMessage())
 			case key.Matches(msg, m.keyMap.Chat.End):
 				if cmd := m.chat.ScrollToBottomAndAnimate(); cmd != nil {
 					cmds = append(cmds, cmd)
@@ -2991,11 +2993,9 @@ func (m *UI) copyChatHighlight() tea.Cmd {
 	)
 }
 
-// copyChatBlockOrHighlight is the y/c keypress entry point. It copies the
-// mouse-drag highlight when one exists, otherwise the focused block's raw
-// verbatim text — what users expect when yanking
-// a bash or output block).
-func (m *UI) copyChatBlockOrHighlight() tea.Cmd {
+// copyChatMessage copies the focused message to clipboard, stripping ANSI
+// escape codes for clean clipboard text.
+func (m *UI) copyChatMessage() tea.Cmd {
 	if m.chat.HasHighlight() {
 		return m.copyChatHighlight()
 	}
@@ -3008,11 +3008,11 @@ func (m *UI) copyChatBlockOrHighlight() tea.Cmd {
 		return nil
 	}
 	width := m.chat.list.Width()
-	text := rawer.RawRender(width)
+	text := ansi.Strip(rawer.RawRender(width))
 	if text == "" {
 		return nil
 	}
-	return common.CopyToClipboard(text, "Block copied to clipboard")
+	return common.CopyToClipboard(text, "Message copied to clipboard")
 }
 
 // renderLogo renders the Lenos logo with the given styles and dimensions.
