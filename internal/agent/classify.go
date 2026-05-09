@@ -22,6 +22,7 @@ const (
 	classifyInvalidBash
 	classifyBanned
 	classifyMd          // emit starts with :md protocol prefix
+	classifyMdExit      // emits :md with exit on first line — route, then exit
 	classifyProsePrefix // emit starts with Title-Cased prose word
 )
 
@@ -92,6 +93,28 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 		// with `:md`, `:md @agent`, or `:md\nbody` — all valid forms.
 		rest := strings.TrimPrefix(trimmed, transcript.MdPrefix)
 		if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
+			// Check if the first line contains `exit` as a space-delimited token.
+			// Only scan line 1 — the rest is body content. No substring matching:
+			// `exiting` or `@agent-exit` should NOT match.
+			firstLine := trimmed
+			if idx := strings.IndexByte(trimmed, '\n'); idx >= 0 {
+				firstLine = trimmed[:idx]
+			}
+			// Re-check :md prefix on firstLine to get the portion after :md.
+			firstRest := strings.TrimPrefix(firstLine, transcript.MdPrefix)
+			firstRest = strings.TrimSpace(firstRest)
+			hasExit := false
+			if firstRest != "" {
+				for _, tok := range strings.Fields(firstRest) {
+					if tok == "exit" {
+						hasExit = true
+						break
+					}
+				}
+			}
+			if hasExit {
+				return classifyMdExit, ""
+			}
 			return classifyMd, ""
 		}
 	}
