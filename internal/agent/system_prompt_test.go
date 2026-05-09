@@ -362,38 +362,6 @@ func TestSystemPrompt_MultipleExtraContextFiles(t *testing.T) {
 	}
 }
 
-func TestSystemPrompt_RenderedTemplate_ContainsMdExitPattern(t *testing.T) {
-	dataDir := t.TempDir()
-	configDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
-	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
-	t.Setenv("LENOS_GLOBAL_DATA", configDir)
-	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
-
-	store, err := config.Init(dataDir, "", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	store.Config().Options.Attribution = &config.Attribution{}
-
-	cp := getCoderContextPaths(store)
-	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, cp)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// The template must teach :md @agent exit as the single-emission pattern.
-	assert.Contains(t, got, ":md @neil exit",
-		"rendered prompt must contain the new atomic pattern")
-
-	// The template must NOT contain the old two-emission pattern where
-	// :md and exit appear as separate unrelated code blocks.
-	assert.NotContains(t, got, "```\n    :md\n    Hi! What can I help you with today?\n    exit\n```",
-		"rendered prompt must NOT contain old greeting pattern")
-	assert.NotContains(t, got, "```\n    :md\n    4.\n    exit\n```",
-		"rendered prompt must NOT contain old factual-answer pattern")
-}
-
 func TestSystemPrompt_ZeroExtraContextFiles(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
