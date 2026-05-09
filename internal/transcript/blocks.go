@@ -147,13 +147,6 @@ func SplitBlocks(body []byte) []Block {
 // Bare `:md` sends to the session owner; `:md @agent` sends to a named agent.
 const MdPrefix = ":md"
 
-// MdSeparator is the space after :md before an optional @agent reference.
-// The full first-line forms are:
-//
-//	:md                          → bare: routed to owner
-//	:md @mira                    → routed to agent "mira"
-const MdSeparator = " "
-
 // StripMdPrefixLine removes the first line from a block's source if it
 // starts with the :md prefix. Returns the body text after the :md line.
 // Returns "" for a bare `:md` line with no body. If the source doesn't start
