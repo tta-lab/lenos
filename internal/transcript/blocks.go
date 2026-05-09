@@ -11,14 +11,15 @@ import (
 type BlockKind int
 
 const (
-	BlockUnknown BlockKind = iota
-	BlockUserMsg           // **λ** user message
-	BlockBashCmd           // ```bash ... ``` agent emission
-	BlockOutput            // ``` ... ``` command output
-	BlockTrailer           // *[HH:MM:SS, Xs]* — duration footer
-	BlockTurnEnd           // *(turn ended)*
-	BlockRuntime           // > *runtime: ...*
-	BlockProse             // narrate output / free prose between fences
+	BlockUnknown   BlockKind = iota
+	BlockUserMsg             // **λ** user message
+	BlockBashCmd             // ```bash ... ``` agent emission
+	BlockOutput              // ``` ... ``` command output
+	BlockTrailer             // *[HH:MM:SS, Xs]* — duration footer
+	BlockTurnEnd             // *(turn ended)*
+	BlockRuntime             // > *runtime: ...*
+	BlockProse               // free prose between fences
+	BlockMdMessage           // :md protocol message — first line starts with :md
 )
 
 // Block is one navigable unit of the transcript: the body the user can
@@ -142,6 +143,49 @@ func SplitBlocks(body []byte) []Block {
 	return blocks
 }
 
+// MdPrefix is the first line prefix that identifies an :md protocol message.
+// Bare `:md` sends to the session owner; `:md @agent` sends to a named agent.
+const MdPrefix = ":md"
+
+// MdSeparator is the space after :md before an optional @agent reference.
+// The full first-line forms are:
+//
+//	:md                          → bare: routed to owner
+//	:md @mira                    → routed to agent "mira"
+const MdSeparator = " "
+
+// ParseMdAddressee extracts the agent name after `:md @` from the first line
+// of an :md protocol message. Returns "" for bare `:md` (routed to owner),
+// for text without an `:md` prefix, or for `:md @` with no name.
+//
+// Used by both classifyBlock() (to confirm :md classification) and the chat
+// renderer's linePrefix() (to display the addressee).
+func ParseMdAddressee(text string) string {
+	first := text
+	if i := strings.IndexByte(text, '\n'); i >= 0 {
+		first = text[:i]
+	}
+	first = strings.TrimSpace(first)
+
+	if first == MdPrefix {
+		return "" // bare :md → owner
+	}
+	// Check for :md @agent-name
+	prefix := MdPrefix + " @"
+	if strings.HasPrefix(first, prefix) {
+		after := strings.TrimPrefix(first, prefix)
+		// Take only the first word (agent name)
+		if i := strings.IndexAny(after, " \t"); i >= 0 {
+			after = after[:i]
+		}
+		if after == "" {
+			return ""
+		}
+		return after
+	}
+	return ""
+}
+
 // classifyBlock inspects the first / last lines of a block's raw text to
 // decide what kind of block it is.
 func classifyBlock(text string) BlockKind {
@@ -152,6 +196,13 @@ func classifyBlock(text string) BlockKind {
 	first = strings.TrimSpace(first)
 
 	switch {
+	case strings.HasPrefix(first, MdPrefix):
+		// :md (bare) or :md @agent — the first line starts with :md.
+		// Broad match (any text starting with :md) because the protocol
+		// only cares about the leading prefix — ":md to owner" and ":md @agent"
+		// are the two valid forms. Check fires before LambdaMsgPrefix since
+		// :md has no ** wrapper.
+		return BlockMdMessage
 	case strings.HasPrefix(first, LambdaMsgPrefix):
 		return BlockUserMsg
 	case isLenosBashFence(first):

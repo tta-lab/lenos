@@ -9,6 +9,38 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
 
+// linePrefix for MdBlockMdMessage renders → addressee prefix.
+// Bare :md shows → neil (owner), :md @mira shows → mira.
+func TestMdBlockItem_linePrefix_mdMessage(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+
+	cases := []struct {
+		name     string
+		source   string
+		focused  bool
+		wantPref string // prefix must contain this substring
+	}{
+		{"bare :md, blurred", ":md\nhello", false, "→ neil"},
+		{"bare :md, focused", ":md\nhello", true, "→ neil"},
+		{":md @mira, blurred", ":md @mira\nhello", false, "→ mira"},
+		{":md @mira, focused", ":md @mira\nhello", true, "→ mira"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			item := NewMdBlockItem(&sty, "test-id", tc.source, "body", MdBlockMdMessage)
+			if tc.focused {
+				item.SetFocused(true)
+			}
+			got := item.linePrefix()
+			assert.Contains(t, got, tc.wantPref, "linePrefix must include → addressee")
+			// Must not be empty — gutter must be stable.
+			assert.NotEmpty(t, got, "linePrefix must never be empty")
+		})
+	}
+}
+
 // RawRender must yield the verbatim .md source so clipboard / mouse-copy
 // paths produce transcript text without ANSI escapes.
 func TestMdBlockItem_RawRender_returnsRawSource(t *testing.T) {

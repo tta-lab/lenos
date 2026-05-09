@@ -150,6 +150,22 @@ func classifyAndRenderBlock(b transcript.Block, renderer *glamour.TermRenderer, 
 		return chat.MdBlockLenosBash, renderLenosBashSource(b.Source, renderer, rerr)
 	}
 
+	if b.Kind == transcript.BlockMdMessage {
+		// Strip the :md @agent first line — the addressee is rendered by
+		// linePrefix() in md_block.go, not shown in the body text.
+		body := stripMdPrefixLine(b.Source)
+		rendered := body
+		if rerr == nil {
+			out, err := renderer.Render(body)
+			if err != nil {
+				slog.Warn("Render block", "kind", b.Kind, "err", err)
+			} else {
+				rendered = strings.Trim(out, "\n")
+			}
+		}
+		return chat.MdBlockMdMessage, rendered
+	}
+
 	rendered := b.Source
 	if rerr == nil {
 		out, err := renderer.Render(b.Source)
@@ -167,6 +183,25 @@ func classifyAndRenderBlock(b transcript.Block, renderer *glamour.TermRenderer, 
 		return chat.MdBlockUserMsg, rendered
 	}
 	return chat.MdBlockOther, rendered
+}
+
+// stripMdPrefixLine removes the first line from a block's source if it
+// starts with the :md prefix. Used to strip the protocol prefix before
+// rendering the body through Glamour — the addressee is shown via
+// linePrefix() in the chat item, not repeated in the body text.
+func stripMdPrefixLine(source string) string {
+	first, rest, found := strings.Cut(source, "\n")
+	if !found {
+		// Single line with only the :md prefix — empty body.
+		if strings.HasPrefix(strings.TrimSpace(first), transcript.MdPrefix) {
+			return ""
+		}
+		return source
+	}
+	if strings.HasPrefix(strings.TrimSpace(first), transcript.MdPrefix) {
+		return strings.TrimLeft(rest, "\n")
+	}
+	return source
 }
 
 // isLenosBashSource returns true if the block source begins with the

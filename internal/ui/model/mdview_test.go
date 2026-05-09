@@ -106,4 +106,24 @@ func TestClassifyAndRenderBlock_LenosBash(t *testing.T) {
 		assert.Contains(t, stripped, "hello world", "user-msg body preserved")
 		assert.Contains(t, rendered, lambdaSGR, "lambdaSGR must be embedded around the λ glyph")
 	})
+
+	// :md protocol blocks must map to MdBlockMdMessage and strip the
+	// :md @agent first line from the rendered display.
+	t.Run(":md bare maps to MdBlockMdMessage with body rendered", func(t *testing.T) {
+		b := transcript.Block{Kind: transcript.BlockMdMessage, Source: ":md\nHello, world."}
+		kind, rendered := classifyAndRenderBlock(b, renderer, nil)
+		assert.Equal(t, chat.MdBlockMdMessage, kind)
+		stripped := ansi.Strip(rendered)
+		assert.NotContains(t, stripped, ":md", ":md prefix stripped from rendered body")
+		assert.Contains(t, stripped, "Hello, world.", "body text preserved through Glamour")
+	})
+
+	t.Run(":md @agent maps to MdBlockMdMessage with @agent stripped", func(t *testing.T) {
+		b := transcript.Block{Kind: transcript.BlockMdMessage, Source: ":md @mira\nReview the PR?"}
+		kind, rendered := classifyAndRenderBlock(b, renderer, nil)
+		assert.Equal(t, chat.MdBlockMdMessage, kind)
+		stripped := ansi.Strip(rendered)
+		assert.NotContains(t, stripped, ":md @mira", ":md @agent prefix stripped from rendered body")
+		assert.Contains(t, stripped, "Review the PR?", "body text preserved")
+	})
 }
