@@ -226,10 +226,10 @@ func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Observation persisted as User row.
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.True(t, strings.HasPrefix(users[0].Content().Text, "[runtime] your last response was empty"))
+	// Observation persisted as Result row.
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.True(t, strings.HasPrefix(results[0].Content().Text, "[runtime] your last response was empty"))
 
 	// Assistant has FinishReasonToolUse for re-prompt branch.
 	assistants := assistantsByOrder(ms)
@@ -249,9 +249,9 @@ func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.Contains(t, users[0].Content().Text, "[runtime] your last response was not valid bash")
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, "[runtime] your last response was not valid bash")
 
 	// Assistant has FinishReasonToolUse for invalid-bash branch.
 	assistants := assistantsByOrder(ms)
@@ -447,16 +447,12 @@ func TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Prose gate fired — no exec, no result row.
+	// Prose gate fired — no exec, result stored for prose-shape failure.
 	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
 	results := messagesByRole(ms, message.Result)
-	assert.Empty(t, results, "no result row — bash bypassed by prose-prefix gate")
-
-	// Re-prompt persisted for the prose-shape failure.
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.Contains(t, users[0].Content().Text, alertPrefix)
-	assert.Contains(t, users[0].Content().Text, "`Let`")
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, alertPrefix)
+	assert.Contains(t, results[0].Content().Text, "`Let`")
 }
 
 // --- Mock helpers ---
@@ -700,10 +696,13 @@ func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "noop")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
+	// Re-prompt is a Result, drained prompt is a User message.
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.True(t, strings.HasPrefix(results[0].Content().Text, "[runtime]"))
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.True(t, strings.HasPrefix(users[0].Content().Text, "[runtime]"))
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
 }
 
 func TestRunLoop_DrainOnBanned(t *testing.T) {
@@ -715,10 +714,13 @@ func TestRunLoop_DrainOnBanned(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
+	// Re-prompt is a Result, drained prompt is a User message.
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, "[runtime]")
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, "[runtime]")
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
 }
 
 func TestRunLoop_DrainOnTimeout(t *testing.T) {
@@ -930,9 +932,9 @@ func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	obs := users[0].Content().Text
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	obs := results[0].Content().Text
 	assert.Contains(t, obs, "`Hello`")
 	assert.Contains(t, obs, ":md")
 }
@@ -1202,18 +1204,14 @@ func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
 	// No exec ran — runner.bash should be empty.
 	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
 
-	// No result row created.
+	// Re-prompt stored as Result.
 	results := messagesByRole(ms, message.Result)
-	assert.Empty(t, results, "no result row when prose-prefix bypasses exec")
+	require.Len(t, results, 1)
+	obs := results[0].Content().Text
 
 	assistants := messagesByRole(ms, message.Assistant)
 	require.Len(t, assistants, 1, "bad prose-prefix assistant emit must be dropped from persistence")
 	assert.Equal(t, "exit", strings.TrimSpace(assistants[0].Content().Text))
-
-	// Re-prompt persisted as User row.
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	obs := users[0].Content().Text
 	assert.Contains(t, obs, alertPrefix)
 	assert.Contains(t, obs, "`Read`")
 
@@ -1265,15 +1263,12 @@ func TestRunLoop_ToolCall_FiresPreExec(t *testing.T) {
 	assert.Empty(t, runner.bash, "tool-call branch must not invoke runner")
 
 	results := messagesByRole(ms, message.Result)
-	assert.Empty(t, results, "no result row when tool-call branch bypasses exec")
+	require.Len(t, results, 1)
+	obs := results[0].Content().Text
 
 	assistants := messagesByRole(ms, message.Assistant)
 	require.Len(t, assistants, 1, "bad tool-call assistant emit must be dropped from persistence")
 	assert.Equal(t, "exit", strings.TrimSpace(assistants[0].Content().Text))
-
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	obs := users[0].Content().Text
 	assert.Contains(t, obs, alertPrefix)
 	assert.Contains(t, obs, "There is NO tool/function calling API")
 	assert.Contains(t, obs, "emit plain bash")
@@ -1306,11 +1301,13 @@ func TestRunLoop_DrainOnToolCall(t *testing.T) {
 	_, err := runLoop(context.Background(), deps, nil, "go")
 	require.NoError(t, err)
 
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, alertPrefix)
+	assert.Contains(t, results[0].Content().Text, "There is NO tool/function calling API")
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, alertPrefix)
-	assert.Contains(t, users[0].Content().Text, "There is NO tool/function calling API")
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
 }
 
 // TestRunLoop_DrainOnProsePrefix is the drain peer for the prose-prefix branch.
@@ -1325,11 +1322,13 @@ func TestRunLoop_DrainOnProsePrefix(t *testing.T) {
 	_, err := runLoop(context.Background(), deps, nil, "go")
 	require.NoError(t, err)
 
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, alertPrefix)
+	assert.Contains(t, results[0].Content().Text, "`Now`", "must reference the offending first word")
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, alertPrefix)
-	assert.Contains(t, users[0].Content().Text, "`Now`", "must reference the offending first word")
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
 }
 
 // --- SSOT equivalence tests ---

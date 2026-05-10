@@ -484,7 +484,7 @@ func assistantTextMessage(text string, rc message.ReasoningContent) fantasy.Mess
 // text. The next turn's history will replay this as the [runtime] guidance.
 func persistObservation(ctx context.Context, deps loopDeps, obs string) error {
 	_, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-		Role:  message.User,
+		Role:  message.Result,
 		Parts: []message.ContentPart{message.TextContent{Text: obs}},
 	})
 	return err

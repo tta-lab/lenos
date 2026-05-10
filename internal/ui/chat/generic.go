@@ -109,6 +109,11 @@ func (m *ResultMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 func (m *ResultMessageItem) formatCommandForCopy() string {
 	cmd := m.message.CommandContent()
 
+	// TextContent (runtime responses): return text directly.
+	if cmd.Command == "" {
+		return m.message.Content().Text
+	}
+
 	// Pending commands: just the command line.
 	if cmd.Pending {
 		return "$ " + cmd.Command
