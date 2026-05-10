@@ -54,6 +54,9 @@ func (t *stripTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
 	req.Body = io.NopCloser(bytes.NewReader(stripped))
 	req.ContentLength = int64(len(stripped))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(stripped)), nil
+	}
 	return t.wrap.RoundTrip(req)
 }
 
