@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,9 +30,9 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	// Bash-first protocol is described.
 	assert.Contains(t, got, "raw bash")
 	assert.Contains(t, got, "exit")
-	assert.Contains(t, got, "narrate <<'EOF'")
+	assert.Contains(t, got, "narrate <<'")
 	assert.Contains(t, got, "During work, write short progress notes as bash comments")
-	assertHeredocTerminatorsStartAtColumnZero(t, got)
+	assertValidBashSyntax(t, got)
 	assert.NotContains(t, got, "Wrong shape")
 	assert.NotContains(t, got, "wrong shapes")
 	assert.NotContains(t, got, "common mistake")
@@ -90,6 +91,7 @@ func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {
 
 	assert.Contains(t, got, "# Available Commands")
 	assert.Contains(t, got, "## src")
+	assertValidBashSyntax(t, got)
 	assert.Contains(t, got, "symbol-aware source reader")
 	assert.Contains(t, got, "src <file> --tree")
 	assert.Contains(t, got, "## web")
@@ -186,6 +188,15 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 		"default runtime prompt should not contain markdown fence tokens for models to copy")
 	assert.NotContains(t, got, "narrate --continue",
 		"default runtime prompt should not teach mid-session narration")
+	assertValidBashSyntax(t, got)
+}
+
+func assertValidBashSyntax(t *testing.T, script string) {
+	t.Helper()
+	cmd := exec.Command("bash", "-n")
+	cmd.Stdin = strings.NewReader(script)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
 }
 
 func TestSystemPrompt_AgentMode_RendersAgentBody(t *testing.T) {

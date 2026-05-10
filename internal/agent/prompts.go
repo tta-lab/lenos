@@ -68,7 +68,9 @@ func SystemPrompt(
 		return "", err
 	}
 
-	return base + "\n" + gitSection + "\n" + lenosWrapper, nil
+	return base + "\n" +
+		bashNarrateSection("LENOS_GIT_CONTEXT", gitSection) + "\n" +
+		bashNarrateSection("LENOS_WRAPPER", lenosWrapper), nil
 }
 
 // resolveIdentityBody resolves the agent identity body used for the
@@ -100,6 +102,34 @@ func buildLenosWrapper(
 		return "", err
 	}
 	return p.Build(ctx, provider, model, store)
+}
+
+func bashNarrateSection(delimiter, body string) string {
+	for containsHeredocTerminator(body, delimiter) {
+		delimiter += "_END"
+	}
+
+	body = strings.TrimRight(body, "\n")
+	var b strings.Builder
+	b.WriteString("narrate <<'")
+	b.WriteString(delimiter)
+	b.WriteString("'\n")
+	b.WriteString(body)
+	if body != "" {
+		b.WriteByte('\n')
+	}
+	b.WriteString(delimiter)
+	b.WriteByte('\n')
+	return b.String()
+}
+
+func containsHeredocTerminator(body, delimiter string) bool {
+	for _, line := range strings.Split(body, "\n") {
+		if line == delimiter {
+			return true
+		}
+	}
+	return false
 }
 
 func InitializePrompt(cfg *config.ConfigStore) (string, error) {
