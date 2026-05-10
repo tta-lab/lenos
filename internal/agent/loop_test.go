@@ -1600,7 +1600,6 @@ func intString(i int) string {
 func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
 	t.Parallel()
 	emit := ":md @neil\nHello, this is a message.\n\nMore content."
-	body := "Hello, this is a message.\n\nMore content."
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1617,7 +1616,8 @@ func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
 	require.NotNil(t, fp)
 	assert.Equal(t, ":md", fp.Title, "FinishPart Title should be ':md'")
 	assert.Equal(t, message.FinishReasonToolUse, fp.Reason)
-	assert.Equal(t, body, first.Content().Text, "Content.Text should be :md body without prefix")
+	// Content.Text stores the full emit (with :md prefix) so the model sees its own output.
+	assert.Equal(t, emit, first.Content().Text, "Content.Text should store full emit with :md prefix")
 }
 
 func TestRunLoop_MdExitEmptyBody(t *testing.T) {

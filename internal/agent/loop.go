@@ -207,7 +207,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				newParts = append(newParts, rc)
 			}
 			newParts = append(newParts,
-				message.TextContent{Text: body},
+				message.TextContent{Text: emit},
 				message.Finish{Reason: message.FinishReasonToolUse, Title: ":md", Time: time.Now().Unix()},
 			)
 			assistantMsg.Parts = newParts
@@ -238,7 +238,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			} else {
 				ack = "[runtime] message written. you may use exit to enter sleep if you finish your work / waiting for reply..."
 			}
-			msg := assistantTextMessage(body, assistantMsg.ReasoningContent())
+			msg := assistantTextMessage(emit, assistantMsg.ReasoningContent())
 			msgs = append(msgs, msg, fantasy.NewUserMessage(ack))
 			if obsErr := persistObservation(ctx, deps, ack); obsErr != nil {
 				slog.Warn("loop: persist :md ack", "error", obsErr)
@@ -248,7 +248,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// If :md had exit on first line, end the loop after delivering the message.
 			if cls == classifyMdExit {
 				assistantMsg.Parts = []message.ContentPart{
-					message.TextContent{Text: body},
+					message.TextContent{Text: emit},
 					message.Finish{Reason: message.FinishReasonEndTurn, Title: ":md", Time: time.Now().Unix()},
 				}
 				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
