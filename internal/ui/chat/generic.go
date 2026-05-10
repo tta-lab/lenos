@@ -99,10 +99,13 @@ func (m *ResultMessageItem) ID() string {
 // HandleKeyEvent implements [KeyEventHandler].
 func (m *ResultMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	if k := key.String(); k == "c" || k == "y" {
-		text := m.formatCommandForCopy()
-		return true, common.CopyToClipboard(text, "Command copied to clipboard")
+		return true, common.CopyToClipboard(m.CopyText(), "Command copied to clipboard")
 	}
 	return false, nil
+}
+
+func (m *ResultMessageItem) CopyText() string {
+	return m.formatCommandForCopy()
 }
 
 // formatCommandForCopy formats the command result for clipboard copying.
@@ -116,11 +119,6 @@ func (m *ResultMessageItem) formatCommandForCopy() string {
 
 	// Pending commands: just the command line.
 	if cmd.Pending {
-		return "$ " + cmd.Command
-	}
-
-	// Exit 0: just the command line (compact).
-	if cmd.ExitCode != nil && *cmd.ExitCode == 0 {
 		return "$ " + cmd.Command
 	}
 

@@ -43,7 +43,7 @@ func TestResultMessageItem_HandleKeyEvent(t *testing.T) {
 		handled, cmd := item.HandleKeyEvent(fakeKeyMsg{s: "y"})
 		assert.True(t, handled, "y key should be handled")
 		require.NotNil(t, cmd, "copy cmd should be returned")
-		assert.Equal(t, "$ echo hello", item.formatCommandForCopy())
+		assert.Equal(t, "$ echo hello\nhello", item.formatCommandForCopy())
 	})
 
 	t.Run("c key also handled", func(t *testing.T) {
@@ -51,7 +51,7 @@ func TestResultMessageItem_HandleKeyEvent(t *testing.T) {
 		handled, cmd := item.HandleKeyEvent(fakeKeyMsg{s: "c"})
 		assert.True(t, handled, "c key should be handled")
 		require.NotNil(t, cmd)
-		assert.Equal(t, "$ ls -la", item.formatCommandForCopy())
+		assert.Equal(t, "$ ls -la\ntotal 4\ndrwxr-xr-x  3 neil staff  96 Apr 11 .", item.formatCommandForCopy())
 	})
 
 	t.Run("unrelated key not handled", func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 	t.Run("success exit omits exit code", func(t *testing.T) {
 		item := makeItem("f1", "echo hello", "hello", intPtr(0), false)
 		got := item.formatCommandForCopy()
-		assert.Equal(t, "$ echo hello", got)
+		assert.Equal(t, "$ echo hello\nhello", got)
 	})
 
 	t.Run("non-zero exit includes suffix", func(t *testing.T) {
