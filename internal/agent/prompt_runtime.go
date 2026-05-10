@@ -38,9 +38,9 @@ with :md on the first line:
 
   :md
   your message here — apostrophes, "quotes", $vars all pass through.
-  exit
+  :exit
 
-To end the turn, emit literally:  exit
+To end the turn, emit literally:  exit (or :exit)
 
 If you actually meant to run a command, fix the bash quoting. "unexpected
 EOF while looking for matching" errors come from unbalanced quotes —
@@ -82,7 +82,7 @@ To act, emit plain bash only:
 To talk to the human, use:
   :md
   your message here
-  :md @agent-name
+  :md ->agent-name
   message for a specific agent
 
 To leave a short note before a command, use a bash comment:
@@ -154,10 +154,10 @@ If this was meant as a brief note before a command, convert to a bash comment:
 If this was meant as a multi-line message to the human, start with :md:
   :md
   %s
-  exit
+  :exit
 
 To act, emit pure bash starting with a lowercase command (ls, grep, src, etc.).
-To end the turn, emit literally:  exit
+To end the turn, emit literally:  exit (or :exit)
 
 If `+"`%s`"+` was actually a real binary (e.g. cap-named tools like Cargo), probe with:
   command -v %s

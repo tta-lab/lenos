@@ -195,19 +195,26 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 		case classifyMd, classifyMdExit:
 			// :md protocol message — route, persist, acknowledge.
-			// Stores the :md body (after stripping the `:md @agent` first line) in the
-			// assistant message's Content().Text. The assistant message starts with empty
-			// TextContent — replace it with the body text and set Finish.Title == ":md".
+			// Stores the :md body (after stripping the `:md ->agent` first line and
+			// trailing :exit) in the assistant message's Content().Text. The assistant
+			// message starts with empty TextContent — replace it with the body text.
 			body := StripMdPrefixLine(emit)
 			addressee := ParseMdAddressee(emit)
 
-			// (1) Store :md body in assistant message Content, preserving reasoning content.
+			// Strip trailing :exit from body (protocol signal, not delivery content).
+			if idx := strings.LastIndex(body, "\n:exit"); idx >= 0 && idx+6 == len(body) {
+				body = strings.TrimRight(body[:idx], "\n")
+			} else if strings.HasPrefix(body, ":exit") && len(body) == 5 {
+				body = "" // bare :exit with no body
+			}
+
+			// (1) Store stripped :md body in assistant message Content.
 			var newParts []message.ContentPart
 			if rc := assistantMsg.ReasoningContent(); rc.Thinking != "" {
 				newParts = append(newParts, rc)
 			}
 			newParts = append(newParts,
-				message.TextContent{Text: emit},
+				message.TextContent{Text: body},
 				message.Finish{Reason: message.FinishReasonToolUse, Time: time.Now().Unix()},
 			)
 			assistantMsg.Parts = newParts
@@ -215,7 +222,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				slog.Warn("loop: persist :md message", "error", updateErr)
 			}
 
-			// (2) Route: if :md @agent with body, send via ttal send.
+			// (2) Route: if :md ->agent with body, send via ttal send.
 			var sendFailed bool
 			var sendExitCode int
 			if addressee != "" && body != "" {
@@ -224,7 +231,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 					deps.env, deps.paths)
 				sendExitCode = res.ExitCode
 				if res.ExitCode != 0 {
-					slog.Warn("loop: route :md @agent", "addressee", addressee, "exit", res.ExitCode, "stderr", string(res.Stderr))
+					slog.Warn("loop: route :md ->agent", "addressee", addressee, "exit", res.ExitCode, "stderr", string(res.Stderr))
 					sendFailed = true
 				}
 			}
@@ -232,23 +239,23 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// (3) Inject runtime acknowledgment into model's history.
 			var ack string
 			if sendFailed {
-				ack = "[runtime] message delivery to " + addressee + " failed (exit " + fmt.Sprintf("%d", sendExitCode) + "). you may try again or use exit to sleep."
+				ack = "[runtime] message delivery to " + addressee + " failed (exit " + fmt.Sprintf("%d", sendExitCode) + "). you may use :exit to end the turn."
 			} else if addressee != "" {
-				ack = "[runtime] message sent to " + addressee + ". you may use exit to enter sleep if you finish your work / waiting for reply..."
+				ack = "[runtime] message sent to " + addressee + ". you may use :exit to end the turn."
 			} else {
-				ack = "[runtime] message written. you may use exit to enter sleep if you finish your work / waiting for reply..."
+				ack = "[runtime] message written. you may use :exit to end the turn."
 			}
-			msg := assistantTextMessage(emit, assistantMsg.ReasoningContent())
+			msg := assistantTextMessage(body, assistantMsg.ReasoningContent())
 			msgs = append(msgs, msg, fantasy.NewUserMessage(ack))
 			if obsErr := persistObservation(ctx, deps, ack); obsErr != nil {
 				slog.Warn("loop: persist :md ack", "error", obsErr)
 			}
 			msgs = drainAndAppend(ctx, deps, msgs)
 
-			// If :md had exit on first line, end the loop after delivering the message.
+			// If :md had trailing :exit, end the loop after delivering the message.
 			if cls == classifyMdExit {
 				assistantMsg.Parts = []message.ContentPart{
-					message.TextContent{Text: emit},
+					message.TextContent{Text: body},
 					message.Finish{Reason: message.FinishReasonEndTurn, Time: time.Now().Unix()},
 				}
 				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
