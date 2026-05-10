@@ -375,14 +375,9 @@ func TestRunLoop_ExecPersistsResultRow(t *testing.T) {
 	assert.False(t, cc.Pending)
 }
 
-// TestRunLoop_ExecExitSingleEmit covers the classifyExecExit happy path:
-// the model emits `cmd && exit` once, the runner executes the cmd, and
-// the loop calls TurnEnd + returns stopExit WITHOUT re-prompting the
-// model (verified by scriptedModel containing only the single emit —
-// any extra Stream call would panic).
-func TestRunLoop_ExecExitSingleEmit(t *testing.T) {
+func TestRunLoop_TrailingExitDoesNotEndTurn(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{`narrate "hi" && exit`}}
+	model := &scriptedModel{emits: []string{`narrate "hi" && exit`, ":md\nDone."}}
 	runner := &fakeRunner{results: []ExecResult{
 		{Stdout: []byte("hi\n"), ExitCode: 0, Duration: time.Millisecond},
 	}}
@@ -391,26 +386,18 @@ func TestRunLoop_ExecExitSingleEmit(t *testing.T) {
 
 	stop, err := runLoop(context.Background(), deps, nil, "say hi")
 	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop, "single-emit cmd && exit must end the turn")
+	assert.Equal(t, stopExit, stop)
 
-	// Recorder sequence proves no second model emit happened: prompt,
-	// Bash actually ran, and the assistant row finished EndTurn.
 	require.Equal(t, []string{`narrate "hi" && exit`}, runner.bash)
 	assistants := assistantsByOrder(ms)
-	require.Len(t, assistants, 1)
-	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+	require.Len(t, assistants, 2)
+	assert.Equal(t, message.FinishReasonToolUse, assistants[0].FinishReason())
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[1].FinishReason())
 }
 
-// TestRunLoop_ExecExitSingleEmit_PreCmdFails pins the current behavior
-// when the pre-exit command exits non-zero (e.g. `false && exit` —
-// bash short-circuits so `exit` never runs, but the loop classified
-// the emit as classifyExecExit and ends the turn unconditionally based
-// on intent, not realised exit). If a future change wants to re-prompt
-// on pre-cmd failure, this test will need to flip — making the change
-// visible in code review.
-func TestRunLoop_ExecExitSingleEmit_PreCmdFails(t *testing.T) {
+func TestRunLoop_TrailingExitFailureDoesNotEndTurn(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{`false && exit`}}
+	model := &scriptedModel{emits: []string{`false && exit`, ":md\nSaw failure."}}
 	runner := &fakeRunner{results: []ExecResult{
 		{ExitCode: 1, Duration: time.Millisecond},
 	}}
@@ -419,27 +406,20 @@ func TestRunLoop_ExecExitSingleEmit_PreCmdFails(t *testing.T) {
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop, "classifyExecExit honors model intent regardless of pre-cmd exit code")
+	assert.Equal(t, stopExit, stop)
 
-	// Turn ended despite the non-zero exit: assistant is finished EndTurn.
 	assistants := assistantsByOrder(ms)
-	require.NotEmpty(t, assistants)
-	fp := assistants[len(assistants)-1].FinishPart()
-	require.NotNil(t, fp)
-	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason)
+	require.Len(t, assistants, 2)
+	assert.Equal(t, message.FinishReasonToolUse, assistants[0].FinishReason())
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[1].FinishReason())
 }
 
-// TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt pins the routing
-// behavior for prose-shaped emits that happen to end with `&& exit`. With the
-// classifyProsePrefix gate active, "Let me start && exit" is caught as prose
-// BEFORE trailingExitRe can match — bash never runs, a prose re-prompt fires,
-// and the model must re-emit. If a future change wants to let classifyExecExit
-// win again, this test must flip too — making the change visible in review.
-func TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt(t *testing.T) {
+// TestRunLoop_TrailingExit_NaturalLanguageCoercesToMd pins the routing
+// behavior for prose-shaped emits that happen to end with `&& exit`.
+func TestRunLoop_TrailingExit_NaturalLanguageCoercesToMd(t *testing.T) {
 	t.Parallel()
-	// Two emits: prose-prefix re-prompt fires on the first, model corrects with exit.
 	model := &scriptedModel{emits: []string{`Let me start && exit`, "exit"}}
-	runner := &fakeRunner{} // bash must NOT be called — prose gate fires pre-exec
+	runner := &fakeRunner{}
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
 
@@ -447,12 +427,12 @@ func TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Prose gate fired — no exec, result stored for prose-shape failure.
-	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
-	results := messagesByRole(ms, message.Result)
-	require.Len(t, results, 1)
-	assert.Contains(t, results[0].Content().Text, alertPrefix)
-	assert.Contains(t, results[0].Content().Text, "`Let`")
+	assert.Empty(t, runner.bash, "natural-language branch must not invoke runner")
+	assert.Empty(t, messagesByRole(ms, message.Result))
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+	assert.Equal(t, "Let me start && exit", assistants[0].Content().Text)
 }
 
 // --- Mock helpers ---
@@ -916,14 +896,14 @@ func TestRunLoop_Exit127_ThenExit(t *testing.T) {
 	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
 }
 
-// TestRunLoop_Exit127_ProseRePrompts tests that when the model emits English
-// prose and bash prints "command not found", the re-prompt includes guidance
-// about prose being parsed as bash.
-func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
+// TestRunLoop_Exit127_LowercaseProseRePrompts tests that lowercase prose,
+// which is outside the natural-language auto-md heuristic, still gets
+// cmd-not-found guidance when bash reports it as a missing command.
+func TestRunLoop_Exit127_LowercaseProseRePrompts(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{"Hello world", "exit"}}
+	model := &scriptedModel{emits: []string{"hello world", "exit"}}
 	runner := &fakeRunner{results: []ExecResult{
-		{Stderr: []byte("bash: Hello: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
+		{Stderr: []byte("bash: hello: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
 	}}
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
@@ -934,8 +914,8 @@ func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
 
 	results := messagesByRole(ms, message.Result)
 	require.Len(t, results, 1)
-	obs := results[0].Content().Text
-	assert.Contains(t, obs, "`Hello`")
+	obs := results[0].CommandContent().Output
+	assert.Contains(t, obs, "`hello`")
 	assert.Contains(t, obs, ":md")
 }
 
@@ -944,9 +924,9 @@ func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
 // regardless of input shape.
 func TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{"```bash\necho hi\n```", "exit"}}
+	model := &scriptedModel{emits: []string{"notarealcmd", "exit"}}
 	runner := &fakeRunner{results: []ExecResult{
-		{Stderr: []byte("bash: bash: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
+		{Stderr: []byte("bash: notarealcmd: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
 	}}
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
@@ -990,15 +970,15 @@ func TestRunLoop_Exit127_NonExitNotAffected(t *testing.T) {
 
 // TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt covers the stderr-scan
 // failure mode from session 1bd0d74e: a multi-line emit whose first token is
-// NOT Title-Cased (so classifyProsePrefix doesn't fire), but bash reports
+// lowercase (so natural-language coercion doesn't fire), but bash reports
 // "command not found" on an internal line and the trailing real command exits 0,
 // making the overall exit 0. The old exit-127 gate missed these; stderr-scan catches them.
 //
-// Note: Title-Cased-first-word emits like "The PR already exists..." now route
-// to classifyProsePrefix pre-exec and never reach the stderr-scan path.
+// Note: natural-language emits like "The PR already exists..." now coerce to
+// :md and never reach the stderr-scan path.
 func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	t.Parallel()
-	// Emit starts with lowercase (bypasses classifyProsePrefix) but contains a
+	// Emit starts with lowercase (bypasses natural-language coercion) but contains a
 	// not-found token internally. bash runs, reports "command not found" for
 	// "nonexistentcmd" in stderr while the trailing real command succeeds (exit 0).
 	inner := &scriptedModel{emits: []string{
@@ -1073,9 +1053,9 @@ func TestRunLoop_GrepNoMatch_NoRePrompt(t *testing.T) {
 // re-prompt when stderr contains "command not found". Guards against a regression
 // where the result envelope is silently dropped from the model's context.
 //
-// Note: Title-Cased-first-word emits like "The PR already exists..." now route to
-// classifyProsePrefix pre-exec; this test uses a lowercase-starting emit so it
-// exercises the post-exec stderr-scan path.
+// Note: natural-language emits like "The PR already exists..." now coerce to
+// :md; this test uses a lowercase-starting emit so it exercises the post-exec
+// stderr-scan path.
 func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	t.Parallel()
 	inner := &scriptedModel{emits: []string{
@@ -1135,7 +1115,7 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 // in worker session 7f71f563).
 func TestRunLoop_CmdNotFound_BashLineNumberFormat(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{"```bash\ngit log\n```", "exit"}}
+	model := &scriptedModel{emits: []string{"echo before\n652a5f45", "exit"}}
 	runner := &fakeRunner{results: []ExecResult{
 		{Stderr: []byte("bash: line 2: 652a5f45: command not found\n"), ExitCode: 127, Duration: time.Millisecond},
 	}}
@@ -1187,51 +1167,9 @@ func TestScanFirstCmdNotFound_BothBashErrorFormats(t *testing.T) {
 	}
 }
 
-// TestRunLoop_ProsePrefix_FiresPreExec verifies a Title-Cased prose-first-word
-// emit triggers rePromptProsePrefix BEFORE bash exec, with no result row
-// created (the runtime bypasses bash entirely for this shape).
-func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
-	t.Parallel()
-	inner := &scriptedModel{emits: []string{"Read the files I need", "exit"}}
-	model := &streamCapturingModel{inner: inner}
-	runner := &fakeRunner{} // no canned results — runner must NOT be called
-	rec := &recordingRecorder{}
-	deps, ms := newDeps(t, model, runner, rec)
-
-	_, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-
-	// No exec ran — runner.bash should be empty.
-	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
-
-	// Re-prompt stored as Result.
-	results := messagesByRole(ms, message.Result)
-	require.Len(t, results, 1)
-	obs := results[0].Content().Text
-
-	assistants := messagesByRole(ms, message.Assistant)
-	require.Len(t, assistants, 1, "bad prose-prefix assistant emit must be dropped from persistence")
-	assert.Equal(t, "exit", strings.TrimSpace(assistants[0].Content().Text))
-	assert.Contains(t, obs, alertPrefix)
-	assert.Contains(t, obs, "`Read`")
-
-	require.Len(t, model.captured, 2, "expected initial prompt and one re-prompt turn")
-	for _, m := range model.captured[1] {
-		if m.Role != fantasy.MessageRoleAssistant {
-			continue
-		}
-		for _, part := range m.Content {
-			if tp, ok := part.(fantasy.TextPart); ok {
-				assert.NotContains(t, tp.Text, "Read the files I need", "bad prose emit must not be replayed to model")
-			}
-		}
-	}
-}
-
-// TestRunLoop_ProsePrefix_LowercaseAccepted verifies a lowercase first word
-// (legit bash command) does NOT trigger the pre-exec re-prompt — it routes
-// through classifyExec normally.
-func TestRunLoop_ProsePrefix_LowercaseAccepted(t *testing.T) {
+// TestRunLoop_NaturalLanguage_LowercaseAccepted verifies a lowercase first word
+// (legit bash command) does NOT trigger natural-language coercion.
+func TestRunLoop_NaturalLanguage_LowercaseAccepted(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"ls -la", "exit"}}
 	runner := &fakeRunner{results: []ExecResult{
@@ -1290,6 +1228,52 @@ func TestRunLoop_ToolCall_FiresPreExec(t *testing.T) {
 	}
 }
 
+func TestRunLoop_NaturalLanguageCoercesToMdAndStops(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"Done. Tests pass."}}
+	runner := &fakeRunner{}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Empty(t, runner.bash)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+	assert.Equal(t, "Done. Tests pass.", assistants[0].Content().Text)
+}
+
+func TestRunLoop_NaturalLanguageIgnoresContinueMarker(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"Done.\n:continue"}}
+	runner := &fakeRunner{}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Empty(t, runner.bash)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+	assert.Equal(t, "Done.", assistants[0].Content().Text)
+}
+
+func TestRunLoop_NaturalLanguageWithEqualsStaysBash(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"Output=$(pwd)", ":md\nDone."}}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("/tmp\n"), ExitCode: 0}}}
+	deps, _ := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{"Output=$(pwd)"}, runner.bash)
+}
+
 // TestRunLoop_DrainOnToolCall ensures queued user input still drains after the
 // tool-call re-prompt branch, matching other non-exec re-prompt paths.
 func TestRunLoop_DrainOnToolCall(t *testing.T) {
@@ -1305,27 +1289,6 @@ func TestRunLoop_DrainOnToolCall(t *testing.T) {
 	require.Len(t, results, 1)
 	assert.Contains(t, results[0].Content().Text, alertPrefix)
 	assert.Contains(t, results[0].Content().Text, "There is NO tool/function calling API")
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.Equal(t, "q1", users[0].Content().Text)
-}
-
-// TestRunLoop_DrainOnProsePrefix is the drain peer for the prose-prefix branch.
-// Every re-prompt branch must have a DrainOn<X> counterpart so a future
-// simplification can't silently drop drainAndAppend.
-func TestRunLoop_DrainOnProsePrefix(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"Now starting the task", "exit"}}
-	rec := &recordingRecorder{}
-	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
-
-	_, err := runLoop(context.Background(), deps, nil, "go")
-	require.NoError(t, err)
-
-	results := messagesByRole(ms, message.Result)
-	require.Len(t, results, 1)
-	assert.Contains(t, results[0].Content().Text, alertPrefix)
-	assert.Contains(t, results[0].Content().Text, "`Now`", "must reference the offending first word")
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
 	assert.Equal(t, "q1", users[0].Content().Text)
@@ -1474,11 +1437,6 @@ func TestObservationSSOT_RePromptRoundTrip(t *testing.T) {
 			emit: "echo 'unclosed",
 		},
 		{
-			name: "prose-prefix",
-			obs:  rePromptProsePrefix("Hello", "Hello world"),
-			emit: "Hello world",
-		},
-		{
 			name: "banned",
 			obs:  rePromptBlockedPattern(),
 			emit: "sed -i 's/foo/bar/g' file",
@@ -1600,7 +1558,7 @@ func intString(i int) string {
 func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
 	t.Parallel()
 	emit := ":md ->neil\nHello, this is a message.\n\nMore content."
-	model := &scriptedModel{emits: []string{emit, "exit"}}
+	model := &scriptedModel{emits: []string{emit}}
 	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
 	deps, ms := newDeps(t, model, runner, nil)
 
@@ -1614,12 +1572,51 @@ func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
 	first := assistants[0]
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
-	assert.Equal(t, message.FinishReasonToolUse, fp.Reason)
+	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason)
 	want := "Hello, this is a message.\n\nMore content."
 	assert.Equal(t, want, first.Content().Text, "Content.Text should store stripped :md body without prefix")
 }
 
-func TestRunLoop_MdExitEmptyBody(t *testing.T) {
+func TestRunLoop_MdContinueKeepsLoopAlive(t *testing.T) {
+	t.Parallel()
+	emit := ":md\nReading first.\n:continue"
+	inner := &scriptedModel{emits: []string{emit, "echo hi", ":md\nDone."}}
+	model := &streamCapturingModel{inner: inner}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("hi\n"), ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{"echo hi"}, runner.bash)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 3)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+	assert.Equal(t, "Reading first.", assistants[0].Content().Text)
+	assert.Equal(t, message.FinishReasonToolUse, assistants[1].FinishReason())
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[2].FinishReason())
+	assert.Equal(t, "Done.", assistants[2].Content().Text)
+
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].CommandContent().Output, "hi")
+
+	require.Len(t, model.captured, 3)
+	afterMdPrompt := model.captured[1]
+	require.NotEmpty(t, afterMdPrompt)
+	last := afterMdPrompt[len(afterMdPrompt)-1]
+	assert.Equal(t, fantasy.MessageRoleAssistant, last.Role)
+	for _, part := range last.Content {
+		if tp, ok := part.(fantasy.TextPart); ok {
+			assert.Contains(t, tp.Text, "Reading first.")
+			assert.NotContains(t, tp.Text, "[runtime]")
+		}
+	}
+	assert.Empty(t, messagesByRole(ms, message.User), ":md :continue must not persist a runtime response")
+}
+
+func TestRunLoop_MdLegacyExitEmptyBody(t *testing.T) {
 	t.Parallel()
 	emit := ":md\n:exit"
 	model := &scriptedModel{emits: []string{emit}}
@@ -1639,7 +1636,7 @@ func TestRunLoop_MdExitEmptyBody(t *testing.T) {
 	assert.Equal(t, "", first.Content().Text)
 }
 
-func TestRunLoop_MdAgentExitEndsTurn(t *testing.T) {
+func TestRunLoop_MdAgentLegacyExitEndsTurn(t *testing.T) {
 	t.Parallel()
 	emit := ":md ->agent\n:exit"
 	model := &scriptedModel{emits: []string{emit}}

@@ -30,9 +30,15 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.Contains(t, got, "raw bash")
 	assert.Contains(t, got, "exit")
 	assert.Contains(t, got, ":md")
+	assert.Contains(t, got, ":continue")
+	assert.Contains(t, got, "auto-coerces to :md")
 	// :md is the sole agent communication channel — single-line or multi-line.
 	assert.Contains(t, got, ":md ->agent",
 		":md protocol must be advertised with ->agent syntax")
+	assert.False(t, strings.Contains(got, ":exit"),
+		"base prompt must not advertise legacy :exit")
+	assert.False(t, strings.Contains(got, "Reading the README and the top-level layout.\n    cat README.md && ls"),
+		"base prompt must not show :md and bash mixed in one response")
 
 	// MUST NOT mention the legacy <cmd> markup — that's the whole point.
 	assert.False(t, strings.Contains(got, "<cmd>"),

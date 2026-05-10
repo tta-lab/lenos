@@ -20,11 +20,6 @@ func TestClassify_Exit(t *testing.T) {
 		"  exit 1  ",
 		"exit\t0",  // tab between exit and N is bash-legal
 		"\texit\n", // leading tab + trailing newline
-		// :exit variants (text-mode turn-end signal)
-		":exit",
-		":exit 0",
-		":exit 1",
-		"  :exit  ",
 	}
 	for _, in := range cases {
 		cls, _ := classify(ctx, in)
@@ -44,6 +39,8 @@ func TestClassify_NotExit(t *testing.T) {
 		"cat <<'EOF'\nexit\nEOF\necho ok",   // exit literal in heredoc
 		"exit && echo done",                 // exit as part of compound
 		"exit\nls",                          // exit followed by newline+cmd
+		":exit",                             // legacy text-mode exit is not a loop exit anymore
+		":exit 0",                           // only bare bash exit exits the loop
 		"# exit",                            // commented exit
 		"export EXIT=1",                     // env var assignment
 	}
@@ -129,6 +126,33 @@ func TestClassify_ToolCallBeatsInvalidBash(t *testing.T) {
 	require.Equal(t, classifyToolCall, cls)
 }
 
+func TestClassify_NaturalLanguage(t *testing.T) {
+	t.Parallel()
+	if _, err := os.Stat("/bin/bash"); err != nil {
+		t.Skip("/bin/bash not available")
+	}
+	ctx := context.Background()
+	cases := []struct {
+		emit string
+		want classifyResult
+	}{
+		{"Hello world", classifyNaturalLanguage},
+		{"> Done", classifyNaturalLanguage},
+		{"```bash\necho hi\n```", classifyNaturalLanguage},
+		{"Output=$(pwd)", classifyExec},
+		{"VAR=value go test ./...", classifyExec},
+		{"ls -la", classifyExec},
+		{"# checking\nls", classifyExec},
+	}
+	for _, tc := range cases {
+		t.Run(tc.emit, func(t *testing.T) {
+			t.Parallel()
+			cls, _ := classify(ctx, tc.emit)
+			require.Equal(t, tc.want, cls)
+		})
+	}
+}
+
 func TestClassify_Exec(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/bash"); err != nil {
@@ -162,7 +186,7 @@ func TestClassify_HeredocWithExit(t *testing.T) {
 	require.Equal(t, classifyExec, cls)
 }
 
-func TestClassify_ExecExit(t *testing.T) {
+func TestClassify_TrailingExitIsExec(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/bash"); err != nil {
 		t.Skip("/bin/bash not available")
@@ -187,8 +211,8 @@ func TestClassify_ExecExit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			cls, _ := classify(ctx, tc.emit)
-			require.Equal(t, classifyExecExit, cls,
-				"expected classifyExecExit for %q (got %v)", tc.emit, cls)
+			require.Equal(t, classifyExec, cls,
+				"expected trailing exit to remain plain exec for %q (got %v)", tc.emit, cls)
 		})
 	}
 }
@@ -198,9 +222,7 @@ func TestClassify_BareExitStillBareExit(t *testing.T) {
 	if _, err := os.Stat("/bin/bash"); err != nil {
 		t.Skip("/bin/bash not available")
 	}
-	// Bare `exit` must classify as classifyExit (the emit-IS-the-exit path),
-	// not classifyExecExit (run-then-exit). The two paths emit different
-	// recorder events.
+	// Bare `exit` must classify as classifyExit (the emit-IS-the-exit path).
 	ctx := context.Background()
 	cls, _ := classify(ctx, "exit")
 	require.Equal(t, classifyExit, cls)
@@ -208,10 +230,6 @@ func TestClassify_BareExitStillBareExit(t *testing.T) {
 	require.Equal(t, classifyExit, cls)
 }
 
-// TestClassify_ProsePrefix locks the classify() ordering: classifyProsePrefix
-// must win over classifyExecExit when the emit starts with a Title-Cased word
-// AND ends with `&& exit`. If the two checks were accidentally swapped, the
-// trailing-exit path would run bash before the prose gate fires.
 func TestClassify_MdMessage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -219,18 +237,20 @@ func TestClassify_MdMessage(t *testing.T) {
 		emit string
 		want classifyResult
 	}{
-		{":md", classifyMd},
-		{":md\nhello world", classifyMd},
-		{":md ->mira", classifyMd},
-		{":md ->mira\nhello world", classifyMd},
-		{":md ->mira\nmulti\nline", classifyMd},
+		{":md", classifyMdExit},
+		{":md\nhello world", classifyMdExit},
+		{":md ->mira", classifyMdExit},
+		{":md ->mira\nhello world", classifyMdExit},
+		{":md ->mira\nmulti\nline", classifyMdExit},
 		// Whitespace before :md is allowed (trimmed).
-		{"  :md\nhello", classifyMd},
-		// :md must beat trailing-exit.
-		{":md\nhello\nexit", classifyMd},
-		// Trailing :exit triggers MdExit.
+		{"  :md\nhello", classifyMdExit},
+		// :md defaults to turn-end, regardless of body content.
+		{":md\nhello\nexit", classifyMdExit},
 		{":md\nhello\n:exit", classifyMdExit},
 		{":md ->mira\nhello\n:exit", classifyMdExit},
+		// Trailing :continue keeps the loop alive after delivery.
+		{":md\nhello\n:continue", classifyMdContinue},
+		{":md ->mira\nhello\n:continue", classifyMdContinue},
 	}
 	for _, tc := range cases {
 		t.Run(tc.emit, func(t *testing.T) {
@@ -248,20 +268,16 @@ func TestClassify_MdExit(t *testing.T) {
 		emit string
 		want classifyResult
 	}{
-		// Trailing :exit cases (new protocol: body\n:exit)
+		// :md now exits by default. Trailing :exit is tolerated as legacy
+		// body text but no longer controls the lifecycle.
 		{":md ->neil\nhello world\n:exit", classifyMdExit},
 		{":md ->neil\n:exit", classifyMdExit},
 		{":md\nhello\n:exit", classifyMdExit},
 		{":md ->neil\nmulti\nline\nbody\n:exit", classifyMdExit},
-		// Anti-match: :exit in middle of body (not at end)
-		{":md ->neil\n:exit\nmore body", classifyMd},
-		// Anti-match: bare "exit" at end (not :exit)
-		{":md\nbody\nexit", classifyMd},
-		// Anti-match: :exit as substring in command
-		{":md ->neil\ncode :exit", classifyMd},
-		// exit as substring in agent name must NOT match (no longer applies
-		// since we use trailing :exit, but keep for regression)
-		{":md ->agent-exit\nbody", classifyMd},
+		{":md ->neil\n:exit\nmore body", classifyMdExit},
+		{":md\nbody\nexit", classifyMdExit},
+		{":md ->neil\ncode :exit", classifyMdExit},
+		{":md ->agent-exit\nbody", classifyMdExit},
 	}
 	for _, tc := range cases {
 		t.Run(tc.emit, func(t *testing.T) {
@@ -272,7 +288,7 @@ func TestClassify_MdExit(t *testing.T) {
 	}
 }
 
-func TestClassify_ProsePrefix(t *testing.T) {
+func TestClassify_NaturalLanguageReplacesTitleCaseProseHeuristic(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/bash"); err != nil {
 		t.Skip("/bin/bash not available")
@@ -282,72 +298,27 @@ func TestClassify_ProsePrefix(t *testing.T) {
 		emit string
 		want classifyResult
 	}{
-		{"Read the file", classifyProsePrefix},
-		{"Now starting the task", classifyProsePrefix},
-		// Critical overlap: prose-prefix must win over trailing-exit.
-		{"Let me start && exit", classifyProsePrefix},
-		{"Read files && exit", classifyProsePrefix},
+		{"Read the file", classifyNaturalLanguage},
+		{"Now starting the task", classifyNaturalLanguage},
+		{"Let me start && exit", classifyNaturalLanguage},
+		{"Read files && exit", classifyNaturalLanguage},
 		// Lowercase-first: goes through normally.
-		{"ls -la && exit", classifyExecExit},
-		{"echo done && exit", classifyExecExit},
+		{"ls -la && exit", classifyExec},
+		{"echo done && exit", classifyExec},
 	}
 	for _, tc := range cases {
 		t.Run(tc.emit, func(t *testing.T) {
 			t.Parallel()
-			cls, aux := classify(ctx, tc.emit)
+			cls, _ := classify(ctx, tc.emit)
 			assert.Equal(t, tc.want, cls)
-			if tc.want == classifyProsePrefix {
-				assert.NotEmpty(t, aux, "classify must return the prose word via aux slot")
-			}
 		})
 	}
 }
 
-func TestClassify_ProsePrefixBeatsInvalidBash(t *testing.T) {
+func TestClassify_NaturalLanguageBeatsInvalidBash(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	emit := "Read the file and tell me what's wrong with $('"
-	cls, aux := classify(ctx, emit)
-	require.Equal(t, classifyProsePrefix, cls)
-	require.Equal(t, "Read", aux)
-}
-
-// TestDetectProsePrefix locks the cap-letter heuristic contract. Asserts both
-// the captured first word AND the full offending line — re-prompts use the
-// line to quote the model's prose verbatim and show in-place conversion.
-func TestDetectProsePrefix(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name     string
-		emit     string
-		wantWord string
-		wantLine string
-	}{
-		{"capitalized first word", "Read the file", "Read", "Read the file"},
-		{"single capitalized word", "Foo", "Foo", "Foo"},
-		{"all caps not detected", "FOO", "", ""},
-		{"lowercase first not detected", "ls -la", "", ""},
-		{"single capital letter alone", "X", "", ""},
-		{"starts with digit", "0xDEADBEEF", "", ""},
-		{"absolute path", "/usr/bin/Read", "", ""},
-		{"comment line skipped", "# Let me try\nls /tmp", "", ""},
-		{"empty leading lines", "\n\n  Read the file", "Read", "Read the file"},
-		{"narrate heredoc accepted", "narrate <<'EOF'\nLet me explain.\nEOF", "", ""},
-		{"empty emit", "", "", ""},
-		{"only whitespace", "   \n\t  ", "", ""},
-		{"multi-word prose captures full line", "Now I'll start the test", "Now", "Now I'll start the test"},
-		// Known false positive: Title-Cased var assignment (e.g. Output=$(pwd)).
-		// The heuristic fires on the capital letter; the re-prompt is still
-		// constructive (asks model to probe with command -v Output). Documented
-		// here so a future regex tightening has a regression guard.
-		{"var assignment false positive", "Output=$(pwd)", "Output", "Output=$(pwd)"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			gotWord, gotLine := detectProsePrefix(tc.emit)
-			assert.Equal(t, tc.wantWord, gotWord, "firstWord")
-			assert.Equal(t, tc.wantLine, gotLine, "line")
-		})
-	}
+	cls, _ := classify(ctx, emit)
+	require.Equal(t, classifyNaturalLanguage, cls)
 }

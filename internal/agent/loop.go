@@ -159,28 +159,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
-		case classifyProsePrefix:
-			// Same asymmetry as classifyToolCall above: prose-prefix is a shape
-			// error at the transport boundary ("English sentence in bash slot"),
-			// so preserving it in history hurts more than it helps. The runtime
-			// keeps the raw emit for auditability but deletes the
-			// assistant row so the next prompt only contains the corrective user
-			// observation. See flicknote 4ddde3f1.
-			// aux carries the first prose word from classify(); call detectProsePrefix
-			// again to also obtain the full offending line for the re-prompt body.
-			// The second call is a cheap linear scan with early termination.
-			proseWord, proseLine := detectProsePrefix(emit)
-			_ = aux // aux == proseWord; acknowledged, full line obtained above
-			obs := rePromptProsePrefix(proseWord, proseLine)
-			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
-				slog.Warn("loop: delete prose-prefix assistant message", "error", err)
-			}
-			msgs = append(msgs, fantasy.NewUserMessage(obs))
-			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-				slog.Warn("loop: persist prose-prefix re-prompt", "error", obsErr)
-			}
-			msgs = drainAndAppend(ctx, deps, msgs)
-
 		case classifyBanned:
 			obs := rePromptBlockedPattern()
 			msgs = append(msgs,
@@ -193,20 +171,24 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
-		case classifyMd, classifyMdExit:
-			// :md protocol message — route, persist, acknowledge.
+		case classifyNaturalLanguage, classifyMdExit, classifyMdContinue:
+			// :md protocol message — route and persist. Natural-language emits
+			// are coerced into :md and always end the loop; explicit :md may use
+			// trailing :continue to continue without a runtime response.
+			mdClass := cls
+			if cls == classifyNaturalLanguage {
+				emit = MdPrefix + "\n" + emit
+				mdClass = classifyMdExit
+			}
+
 			// Stores the :md body (after stripping the `:md ->agent` first line and
-			// trailing :exit) in the assistant message's Content().Text. The assistant
+			// trailing lifecycle marker) in the assistant message's Content().Text. The assistant
 			// message starts with empty TextContent — replace it with the body text.
 			body := StripMdPrefixLine(emit)
 			addressee := ParseMdAddressee(emit)
 
-			// Strip trailing :exit from body (protocol signal, not delivery content).
-			if idx := strings.LastIndex(body, "\n:exit"); idx >= 0 && idx+6 == len(body) {
-				body = strings.TrimRight(body[:idx], "\n")
-			} else if strings.HasPrefix(body, ":exit") && len(body) == 5 {
-				body = "" // bare :exit with no body
-			}
+			body = stripTrailingMdMarker(body, ":continue")
+			body = stripTrailingMdMarker(body, ":exit")
 
 			// (1) Store stripped :md body in assistant message Content.
 			var newParts []message.ContentPart
@@ -215,7 +197,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 			newParts = append(newParts,
 				message.TextContent{Text: body},
-				message.Finish{Reason: message.FinishReasonToolUse, Time: time.Now().Unix()},
+				message.Finish{Reason: message.FinishReasonEndTurn, Time: time.Now().Unix()},
 			)
 			assistantMsg.Parts = newParts
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
@@ -236,35 +218,17 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				}
 			}
 
-			// (3) Inject runtime acknowledgment into model's history.
-			var ack string
 			if sendFailed {
-				ack = "[runtime] message delivery to " + addressee + " failed (exit " + fmt.Sprintf("%d", sendExitCode) + "). you may use :exit to end the turn."
-			} else if addressee != "" {
-				ack = "[runtime] message sent to " + addressee + ". you may use :exit to end the turn."
-			} else {
-				ack = "[runtime] message written. you may use :exit to end the turn."
+				slog.Warn("loop: :md delivery failed without runtime response", "addressee", addressee, "exit", sendExitCode)
 			}
-			msg := assistantTextMessage(body, assistantMsg.ReasoningContent())
-			msgs = append(msgs, msg, fantasy.NewUserMessage(ack))
-			if obsErr := persistObservation(ctx, deps, ack); obsErr != nil {
-				slog.Warn("loop: persist :md ack", "error", obsErr)
-			}
-			msgs = drainAndAppend(ctx, deps, msgs)
-
-			// If :md had trailing :exit, end the loop after delivering the message.
-			if cls == classifyMdExit {
-				assistantMsg.Parts = []message.ContentPart{
-					message.TextContent{Text: body},
-					message.Finish{Reason: message.FinishReasonEndTurn, Time: time.Now().Unix()},
-				}
-				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
-					slog.Warn("loop: persist :md exit finish", "error", updateErr)
-				}
+			if mdClass == classifyMdExit {
 				return stopExit, nil
 			}
+			msg := assistantTextMessage(body, assistantMsg.ReasoningContent())
+			msgs = append(msgs, msg)
+			msgs = drainAndAppend(ctx, deps, msgs)
 
-		case classifyExec, classifyExecExit:
+		case classifyExec:
 			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 				Role:  message.Result,
 				Parts: []message.ContentPart{message.CommandContent{Command: emit, Pending: true}},
@@ -319,18 +283,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				)
 				msgs = drainAndAppend(ctx, deps, msgs)
 				continue
-			}
-
-			// `cmd && exit` (and ; / ||): bash already executed both clauses,
-			// the command succeeded, and the trailing exit signals turn-end
-			// — no point continuing the loop just to re-prompt the model
-			// for an empty next step.
-			if cls == classifyExecExit {
-				assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
-				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
-					slog.Warn("loop: failed to persist message after exec-exit", "error", updateErr)
-				}
-				return stopExit, nil
 			}
 
 			obs := envelope
@@ -561,8 +513,9 @@ var cmdNotFoundRe = regexp.MustCompile(`(?m)^bash:(?: line \d+:)? (\S+): command
 // scanFirstCmdNotFound returns the first token bash reported as "command not found"
 // in stderr, or "" if no match. Catches both:
 //   - overall exit 127 (prose-only emit, stderr has the pattern)
-//   - overall exit != 127 (prose-prefix + trailing real command — bash runs left to
-//     right, prose lines exit 127 but trailing command's exit masks them overall)
+//   - overall exit != 127 (missing command + trailing real command — bash runs
+//     left to right, the missing command exits 127, but the trailing command's
+//     exit masks it overall)
 func scanFirstCmdNotFound(stderr string) string {
 	m := cmdNotFoundRe.FindStringSubmatch(stderr)
 	if len(m) < 2 {

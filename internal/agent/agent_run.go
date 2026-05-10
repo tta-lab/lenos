@@ -255,8 +255,8 @@ runLoopReentry:
 //
 // Boundary note: "most recent assistant" no longer implies "assistant from
 // the immediately previous streamed turn". The loop may delete assistant rows
-// for transport-shape failures such as tool-call / prose-prefix emits before
-// re-prompting, so the latest surviving assistant can be an earlier message.
+// for transport-shape failures such as tool-call emits before re-prompting,
+// so the latest surviving assistant can be an earlier message.
 // That is intentional: attach the error banner to the newest durable
 // assistant row rather than assuming every streamed emit still exists.
 func (a *sessionAgent) attachErrorFinish(ctx context.Context, sessionID string, runErr error, model string) {

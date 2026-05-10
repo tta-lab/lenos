@@ -7,7 +7,7 @@ import "fmt"
 //   - [runtime] — informational correction (empty, invalid-bash, banned, timeout).
 //     bash already ran (or was cleanly blocked before any side-effects).
 //   - [ALERT from runtime] — high-salience correction where the model has
-//     demonstrated it ignores trailing corrections (cmd-not-found, prose-prefix).
+//     demonstrated it ignores trailing corrections (cmd-not-found, tool-call).
 //     Uses a distinct prefix and appears BEFORE any result envelope so the model
 //     reads the correction first.
 //
@@ -22,25 +22,22 @@ func rePromptEmpty() string {
 // rePromptInvalidBash is the next-observation text after `bash -n` rejected
 // the emit. bashErr carries the raw stderr from `bash -n`.
 //
-// In practice the #1 cause of bash-syntax failure is the model emitting
-// natural-language prose at the top level (e.g. "Hi! How can I help?")
-// because every response is fed to bash -c. The re-prompt leads with that
-// hypothesis so the model corrects course on the next turn, then falls back
-// to generic-bash-fix guidance.
+// In practice a common cause of bash-syntax failure is the model emitting
+// lowercase natural-language prose or quoted text that falls outside the
+// natural-language auto-md guard. The re-prompt leads with that hypothesis so
+// the model corrects course on the next turn, then falls back to generic bash
+// fix guidance.
 func rePromptInvalidBash(bashErr string) string {
 	return fmt.Sprintf(`[runtime] your last response was not valid bash. bash -n said:
   %s
 
-THE MOST LIKELY CAUSE: you emitted natural-language prose (a greeting, an
-explanation, a markdown answer) instead of bash. Every response is run as
-bash -c — there is no chat channel. To say something, start your response
-with :md on the first line:
+THE MOST LIKELY CAUSE: you emitted text that is neither bash nor a valid :md
+message. To say something, start your response with :md on the first line:
 
   :md
   your message here — apostrophes, "quotes", $vars all pass through.
-  :exit
 
-To end the turn, emit literally:  exit (or :exit)
+To end the turn without sending a message, emit literally:  exit
 
 If you actually meant to run a command, fix the bash quoting. "unexpected
 EOF while looking for matching" errors come from unbalanced quotes —
@@ -82,8 +79,14 @@ To act, emit plain bash only:
 To talk to the human, use:
   :md
   your message here
+
+To talk to a specific agent, use:
   :md ->agent-name
   message for a specific agent
+
+To send a message and then continue without a runtime response, end the
+message with:
+  :continue
 
 To leave a short note before a command, use a bash comment:
   # checking the agent loop
@@ -117,11 +120,11 @@ if `+"`%s`"+` is a real binary you expected:
   command -v %s     # builtin probe — returns 1 (not 127) if missing
 then either install it, or pick an alternative.
 
-if `+"`%s`"+` looks like part of an English sentence ("Let me ...", "I'll ...",
-"Here's ...") OR you wrapped your command in a markdown fence
+if `+"`%s`"+` looks like part of an English sentence ("let me ...", "i'll ...",
+"here's ...") OR you wrapped your command in a markdown fence
 (`+"```bash ... ```"+`), DROP THAT shape:
   - the runtime parses your ENTIRE response as bash via bash -c
-  - English prose at the top runs as commands and fails
+  - shell-looking prose runs as commands and fails
   - markdown fences (`+"```...```"+`) are bash command-substitution syntax,
     not chat-rendering boundaries
 
@@ -130,38 +133,4 @@ to talk to the human (multi-line):   :md ...
 to end the turn:                     exit
 to act:                              emit pure bash (chained with && / ; / | as needed).`,
 		firstWord, firstWord, firstWord, firstWord)
-}
-
-// rePromptProsePrefix is the next-observation text after the runtime detected
-// a Title-Cased prose word at the start of an emit (typically "Let", "Now",
-// "Read", "The", etc — common English sentence-openers). The runtime never
-// executed the emit; bash was bypassed so the model gets a clean, unambiguous
-// signal that the shape was wrong before any side-effects could happen.
-//
-// Quotes the actual offending line and shows the in-place conversion to
-// bash comment + :md forms — model sees the exact text it should have
-// written instead of the abstract rule.
-func rePromptProsePrefix(firstWord, line string) string {
-	return fmt.Sprintf(alertPrefix+` your last emit started with English prose:
-
-  %s
-
-The runtime DID NOT execute it — every byte of your response is fed to bash -c, and English sentences run as commands (which fail with "command not found"). To prevent any side effects, no bash ran this turn.
-
-If this was meant as a brief note before a command, convert to a bash comment:
-  # %s
-
-If this was meant as a multi-line message to the human, start with :md:
-  :md
-  %s
-  :exit
-
-To act, emit pure bash starting with a lowercase command (ls, grep, src, etc.).
-To end the turn, emit literally:  exit (or :exit)
-
-If `+"`%s`"+` was actually a real binary (e.g. cap-named tools like Cargo), probe with:
-  command -v %s
-
-then re-emit with the verified path.`,
-		line, line, line, firstWord, firstWord)
 }

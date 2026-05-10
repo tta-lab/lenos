@@ -25,6 +25,18 @@ func StripMdPrefixLine(source string) string {
 	return source
 }
 
+func stripTrailingMdMarker(body, marker string) string {
+	trimmed := strings.TrimRight(body, " \t\r\n")
+	if trimmed == marker {
+		return ""
+	}
+	suffix := "\n" + marker
+	if strings.HasSuffix(trimmed, suffix) {
+		return strings.TrimRight(strings.TrimSuffix(trimmed, suffix), "\n")
+	}
+	return body
+}
+
 // ParseMdAddressee extracts the agent name after `:md ->` from the first line
 // of an :md protocol message. Returns "" for bare `:md` (routed to owner),
 // for text without an `:md` prefix, or for `:md ->` with no name.
