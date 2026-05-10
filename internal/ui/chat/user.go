@@ -79,7 +79,7 @@ func (m *UserMessageItem) Render(width int) string {
 	lines := strings.Split(m.RawRender(width), "\n")
 	for i, line := range lines {
 		if i == 0 {
-			lines[i] = prefix + "λ  " + line
+			lines[i] = prefix + m.sty.Chat.Message.UserLambda.Render("λ") + "  " + line
 		} else {
 			lines[i] = prefix + line
 		}
