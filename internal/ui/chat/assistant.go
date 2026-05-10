@@ -155,13 +155,7 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 		if thinking != "" && a.showThinking {
 			messageParts = append(messageParts, "")
 		}
-		if fp := a.message.FinishPart(); fp != nil && fp.Reason == message.FinishReasonToolUse {
-			// Tool-use finish = bash emit: render as "$ cmd"
-			messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render("$ "+content))
-		} else {
-			// Other (EndTurn, etc.): render as markdown
-			messageParts = append(messageParts, a.renderMarkdown(content, width))
-		}
+		messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render(bashEmitPreview(content, width)))
 	}
 	if a.message.IsFinished() {
 		switch a.message.FinishReason() {
@@ -227,6 +221,15 @@ func (a *AssistantMessageItem) renderMarkdown(content string, width int) string 
 	return strings.TrimSuffix(result, "\n")
 }
 
+func bashEmitPreview(content string, width int) string {
+	firstLine, _, _ := strings.Cut(content, "\n")
+	preview := "$ " + firstLine
+	if width <= 0 {
+		return preview
+	}
+	return ansi.Truncate(preview, width, "…")
+}
+
 func (a *AssistantMessageItem) renderSpinning() string {
 	if a.message.IsThinking() {
 		a.anim.SetLabel("Thinking")
@@ -287,8 +290,11 @@ func (a *AssistantMessageItem) HandleMouseClick(btn ansi.MouseButton, x, y int) 
 // HandleKeyEvent implements KeyEventHandler.
 func (a *AssistantMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	if k := key.String(); k == "c" || k == "y" {
-		text := a.message.Content().Text
-		return true, common.CopyToClipboard(text, "Message copied to clipboard")
+		return true, common.CopyToClipboard(a.CopyText(), "Message copied to clipboard")
 	}
 	return false, nil
+}
+
+func (a *AssistantMessageItem) CopyText() string {
+	return a.message.Content().Text
 }

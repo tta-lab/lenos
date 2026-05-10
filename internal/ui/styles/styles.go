@@ -225,6 +225,7 @@ type Styles struct {
 		Message struct {
 			UserBlurred      lipgloss.Style
 			UserFocused      lipgloss.Style
+			UserLambda       lipgloss.Style
 			AssistantBlurred lipgloss.Style
 			AssistantFocused lipgloss.Style
 			NoContent        lipgloss.Style
@@ -1201,6 +1202,7 @@ func DefaultStyles() Styles {
 		BorderForeground(primary).BorderStyle(normalBorder)
 	s.Chat.Message.UserFocused = lipgloss.NewStyle().Foreground(secondary).PaddingLeft(1).BorderLeft(true).
 		BorderForeground(primary).BorderStyle(messageFocussedBorder)
+	s.Chat.Message.UserLambda = lipgloss.NewStyle().Foreground(primary).Bold(true)
 	// Assistant messages - green accent
 	s.Chat.Message.AssistantBlurred = lipgloss.NewStyle().Foreground(fgBase).PaddingLeft(2)
 	s.Chat.Message.AssistantFocused = lipgloss.NewStyle().Foreground(green).PaddingLeft(1).BorderLeft(true).

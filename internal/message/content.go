@@ -441,23 +441,37 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 		})
 	case Result:
 		var results []CommandContent
+		var texts []string
 		hasParts := len(m.Parts) > 0
 		for _, part := range m.Parts {
-			cc, ok := part.(CommandContent)
-			if !ok || cc.Command == "" || cc.Pending {
-				continue
+			switch part := part.(type) {
+			case TextContent:
+				if text := strings.TrimSpace(part.Text); text != "" {
+					texts = append(texts, text)
+				}
+			case CommandContent:
+				if part.Command == "" || part.Pending {
+					continue
+				}
+				results = append(results, part)
 			}
-			results = append(results, cc)
 		}
-		if len(results) == 0 && hasParts {
-			// Parts existed but none were completed commands — warn only in this case.
-			slog.Warn("Result message has no non-pending CommandContent parts")
+		var replay []string
+		replay = append(replay, texts...)
+		if len(results) > 0 {
+			replay = append(replay, FormatResults(results))
+		}
+		if len(replay) == 0 {
+			if hasParts {
+				// Parts existed but none were replayable — warn only in this case.
+				slog.Warn("Result message has no replayable content parts")
+			}
 			break
 		}
 		messages = append(messages, fantasy.Message{
 			Role: fantasy.MessageRoleUser,
 			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: FormatResults(results)},
+				fantasy.TextPart{Text: strings.Join(replay, "\n\n")},
 			},
 		})
 	}

@@ -3003,6 +3003,13 @@ func (m *UI) copyChatMessage() tea.Cmd {
 	if item == nil {
 		return nil
 	}
+	if copyable, ok := item.(chat.Copyable); ok {
+		text := copyable.CopyText()
+		if strings.TrimSpace(text) == "" {
+			return nil
+		}
+		return common.CopyToClipboard(text, "Message copied to clipboard")
+	}
 	rawer, ok := item.(list.RawRenderable)
 	if !ok {
 		return nil
