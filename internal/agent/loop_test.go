@@ -948,8 +948,8 @@ func TestRunLoop_Exit127_LowercaseProseRePrompts(t *testing.T) {
 }
 
 // TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance tests that the
-// rePromptCmdNotFound template includes guidance about markdown fences
-// regardless of input shape.
+// rePromptCmdNotFound template names markdown fences without echoing a
+// copyable fence token back to the model.
 func TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"notarealcmd", "exit"}}
@@ -969,7 +969,7 @@ func TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance(t *testing.T) {
 	assert.Equal(t, 1, *results[0].CommandContent().ExitCode)
 	obs := results[0].CommandContent().Output
 	assert.Contains(t, obs, "markdown fence")
-	assert.Contains(t, obs, "```bash")
+	assert.NotContains(t, obs, "```")
 
 	users := messagesByRole(ms, message.User)
 	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")

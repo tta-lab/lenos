@@ -30,11 +30,15 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.Contains(t, got, "raw bash")
 	assert.Contains(t, got, "exit")
 	assert.Contains(t, got, "narrate <<'EOF'")
-	assert.Contains(t, got, "narrate --to agent-name")
-	assert.Contains(t, got, "narrate --continue")
-	assert.Contains(t, got, "rewrite it into a `narrate` heredoc")
+	assert.Contains(t, got, "During work, write short progress notes as bash comments")
 	assertHeredocTerminatorsStartAtColumnZero(t, got)
-	assert.Contains(t, got, "Natural-language first line followed by valid bash")
+	assert.NotContains(t, got, "Wrong shape")
+	assert.NotContains(t, got, "wrong shapes")
+	assert.NotContains(t, got, "common mistake")
+	assert.NotContains(t, got, "rewrite it into a `narrate` heredoc")
+	assert.NotContains(t, got, "narrate --to")
+	assert.NotContains(t, got, "narrate --continue")
+	assert.NotContains(t, got, "```")
 	assert.NotContains(t, got, ":md")
 	assert.NotContains(t, got, ":continue")
 	assert.False(t, strings.Contains(got, ":exit"),
@@ -178,6 +182,10 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 	if !strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
 		t.Errorf("default mode should contain coder identity")
 	}
+	assert.NotContains(t, got, "```",
+		"default runtime prompt should not contain markdown fence tokens for models to copy")
+	assert.NotContains(t, got, "narrate --continue",
+		"default runtime prompt should not teach mid-session narration")
 }
 
 func TestSystemPrompt_AgentMode_RendersAgentBody(t *testing.T) {

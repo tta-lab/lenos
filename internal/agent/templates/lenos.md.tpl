@@ -76,20 +76,20 @@ Common mistakes:
 4. **unicode-fold** — converts curly quotes, em-dashes, ellipsis, etc. to ASCII equivalents
 
 When a non-exact pass fires, `src edit` prints to stderr:
-```
-matched via: trim-both pass
-AFTER re-indented: 4-space → tab
-```
+
+  matched via: trim-both pass
+  AFTER re-indented: 4-space → tab
+
 This tells you the match was approximate and that your AFTER text was auto-transformed.
 
 **Multi-match disambiguation**: if the same text appears in multiple places, `src edit` errors with line numbers and snippets:
-```
-found 3 matches:
-  line 12: func Foo() {
-  line 45: func Foo() {
-  line 78: func Foo() {
-add surrounding context to disambiguate
-```
+
+  found 3 matches:
+    line 12: func Foo() {
+    line 45: func Foo() {
+    line 78: func Foo() {
+  add surrounding context to disambiguate
+
 Fix: use `--section <id>` to scope to one symbol, or add more surrounding lines to the BEFORE block.
 
 **If edit fails**:
