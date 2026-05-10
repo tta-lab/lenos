@@ -155,13 +155,7 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 		if thinking != "" && a.showThinking {
 			messageParts = append(messageParts, "")
 		}
-		if fp := a.message.FinishPart(); fp != nil && fp.Reason == message.FinishReasonToolUse {
-			// Tool-use finish = bash emit: render as "$ cmd"
-			messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render("$ "+content))
-		} else {
-			// Other (EndTurn, etc.): render as markdown
-			messageParts = append(messageParts, a.renderMarkdown(content, width))
-		}
+		messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render("$ "+content))
 	}
 	if a.message.IsFinished() {
 		switch a.message.FinishReason() {
