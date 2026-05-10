@@ -188,4 +188,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace charm.land/fantasy => github.com/tta-lab/fantasy v0.0.0-20260506051210-968c56725972
+replace charm.land/fantasy => github.com/tta-lab/fantasy v0.0.0-20260510134819-7b55c6a5ee87

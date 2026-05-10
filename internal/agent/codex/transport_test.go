@@ -347,6 +347,61 @@ func TestStripTransport_RoundTrip_HoistsAndStrips(t *testing.T) {
 	}
 }
 
+func TestStripTransport_RoundTrip_SetsGetBodyForRewrittenJSON(t *testing.T) {
+	var captured *http.Request
+	client := NewClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		captured = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	}))
+
+	body := `{"model":"gpt-5.5","max_output_tokens":1000,"input":[{"role":"developer","content":"sys"},{"role":"user","content":"hi"}],"store":false}`
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://example.test/responses", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if captured == nil {
+		t.Fatal("expected request to reach wrapped transport")
+	}
+	if captured.GetBody == nil {
+		t.Fatal("expected rewritten request to set GetBody")
+	}
+
+	replayBody, err := captured.GetBody()
+	if err != nil {
+		t.Fatalf("GetBody: %v", err)
+	}
+	defer replayBody.Close()
+
+	replayed, err := io.ReadAll(replayBody)
+	if err != nil {
+		t.Fatalf("read replay body: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(replayed, &got); err != nil {
+		t.Fatalf("unmarshal replay body: %v", err)
+	}
+	if _, present := got["max_output_tokens"]; present {
+		t.Errorf("expected max_output_tokens stripped from replay body")
+	}
+	if got["instructions"] != "sys" {
+		t.Errorf("expected instructions=\"sys\" in replay body, got %#v", got["instructions"])
+	}
+}
+
 func TestStripTransport_EmptyBody(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -375,4 +430,10 @@ func TestStripTransport_EmptyBody(t *testing.T) {
 			resp.Body.Close()
 		})
 	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
