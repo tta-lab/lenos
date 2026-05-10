@@ -47,6 +47,32 @@ func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommand(t *testing.T
 	assert.Empty(t, items, "completed successful command result is already represented by the assistant bash emit")
 }
 
+func TestExtractMessageItems_Result_KeepsSuccessfulCommandWithNarration(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	exitCode := 0
+	msg := &message.Message{
+		ID:   "result-narration",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{
+				Command:  "narrate <<'EOF'\nDone.\nEOF",
+				ExitCode: &exitCode,
+				Pending:  false,
+				Narrations: []message.CommandNarration{
+					{Body: "Done."},
+				},
+			},
+		},
+	}
+
+	items := ExtractMessageItems(&sty, msg, false)
+
+	require.Len(t, items, 1)
+	_, ok := items[0].(*ResultMessageItem)
+	assert.True(t, ok)
+}
+
 func TestExtractMessageItems_Result_KeepsVisibleResultRows(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()

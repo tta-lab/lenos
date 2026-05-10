@@ -225,9 +225,7 @@ func TestSystemPrompt_BuildsNonEmptyPrompt(t *testing.T) {
 
 	// Spot-check the bash-first protocol marker is present so a future
 	// template restructure that drops the protocol section gets caught.
-	// ":md" + "exit" together signal the :md protocol contract is
-	// rendered into the prompt.
-	assert.Contains(t, prompt, ":md", "bash-first protocol must explain :md form")
+	assert.Contains(t, prompt, "narrate <<'EOF'", "bash-first protocol must explain narrate form")
 	assert.Contains(t, prompt, "Output Protocol", "bash-first output-protocol section must be in the rendered prompt")
 }
 

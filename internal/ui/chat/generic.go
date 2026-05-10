@@ -71,19 +71,35 @@ func (m *ResultMessageItem) renderCommandResult(width int, cmd message.CommandCo
 		pendingStyle := m.sty.Tool.StateWaiting.Width(width)
 		return pendingStyle.Render("running...")
 	}
-	if cmd.ExitCode == nil || *cmd.ExitCode == 0 {
-		// Exit 0: assistant already shows the command — nothing extra to render.
+	var parts []string
+	if cmd.ExitCode != nil && *cmd.ExitCode != 0 {
+		// Non-zero exit: output body and compact × N badge.
+		var sb strings.Builder
+		if cmd.Output != "" {
+			bodyStyle := m.sty.Tool.Body.Width(width)
+			sb.WriteString(bodyStyle.Render(cmd.Output))
+			sb.WriteString(" ")
+		}
+		sb.WriteString(m.sty.Tool.IconError.Render(fmt.Sprintf("%d", *cmd.ExitCode)))
+		parts = append(parts, sb.String())
+	}
+	for _, narration := range cmd.Narrations {
+		body := strings.TrimSpace(narration.Body)
+		if body == "" {
+			continue
+		}
+		renderer := common.MarkdownRenderer(m.sty, width)
+		rendered, err := renderer.Render(body)
+		if err != nil {
+			rendered = body
+		}
+		parts = append(parts, strings.TrimSuffix(rendered, "\n"))
+	}
+	if len(parts) == 0 {
+		// Exit 0 without narration: assistant already shows the command.
 		return ""
 	}
-	// Non-zero exit: output body and compact × N badge.
-	var sb strings.Builder
-	if cmd.Output != "" {
-		bodyStyle := m.sty.Tool.Body.Width(width)
-		sb.WriteString(bodyStyle.Render(cmd.Output))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(m.sty.Tool.IconError.Render(fmt.Sprintf("%d", *cmd.ExitCode)))
-	return sb.String()
+	return strings.Join(parts, "\n\n")
 }
 
 // Render implements MessageItem.

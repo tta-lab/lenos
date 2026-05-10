@@ -18,8 +18,6 @@ const (
 	classifyToolCall
 	classifyInvalidBash
 	classifyBanned
-	classifyMdExit     // :md routes, then exits by default
-	classifyMdContinue // :md routes, then continues when body ends with :continue
 	classifyNaturalLanguage
 )
 
@@ -28,10 +26,6 @@ const (
 // by other commands, or "exit" inside a quoted string never match because
 // classify() trims the input first and only this regex is applied.
 var exitRe = regexp.MustCompile(`^\s*exit(\s+-?\d+)?\s*$`)
-
-// mdTrailingContinueRe matches `\n:continue` at the very end of an emit.
-// :md exits by default; this marker is the only :md continue signal.
-var mdTrailingContinueRe = regexp.MustCompile(`\n:continue\s*$`)
 
 // toolCallXMLRe matches XML-style tool/function call hallucinations.
 var toolCallXMLRe = regexp.MustCompile(`(?i)</?(?:tool_call|minimax:tool_call|function_call|tool_use|invoke)\b[^>]*>`)
@@ -62,7 +56,7 @@ type bashSalvageProbe interface {
 // auxiliary string (bash stderr for classifyInvalidBash; rewritten bash for
 // classifyExec when natural-language first-line rewrite applies; "" otherwise).
 //
-// Classification order: empty → exit → banned → tool-call → :md →
+// Classification order: empty → exit → banned → tool-call →
 // natural-language → bash-syntax → exec.
 // Empty short-circuits before exit so `   ` doesn't accidentally pass the
 // trim+exitRe check; banned runs before bash-syntax so we never invoke
@@ -86,21 +80,6 @@ func classifyWithSalvageProbe(ctx context.Context, emit string, probe bashSalvag
 	}
 	if containsToolCallPattern(emit) {
 		return classifyToolCall, ""
-	}
-	if strings.HasPrefix(trimmed, MdPrefix) {
-		// :md at the very start of the emit (bare or followed by ->agent).
-		// Must fire before natural-language coercion so explicit :md keeps
-		// its explicit lifecycle marker semantics.
-		// Require space, tab, or newline after :md to avoid matching
-		// commands like `:mdata` or `:md5sum`. The trimmed emit may start
-		// with `:md`, `:md ->agent`, or `:md\nbody` — all valid forms.
-		rest := strings.TrimPrefix(trimmed, MdPrefix)
-		if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
-			if mdTrailingContinueRe.MatchString(trimmed) {
-				return classifyMdContinue, ""
-			}
-			return classifyMdExit, ""
-		}
 	}
 	if rewritten, ok := rewriteNaturalLanguageFirstLineBash(ctx, emit, probe); ok {
 		return classifyExec, rewritten
@@ -174,11 +153,6 @@ func rewriteNaturalLanguageFirstLineBash(ctx context.Context, emit string, probe
 	rest = strings.TrimLeft(rest, "\n")
 	restTrimmed := strings.TrimSpace(rest)
 	if restTrimmed == "" || exitRe.MatchString(restTrimmed) {
-		return "", false
-	}
-	if strings.HasPrefix(restTrimmed, MdPrefix) ||
-		strings.HasPrefix(restTrimmed, ":continue") ||
-		strings.HasPrefix(restTrimmed, ":exit") {
 		return "", false
 	}
 	if containsBlockedPattern(rest) || containsToolCallPattern(rest) {

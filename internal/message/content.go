@@ -68,13 +68,21 @@ func (tc TextContent) String() string {
 
 func (TextContent) isPart() {}
 
+type CommandNarration struct {
+	Body             string `json:"body,omitempty"`
+	To               string `json:"to,omitempty"`
+	DeliveryExitCode *int   `json:"delivery_exit_code,omitempty"`
+	DeliveryOutput   string `json:"delivery_output,omitempty"`
+}
+
 // CommandContent represents a command execution result in a message.
 type CommandContent struct {
-	Command     string `json:"command"`
-	Output      string `json:"output"`
-	ExitCode    *int   `json:"exit_code,omitempty"`
-	Pending     bool   `json:"pending"`
-	Observation string `json:"observation,omitempty"`
+	Command     string             `json:"command"`
+	Output      string             `json:"output"`
+	ExitCode    *int               `json:"exit_code,omitempty"`
+	Pending     bool               `json:"pending"`
+	Observation string             `json:"observation,omitempty"`
+	Narrations  []CommandNarration `json:"narrations,omitempty"`
 }
 
 func (CommandContent) isPart() {}
@@ -501,6 +509,9 @@ func formatOneResult(r CommandContent) string {
 	output := html.EscapeString(r.Output)
 	if output == "" {
 		output = "(no output)"
+	}
+	if len(r.Narrations) > 0 {
+		output += "\nnarration rendered to user; body omitted from result replay"
 	}
 	if r.ExitCode != nil && *r.ExitCode != 0 && *r.ExitCode != -1 {
 		output += fmt.Sprintf("\n(exit code: %d)", *r.ExitCode)

@@ -314,5 +314,8 @@ func shouldSkipResultMessageItem(msg *message.Message) bool {
 	if cmd.Command == "" || cmd.Pending {
 		return false
 	}
+	if len(cmd.Narrations) > 0 {
+		return false
+	}
 	return cmd.ExitCode != nil && *cmd.ExitCode == 0
 }

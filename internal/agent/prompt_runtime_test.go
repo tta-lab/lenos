@@ -13,7 +13,7 @@ func TestRePromptEmpty(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got, "[runtime] "), "must start with [runtime] tag")
 	assert.Contains(t, got, "your last response was empty")
 	assert.Contains(t, got, `"exit"`)
-	assert.Contains(t, got, ":md")
+	assert.Contains(t, got, "narrate")
 	assert.Contains(t, got, "# ...")
 }
 
@@ -24,8 +24,8 @@ func TestRePromptInvalidBash(t *testing.T) {
 	assert.Contains(t, got, "not valid bash")
 	assert.Contains(t, got, "bash -n said:")
 	assert.Contains(t, got, "syntax error near token `then'")
-	assert.Contains(t, got, "neither bash nor a valid :md")
-	assert.Contains(t, got, ":md")
+	assert.Contains(t, got, "neither bash nor a valid")
+	assert.Contains(t, got, "narrate <<'EOF'")
 	assert.Contains(t, got, "exit")
 }
 
@@ -66,7 +66,7 @@ func TestRePromptCmdNotFound_Format(t *testing.T) {
 	assert.Contains(t, got, "command -v lorem")
 	assert.Contains(t, got, "# ", "must offer bash comment for one-line inline annotation")
 	assert.Contains(t, got, "comment")
-	assert.Contains(t, got, ":md")
+	assert.Contains(t, got, "narrate <<'EOF'")
 	assert.Contains(t, got, "exit")
 	assert.Contains(t, got, "```bash")
 	assert.Contains(t, got, "```")
@@ -80,7 +80,7 @@ func TestRePromptCmdNotFound_EmptyInput(t *testing.T) {
 	got := rePromptCmdNotFound("")
 	assert.True(t, strings.HasPrefix(got, alertPrefix+" "))
 	assert.Contains(t, got, "command not found")
-	assert.Contains(t, got, ":md")
+	assert.Contains(t, got, "narrate")
 	assert.Contains(t, got, "exit")
 }
 

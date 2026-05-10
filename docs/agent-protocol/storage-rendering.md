@@ -1,67 +1,61 @@
 # Storage And Rendering
 
-The database and TUI are part of the protocol. They must preserve the shape the
-next model turn will see.
+SQLite remains the source of truth for session history. The runtime stores
+what the model emitted after any runtime rewrite, plus command results and
+runtime-owned narration metadata.
 
-## Assistant Storage
+## Assistant Messages
 
-Natural-language coercion stores:
+Assistant text stores bash. If natural-language detection rewrites prose, the
+stored assistant message is the generated `narrate <<'EOF'` bash, not the raw
+prose.
 
-```text
-:md
-<original emit>
+Assistant messages render in the TUI as bash previews. The first line is shown
+with a `$` prefix; multi-line bash is collapsed to one preview line.
+
+## Command Results
+
+Command results use `message.CommandContent`:
+
+```go
+type CommandContent struct {
+    Command     string
+    Output      string
+    ExitCode    *int
+    Pending     bool
+    Observation string
+    Narrations  []CommandNarration
+}
 ```
 
-Explicit `:md` stores the full source, including:
+`Observation` is the exact result body replayed to the model on the next
+iteration. If it is present, `FormatResults` uses it instead of rebuilding from
+stdout/stderr.
 
-- the `:md` prefix line.
-- an optional `->agent` addressee.
-- a trailing `:continue` lifecycle marker.
+## Command Narration
 
-Prose-prefixed bash salvage stores the rewritten bash:
+Narration is result metadata:
 
-```bash
-# <original first line>
-<rest of bash>
+```go
+type CommandNarration struct {
+    Body             string
+    To               string
+    DeliveryExitCode *int
+    DeliveryOutput   string
+}
 ```
 
-Bare `exit` stores an assistant finish and stops the loop.
+The body renders to the human as markdown, but it is not duplicated into the
+next model observation. The model already sees its own assistant command,
+including the heredoc body, through the assistant message.
 
-## Markdown Routing
-
-For delivery, `:md` strips the protocol line and strips trailing lifecycle
-markers from the body. Storage does not strip them.
-
-Addressed markdown routes through `ttal send --to <agent>`. Delivery failures
-are logged, but no runtime result message is appended for `:md`.
-
-## Result Storage
-
-Bash result rows store:
-
-- command
-- combined stdout/stderr output
-- exit code
-- model observation body
-- pending/completed state
-
-Pending rows are created before execution and updated after execution.
+`FormatResults` may include status text such as "narration rendered to user"
+or "narration delivery failed", but it omits the narration body.
 
 ## TUI Rendering
 
-Assistant `:md` messages render as markdown, not as bash. The `:md` line
-remains visible; rendering does not strip protocol text.
-
-Successful completed command results are skipped in the chat view because the
-assistant bash emit already represents the command. These result rows still
-remain in storage.
-
-The TUI still renders:
-
-- pending result rows.
-- failed result rows.
-- completed result rows without an exit code.
-- runtime text result rows.
-
-This keeps failures and active work visible without spending vertical space on
-successful command separators.
+- Successful commands with no narration are hidden.
+- Failed commands render as command output plus the failure badge.
+- Commands with narration are rendered even when exit code is 0.
+- If both failure and narration exist, the failed result appears first and the
+  narration body appears after it as markdown.

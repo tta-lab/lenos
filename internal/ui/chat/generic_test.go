@@ -1,9 +1,11 @@
 package chat
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/message"
@@ -160,6 +162,64 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 		got := item.formatCommandForCopy()
 		assert.Equal(t, "$ ls -la /tmp\ndrwxr-xr-x  4 neil staff  128 Apr 11 tmp\n-rw-r--r--  1 neil staff   64 Apr 11 log", got)
 	})
+}
+
+func TestResultMessageItem_RendersNarrationBody(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	exitCode := 0
+	msg := &message.Message{
+		ID:   "result-narration-render",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{
+				Command:  "narrate <<'EOF'\n# Done\nEOF",
+				ExitCode: &exitCode,
+				Pending:  false,
+				Narrations: []message.CommandNarration{
+					{Body: "# Done\nsecond line"},
+				},
+			},
+		},
+	}
+	item := NewResultMessageItem(&sty, msg)
+
+	rendered := ansi.Strip(item.RawRender(80))
+
+	assert.Contains(t, rendered, "Done")
+	assert.Contains(t, rendered, "second line")
+	assert.NotContains(t, rendered, "$ narrate", "narration result should render as prose, not as a command")
+}
+
+func TestResultMessageItem_RendersFailureBeforeNarration(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	exitCode := 1
+	msg := &message.Message{
+		ID:   "result-failure-narration-render",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{
+				Command:  "false; narrate <<'EOF'\n# Failed\nEOF",
+				Output:   "command failed",
+				ExitCode: &exitCode,
+				Pending:  false,
+				Narrations: []message.CommandNarration{
+					{Body: "# Failed\nshown to human"},
+				},
+			},
+		},
+	}
+	item := NewResultMessageItem(&sty, msg)
+
+	rendered := ansi.Strip(item.RawRender(80))
+
+	failureIdx := strings.Index(rendered, "command failed")
+	narrationIdx := strings.Index(rendered, "Failed")
+	require.NotEqual(t, -1, failureIdx)
+	require.NotEqual(t, -1, narrationIdx)
+	assert.Less(t, failureIdx, narrationIdx)
+	assert.Contains(t, rendered, "shown to human")
 }
 
 func intPtr(v int) *int {

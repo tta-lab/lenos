@@ -16,7 +16,7 @@ const alertPrefix = "[ALERT from runtime]"
 
 // rePromptEmpty is the next-observation text after an empty/whitespace emit.
 func rePromptEmpty() string {
-	return `[runtime] your last response was empty. emit a bash command, a comment (# ...), a :md message, or "exit" to end the turn.`
+	return `[runtime] your last response was empty. emit a bash command, a comment (# ...), a narrate heredoc, or "exit" to end the turn.`
 }
 
 // rePromptInvalidBash is the next-observation text after `bash -n` rejected
@@ -24,18 +24,19 @@ func rePromptEmpty() string {
 //
 // In practice a common cause of bash-syntax failure is the model emitting
 // lowercase natural-language prose or quoted text that falls outside the
-// natural-language auto-md guard. The re-prompt leads with that hypothesis so
+// natural-language rewrite guard. The re-prompt leads with that hypothesis so
 // the model corrects course on the next turn, then falls back to generic bash
 // fix guidance.
 func rePromptInvalidBash(bashErr string) string {
 	return fmt.Sprintf(`[runtime] your last response was not valid bash. bash -n said:
   %s
 
-THE MOST LIKELY CAUSE: you emitted text that is neither bash nor a valid :md
-message. To say something, start your response with :md on the first line:
+THE MOST LIKELY CAUSE: you emitted text that is neither bash nor a valid
+narrate heredoc. To say something explicitly, emit:
 
-  :md
+  narrate <<'EOF'
   your message here — apostrophes, "quotes", $vars all pass through.
+  EOF
 
 To end the turn without sending a message, emit literally:  exit
 
@@ -56,12 +57,12 @@ See src --help for usage.`
 
 // rePromptToolCall is the next-observation text after the model emitted a
 // structured tool/function call shape. This runtime has no tool-calling API:
-// every turn is either plain bash, :md, comments, or exit.
+// every turn is either plain bash, narrate, comments, or exit.
 //
 // Body deliberately avoids spelling out the wrong shapes verbatim. Quoting
 // literal wrappers such as XML / bracket tool-call forms would re-inject the
 // same pattern we just deleted from assistant history in the tool-call branch.
-// The description stays abstract; the correct bash / :md / comment / exit
+// The description stays abstract; the correct bash / narrate / comment / exit
 // shapes are still demonstrated concretely because those are the patterns we
 // want the model to copy.
 func rePromptToolCall() string {
@@ -77,16 +78,14 @@ To act, emit plain bash only:
   src edit internal/agent/loop.go
 
 To talk to the human, use:
-  :md
+  narrate <<'EOF'
   your message here
+  EOF
 
 To talk to a specific agent, use:
-  :md ->agent-name
+  narrate --to agent-name <<'EOF'
   message for a specific agent
-
-To send a message and then continue without a runtime response, end the
-message with:
-  :continue
+  EOF
 
 To leave a short note before a command, use a bash comment:
   # checking the agent loop
@@ -129,8 +128,8 @@ if `+"`%s`"+` looks like part of an English sentence ("let me ...", "i'll ...",
     not chat-rendering boundaries
 
 to annotate one command (one line):  # this is a bash comment — bash ignores it
-to talk to the human (multi-line):   :md ...
-to end the turn:                     exit
+to talk to the human (multi-line):   narrate <<'EOF' ... EOF
+to end the turn without text:        exit
 to act:                              emit pure bash (chained with && / ; / | as needed).`,
 		firstWord, firstWord, firstWord, firstWord)
 }

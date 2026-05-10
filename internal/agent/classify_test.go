@@ -286,60 +286,30 @@ func TestClassify_BareExitStillBareExit(t *testing.T) {
 	require.Equal(t, classifyExit, cls)
 }
 
-func TestClassify_MdMessage(t *testing.T) {
+func TestClassify_MdPrefixHasNoProtocolMeaning(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	cases := []struct {
 		emit string
 		want classifyResult
 	}{
-		{":md", classifyMdExit},
-		{":md\nhello world", classifyMdExit},
-		{":md ->mira", classifyMdExit},
-		{":md ->mira\nhello world", classifyMdExit},
-		{":md ->mira\nmulti\nline", classifyMdExit},
-		// Whitespace before :md is allowed (trimmed).
-		{"  :md\nhello", classifyMdExit},
-		// :md defaults to turn-end, regardless of body content.
-		{":md\nhello\nexit", classifyMdExit},
-		{":md\nhello\n:exit", classifyMdExit},
-		{":md ->mira\nhello\n:exit", classifyMdExit},
-		// Trailing :continue keeps the loop alive after delivery.
-		{":md\nhello\n:continue", classifyMdContinue},
-		{":md ->mira\nhello\n:continue", classifyMdContinue},
+		{":md", classifyNaturalLanguage},
+		{":md\nhello world", classifyNaturalLanguage},
+		{":md ->mira", classifyNaturalLanguage},
+		{":md ->mira\nhello world", classifyNaturalLanguage},
+		{":md ->mira\nmulti\nline", classifyNaturalLanguage},
+		{"  :md\nhello", classifyNaturalLanguage},
+		{":md\nhello\nexit", classifyNaturalLanguage},
+		{":md\nhello\n:exit", classifyNaturalLanguage},
+		{":md ->mira\nhello\n:exit", classifyNaturalLanguage},
+		{":md\nhello\n:continue", classifyNaturalLanguage},
+		{":md ->mira\nhello\n:continue", classifyNaturalLanguage},
 	}
 	for _, tc := range cases {
 		t.Run(tc.emit, func(t *testing.T) {
 			t.Parallel()
 			cls, _ := classify(ctx, tc.emit)
-			assert.Equal(t, tc.want, cls, "classify for :md emit")
-		})
-	}
-}
-
-func TestClassify_MdExit(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	cases := []struct {
-		emit string
-		want classifyResult
-	}{
-		// :md now exits by default. Trailing :exit is tolerated as legacy
-		// body text but no longer controls the lifecycle.
-		{":md ->neil\nhello world\n:exit", classifyMdExit},
-		{":md ->neil\n:exit", classifyMdExit},
-		{":md\nhello\n:exit", classifyMdExit},
-		{":md ->neil\nmulti\nline\nbody\n:exit", classifyMdExit},
-		{":md ->neil\n:exit\nmore body", classifyMdExit},
-		{":md\nbody\nexit", classifyMdExit},
-		{":md ->neil\ncode :exit", classifyMdExit},
-		{":md ->agent-exit\nbody", classifyMdExit},
-	}
-	for _, tc := range cases {
-		t.Run(tc.emit, func(t *testing.T) {
-			t.Parallel()
-			cls, _ := classify(ctx, tc.emit)
-			assert.Equal(t, tc.want, cls, "classify for :md exit emit: %q", tc.emit)
+			assert.Equal(t, tc.want, cls, ":md must not be a dedicated protocol class")
 		})
 	}
 }

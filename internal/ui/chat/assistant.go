@@ -134,20 +134,6 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 	thinking := strings.TrimSpace(a.message.ReasoningContent().Thinking)
 	content := strings.TrimSpace(a.message.Content().Text)
 
-	// Dispatch on protocol prefix: :md is prose, anything else is bash.
-	if isMdProtocolContent(content) {
-		// :md — render as Glamour markdown.
-		if thinking != "" && a.showThinking {
-			messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))
-		}
-		if thinking != "" && a.showThinking {
-			messageParts = append(messageParts, "")
-		}
-		messageParts = append(messageParts, a.renderMarkdown(content, width))
-		return strings.Join(messageParts, "\n")
-	}
-
-	// Default path: bash emits or fallback markdown.
 	if thinking != "" && a.showThinking {
 		messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))
 	}
@@ -211,16 +197,6 @@ func (a *AssistantMessageItem) renderThinking(thinking string, width int) string
 	return result
 }
 
-// renderMarkdown renders content as markdown.
-func (a *AssistantMessageItem) renderMarkdown(content string, width int) string {
-	renderer := common.MarkdownRenderer(a.sty, width)
-	result, err := renderer.Render(content)
-	if err != nil {
-		return content
-	}
-	return strings.TrimSuffix(result, "\n")
-}
-
 func bashEmitPreview(content string, width int) string {
 	firstLine, _, _ := strings.Cut(content, "\n")
 	preview := "$ " + firstLine
@@ -228,15 +204,6 @@ func bashEmitPreview(content string, width int) string {
 		return preview
 	}
 	return ansi.Truncate(preview, width, "…")
-}
-
-func isMdProtocolContent(content string) bool {
-	trimmed := strings.TrimLeft(content, " \t\r\n")
-	if !strings.HasPrefix(trimmed, ":md") {
-		return false
-	}
-	rest := strings.TrimPrefix(trimmed, ":md")
-	return rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n'
 }
 
 func (a *AssistantMessageItem) renderSpinning() string {

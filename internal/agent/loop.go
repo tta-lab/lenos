@@ -122,6 +122,14 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				slog.Warn("loop: persist rewritten bash emit", "error", updateErr)
 			}
 		}
+		if cls == classifyNaturalLanguage {
+			emit = narrateCommandForBody(emit)
+			replaceAssistantText(&assistantMsg, emit)
+			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+				slog.Warn("loop: persist natural-language narrate rewrite", "error", updateErr)
+			}
+			cls = classifyExec
+		}
 
 		switch cls {
 		case classifyExit:
@@ -187,64 +195,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
-		case classifyNaturalLanguage, classifyMdExit, classifyMdContinue:
-			// :md protocol message — route and persist. Natural-language emits
-			// are coerced into :md and always end the loop; explicit :md may use
-			// trailing :continue to continue without a runtime response.
-			mdClass := cls
-			if cls == classifyNaturalLanguage {
-				emit = MdPrefix + "\n" + emit
-				mdClass = classifyMdExit
-			}
-
-			// Store the protocol text intact so DB history, TUI rendering, and
-			// the next model prompt all agree on the same shape. Route only the
-			// stripped body, excluding lifecycle markers from delivery.
-			stored := emit
-			body := StripMdPrefixLine(emit)
-			addressee := ParseMdAddressee(emit)
-
-			body = stripTrailingMdMarker(body, ":continue")
-			body = stripTrailingMdMarker(body, ":exit")
-
-			// (1) Store full :md protocol text in assistant message Content.
-			var newParts []message.ContentPart
-			if rc := assistantMsg.ReasoningContent(); rc.Thinking != "" {
-				newParts = append(newParts, rc)
-			}
-			newParts = append(newParts,
-				message.TextContent{Text: stored},
-				message.Finish{Reason: message.FinishReasonEndTurn, Time: time.Now().Unix()},
-			)
-			assistantMsg.Parts = newParts
-			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
-				slog.Warn("loop: persist :md message", "error", updateErr)
-			}
-
-			// (2) Route: if :md ->agent with body, send via ttal send.
-			var sendFailed bool
-			var sendExitCode int
-			if addressee != "" && body != "" {
-				res := deps.runner.Run(ctx,
-					"cat <<'EOF' | ttal send --to "+addressee+"\n"+body+"\nEOF",
-					deps.env, deps.paths)
-				sendExitCode = res.ExitCode
-				if res.ExitCode != 0 {
-					slog.Warn("loop: route :md ->agent", "addressee", addressee, "exit", res.ExitCode, "stderr", string(res.Stderr))
-					sendFailed = true
-				}
-			}
-
-			if sendFailed {
-				slog.Warn("loop: :md delivery failed without runtime response", "addressee", addressee, "exit", sendExitCode)
-			}
-			if mdClass == classifyMdExit {
-				return stopExit, nil
-			}
-			msg := assistantTextMessage(stored, assistantMsg.ReasoningContent())
-			msgs = append(msgs, msg)
-			msgs = drainAndAppend(ctx, deps, msgs)
-
 		case classifyExec:
 			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 				Role:  message.Result,
@@ -254,7 +204,18 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopError, fmt.Errorf("create result row: %w", createErr)
 			}
 
-			res := deps.runner.Run(ctx, emit, deps.env, deps.paths)
+			inv, invErr := newNarrateInvocation(emit, deps.env, deps.paths)
+			if invErr != nil {
+				abandonPending(ctx, deps.messages, &resultMsg)
+				return stopError, fmt.Errorf("create narrate IPC directory: %w", invErr)
+			}
+			res := deps.runner.Run(ctx, inv.bash, inv.env, inv.paths)
+			narrations, narrateErr := readNarrationEvents(inv.dir)
+			inv.cleanup()
+			if narrateErr != nil {
+				abandonPending(ctx, deps.messages, &resultMsg)
+				return stopError, fmt.Errorf("read narrate IPC events: %w", narrateErr)
+			}
 
 			// Honor mid-exec cancellation: a canceled context means the agent
 			// loop is shutting down and we should not pretend the command finished.
@@ -262,18 +223,21 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				abandonPending(ctx, deps.messages, &resultMsg)
 				return stopCanceled, ctx.Err()
 			}
+			narrations, deliveryFailed := deliverNarrations(ctx, deps.runner, deps.env, deps.paths, narrations)
 
 			exitCode := res.ExitCode
 			stderr := string(res.Stderr)
 			envelope := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
 			body := strings.TrimPrefix(envelope, "<result>\n")
 			body = strings.TrimSuffix(body, "\n</result>")
+			body = appendNarrationObservation(body, narrations)
 			resultMsg.Parts = []message.ContentPart{message.CommandContent{
 				Command:     emit,
 				Output:      string(combine(res.Stdout, res.Stderr)),
 				ExitCode:    &exitCode,
 				Pending:     false,
 				Observation: body,
+				Narrations:  narrations,
 			}}
 			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 				slog.Warn("loop: persist result row", "error", updateErr)
@@ -290,6 +254,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 					ExitCode:    &exitCode,
 					Pending:     false,
 					Observation: obs,
+					Narrations:  narrations,
 				}}
 				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 					slog.Warn("loop: persist timeout result row", "error", updateErr)
@@ -302,14 +267,14 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				continue
 			}
 
-			obs := envelope
+			obs := "<result>\n" + body + "\n</result>"
 			if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
 				rePrompt := rePromptCmdNotFound(firstNotFound)
 				// SALIENCE FLIP: alert FIRST so the model sees the correction before the
 				// (potentially success-looking) result envelope. Validated via worker session
 				// d2f0a207: model reasoning ignored 20 trailing [runtime] re-prompts because
 				// the envelope showed exit-0 with apparently-successful trailing command output.
-				obs = rePrompt + "\n\n" + envelope
+				obs = rePrompt + "\n\n" + obs
 				exitCode := 1
 
 				// Keep the result row with non-zero exit code instead of abandoning it.
@@ -319,10 +284,14 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 					ExitCode:    &exitCode,
 					Pending:     false,
 					Observation: obs,
+					Narrations:  narrations,
 				}}
 				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 					slog.Warn("loop: persist cmd-not-found result row", "error", updateErr)
 				}
+			}
+			if len(narrations) > 0 && res.ExitCode == 0 && !deliveryFailed {
+				return stopExit, nil
 			}
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),

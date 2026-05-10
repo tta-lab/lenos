@@ -1,111 +1,46 @@
 # Salvage
 
-Salvage is the runtime's narrow repair path for prose-prefixed bash. It is not
-a general bash detector and does not replace the normal bash path.
-
-## Problem
-
-Small models often emit a communication line followed by a real command:
+Salvage handles one common mixed response:
 
 ```text
 I'll inspect the repo.
 cat README.md && ls
 ```
 
-If treated as markdown, the command is lost. If treated as bash as-is, the
-first line executes as a command and fails. Salvage rewrites only the first
-line to a bash comment:
+When safe, the runtime rewrites it to:
 
 ```bash
 # I'll inspect the repo.
 cat README.md && ls
 ```
 
-The rewritten bash is what gets stored and executed.
+This keeps useful shell work from being lost while still avoiding broad,
+guessy prose-to-bash rewrites.
 
-## Preconditions
+## Gate
 
-Salvage only runs when:
+Salvage runs before the general natural-language rewrite. It only fires when:
 
-1. The first line is natural language and is not a markdown heading that starts
-   with two or more `#` characters.
-2. The remaining body is non-empty.
-3. The remaining body is not `:md`, `:continue`, `:exit`, or a bare `exit`.
-4. The remaining body is not a blocked command or tool-call hallucination.
-5. The remaining body passes `bash -n`.
-6. The first effective line of the body has a strong command signal.
+- The first line is natural language.
+- There is non-empty content after the first line.
+- The rest is not a bare exit-like marker.
+- The rest has valid bash syntax according to `bash -n`.
+- The first effective command in the rest has shell-action evidence.
 
-Effective lines ignore blank and `#` lines.
+Shell-action evidence includes assignment prefixes, `&&`, `||`, pipes,
+redirects, semicolons, flags, path-like tokens, or an executable path.
 
-## Strong Command Signals
+For command words, the runtime probes command existence through the same
+runner abstraction used for bash. For path commands such as `./scripts/test.sh`
+or `/usr/local/bin/tool`, it probes executability in the sandbox.
 
-There are two accepted signals.
+## Non-Goals
 
-Path execution:
+Salvage is not a general bash classifier. It is a narrow repair for
+"first line prose, rest looks like shell." If the rest is ambiguous prose such
+as `go ahead`, salvage does not fire; the full emit becomes narration.
 
-- The first word starts with `./`, `../`, `/`, or `~/`.
-- The same runner reports it executable with `test -x`.
+## Storage
 
-Resolved command:
-
-- The first word starts with lowercase ASCII.
-- The same runner resolves it with `command -v`.
-- The line has extra shell evidence, such as a flag, redirect, pipe, command
-  operator, assignment prefix, or path-like token.
-
-Low-confidence cases fall back to natural-language coercion.
-
-## Runner-Backed Probes
-
-The runtime may execute through `LocalRunner` or `SandboxRunner`. Host `PATH`
-and sandbox `PATH` can differ, and relative executable paths must be checked in
-the same working directory and filesystem view as the eventual command.
-
-For that reason, salvage probes run through the same `Runner` as execution:
-
-- `command -v -- <word>` for normal command words.
-- `test -x <path>` for path execution words.
-
-The probes are read-only and are not persisted as result messages. They are
-used only to decide whether a prose-prefixed emit should be rewritten.
-
-## Examples
-
-These should salvage:
-
-```text
-I'll test.
-go test ./...
-```
-
-```text
-I'll run the script.
-./scripts/test.sh
-```
-
-These should not salvage:
-
-```text
-### Done
-cat README.md && ls
-```
-
-```text
-Done.
-go ahead
-```
-
-```text
-Done.
-make sure tests pass
-```
-
-## Tradeoff
-
-Salvage favors false negatives over false positives. Missing a salvage means
-the mixed response is delivered as `:md` and the loop stops. Wrongly salvaging
-prose executes text the model meant as communication.
-
-If this layer grows into a broad natural-language classifier, it should be
-replaced by an explicit classifier component rather than more shell-shaped
-heuristics.
+When salvage fires, the rewritten bash is stored in the assistant message and
+in the command result. The original prose line becomes a bash comment.

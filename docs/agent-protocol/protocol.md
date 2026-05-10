@@ -1,94 +1,67 @@
 # Protocol
 
-Lenos uses a bash-first agent loop. The model no longer emits traditional
-tool calls, so the runtime must classify each assistant emit before deciding
-whether to execute bash, deliver markdown, ask the model to retry, or end the
-loop.
+The protocol is bash-only. Every assistant response is interpreted as shell
+input and executed with one `bash -c` call, except for bare `exit`, which ends
+the loop without execution.
 
-## Design Goal
-
-The protocol keeps model output small and terminal-native:
-
-- Bash is the action format.
-- Markdown is the communication format.
-- Runtime observations are user-role feedback to the next model step.
-- The database stores protocol text the model emitted or the runtime explicitly
-  added.
-
-The classifier is not a general natural-language detector and not a general
-bash detector. It answers one protocol question:
-
-> What should the runtime do with this assistant emit?
-
-## Bash
-
-Any valid bash emit that is not otherwise classified runs in the configured
-`Runner`.
+## Valid Shapes
 
 ```bash
-rg "needle" internal/agent
-go test ./...
+ls -la
 ```
 
-Each bash emit creates a pending result message, runs in the runner, then
-updates that result with output, exit code, and the observation sent back to the
-model.
-
-## Markdown
-
-Assistant communication starts with `:md` on the first line:
-
-```text
-:md
-Done. The tests pass.
+```bash
+# inspect before editing
+cat README.md && rg "needle" .
 ```
 
-Addressed markdown starts with `:md ->agent-name`:
-
-```text
-:md ->reviewer
-Please review the protocol change.
+```bash
+narrate <<'EOF'
+Done. Tests pass.
+EOF
 ```
 
-The full `:md` source is stored in the assistant message. Delivery strips only
-the protocol line and lifecycle marker before routing. There is no runtime
-result or ack message for `:md`.
-
-If the assistant forgets `:md`, natural-language coercion may add it. A first
-line that starts with two or more `#` characters is treated as markdown and
-stored as a `:md` block instead of being salvaged into bash.
-
-## Continue
-
-`:md` stops the loop by default. A trailing `:continue` keeps the loop alive:
-
-```text
-:md
-I found the relevant file.
-:continue
+```bash
+narrate --to reviewer <<'EOF'
+Please review the auth change.
+EOF
 ```
-
-The stored assistant text keeps `:continue`. The routed markdown body strips
-it. The next model prompt sees the stored protocol text.
-
-## Exit
-
-Only a bare `exit` or `exit N` emit exits the loop:
 
 ```bash
 exit
-exit 0
-exit 1
 ```
 
-Multi-line bash ending in `exit`, or `cmd && exit`, is just bash. The `exit`
-runs inside the subprocess and does not end the agent loop as a protocol
-message.
+## Narration
 
-## Invariants
+`narrate` is not an external protocol marker. It is a bash function injected
+by the runtime before the model's shell text is executed.
 
-- Explicit `:md` wins over all natural-language guessing.
-- Natural-language coercion only adds `:md`; it does not strip protocol text.
-- `:md` never receives a runtime result message.
-- Bare `exit` is the only non-markdown protocol exit.
-- Bash execution always goes through `Runner`.
+The function reads stdin and writes one IPC event. `--to <agent>` records an
+addressee for delivery through `ttal send`. Multiple `narrate` calls in one
+bash response are allowed and render in event order.
+
+The runtime does not inspect narration until the whole bash subprocess exits.
+Commands after `narrate` still run.
+
+## Loop Lifecycle
+
+After bash exits:
+
+- If exit code is 0 and at least one narration exists, render the narration
+  and stop the loop.
+- If exit code is 0 and there is no narration, send the command result back to
+  the model and continue.
+- If exit code is non-zero, persist the failed result. If narration exists,
+  render it after the failed command result, but continue the loop.
+- If addressed narration delivery fails, persist delivery status and continue
+  the loop with an observation that omits the narration body.
+- If the model emits bare `exit`, stop the loop without executing bash.
+
+## Natural-Language Safety Net
+
+If an assistant response clearly looks like reader-facing prose, the runtime
+rewrites it to a `narrate` heredoc, stores that rewritten assistant message,
+executes it, and applies the same lifecycle rules above.
+
+This safety net is for model mistakes. Prompts still instruct the model to
+emit explicit bash.

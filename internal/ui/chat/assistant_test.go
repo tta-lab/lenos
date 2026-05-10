@@ -46,7 +46,7 @@ func TestAssistantMessageItem_RenderBashEmitPreviewIsOneLine(t *testing.T) {
 	assert.Equal(t, "echo one\necho two", item.CopyText())
 }
 
-func TestAssistantMessageItem_RenderMdAsMarkdownKeepsProtocolText(t *testing.T) {
+func TestAssistantMessageItem_RenderMdPrefixAsBashPreview(t *testing.T) {
 	t.Parallel()
 
 	sty := styles.DefaultStyles()
@@ -61,10 +61,9 @@ func TestAssistantMessageItem_RenderMdAsMarkdownKeepsProtocolText(t *testing.T) 
 
 	rendered := ansi.Strip(item.RawRender(80))
 
-	assert.NotContains(t, rendered, "$ :md")
+	assert.Contains(t, rendered, "$ :md")
 	assert.Contains(t, rendered, ":md")
-	assert.Contains(t, rendered, "Done")
-	assert.Contains(t, rendered, "second line")
+	assert.NotContains(t, rendered, "second line")
 	assert.Equal(t, content, item.CopyText())
 }
 

@@ -1,69 +1,45 @@
 # Classifier
 
-The classifier turns one assistant emit into a runtime action class.
-
-## Classes
-
-- `exit`: the whole emit is bare `exit` or `exit N`.
-- `:md`: explicit markdown protocol, optionally addressed with `:md ->agent`.
-- `:md` continue: explicit markdown ending with trailing `:continue`.
-- natural language: prose that should be stored as `:md` and stop the loop.
-- exec: valid bash to run in the configured runner.
-- empty: no useful output, re-prompt the model.
-- invalid bash: `bash -n` rejected the emit, re-prompt the model.
-- banned: blocked edit forms such as `sed -i` or `perl -i`, re-prompt.
-- tool-call hallucination: XML, JSON, or bracket tool-call shapes, re-prompt.
+`internal/agent/classify.go` decides what the runtime does with one model
+emit before execution.
 
 ## Order
 
-Classification order matters:
+1. Empty text: re-prompt.
+2. Bare `exit` or `exit N`: end the loop.
+3. Blocked edit patterns such as `sed -i` and `perl -i`: re-prompt.
+4. Tool-call-shaped wrappers: delete the bad assistant row and re-prompt.
+5. Prose-first-line salvage: rewrite to commented bash when the rest is
+   strongly bash-shaped.
+6. Natural-language emit: rewrite to `narrate` heredoc.
+7. `bash -n` syntax check: re-prompt on syntax failure.
+8. Everything else: execute as bash.
 
-1. Empty emits are rejected first.
-2. Bare `exit` stops the loop.
-3. Blocked command patterns are rejected before syntax checks.
-4. Tool-call-shaped hallucinations are rejected before syntax checks.
-5. Explicit `:md` wins before natural-language coercion.
-6. A narrow prose-prefixed-bash salvage may rewrite the first line to a bash
-   comment.
-7. Remaining natural-language emits are stored as `:md` and stop the loop.
-8. Remaining emits must pass `bash -n`.
-9. Valid remaining emits execute as bash.
+There is no markdown protocol branch.
 
-This order prevents explicit markdown from being reinterpreted as bash and
-prevents hallucinated tool wrappers from being normalized into history.
+## Natural-Language Detector
 
-## Natural-Language Coercion
+An emit is natural language when the first non-whitespace byte satisfies:
 
-An emit is treated as natural language when the first non-whitespace byte is
-not a lowercase English letter and not `#`.
+- It is not a lowercase English letter.
+- It is not `#`.
+- If it is an uppercase English letter, the first line does not contain `=`.
 
-There is one explicit exception: a first line that starts with two or more `#`
-characters is a markdown heading and is treated as natural language. A single
-leading `#` remains bash-shaped because it is a shell comment.
+Markdown-style headings starting with more than one `#` are also natural
+language. This catches `## Done` and `### Done` as prose, while allowing a
+single `#` bash comment.
 
-If the first byte is uppercase English, the first line must not contain `=`, so
-assignment-like shell such as `Output=$(pwd)` can still execute.
+CJK prose works because the first byte is neither lowercase ASCII nor `#`.
 
-When this fires, the runtime prepends `:md\n`, stores that exact protocol text
-in the assistant message, and stops the loop. This is an add-only transform:
-runtime adds `:md`; it does not strip it later from the database or from the
-next model prompt.
+## Why The Detector Is Simple
 
-Pure CJK prose is covered by this rule because its first byte is neither a
-lowercase English letter nor `#`.
+The classifier is not trying to fully understand English or shell. It only
+separates high-confidence prose from normal bash-shaped output. Ambiguous
+lowercase strings still run as bash and recover through command-not-found
+guidance when needed.
 
-## Syntax Check
+## Old Markers
 
-`bash -n` remains the syntax validator for bash candidates. It only checks
-parse validity. It does not execute, inspect `PATH`, or check whether a command
-exists.
-
-These are syntactically valid shell commands:
-
-```bash
-not_a_real_command
-go ahead
-make sure tests pass
-```
-
-That is why `bash -n` cannot decide whether an ambiguous emit is bash or prose.
+Strings like `:md`, `:continue`, and `:exit` no longer have protocol meaning.
+If they appear in model output, they are just text inside the bash-only
+classification flow.

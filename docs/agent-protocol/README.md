@@ -1,35 +1,44 @@
 # Agent Protocol MOC
 
-This directory documents the bash-first agent protocol and the runtime logic
-that supports it.
+Lenos uses one agent output protocol: bash.
 
-Read in this order:
+The model emits shell text. The runtime executes it, records the result in
+SQLite, and either loops with a result observation or stops. Human-facing prose
+is also bash: the model calls the injected `narrate` shell function with a
+heredoc body.
 
-1. [Protocol](protocol.md) - surface protocol and core invariants.
-2. [Classifier](classifier.md) - emit classes and classification order.
-3. [Salvage](salvage.md) - the narrow prose-prefixed bash rewrite.
-4. [Runtime Recovery](runtime-recovery.md) - malformed emit re-prompts.
-5. [Storage And Rendering](storage-rendering.md) - database and TUI behavior.
+## Core Documents
 
-## Short Version
-
-Lenos does not rely on traditional model tool calls in the agent loop. The
-assistant emits text. The runtime classifies that text as bash, markdown,
-exit, or a retryable protocol error.
-
-The runtime intentionally favors false negatives over false positives. Missing
-a bash salvage stops the loop with markdown. Wrongly salvaging prose executes
-text the model meant as communication, which is worse.
+- [Protocol](protocol.md): the bash-only contract and loop lifecycle.
+- [Classifier](classifier.md): how an emit becomes exit, bash, prose rewrite,
+  or a runtime correction.
+- [Salvage](salvage.md): the narrow rewrite for "prose first line, valid bash
+  after it."
+- [Runtime Recovery](runtime-recovery.md): re-prompts for invalid shapes and
+  failed execution.
+- [Narrate IPC](narrate-ipc.md): how the bash function reports narration back
+  to the Go runtime.
+- [Storage and Rendering](storage-rendering.md): SQLite content shape, model
+  replay, and TUI rendering.
 
 ## Implementation Map
 
-- `internal/agent/classify.go`: emit classification, natural-language rule,
-  bash syntax check, prose-prefixed bash salvage.
-- `internal/agent/loop.go`: creates assistant/result rows, applies
-  classification outcomes, routes `:md`, executes bash.
-- `internal/agent/salvage_probe.go`: runner-backed command/path probes for the
-  salvage gate.
-- `internal/agent/md_helpers.go`: `:md` prefix stripping, addressee parsing,
-  trailing lifecycle marker stripping.
-- `internal/agent/prompt_runtime.go`: runtime re-prompts for malformed emits.
-- `internal/ui/chat/messages.go`: message extraction and TUI rendering choices.
+- `internal/agent/classify.go`: emit classification and natural-language
+  detection.
+- `internal/agent/narrate.go`: `narrate` shell prelude, IPC event reading,
+  delivery via `ttal send`, and heredoc rewrite helpers.
+- `internal/agent/loop.go`: model loop, command execution, result persistence,
+  and stop/continue rules.
+- `internal/agent/prompt_runtime.go`: corrective runtime observations.
+- `internal/agent/templates/system_prompt.tpl`: base prompt for the bash-only
+  protocol.
+- `internal/message/content.go`: `CommandContent`, `CommandNarration`, and
+  result replay formatting.
+- `internal/ui/chat/generic.go`: command result and narration rendering.
+- `internal/ui/chat/assistant.go`: assistant emits render as bash previews.
+
+## Design Rule
+
+There is no second in-band markdown protocol. If a behavior cannot be expressed
+as bash plus runtime-owned result metadata, it does not belong in the agent
+emit format.
