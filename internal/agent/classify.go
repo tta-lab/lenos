@@ -47,6 +47,10 @@ var blockedCmdPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?m)(?:^|&&|\|\||;|\|)\s*perl\s+(?:-[a-zA-Z]*i)`),
 }
 
+// bashActionStartRe is deliberately stricter than `bash -n`: shell syntax
+// accepts arbitrary command names, including prose-like CJK lines.
+var bashActionStartRe = regexp.MustCompile(`^(?:[A-Za-z_][A-Za-z0-9_]*=|(?:\./|\../|/|~/)|[({]|(?:alias|awk|bash|bun|cargo|case|cat|cd|chmod|chown|command|cp|curl|date|deno|docker|echo|env|export|false|find|for|function|gh|git|go|gofmt|gofumpt|goimports|grep|head|if|jq|just|kubectl|ls|make|mkdir|mv|narrate|node|npm|perl|pnpm|printf|pwd|pytest|python|python3|rg|rm|rmdir|rsync|sed|set|sh|sleep|sort|source|src|sudo|tail|tar|task|test|touch|true|ttal|type|ulimit|uv|wc|while|which|xargs|yarn)\b)`)
+
 // classify inspects an agent emit and returns the action class plus an
 // auxiliary string (bash stderr for classifyInvalidBash; rewritten bash for
 // classifyExec when natural-language first-line rewrite applies; "" otherwise).
@@ -158,11 +162,25 @@ func rewriteNaturalLanguageFirstLineBash(ctx context.Context, emit string) (stri
 	if containsBlockedPattern(rest) || containsToolCallPattern(rest) {
 		return "", false
 	}
+	if !looksLikeBashAction(rest) {
+		return "", false
+	}
 	if err := bashSyntaxCheck(ctx, rest); err != "" {
 		return "", false
 	}
 
 	return "# " + strings.TrimSpace(firstLine) + "\n" + rest, true
+}
+
+func looksLikeBashAction(emit string) bool {
+	for _, line := range strings.Split(emit, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		return bashActionStartRe.MatchString(trimmed)
+	}
+	return false
 }
 
 // bashSyntaxCheck runs `bash -n` against the emit on stdin. Returns "" on

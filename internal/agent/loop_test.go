@@ -1332,6 +1332,32 @@ func TestRunLoop_NaturalLanguageFirstLineWithInvalidBashRestStillCoercesToMd(t *
 	assert.Equal(t, ":md\n"+emit, assistants[0].Content().Text)
 }
 
+func TestRunLoop_NaturalLanguageMultilineCJKStillCoercesToMd(t *testing.T) {
+	t.Parallel()
+	cases := []string{
+		"我已经完成了。\n不需要继续操作。",
+		"確認しました。\n次の操作は不要です。",
+	}
+	for _, emit := range cases {
+		t.Run(emit, func(t *testing.T) {
+			t.Parallel()
+			model := &scriptedModel{emits: []string{emit}}
+			runner := &fakeRunner{}
+			deps, ms := newDeps(t, model, runner, nil)
+
+			stop, err := runLoop(context.Background(), deps, nil, "")
+			require.NoError(t, err)
+			assert.Equal(t, stopExit, stop)
+			assert.Empty(t, runner.bash)
+
+			assistants := assistantsByOrder(ms)
+			require.Len(t, assistants, 1)
+			assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+			assert.Equal(t, ":md\n"+emit, assistants[0].Content().Text)
+		})
+	}
+}
+
 func TestRunLoop_ExplicitMdMixedWithBashRemainsMd(t *testing.T) {
 	t.Parallel()
 	emit := ":md\nI'll inspect the repo.\ncat README.md && ls"

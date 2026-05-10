@@ -137,6 +137,8 @@ func TestClassify_NaturalLanguage(t *testing.T) {
 		want classifyResult
 	}{
 		{"Hello world", classifyNaturalLanguage},
+		{"我已经完成了。", classifyNaturalLanguage},
+		{"確認しました。", classifyNaturalLanguage},
 		{"> Done", classifyNaturalLanguage},
 		{"```bash\necho hi\n```", classifyNaturalLanguage},
 		{"Output=$(pwd)", classifyExec},
@@ -165,6 +167,29 @@ func TestClassify_NaturalLanguageFirstLineWithValidBashRestRewritesToExec(t *tes
 
 	require.Equal(t, classifyExec, cls)
 	assert.Equal(t, "# I'll inspect the repo.\ncat README.md && ls", aux)
+}
+
+func TestClassify_NaturalLanguageMultilineCJKStaysNaturalLanguage(t *testing.T) {
+	t.Parallel()
+	if _, err := os.Stat("/bin/bash"); err != nil {
+		t.Skip("/bin/bash not available")
+	}
+	ctx := context.Background()
+	cases := []string{
+		"我已经完成了。\n不需要继续操作。",
+		"確認しました。\n次の操作は不要です。",
+	}
+
+	for _, emit := range cases {
+		t.Run(emit, func(t *testing.T) {
+			t.Parallel()
+
+			cls, aux := classify(ctx, emit)
+
+			require.Equal(t, classifyNaturalLanguage, cls)
+			assert.Empty(t, aux)
+		})
+	}
 }
 
 func TestClassify_Exec(t *testing.T) {
