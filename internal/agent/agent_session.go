@@ -21,6 +21,7 @@ import (
 	"charm.land/fantasy/providers/vercel"
 
 	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/protocol"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
 )
@@ -366,7 +367,7 @@ func (a *sessionAgent) Model() Model {
 }
 
 func summarySystemPrompt() string {
-	return bashNarrateSection("LENOS_SUMMARY_SYSTEM", string(summaryPrompt))
+	return protocol.NarrateSection("LENOS_SUMMARY_SYSTEM", string(summaryPrompt))
 }
 
 // formatSummaryPrompt formats the session summarization prompt from a todo list.
@@ -382,7 +383,7 @@ func formatSummaryPrompt(todos []session.Todo) string {
 		sb.WriteString("\nInclude these tasks and their statuses in your summary. ")
 		sb.WriteString("Instruct the resuming assistant to use `task <uuid> done` to mark completed subtasks.")
 	}
-	return bashNarrateSection("LENOS_SUMMARY_REQUEST", sb.String())
+	return protocol.NarrateSection("LENOS_SUMMARY_REQUEST", sb.String())
 }
 
 // buildSummaryPrompt fetches subtasks from taskwarrior and builds the summarization prompt.

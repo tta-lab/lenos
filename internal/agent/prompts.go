@@ -10,6 +10,7 @@ import (
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/protocol"
 )
 
 //go:embed templates/lenos.md.tpl
@@ -69,8 +70,8 @@ func SystemPrompt(
 	}
 
 	return base + "\n" +
-		bashNarrateSection("LENOS_GIT_CONTEXT", gitSection) + "\n" +
-		bashNarrateSection("LENOS_WRAPPER", lenosWrapper), nil
+		protocol.NarrateSection("LENOS_GIT_CONTEXT", gitSection) + "\n" +
+		lenosWrapper, nil
 }
 
 // resolveIdentityBody resolves the agent identity body used for the
@@ -104,34 +105,6 @@ func buildLenosWrapper(
 	return p.Build(ctx, provider, model, store)
 }
 
-func bashNarrateSection(delimiter, body string) string {
-	for containsHeredocTerminator(body, delimiter) {
-		delimiter += "_END"
-	}
-
-	body = strings.TrimRight(body, "\n")
-	var b strings.Builder
-	b.WriteString("narrate <<'")
-	b.WriteString(delimiter)
-	b.WriteString("'\n")
-	b.WriteString(body)
-	if body != "" {
-		b.WriteByte('\n')
-	}
-	b.WriteString(delimiter)
-	b.WriteByte('\n')
-	return b.String()
-}
-
-func containsHeredocTerminator(body, delimiter string) bool {
-	for _, line := range strings.Split(body, "\n") {
-		if line == delimiter {
-			return true
-		}
-	}
-	return false
-}
-
 func InitializePrompt(cfg *config.ConfigStore) (string, error) {
 	systemPrompt, err := prompt.NewPrompt("initialize", string(initializePromptTmpl))
 	if err != nil {
@@ -141,7 +114,7 @@ func InitializePrompt(cfg *config.ConfigStore) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return bashNarrateSection("LENOS_INITIALIZE_PROMPT", body), nil
+	return protocol.NarrateSection("LENOS_INITIALIZE_PROMPT", body), nil
 }
 
 // stripYAMLFrontmatter removes a single leading YAML frontmatter block

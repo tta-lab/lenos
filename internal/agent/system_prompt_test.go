@@ -188,6 +188,11 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 		"default runtime prompt should not contain markdown fence tokens for models to copy")
 	assert.NotContains(t, got, "narrate --continue",
 		"default runtime prompt should not teach mid-session narration")
+	assert.NotContains(t, got, "LENOS_WRAPPER")
+	assert.NotContains(t, got, "<universal_rules>")
+	assert.NotContains(t, got, "<critical_rules>")
+	assert.NotContains(t, got, "<available_skills>")
+	assert.NotContains(t, got, "<memory>")
 	assertValidBashSyntax(t, got)
 }
 
@@ -252,6 +257,36 @@ func TestSystemPrompt_AgentMode_RendersAgentBody(t *testing.T) {
 	if strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
 		t.Errorf("agent mode should NOT contain coder identity when agent file given")
 	}
+	assert.Contains(t, got, "narrate <<'LENOS_IDENTITY_BODY'")
+	assertValidBashSyntax(t, got)
+}
+
+func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	agentContent := "You are a PR Review Lead.\n\n<external_rules>\nKeep this payload unchanged.\n</external_rules>"
+	agentFile := filepath.Join(dataDir, "reviewer.md")
+	require.NoError(t, os.WriteFile(agentFile, []byte(agentContent), 0o644))
+	store.Overrides().AgentContextFile = agentFile
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "narrate <<'LENOS_IDENTITY_BODY'")
+	assert.Contains(t, got, "Keep this payload unchanged.")
+	assert.Contains(t, got, "<external_rules>")
+	assert.NotContains(t, got, "LENOS_WRAPPER")
+	assertValidBashSyntax(t, got)
 }
 
 func TestSystemPrompt_AgentMode_FrontmatterStripped(t *testing.T) {
@@ -304,7 +339,7 @@ func TestSystemPrompt_ExtraContextFilesStillInMemory(t *testing.T) {
 	store.Config().Options.Attribution = &config.Attribution{}
 	store.Config().Options.ContextPaths = nil
 
-	extraContent := "# Extra note\nThis should be in <memory>"
+	extraContent := "# Extra note\nThis should be in memory"
 	extraFile := filepath.Join(dataDir, "extra.md")
 	if err := os.WriteFile(extraFile, []byte(extraContent), 0o644); err != nil {
 		t.Fatal(err)
@@ -318,12 +353,14 @@ func TestSystemPrompt_ExtraContextFilesStillInMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !strings.Contains(got, "<memory>") {
-		t.Errorf("extra context files should be in <memory> block")
-	}
+	assert.Contains(t, got, "narrate <<'LENOS_MEMORY'")
+	assert.Contains(t, got, "narrate <<'LENOS_MEMORY_FILE_")
+	assert.NotContains(t, got, "<memory>")
+	assert.NotContains(t, got, "<file path=")
 	if !strings.Contains(got, "Extra note") {
 		t.Errorf("extra context file content should appear in output")
 	}
+	assertValidBashSyntax(t, got)
 }
 
 func TestSystemPrompt_AgentMode_ExtraContextFilesStillInMemory(t *testing.T) {
@@ -368,9 +405,9 @@ func TestSystemPrompt_AgentMode_ExtraContextFilesStillInMemory(t *testing.T) {
 	if !strings.Contains(got, "Context") {
 		t.Errorf("extra context file should appear in output")
 	}
-	if !strings.Contains(got, "<memory>") {
-		t.Errorf("extra context files should be in <memory> block")
-	}
+	assert.Contains(t, got, "narrate <<'LENOS_MEMORY'")
+	assert.NotContains(t, got, "<memory>")
+	assertValidBashSyntax(t, got)
 }
 
 func TestStripYAMLFrontmatter_EmptyString(t *testing.T) {

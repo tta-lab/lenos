@@ -176,14 +176,18 @@ func TestCoordinator_Run_TextAttachmentPassthrough(t *testing.T) {
 	call := <-captured
 	prompt := call.Prompt
 
-	assert.Contains(t, prompt, `<file path='/path/to/test.txt'>`)
+	assert.Contains(t, prompt, "# Attached Files")
+	assert.Contains(t, prompt, "narrate <<'LENOS_ATTACHMENT_0'")
+	assert.Contains(t, prompt, "# File: /path/to/test.txt")
 	assert.Contains(t, prompt, "hello world")
-	assert.Contains(t, prompt, `<file path='/path/to/notes.md'>`)
+	assert.Contains(t, prompt, "narrate <<'LENOS_ATTACHMENT_1'")
+	assert.Contains(t, prompt, "# File: /path/to/notes.md")
 	assert.Contains(t, prompt, "# notes")
-	assert.Contains(t, prompt, "</file>")
-	assert.Contains(t, prompt, "<system_info>")
+	assert.NotContains(t, prompt, "<file")
+	assert.NotContains(t, prompt, "</file>")
+	assert.NotContains(t, prompt, "<system_info>")
 	// Verify header appears exactly once (both attachments share it)
-	assert.Equal(t, 1, strings.Count(prompt, "<system_info>"))
+	assert.Equal(t, 1, strings.Count(prompt, "# Attached Files"))
 }
 
 func TestCoordinator_Run_EmptyAttachments(t *testing.T) {
