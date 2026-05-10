@@ -51,7 +51,7 @@ the runtime re-prompts you. The shapes that work are:
   ✅ A bash command:                 ls -la
   ✅ Inline annotation:              # check README first
   ✅ Prose to the human:             :md
-  ✅ End the turn:                   exit
+  ✅ End the turn:                   exit (or :exit)
 
   ❌ Plain text greeting             ("Hi! How can I help?")
   ❌ Markdown fences around output   (those break — see top section)
@@ -120,7 +120,7 @@ Chain steps with the operators below.
      kept in your transcript. Use for inline notes that do not need human
      attention. Cheaper than :md for one-line annotations.
 
-3. **End the turn.** Emit literally `exit` (or `exit N`) to hand control back
+3. **End the turn.** Emit literally `exit` (or `exit N`) or `:exit` (or `:exit N`) to hand control back
    to the human. Anything else, even a single word like "done", is treated
    as bash and will likely be a syntax error.
 

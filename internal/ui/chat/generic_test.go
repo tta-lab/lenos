@@ -124,7 +124,7 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 		}
 	}
 
-	t.Run("success exit omits exit code", func(t *testing.T) {
+	t.Run("success exit includes output", func(t *testing.T) {
 		item := makeItem("f1", "echo hello", "hello", intPtr(0), false)
 		got := item.formatCommandForCopy()
 		assert.Equal(t, "$ echo hello\nhello", got)
