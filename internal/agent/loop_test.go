@@ -432,7 +432,7 @@ func TestRunLoop_TrailingExit_NaturalLanguageCoercesToMd(t *testing.T) {
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
 	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
-	assert.Equal(t, "Let me start && exit", assistants[0].Content().Text)
+	assert.Equal(t, ":md\nLet me start && exit", assistants[0].Content().Text)
 }
 
 // --- Mock helpers ---
@@ -1242,7 +1242,7 @@ func TestRunLoop_NaturalLanguageCoercesToMdAndStops(t *testing.T) {
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
 	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
-	assert.Equal(t, "Done. Tests pass.", assistants[0].Content().Text)
+	assert.Equal(t, ":md\nDone. Tests pass.", assistants[0].Content().Text)
 }
 
 func TestRunLoop_NaturalLanguageIgnoresContinueMarker(t *testing.T) {
@@ -1259,7 +1259,7 @@ func TestRunLoop_NaturalLanguageIgnoresContinueMarker(t *testing.T) {
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
 	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
-	assert.Equal(t, "Done.", assistants[0].Content().Text)
+	assert.Equal(t, ":md\nDone.\n:continue", assistants[0].Content().Text)
 }
 
 func TestRunLoop_NaturalLanguageWithEqualsStaysBash(t *testing.T) {
@@ -1568,13 +1568,12 @@ func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
 
 	assistants := assistantsByOrder(ms)
 	require.GreaterOrEqual(t, len(assistants), 1)
-	// The first assistant message should have stored the stripped :md body
+	// The first assistant message should keep the full :md protocol text.
 	first := assistants[0]
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
 	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason)
-	want := "Hello, this is a message.\n\nMore content."
-	assert.Equal(t, want, first.Content().Text, "Content.Text should store stripped :md body without prefix")
+	assert.Equal(t, emit, first.Content().Text, "Content.Text should keep :md protocol text")
 }
 
 func TestRunLoop_MdContinueKeepsLoopAlive(t *testing.T) {
@@ -1593,10 +1592,10 @@ func TestRunLoop_MdContinueKeepsLoopAlive(t *testing.T) {
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 3)
 	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
-	assert.Equal(t, "Reading first.", assistants[0].Content().Text)
+	assert.Equal(t, ":md\nReading first.\n:continue", assistants[0].Content().Text)
 	assert.Equal(t, message.FinishReasonToolUse, assistants[1].FinishReason())
 	assert.Equal(t, message.FinishReasonEndTurn, assistants[2].FinishReason())
-	assert.Equal(t, "Done.", assistants[2].Content().Text)
+	assert.Equal(t, ":md\nDone.", assistants[2].Content().Text)
 
 	results := messagesByRole(ms, message.Result)
 	require.Len(t, results, 1)
@@ -1609,6 +1608,7 @@ func TestRunLoop_MdContinueKeepsLoopAlive(t *testing.T) {
 	assert.Equal(t, fantasy.MessageRoleAssistant, last.Role)
 	for _, part := range last.Content {
 		if tp, ok := part.(fantasy.TextPart); ok {
+			assert.Contains(t, tp.Text, ":md\nReading first.\n:continue")
 			assert.Contains(t, tp.Text, "Reading first.")
 			assert.NotContains(t, tp.Text, "[runtime]")
 		}
@@ -1632,8 +1632,7 @@ func TestRunLoop_MdLegacyExitEmptyBody(t *testing.T) {
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
 	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
-	// :exit stripped from stored body — Content.Text should be empty
-	assert.Equal(t, "", first.Content().Text)
+	assert.Equal(t, ":md\n:exit", first.Content().Text)
 }
 
 func TestRunLoop_MdAgentLegacyExitEndsTurn(t *testing.T) {
@@ -1653,6 +1652,5 @@ func TestRunLoop_MdAgentLegacyExitEndsTurn(t *testing.T) {
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
 	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
-	// :exit stripped from stored body — Content.Text should be empty
-	assert.Equal(t, "", first.Content().Text)
+	assert.Equal(t, ":md ->agent\n:exit", first.Content().Text)
 }

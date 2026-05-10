@@ -135,15 +135,17 @@ The TUI renders conversation messages with distinct visual treatments based on r
 - Terracotta bar on the left (focused/blurred states)
 - Copy-to-clipboard extracts clean text (no bar, no metadata)
 
-#### Assistant Bash Emits (Finish.Title == "bash")
+#### Assistant Bash Emits
 - `$ ` prefix with no Glamour (raw terminal style)
 - Displayed using `ResultHeader` style
 - No thinking box, no markdown rendering
 
-#### Assistant :md Messages (Finish.Title == ":md")
+#### Assistant :md Messages
+- Detected by stored assistant content whose first protocol line is `:md`
+  or `:md ->agent`
 - Rendered through Glamour markdown renderer
 - Full markdown support (headings, code blocks, lists)
-- `:md @agent` prefix line stripped from content before rendering
+- The `:md` prefix remains part of stored and rendered content
 
 #### Bash Results (Result role messages)
 - Exit 0: compact view — only `$ command` line, no output block, no exit badge

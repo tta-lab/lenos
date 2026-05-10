@@ -181,22 +181,23 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				mdClass = classifyMdExit
 			}
 
-			// Stores the :md body (after stripping the `:md ->agent` first line and
-			// trailing lifecycle marker) in the assistant message's Content().Text. The assistant
-			// message starts with empty TextContent — replace it with the body text.
+			// Store the protocol text intact so DB history, TUI rendering, and
+			// the next model prompt all agree on the same shape. Route only the
+			// stripped body, excluding lifecycle markers from delivery.
+			stored := emit
 			body := StripMdPrefixLine(emit)
 			addressee := ParseMdAddressee(emit)
 
 			body = stripTrailingMdMarker(body, ":continue")
 			body = stripTrailingMdMarker(body, ":exit")
 
-			// (1) Store stripped :md body in assistant message Content.
+			// (1) Store full :md protocol text in assistant message Content.
 			var newParts []message.ContentPart
 			if rc := assistantMsg.ReasoningContent(); rc.Thinking != "" {
 				newParts = append(newParts, rc)
 			}
 			newParts = append(newParts,
-				message.TextContent{Text: body},
+				message.TextContent{Text: stored},
 				message.Finish{Reason: message.FinishReasonEndTurn, Time: time.Now().Unix()},
 			)
 			assistantMsg.Parts = newParts
@@ -224,7 +225,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			if mdClass == classifyMdExit {
 				return stopExit, nil
 			}
-			msg := assistantTextMessage(body, assistantMsg.ReasoningContent())
+			msg := assistantTextMessage(stored, assistantMsg.ReasoningContent())
 			msgs = append(msgs, msg)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
