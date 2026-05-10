@@ -12,16 +12,13 @@ import (
 type classifyResult int
 
 const (
-	classifyExec     classifyResult = iota
-	classifyExit                    // emit IS the exit (no command to run)
-	classifyExecExit                // emit ends in `<sep> exit` — run, then exit
+	classifyExec classifyResult = iota
+	classifyExit                // emit IS the exit (no command to run)
 	classifyEmpty
 	classifyToolCall
 	classifyInvalidBash
 	classifyBanned
-	classifyMd          // emit starts with :md protocol prefix
-	classifyMdExit      // emits :md with exit on first line — route, then exit
-	classifyProsePrefix // emit starts with Title-Cased prose word
+	classifyNaturalLanguage
 )
 
 // exitRe matches a literal `exit` / `exit N` (with optional integer and
@@ -29,28 +26,6 @@ const (
 // by other commands, or "exit" inside a quoted string never match because
 // classify() trims the input first and only this regex is applied.
 var exitRe = regexp.MustCompile(`^\s*exit(\s+-?\d+)?\s*$`)
-
-// exitColonRe matches a bare `:exit` / `:exit N` turn-end signal (text-mode
-// variant of `exit`). Only matches when :exit is the entire emit (after trim).
-// Multi-line emits with `:exit` in the body are handled by mdTrailingExitRe.
-var exitColonRe = regexp.MustCompile(`^\s*:exit(\s+-?\d+)?\s*$`)
-
-// mdTrailingExitRe matches `\n:exit` at the very end of an emit (with optional
-// trailing whitespace). This is the text-mode turn-end signal inside :md blocks.
-// Unlike trailingExitRe (bash-mode chain exit), this regex is ONLY used inside
-// the :md classification branch — :exit is a text-mode signal, not bash.
-var mdTrailingExitRe = regexp.MustCompile(`\n:exit\s*$`)
-
-// trailingExitRe matches an emit whose final command is `exit` joined by a
-// shell separator: `... && exit`, `... ; exit`, `... || exit`, or a newline
-// (e.g. heredoc body followed by `exit` on the next line). The model uses
-// this idiom to combine a bash action with turn-end in a single response —
-// common enough that ignoring the exit signal would force every turn into a
-// redundant follow-up emit. We strip the trailing exit clause and run the
-// command portion via classifyExec, then the loop returns stopExit instead
-// of continuing.
-// NOTE: :md blocks use mdTrailingExitRe (trailing \n:exit), not this regex.
-var trailingExitRe = regexp.MustCompile(`(?:&&|\|\||;|\n)\s*exit(?:\s+-?\d+)?\s*$`)
 
 // toolCallXMLRe matches XML-style tool/function call hallucinations.
 var toolCallXMLRe = regexp.MustCompile(`(?i)</?(?:tool_call|minimax:tool_call|function_call|tool_use|invoke)\b[^>]*>`)
@@ -66,29 +41,38 @@ var blockedCmdPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?m)(?:^|&&|\|\||;|\|)\s*perl\s+(?:-[a-zA-Z]*i)`),
 }
 
+var (
+	envAssignmentTokenRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=.*$`)
+	flagTokenRe          = regexp.MustCompile(`(?:^|\s)--?[A-Za-z0-9]`)
+	pathLikeTokenRe      = regexp.MustCompile(`(?:^|\s)(?:\.{1,2}/|~/|/|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+|[A-Za-z0-9_.-]+\.[A-Za-z0-9]{1,8})(?:\s|$|[;&|<>])`)
+)
+
+type bashSalvageProbe interface {
+	commandExists(context.Context, string) bool
+	pathExecutable(context.Context, string) bool
+}
+
 // classify inspects an agent emit and returns the action class plus an
-// auxiliary string (bash stderr for classifyInvalidBash; first Title-Cased
-// word for classifyProsePrefix; "" otherwise).
+// auxiliary string (bash stderr for classifyInvalidBash; rewritten bash for
+// classifyExec when natural-language first-line rewrite applies; "" otherwise).
 //
-// Classification order: empty → exit → banned → tool-call → :md → prose-prefix → bash-syntax → trailing-exit → exec.
+// Classification order: empty → exit → banned → tool-call →
+// natural-language → bash-syntax → exec.
 // Empty short-circuits before exit so `   ` doesn't accidentally pass the
 // trim+exitRe check; banned runs before bash-syntax so we never invoke
-// `bash -n` on a refused pattern; tool-call and prose-prefix both run before
+// `bash -n` on a refused pattern; tool-call and natural-language both run before
 // bash-syntax so obviously wrong non-bash shapes get dedicated corrections
-// instead of generic shell errors; :md fires BEFORE prose-prefix so
-// `:md ->agent` doesn't match prose-prefix's Title-Case detection (the `:`
-// is not a capital letter, but `->agent` contains `-` which is not alphabetic
-// — safe guard regardless). prose-prefix runs before trailing-exit so
-// prose shapes like "Read files && exit" are caught as prose, not executed.
+// instead of generic shell errors.
 func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {
+	return classifyWithSalvageProbe(ctx, emit, nil)
+}
+
+func classifyWithSalvageProbe(ctx context.Context, emit string, probe bashSalvageProbe) (cls classifyResult, aux string) {
 	trimmed := strings.TrimSpace(emit)
 	if trimmed == "" {
 		return classifyEmpty, ""
 	}
 	if exitRe.MatchString(trimmed) {
-		return classifyExit, ""
-	}
-	if exitColonRe.MatchString(trimmed) {
 		return classifyExit, ""
 	}
 	if containsBlockedPattern(emit) {
@@ -97,32 +81,14 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 	if containsToolCallPattern(emit) {
 		return classifyToolCall, ""
 	}
-	if strings.HasPrefix(trimmed, MdPrefix) {
-		// :md at the very start of the emit (bare or followed by ->agent).
-		// Must fire before prose-prefix so `:md ->agent` is not caught by
-		// the Title-Case detector on the `->agent` portion.
-		// Require space, tab, or newline after :md to avoid matching
-		// commands like `:mdata` or `:md5sum`. The trimmed emit may start
-		// with `:md`, `:md ->agent`, or `:md\nbody` — all valid forms.
-		rest := strings.TrimPrefix(trimmed, MdPrefix)
-		if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
-			// Check if the emit ends with a trailing `\n:exit` (text-mode
-			// turn-end signal). Only matches at the very end of the emit.
-			hasTrailingExit := mdTrailingExitRe.MatchString(trimmed)
-			if hasTrailingExit {
-				return classifyMdExit, ""
-			}
-			return classifyMd, ""
-		}
+	if rewritten, ok := rewriteNaturalLanguageFirstLineBash(ctx, emit, probe); ok {
+		return classifyExec, rewritten
 	}
-	if word, _ := detectProsePrefix(emit); word != "" {
-		return classifyProsePrefix, word
+	if isNaturalLanguageEmit(emit) {
+		return classifyNaturalLanguage, ""
 	}
 	if err := bashSyntaxCheck(ctx, emit); err != "" {
 		return classifyInvalidBash, err
-	}
-	if trailingExitRe.MatchString(trimmed) {
-		return classifyExecExit, ""
 	}
 	return classifyExec, ""
 }
@@ -140,38 +106,152 @@ func containsToolCallPattern(emit string) bool {
 	return toolCallXMLRe.MatchString(emit) || toolCallBracketRe.MatchString(emit)
 }
 
-// proseFirstWordRe matches a Title-Cased English word at the start of a line
-// (after optional whitespace). UNIX commands are lowercase by convention; a
-// leading [A-Z][a-z]+ token is almost always English prose leaking into the
-// bash channel. Lowercase prose openings are deliberately not detected —
-// sample evidence shows model prose almost always starts sentence-case, and
-// lowercase commands are conventional UNIX, so capital-letter is a clean signal.
-var proseFirstWordRe = regexp.MustCompile(`^([A-Z][a-z]+)\b`)
+// isNaturalLanguageEmit implements the natural-language auto-md heuristic.
+// Markdown headings that start with two or more `#` are communication.
+// Otherwise, the first non-whitespace byte must not be a lowercase English
+// letter or `#`.
+// If that byte is uppercase English, the first line must not contain `=` so
+// assignment-like command forms such as `Output=$(pwd)` can still execute.
+func isNaturalLanguageEmit(emit string) bool {
+	trimmed := strings.TrimLeft(emit, " \t\r\n")
+	if trimmed == "" {
+		return false
+	}
+	if isMarkdownHeadingFirstLine(trimmed) {
+		return true
+	}
 
-// detectProsePrefix returns the Title-Cased first word and the full first
-// non-comment, non-whitespace line of emit, or ("", "") if no match. Comment
-// lines (start with `#`) are skipped since bash ignores them and they don't leak.
-//
-// The full line is returned alongside the first word so re-prompts can quote
-// the model's exact prose verbatim and show the in-place conversion to bash
-// comment + :md forms — direct conversion lowers the cognitive friction
-// in correcting next turn vs an abstract rule restatement.
-//
-// Heuristic: false positives possible on cap-named binaries (e.g. macOS
-// /usr/bin/Read, Cargo) but the prose re-prompt is constructive in those
-// cases — it asks the model to probe with `command -v <X>` and re-emit.
-func detectProsePrefix(emit string) (firstWord, line string) {
-	for _, candidate := range strings.Split(emit, "\n") {
-		trimmed := strings.TrimSpace(candidate)
+	first := trimmed[0]
+	if first == '#' || (first >= 'a' && first <= 'z') {
+		return false
+	}
+
+	firstLine, _, _ := strings.Cut(trimmed, "\n")
+	if first >= 'A' && first <= 'Z' && strings.Contains(firstLine, "=") {
+		return false
+	}
+
+	return true
+}
+
+func rewriteNaturalLanguageFirstLineBash(ctx context.Context, emit string, probe bashSalvageProbe) (string, bool) {
+	if probe == nil {
+		return "", false
+	}
+	trimmed := strings.TrimLeft(emit, " \t\r\n")
+	firstLine, rest, found := strings.Cut(trimmed, "\n")
+	if !found || strings.TrimSpace(rest) == "" {
+		return "", false
+	}
+	if isMarkdownHeadingFirstLine(firstLine) {
+		return "", false
+	}
+	if !isNaturalLanguageEmit(firstLine) {
+		return "", false
+	}
+
+	rest = strings.TrimLeft(rest, "\n")
+	restTrimmed := strings.TrimSpace(rest)
+	if restTrimmed == "" || exitRe.MatchString(restTrimmed) {
+		return "", false
+	}
+	if containsBlockedPattern(rest) || containsToolCallPattern(rest) {
+		return "", false
+	}
+	if err := bashSyntaxCheck(ctx, rest); err != "" {
+		return "", false
+	}
+	if !shouldSalvageBashRest(ctx, rest, probe) {
+		return "", false
+	}
+
+	return "# " + strings.TrimSpace(firstLine) + "\n" + rest, true
+}
+
+func isMarkdownHeadingFirstLine(emit string) bool {
+	trimmed := strings.TrimLeft(emit, " \t")
+	return strings.HasPrefix(trimmed, "##")
+}
+
+func shouldSalvageBashRest(ctx context.Context, emit string, probe bashSalvageProbe) bool {
+	lines := effectiveShellLines(emit)
+	if len(lines) == 0 {
+		return false
+	}
+
+	line := lines[0]
+	word, hadAssignment := firstCommandWord(line)
+	if word == "" {
+		return false
+	}
+	if isPathCommandWord(word) {
+		return probe.pathExecutable(ctx, word)
+	}
+	if !startsLowerASCII(word) || !hasCommandEvidence(line, hadAssignment) {
+		return false
+	}
+	return probe.commandExists(ctx, word)
+}
+
+func effectiveShellLines(emit string) []string {
+	var lines []string
+	for _, line := range strings.Split(emit, "\n") {
+		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if m := proseFirstWordRe.FindStringSubmatch(trimmed); m != nil {
-			return m[1], trimmed
-		}
-		return "", "" // first content line wasn't Title-Cased — accept the emit
+		lines = append(lines, trimmed)
 	}
-	return "", ""
+	return lines
+}
+
+func firstCommandWord(line string) (string, bool) {
+	hadAssignment := false
+	for _, token := range strings.Fields(line) {
+		token = cleanProbeToken(token)
+		if token == "" {
+			continue
+		}
+		if envAssignmentTokenRe.MatchString(token) {
+			hadAssignment = true
+			continue
+		}
+		return token, hadAssignment
+	}
+	return "", hadAssignment
+}
+
+func cleanProbeToken(token string) string {
+	token = strings.Trim(token, `"'`)
+	token = strings.TrimRight(token, ";|&<>")
+	if strings.ContainsAny(token, "$`\\") {
+		return ""
+	}
+	return token
+}
+
+func isPathCommandWord(word string) bool {
+	return strings.HasPrefix(word, "./") ||
+		strings.HasPrefix(word, "../") ||
+		strings.HasPrefix(word, "/") ||
+		strings.HasPrefix(word, "~/")
+}
+
+func startsLowerASCII(word string) bool {
+	if word == "" {
+		return false
+	}
+	first := word[0]
+	return first >= 'a' && first <= 'z'
+}
+
+func hasCommandEvidence(line string, hadAssignment bool) bool {
+	return hadAssignment ||
+		strings.Contains(line, "&&") ||
+		strings.Contains(line, "||") ||
+		strings.ContainsAny(line, "|;<>") ||
+		flagTokenRe.MatchString(line) ||
+		pathLikeTokenRe.MatchString(line)
 }
 
 // bashSyntaxCheck runs `bash -n` against the emit on stdin. Returns "" on

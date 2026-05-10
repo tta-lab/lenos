@@ -109,23 +109,7 @@ func (a *AssistantMessageItem) RawRender(width int) string {
 
 // Render implements MessageItem.
 func (a *AssistantMessageItem) Render(width int) string {
-	// XXX: Here, we're manually applying the focused/blurred styles because
-	// using lipgloss.Render can degrade performance for long messages due to
-	// it's wrapping logic.
-	// We already know that the content is wrapped to the correct width in
-	// RawRender, so we can just apply the styles directly to each line.
-	focused := a.sty.Chat.Message.AssistantFocused.Render()
-	blurred := a.sty.Chat.Message.AssistantBlurred.Render()
-	rendered := a.RawRender(width)
-	lines := strings.Split(rendered, "\n")
-	for i, line := range lines {
-		if a.focused {
-			lines[i] = focused + line
-		} else {
-			lines[i] = blurred + line
-		}
-	}
-	return strings.Join(lines, "\n")
+	return renderAssistantMessageLines(a.sty, a.focused, a.RawRender(width))
 }
 
 // renderMessageContent renders the message content including thinking, main content, and finish reason.
@@ -134,20 +118,6 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 	thinking := strings.TrimSpace(a.message.ReasoningContent().Thinking)
 	content := strings.TrimSpace(a.message.Content().Text)
 
-	// Dispatch on content prefix: ":" = :md (prose), anything else = bash.
-	if content != "" && strings.HasPrefix(content, ":") {
-		// :md — render as Glamour markdown.
-		if thinking != "" && a.showThinking {
-			messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))
-		}
-		if thinking != "" && a.showThinking {
-			messageParts = append(messageParts, "")
-		}
-		messageParts = append(messageParts, a.renderMarkdown(content, width))
-		return strings.Join(messageParts, "\n")
-	}
-
-	// Default path: bash emits or fallback markdown.
 	if thinking != "" && a.showThinking {
 		messageParts = append(messageParts, a.renderThinking(a.message.ReasoningContent().Thinking, width))
 	}
@@ -211,16 +181,6 @@ func (a *AssistantMessageItem) renderThinking(thinking string, width int) string
 	return result
 }
 
-// renderMarkdown renders content as markdown.
-func (a *AssistantMessageItem) renderMarkdown(content string, width int) string {
-	renderer := common.MarkdownRenderer(a.sty, width)
-	result, err := renderer.Render(content)
-	if err != nil {
-		return content
-	}
-	return strings.TrimSuffix(result, "\n")
-}
-
 func bashEmitPreview(content string, width int) string {
 	firstLine, _, _ := strings.Cut(content, "\n")
 	preview := "$ " + firstLine
@@ -228,6 +188,23 @@ func bashEmitPreview(content string, width int) string {
 		return preview
 	}
 	return ansi.Truncate(preview, width, "…")
+}
+
+func renderAssistantMessageLines(sty *styles.Styles, focused bool, rendered string) string {
+	// XXX: Here, we're manually applying the focused/blurred styles because
+	// using lipgloss.Render can degrade performance for long messages due to
+	// it's wrapping logic.
+	focusedPrefix := sty.Chat.Message.AssistantFocused.Render()
+	blurredPrefix := sty.Chat.Message.AssistantBlurred.Render()
+	lines := strings.Split(rendered, "\n")
+	for i, line := range lines {
+		if focused {
+			lines[i] = focusedPrefix + line
+		} else {
+			lines[i] = blurredPrefix + line
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (a *AssistantMessageItem) renderSpinning() string {

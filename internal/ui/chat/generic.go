@@ -71,19 +71,46 @@ func (m *ResultMessageItem) renderCommandResult(width int, cmd message.CommandCo
 		pendingStyle := m.sty.Tool.StateWaiting.Width(width)
 		return pendingStyle.Render("running...")
 	}
-	if cmd.ExitCode == nil || *cmd.ExitCode == 0 {
-		// Exit 0: assistant already shows the command — nothing extra to render.
+	var parts []string
+	if cmd.ExitCode != nil && *cmd.ExitCode != 0 {
+		// Non-zero exit: output body and compact × N badge.
+		var sb strings.Builder
+		if cmd.Output != "" {
+			bodyStyle := m.sty.Tool.Body.Width(width)
+			sb.WriteString(bodyStyle.Render(cmd.Output))
+			sb.WriteString(" ")
+		}
+		sb.WriteString(m.sty.Tool.IconError.Render(fmt.Sprintf("%d", *cmd.ExitCode)))
+		parts = append(parts, sb.String())
+	}
+	for _, narration := range cmd.Narrations {
+		if delivery := m.renderNarrationDelivery(width, narration); delivery != "" {
+			parts = append(parts, delivery)
+		}
+	}
+	if len(parts) == 0 {
+		// Exit 0 without narration: assistant already shows the command.
 		return ""
 	}
-	// Non-zero exit: output body and compact × N badge.
-	var sb strings.Builder
-	if cmd.Output != "" {
-		bodyStyle := m.sty.Tool.Body.Width(width)
-		sb.WriteString(bodyStyle.Render(cmd.Output))
-		sb.WriteString(" ")
+	return strings.Join(parts, "\n\n")
+}
+
+func (m *ResultMessageItem) renderNarrationDelivery(width int, narration message.CommandNarration) string {
+	if narration.DeliveryExitCode == nil || *narration.DeliveryExitCode == 0 {
+		return ""
 	}
-	sb.WriteString(m.sty.Tool.IconError.Render(fmt.Sprintf("%d", *cmd.ExitCode)))
-	return sb.String()
+	target := strings.TrimSpace(narration.To)
+	if target == "" {
+		target = "recipient"
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "narration delivery failed for %s", target)
+	if narration.DeliveryOutput != "" {
+		sb.WriteString("\n")
+		sb.WriteString(strings.TrimSpace(narration.DeliveryOutput))
+	}
+	bodyStyle := m.sty.Tool.Body.Width(width)
+	return bodyStyle.Render(sb.String()) + " " + m.sty.Tool.IconError.Render(fmt.Sprintf("%d", *narration.DeliveryExitCode))
 }
 
 // Render implements MessageItem.

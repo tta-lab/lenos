@@ -973,7 +973,12 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 			assistantItem.SetMessage(&msg)
 		}
 		if _, ok := existingItem.(*chat.ResultMessageItem); ok {
-			m.chat.RemoveMessage(msg.ID)
+			m.chat.RemoveMessageGroup(msg.ID)
+			items := chat.ExtractMessageItems(m.com.Styles, &msg, showThinking)
+			m.chat.AppendMessages(items...)
+		}
+		if _, ok := existingItem.(*chat.NarrationMessageItem); ok {
+			m.chat.RemoveMessageGroup(msg.ID)
 			items := chat.ExtractMessageItems(m.com.Styles, &msg, showThinking)
 			m.chat.AppendMessages(items...)
 		}

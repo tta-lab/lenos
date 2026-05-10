@@ -29,10 +29,18 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	// Bash-first protocol is described.
 	assert.Contains(t, got, "raw bash")
 	assert.Contains(t, got, "exit")
-	assert.Contains(t, got, ":md")
-	// :md is the sole agent communication channel — single-line or multi-line.
-	assert.Contains(t, got, ":md ->agent",
-		":md protocol must be advertised with ->agent syntax")
+	assert.Contains(t, got, "narrate <<'EOF'")
+	assert.Contains(t, got, "narrate --to agent-name")
+	assert.Contains(t, got, "narrate --continue")
+	assert.Contains(t, got, "rewrite it into a `narrate` heredoc")
+	assertHeredocTerminatorsStartAtColumnZero(t, got)
+	assert.Contains(t, got, "Natural-language first line followed by valid bash")
+	assert.NotContains(t, got, ":md")
+	assert.NotContains(t, got, ":continue")
+	assert.False(t, strings.Contains(got, ":exit"),
+		"base prompt must not advertise legacy :exit")
+	assert.False(t, strings.Contains(got, "Reading the README and the top-level layout.\n    cat README.md && ls"),
+		"base prompt must not show prose and bash mixed in one response")
 
 	// MUST NOT mention the legacy <cmd> markup — that's the whole point.
 	assert.False(t, strings.Contains(got, "<cmd>"),
@@ -40,15 +48,26 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.False(t, strings.Contains(got, "</cmd>"),
 		"base prompt must not reference legacy </cmd> markup")
 
-	// MUST NOT mention the legacy log CLI — :md replaced it.
+	// MUST NOT mention the legacy log CLI.
 	assert.False(t, strings.Contains(got, "log info"),
 		"base prompt must not reference legacy log info CLI")
 	assert.False(t, strings.Contains(got, "log warn"),
 		"base prompt must not reference legacy log warn CLI")
 	assert.False(t, strings.Contains(got, "log error"),
 		"base prompt must not reference legacy log error CLI")
+}
 
-	// :md is single-mode — no severity variants.
+func assertHeredocTerminatorsStartAtColumnZero(t *testing.T, text string) {
+	t.Helper()
+	count := 0
+	for _, line := range strings.Split(text, "\n") {
+		if strings.TrimSpace(line) != "EOF" {
+			continue
+		}
+		count++
+		assert.Equal(t, "EOF", line, "heredoc terminator must start at column zero")
+	}
+	require.NotZero(t, count, "prompt should include heredoc examples")
 }
 
 func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {

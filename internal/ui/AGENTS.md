@@ -135,20 +135,17 @@ The TUI renders conversation messages with distinct visual treatments based on r
 - Terracotta bar on the left (focused/blurred states)
 - Copy-to-clipboard extracts clean text (no bar, no metadata)
 
-#### Assistant Bash Emits (Finish.Title == "bash")
+#### Assistant Bash Emits
 - `$ ` prefix with no Glamour (raw terminal style)
 - Displayed using `ResultHeader` style
-- No thinking box, no markdown rendering
-
-#### Assistant :md Messages (Finish.Title == ":md")
-- Rendered through Glamour markdown renderer
-- Full markdown support (headings, code blocks, lists)
-- `:md @agent` prefix line stripped from content before rendering
+- Stored assistant text is always rendered as a bash preview
 
 #### Bash Results (Result role messages)
-- Exit 0: compact view — only `$ command` line, no output block, no exit badge
+- Exit 0 with no narration: skipped
 - Non-zero exit: `$ command` + output body + exit code badge (red)
-- Copy-to-clipboard: exit 0 returns `$ command` only; non-zero includes output + exit code
+- Narration bodies render as assistant-style markdown items
+- Result row copy-to-clipboard includes command output and non-zero exit code;
+  narration item copy-to-clipboard copies the narration body
 
 #### Runtime Responses (stored as Result rows)
 - Exit code 1: command-not-found re-prompt

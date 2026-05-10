@@ -443,6 +443,25 @@ func (m *Chat) RemoveMessage(id string) {
 	delete(m.pausedAnimations, id)
 }
 
+// RemoveMessageGroup removes a message and any derived chat items that share
+// the message ID prefix.
+func (m *Chat) RemoveMessageGroup(id string) {
+	prefix := id + ":"
+	for {
+		var removeID string
+		for itemID := range m.idInxMap {
+			if itemID == id || strings.HasPrefix(itemID, prefix) {
+				removeID = itemID
+				break
+			}
+		}
+		if removeID == "" {
+			return
+		}
+		m.RemoveMessage(removeID)
+	}
+}
+
 // MessageItem returns the message item with the given ID, or nil if not found.
 func (m *Chat) MessageItem(id string) chat.MessageItem {
 	idx, ok := m.idInxMap[id]

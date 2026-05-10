@@ -1,9 +1,11 @@
 package chat
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/message"
@@ -160,6 +162,86 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 		got := item.formatCommandForCopy()
 		assert.Equal(t, "$ ls -la /tmp\ndrwxr-xr-x  4 neil staff  128 Apr 11 tmp\n-rw-r--r--  1 neil staff   64 Apr 11 log", got)
 	})
+}
+
+func TestNarrationMessageItem_RendersNarrationBody(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	item := NewNarrationMessageItem(&sty, "result-narration-render", "# Done\nsecond line")
+
+	rendered := ansi.Strip(item.Render(80))
+
+	assert.Contains(t, rendered, "Done")
+	assert.Contains(t, rendered, "second line")
+	assert.NotContains(t, rendered, "$ narrate", "narration result should render as prose, not as a command")
+}
+
+func TestExtractMessageItems_RendersFailureBeforeNarration(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	exitCode := 1
+	msg := &message.Message{
+		ID:   "result-failure-narration-render",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{
+				Command:  "false; narrate <<'EOF'\n# Failed\nEOF",
+				Output:   "command failed",
+				ExitCode: &exitCode,
+				Pending:  false,
+				Narrations: []message.CommandNarration{
+					{Body: "# Failed\nshown to human"},
+				},
+			},
+		},
+	}
+	items := ExtractMessageItems(&sty, msg, false)
+
+	require.Len(t, items, 2)
+
+	rendered := ansi.Strip(items[0].Render(80) + "\n" + items[1].Render(80))
+	failureIdx := strings.Index(rendered, "command failed")
+	narrationIdx := strings.Index(rendered, "Failed")
+	require.NotEqual(t, -1, failureIdx)
+	require.NotEqual(t, -1, narrationIdx)
+	assert.Less(t, failureIdx, narrationIdx)
+	assert.Contains(t, rendered, "shown to human")
+}
+
+func TestResultMessageItem_RendersNarrationDeliveryFailure(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	exitCode := 0
+	deliveryExitCode := 9
+	msg := &message.Message{
+		ID:   "result-delivery-failure-render",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{
+				Command:  "narrate --to reviewer <<'EOF'\n# Sent\nEOF",
+				ExitCode: &exitCode,
+				Pending:  false,
+				Narrations: []message.CommandNarration{
+					{
+						Body:             "# Sent\nshown locally",
+						To:               "reviewer",
+						DeliveryExitCode: &deliveryExitCode,
+						DeliveryOutput:   "send failed",
+					},
+				},
+			},
+		},
+	}
+	items := ExtractMessageItems(&sty, msg, false)
+
+	require.Len(t, items, 2)
+	deliveryRendered := ansi.Strip(items[0].Render(80))
+	narrationRendered := ansi.Strip(items[1].Render(80))
+
+	assert.Contains(t, deliveryRendered, "delivery failed")
+	assert.Contains(t, deliveryRendered, "reviewer")
+	assert.Contains(t, deliveryRendered, "send failed")
+	assert.Contains(t, narrationRendered, "shown locally")
 }
 
 func intPtr(v int) *int {
