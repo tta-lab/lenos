@@ -208,7 +208,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 			newParts = append(newParts,
 				message.TextContent{Text: emit},
-				message.Finish{Reason: message.FinishReasonToolUse, Title: ":md", Time: time.Now().Unix()},
+				message.Finish{Reason: message.FinishReasonToolUse, Time: time.Now().Unix()},
 			)
 			assistantMsg.Parts = newParts
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
@@ -249,7 +249,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			if cls == classifyMdExit {
 				assistantMsg.Parts = []message.ContentPart{
 					message.TextContent{Text: emit},
-					message.Finish{Reason: message.FinishReasonEndTurn, Title: ":md", Time: time.Now().Unix()},
+					message.Finish{Reason: message.FinishReasonEndTurn, Time: time.Now().Unix()},
 				}
 				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 					slog.Warn("loop: persist :md exit finish", "error", updateErr)
@@ -291,7 +291,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				slog.Warn("loop: persist result row", "error", updateErr)
 			}
 
-			markStepFinishedWithTitle(ctx, deps, &assistantMsg, message.FinishReasonToolUse, "bash")
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 
 			if errors.Is(res.Err, context.DeadlineExceeded) {
 				exitCode := 124
@@ -494,15 +494,10 @@ func persistObservation(ctx context.Context, deps loopDeps, obs string) error {
 // the step boundary. Errors are logged; persistence failures should not abort
 // the loop.
 func markStepFinished(ctx context.Context, deps loopDeps, msg *message.Message, reason message.FinishReason) {
-	markStepFinishedWithTitle(ctx, deps, msg, reason, "")
-}
-
-// markStepFinishedWithTitle sets the finish reason with a Title for emit-type dispatch.
-func markStepFinishedWithTitle(ctx context.Context, deps loopDeps, msg *message.Message, reason message.FinishReason, title string) {
 	if msg.IsFinished() {
 		return
 	}
-	msg.AddFinish(reason, title, "")
+	msg.AddFinish(reason, "", "")
 	if err := deps.messages.Update(ctx, *msg); err != nil {
 		slog.Warn("loop: persist step finish", "error", err)
 	}

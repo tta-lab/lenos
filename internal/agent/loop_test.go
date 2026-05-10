@@ -1614,9 +1614,7 @@ func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
 	first := assistants[0]
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
-	assert.Equal(t, ":md", fp.Title, "FinishPart Title should be ':md'")
 	assert.Equal(t, message.FinishReasonToolUse, fp.Reason)
-	// Content.Text stores the full emit (with :md prefix) so the model sees its own output.
 	assert.Equal(t, emit, first.Content().Text, "Content.Text should store full emit with :md prefix")
 }
 
@@ -1635,7 +1633,6 @@ func TestRunLoop_MdExitEmptyBody(t *testing.T) {
 	first := assistants[0]
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
-	assert.Equal(t, ":md", fp.Title, "FinishPart Title should be ':md'")
 	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
 	assert.Equal(t, "", first.Content().Text, "Content.Text should be empty for no-body :md exit")
 }
@@ -1656,8 +1653,6 @@ func TestRunLoop_MdAgentExitEndsTurn(t *testing.T) {
 	first := assistants[0]
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
-	assert.Equal(t, ":md", fp.Title, "FinishPart Title should be ':md'")
 	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
-	// Body after stripping `:md @agent` is empty — "exit" token is on the first line, not a separate body.
 	assert.Equal(t, "", first.Content().Text, "Content.Text should be empty — 'exit' is a protocol marker, not body")
 }
