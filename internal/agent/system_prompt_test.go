@@ -193,7 +193,7 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 
 func assertValidBashSyntax(t *testing.T, script string) {
 	t.Helper()
-	cmd := exec.Command("bash", "-n")
+	cmd := exec.CommandContext(t.Context(), "bash", "-n")
 	cmd.Stdin = strings.NewReader(script)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
