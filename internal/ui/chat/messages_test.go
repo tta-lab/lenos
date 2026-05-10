@@ -24,3 +24,86 @@ func TestExtractMessageItems_Assistant_EmptyContent(t *testing.T) {
 	_, ok := items[0].(*AssistantMessageItem)
 	assert.True(t, ok, "item must be an AssistantMessageItem")
 }
+
+func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommand(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	exitCode := 0
+	msg := &message.Message{
+		ID:   "result-success",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{
+				Command:  "echo ok",
+				Output:   "ok\n",
+				ExitCode: &exitCode,
+				Pending:  false,
+			},
+		},
+	}
+
+	items := ExtractMessageItems(&sty, msg, false)
+
+	assert.Empty(t, items, "completed successful command result is already represented by the assistant bash emit")
+}
+
+func TestExtractMessageItems_Result_KeepsVisibleResultRows(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	exitCode := 1
+	cases := []struct {
+		name string
+		msg  *message.Message
+	}{
+		{
+			name: "pending command",
+			msg: &message.Message{
+				ID:   "pending",
+				Role: message.Result,
+				Parts: []message.ContentPart{
+					message.CommandContent{Command: "sleep 1", Pending: true},
+				},
+			},
+		},
+		{
+			name: "failed command",
+			msg: &message.Message{
+				ID:   "failed",
+				Role: message.Result,
+				Parts: []message.ContentPart{
+					message.CommandContent{Command: "false", ExitCode: &exitCode, Pending: false},
+				},
+			},
+		},
+		{
+			name: "completed command without exit code",
+			msg: &message.Message{
+				ID:   "unknown-exit",
+				Role: message.Result,
+				Parts: []message.ContentPart{
+					message.CommandContent{Command: "legacy command", Pending: false},
+				},
+			},
+		},
+		{
+			name: "runtime text response",
+			msg: &message.Message{
+				ID:    "runtime",
+				Role:  message.Result,
+				Parts: []message.ContentPart{message.TextContent{Text: "[runtime] retry"}},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			items := ExtractMessageItems(&sty, tc.msg, false)
+
+			require.Len(t, items, 1)
+			_, ok := items[0].(*ResultMessageItem)
+			assert.True(t, ok)
+		})
+	}
+}

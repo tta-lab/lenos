@@ -345,7 +345,7 @@ func TestAppendSessionMessage_Result(t *testing.T) {
 		require.True(t, ok, "item should be a ResultMessageItem")
 	})
 
-	t.Run("Result completed message with exit code is appended", func(t *testing.T) {
+	t.Run("completed successful result message is skipped", func(t *testing.T) {
 		t.Parallel()
 		ui := newTestUIWithChat(t)
 		exitCode := 0
@@ -356,9 +356,7 @@ func TestAppendSessionMessage_Result(t *testing.T) {
 		}
 		ui.appendSessionMessage(msg)
 		item := ui.chat.MessageItem("result-2")
-		require.NotNil(t, item)
-		_, ok := item.(*chat.ResultMessageItem)
-		require.True(t, ok)
+		require.Nil(t, item)
 	})
 
 	t.Run("duplicate Result message is skipped", func(t *testing.T) {
@@ -380,7 +378,7 @@ func TestAppendSessionMessage_Result(t *testing.T) {
 func TestUpdateSessionMessage_Result(t *testing.T) {
 	t.Parallel()
 
-	t.Run("ResultMessageItem is replaced with updated content", func(t *testing.T) {
+	t.Run("completed successful update removes pending result item", func(t *testing.T) {
 		t.Parallel()
 		ui := newTestUIWithChat(t)
 		exitCode := 0
@@ -402,12 +400,8 @@ func TestUpdateSessionMessage_Result(t *testing.T) {
 		}
 		ui.updateSessionMessage(completedMsg)
 
-		// Item should still exist and be a ResultMessageItem with updated content.
 		item := ui.chat.MessageItem("result-update-1")
-		require.NotNil(t, item, "Result message item should still exist after update")
-		resultItem, ok := item.(*chat.ResultMessageItem)
-		require.True(t, ok, "item should still be a ResultMessageItem after update")
-		require.NotNil(t, resultItem, "ResultMessageItem should have updated content")
+		require.Nil(t, item, "successful result item should be removed after completion")
 	})
 }
 

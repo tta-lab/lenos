@@ -301,7 +301,18 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, showThinking 
 	case message.Assistant:
 		return []MessageItem{NewAssistantMessageItem(sty, msg, showThinking)}
 	case message.Result:
+		if shouldSkipResultMessageItem(msg) {
+			return nil
+		}
 		return []MessageItem{NewResultMessageItem(sty, msg)}
 	}
 	return []MessageItem{}
+}
+
+func shouldSkipResultMessageItem(msg *message.Message) bool {
+	cmd := msg.CommandContent()
+	if cmd.Command == "" || cmd.Pending {
+		return false
+	}
+	return cmd.ExitCode != nil && *cmd.ExitCode == 0
 }
