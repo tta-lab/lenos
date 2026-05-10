@@ -7,13 +7,14 @@
 Before executing the model's bash, the runtime prepends a shell function named
 `narrate`. It:
 
-1. Parses optional `--to <agent>`.
+1. Parses optional `--to <agent>` and `--continue`.
 2. Rejects any remaining positional arguments.
 3. Allocates an event directory under `$LENOS_NARRATE_DIR`.
 4. Writes the optional addressee to `to`.
-5. Reads stdin into `body`.
-6. Rejects an empty body and removes the event directory.
-7. Returns 0 if the event was written.
+5. Writes `continue` when `--continue` was provided.
+6. Reads stdin into `body`.
+7. Rejects an empty body and removes the event directory.
+8. Returns 0 if the event was written.
 
 The function does not end the bash subprocess. Later shell commands still run.
 The body must come from stdin, normally a heredoc. `narrate "Done"` fails
@@ -28,6 +29,7 @@ $LENOS_NARRATE_DIR/
   000001.xxxxxx/
     body
     to
+    continue
   000002.xxxxxx/
     body
 ```
@@ -62,3 +64,9 @@ This delivery call goes through the `Runner` abstraction. Unit tests use a
 fake runner, so `ttal send` has no side effects in tests.
 
 Delivery status is stored on `CommandNarration`, not as a separate message.
+
+## Continue Flag
+
+`narrate --continue` still renders the body to the human, but it prevents a
+successful narration from ending the loop. The model receives an observation
+that says continue was requested while still omitting the narration body.

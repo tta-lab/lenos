@@ -143,8 +143,9 @@ The TUI renders conversation messages with distinct visual treatments based on r
 #### Bash Results (Result role messages)
 - Exit 0 with no narration: skipped
 - Non-zero exit: `$ command` + output body + exit code badge (red)
-- Narration bodies render as markdown after the command result
-- Copy-to-clipboard: exit 0 returns `$ command` only; non-zero includes output + exit code
+- Narration bodies render as assistant-style markdown items
+- Result row copy-to-clipboard includes command output and non-zero exit code;
+  narration item copy-to-clipboard copies the narration body
 
 #### Runtime Responses (stored as Result rows)
 - Exit code 1: command-not-found re-prompt

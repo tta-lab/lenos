@@ -290,7 +290,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 					slog.Warn("loop: persist cmd-not-found result row", "error", updateErr)
 				}
 			}
-			if len(narrations) > 0 && res.ExitCode == 0 && !deliveryFailed {
+			if shouldStopAfterNarration(narrations, res.ExitCode, deliveryFailed) {
 				return stopExit, nil
 			}
 			msgs = append(msgs,

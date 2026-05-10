@@ -31,6 +31,7 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.Contains(t, got, "exit")
 	assert.Contains(t, got, "narrate <<'EOF'")
 	assert.Contains(t, got, "narrate --to agent-name")
+	assert.Contains(t, got, "narrate --continue")
 	assert.Contains(t, got, "rewrite it into a `narrate` heredoc")
 	assertHeredocTerminatorsStartAtColumnZero(t, got)
 	assert.Contains(t, got, "Natural-language first line followed by valid bash")

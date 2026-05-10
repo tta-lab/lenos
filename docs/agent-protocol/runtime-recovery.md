@@ -36,3 +36,9 @@ suggesting bash-native `timeout`.
 If `narrate --to <agent>` fails during `ttal send`, the result stores the
 delivery exit code and output in `CommandNarration`. The next model observation
 mentions delivery failure but omits the narration body.
+
+## Narration Continue
+
+If `narrate --continue` is used, successful bash does not stop the loop. The
+next model observation mentions that continue was requested and still omits
+the narration body.

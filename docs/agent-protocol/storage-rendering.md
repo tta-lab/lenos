@@ -40,6 +40,7 @@ Narration is result metadata:
 type CommandNarration struct {
     Body             string
     To               string
+    Continue         bool
     DeliveryExitCode *int
     DeliveryOutput   string
 }
@@ -50,12 +51,13 @@ next model observation. The model already sees its own assistant command,
 including the heredoc body, through the assistant message.
 
 `FormatResults` may include status text such as "narration rendered to user"
-or "narration delivery failed", but it omits the narration body.
+or "narration delivery failed", plus "continue requested" for
+`narrate --continue`, but it omits the narration body.
 
 ## TUI Rendering
 
 - Successful commands with no narration are hidden.
 - Failed commands render as command output plus the failure badge.
-- Commands with narration are rendered even when exit code is 0.
+- Commands with narration render narration bodies as assistant markdown.
 - If both failure and narration exist, the failed result appears first and the
-  narration body appears after it as markdown.
+  narration body appears after it as assistant markdown.

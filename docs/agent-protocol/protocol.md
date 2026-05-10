@@ -28,6 +28,12 @@ EOF
 ```
 
 ```bash
+narrate --continue <<'EOF'
+I found the parser and will patch it next.
+EOF
+```
+
+```bash
 exit
 ```
 
@@ -38,8 +44,10 @@ by the runtime before the model's shell text is executed.
 
 The function reads stdin and writes one IPC event. Positional arguments are not
 message body text; `narrate "Done"` is invalid. Empty stdin is also invalid.
-`--to <agent>` records an addressee for delivery through `ttal send`. Multiple
-`narrate` calls in one bash response are allowed and render in event order.
+`--to <agent>` records an addressee for delivery through `ttal send`.
+`--continue` records that this narration should not end the agent loop.
+Options may be combined. Multiple `narrate` calls in one bash response are
+allowed and render in event order.
 
 The runtime does not inspect narration until the whole bash subprocess exits.
 Commands after `narrate` still run.
@@ -49,7 +57,7 @@ Commands after `narrate` still run.
 After bash exits:
 
 - If exit code is 0 and at least one narration exists, render the narration
-  and stop the loop.
+  and stop the loop unless any narration used `--continue`.
 - If exit code is 0 and there is no narration, send the command result back to
   the model and continue.
 - If exit code is non-zero, persist the failed result. If narration exists,

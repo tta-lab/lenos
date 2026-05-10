@@ -301,21 +301,76 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, showThinking 
 	case message.Assistant:
 		return []MessageItem{NewAssistantMessageItem(sty, msg, showThinking)}
 	case message.Result:
-		if shouldSkipResultMessageItem(msg) {
-			return nil
-		}
-		return []MessageItem{NewResultMessageItem(sty, msg)}
+		return extractResultMessageItems(sty, msg)
 	}
 	return []MessageItem{}
 }
 
-func shouldSkipResultMessageItem(msg *message.Message) bool {
+func extractResultMessageItems(sty *styles.Styles, msg *message.Message) []MessageItem {
 	cmd := msg.CommandContent()
+	renderResult := shouldRenderResultMessageItem(cmd)
+
+	items := make([]MessageItem, 0, 1+len(cmd.Narrations))
+	if renderResult {
+		resultMsg := msg
+		if cmd.Command != "" {
+			resultMsg = resultMessageWithoutNarrationBodies(msg)
+		}
+		items = append(items, NewResultMessageItem(sty, resultMsg))
+	}
+
+	for i, narration := range cmd.Narrations {
+		body := strings.TrimSpace(narration.Body)
+		if body == "" {
+			continue
+		}
+		items = append(items, NewNarrationMessageItem(sty, narrationMessageID(msg.ID, i, renderResult), body))
+	}
+	return items
+}
+
+func shouldRenderResultMessageItem(cmd message.CommandContent) bool {
 	if cmd.Command == "" || cmd.Pending {
-		return false
+		return true
 	}
-	if len(cmd.Narrations) > 0 {
-		return false
+	if cmd.ExitCode == nil || *cmd.ExitCode != 0 {
+		return true
 	}
-	return cmd.ExitCode != nil && *cmd.ExitCode == 0
+	return hasNarrationDeliveryFailure(cmd.Narrations)
+}
+
+func resultMessageWithoutNarrationBodies(msg *message.Message) *message.Message {
+	cmd := msg.CommandContent()
+	cmd.Narrations = narrationDeliveryResults(cmd.Narrations)
+	clone := *msg
+	clone.Parts = []message.ContentPart{cmd}
+	return &clone
+}
+
+func narrationDeliveryResults(narrations []message.CommandNarration) []message.CommandNarration {
+	out := make([]message.CommandNarration, 0, len(narrations))
+	for _, narration := range narrations {
+		if narration.DeliveryExitCode == nil || *narration.DeliveryExitCode == 0 {
+			continue
+		}
+		narration.Body = ""
+		out = append(out, narration)
+	}
+	return out
+}
+
+func hasNarrationDeliveryFailure(narrations []message.CommandNarration) bool {
+	for _, narration := range narrations {
+		if narration.DeliveryExitCode != nil && *narration.DeliveryExitCode != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func narrationMessageID(messageID string, index int, resultRendered bool) string {
+	if index == 0 && !resultRendered {
+		return messageID
+	}
+	return fmt.Sprintf("%s:narration:%d", messageID, index)
 }

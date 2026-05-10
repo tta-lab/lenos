@@ -71,6 +71,7 @@ func (TextContent) isPart() {}
 type CommandNarration struct {
 	Body             string `json:"body,omitempty"`
 	To               string `json:"to,omitempty"`
+	Continue         bool   `json:"continue,omitempty"`
 	DeliveryExitCode *int   `json:"delivery_exit_code,omitempty"`
 	DeliveryOutput   string `json:"delivery_output,omitempty"`
 }
@@ -511,10 +512,23 @@ func formatOneResult(r CommandContent) string {
 		output = "(no output)"
 	}
 	if len(r.Narrations) > 0 {
-		output += "\nnarration rendered to user; body omitted from result replay"
+		line := "narration rendered to user"
+		if narrationsRequestContinue(r.Narrations) {
+			line += "; continue requested"
+		}
+		output += "\n" + line + "; body omitted from result replay"
 	}
 	if r.ExitCode != nil && *r.ExitCode != 0 && *r.ExitCode != -1 {
 		output += fmt.Sprintf("\n(exit code: %d)", *r.ExitCode)
 	}
 	return output
+}
+
+func narrationsRequestContinue(narrations []CommandNarration) bool {
+	for _, narration := range narrations {
+		if narration.Continue {
+			return true
+		}
+	}
+	return false
 }

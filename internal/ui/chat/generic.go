@@ -84,19 +84,6 @@ func (m *ResultMessageItem) renderCommandResult(width int, cmd message.CommandCo
 		parts = append(parts, sb.String())
 	}
 	for _, narration := range cmd.Narrations {
-		body := strings.TrimSpace(narration.Body)
-		if body == "" {
-			if delivery := m.renderNarrationDelivery(width, narration); delivery != "" {
-				parts = append(parts, delivery)
-			}
-			continue
-		}
-		renderer := common.MarkdownRenderer(m.sty, width)
-		rendered, err := renderer.Render(body)
-		if err != nil {
-			rendered = body
-		}
-		parts = append(parts, strings.TrimSuffix(rendered, "\n"))
 		if delivery := m.renderNarrationDelivery(width, narration); delivery != "" {
 			parts = append(parts, delivery)
 		}

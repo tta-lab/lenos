@@ -187,11 +187,19 @@ func cannedDrainer(rounds ...[]string) func() []string {
 
 func writeNarrationEvent(t *testing.T, env map[string]string, body string) {
 	t.Helper()
+	writeNarrationEventWithContinue(t, env, body, false)
+}
+
+func writeNarrationEventWithContinue(t *testing.T, env map[string]string, body string, continueLoop bool) {
+	t.Helper()
 	dir := env[narrateDirEnv]
 	require.NotEmpty(t, dir)
 	eventDir := filepath.Join(dir, "000001.test")
 	require.NoError(t, os.MkdirAll(eventDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(eventDir, "body"), []byte(body), 0o644))
+	if continueLoop {
+		require.NoError(t, os.WriteFile(filepath.Join(eventDir, "continue"), []byte("1"), 0o644))
+	}
 }
 
 // --- Tests ---
@@ -1655,6 +1663,34 @@ func TestRunLoop_NarrateEventPersistsNarrationAndStops(t *testing.T) {
 	assert.Equal(t, emit, cc.Command, "stored command should be the model emit, not the injected wrapper")
 	require.Len(t, cc.Narrations, 1)
 	assert.Equal(t, "Done for the user.", cc.Narrations[0].Body)
+	assert.NotContains(t, cc.Observation, "Done for the user.")
+	assert.NotContains(t, message.FormatResults([]message.CommandContent{cc}), "Done for the user.")
+}
+
+func TestRunLoop_NarrateContinueFlagContinuesWithoutReplayingBody(t *testing.T) {
+	emit := "narrate --continue <<'EOF'\nDone for the user.\nEOF"
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{
+		results: []ExecResult{{ExitCode: 0, Duration: time.Millisecond}},
+		onRun: func(bash string, env map[string]string, _ []client.AllowedPath) {
+			require.Contains(t, bash, "narrate()")
+			writeNarrationEventWithContinue(t, env, "Done for the user.", true)
+		},
+	}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, 2, model.calls, "narrate --continue should continue the loop")
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+	require.Len(t, cc.Narrations, 1)
+	assert.Equal(t, "Done for the user.", cc.Narrations[0].Body)
+	assert.True(t, cc.Narrations[0].Continue)
+	assert.Contains(t, cc.Observation, "continue requested")
 	assert.NotContains(t, cc.Observation, "Done for the user.")
 	assert.NotContains(t, message.FormatResults([]message.CommandContent{cc}), "Done for the user.")
 }

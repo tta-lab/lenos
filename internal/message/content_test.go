@@ -215,6 +215,24 @@ func TestFormatResults_OmitsNarrationBody(t *testing.T) {
 	require.NotContains(t, got, "Secret body for the user.")
 }
 
+func TestFormatResults_PreservesNarrationContinueStatus(t *testing.T) {
+	t.Parallel()
+
+	exitCode := 0
+	got := FormatResults([]CommandContent{{
+		Command:  "narrate --continue <<'EOF'\nSecret body for the user.\nEOF",
+		Output:   "",
+		ExitCode: &exitCode,
+		Pending:  false,
+		Narrations: []CommandNarration{
+			{Body: "Secret body for the user.", Continue: true},
+		},
+	}})
+
+	require.Contains(t, got, "continue requested")
+	require.NotContains(t, got, "Secret body for the user.")
+}
+
 func TestFinishThinking_PreservesResponsesData(t *testing.T) {
 	t.Parallel()
 	msg := &Message{Parts: []ContentPart{ReasoningContent{Thinking: "x", StartedAt: 1}}}

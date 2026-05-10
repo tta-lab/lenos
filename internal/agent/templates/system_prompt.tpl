@@ -22,6 +22,12 @@ narrate --to agent-name <<'EOF'
 message here
 EOF
 
+To show progress but keep the loop running, add `--continue`:
+
+narrate --continue <<'EOF'
+message here
+EOF
+
 If your response looks like natural-language reader text, the runtime may
 rewrite it into a `narrate` heredoc and run that. Do not rely on that safety
 net for work-in-progress notes. Use `# comment` before a command instead.
@@ -58,6 +64,11 @@ EOF
   - A message to another agent:
 narrate --to reviewer <<'EOF'
 Please review the auth change.
+EOF
+
+  - A message that should not end the turn:
+narrate --continue <<'EOF'
+I found the relevant parser and will patch it next.
 EOF
 
   - End the turn without sending a message:
@@ -109,10 +120,11 @@ subprocess exits.
 body on stdin with a heredoc. Empty message bodies are runtime errors.
 
 If the bash subprocess exits 0 and at least one narration was recorded, the
-agent loop ends after rendering the narration. If the subprocess exits
-non-zero, the runtime shows the failed command result and the narration, then
-continues the loop so you can recover. Delivery failures for `narrate --to`
-also continue the loop with an observation that omits the narration body.
+agent loop ends after rendering the narration, unless any narration used
+`--continue`. If the subprocess exits non-zero, the runtime shows the failed
+command result and the narration, then continues the loop so you can recover.
+Delivery failures for `narrate --to` also continue the loop with an
+observation that omits the narration body.
 
 Do not pipe command output through `narrate`; the reader can already see
 stdout/stderr. `narrate` is for text you write.
@@ -133,6 +145,12 @@ When you run `ls -la`, your raw bytes are exactly:
 When you tell the user something and end the turn, your raw bytes are exactly:
 
 narrate <<'EOF'
+message here
+EOF
+
+When you tell the user something and keep working, your raw bytes are exactly:
+
+narrate --continue <<'EOF'
 message here
 EOF
 

@@ -164,34 +164,19 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 	})
 }
 
-func TestResultMessageItem_RendersNarrationBody(t *testing.T) {
+func TestNarrationMessageItem_RendersNarrationBody(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
-	exitCode := 0
-	msg := &message.Message{
-		ID:   "result-narration-render",
-		Role: message.Result,
-		Parts: []message.ContentPart{
-			message.CommandContent{
-				Command:  "narrate <<'EOF'\n# Done\nEOF",
-				ExitCode: &exitCode,
-				Pending:  false,
-				Narrations: []message.CommandNarration{
-					{Body: "# Done\nsecond line"},
-				},
-			},
-		},
-	}
-	item := NewResultMessageItem(&sty, msg)
+	item := NewNarrationMessageItem(&sty, "result-narration-render", "# Done\nsecond line")
 
-	rendered := ansi.Strip(item.RawRender(80))
+	rendered := ansi.Strip(item.Render(80))
 
 	assert.Contains(t, rendered, "Done")
 	assert.Contains(t, rendered, "second line")
 	assert.NotContains(t, rendered, "$ narrate", "narration result should render as prose, not as a command")
 }
 
-func TestResultMessageItem_RendersFailureBeforeNarration(t *testing.T) {
+func TestExtractMessageItems_RendersFailureBeforeNarration(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	exitCode := 1
@@ -210,10 +195,11 @@ func TestResultMessageItem_RendersFailureBeforeNarration(t *testing.T) {
 			},
 		},
 	}
-	item := NewResultMessageItem(&sty, msg)
+	items := ExtractMessageItems(&sty, msg, false)
 
-	rendered := ansi.Strip(item.RawRender(80))
+	require.Len(t, items, 2)
 
+	rendered := ansi.Strip(items[0].Render(80) + "\n" + items[1].Render(80))
 	failureIdx := strings.Index(rendered, "command failed")
 	narrationIdx := strings.Index(rendered, "Failed")
 	require.NotEqual(t, -1, failureIdx)
@@ -246,14 +232,16 @@ func TestResultMessageItem_RendersNarrationDeliveryFailure(t *testing.T) {
 			},
 		},
 	}
-	item := NewResultMessageItem(&sty, msg)
+	items := ExtractMessageItems(&sty, msg, false)
 
-	rendered := ansi.Strip(item.RawRender(80))
+	require.Len(t, items, 2)
+	deliveryRendered := ansi.Strip(items[0].Render(80))
+	narrationRendered := ansi.Strip(items[1].Render(80))
 
-	assert.Contains(t, rendered, "delivery failed")
-	assert.Contains(t, rendered, "reviewer")
-	assert.Contains(t, rendered, "send failed")
-	assert.Contains(t, rendered, "shown locally")
+	assert.Contains(t, deliveryRendered, "delivery failed")
+	assert.Contains(t, deliveryRendered, "reviewer")
+	assert.Contains(t, deliveryRendered, "send failed")
+	assert.Contains(t, narrationRendered, "shown locally")
 }
 
 func intPtr(v int) *int {

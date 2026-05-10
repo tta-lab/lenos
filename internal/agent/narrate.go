@@ -47,14 +47,30 @@ func newNarrateInvocation(emit string, env map[string]string, paths []client.All
 const narrateShellPrelude = `LENOS_NARRATE_SEQ=0
 narrate() {
   local to=""
-  if [ "${1:-}" = "--to" ]; then
-    if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then
-      printf '%s\n' "narrate: --to requires an addressee" >&2
-      return 2
-    fi
-    to="${2:-}"
-    shift 2
-  fi
+  local continue_loop=0
+  while [ "$#" -gt 0 ]; do
+    case "${1:-}" in
+      --to)
+        if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then
+          printf '%s\n' "narrate: --to requires an addressee" >&2
+          return 2
+        fi
+        to="${2:-}"
+        shift 2
+        ;;
+      --continue)
+        continue_loop=1
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
   if [ "$#" -ne 0 ]; then
     printf '%s\n' "narrate: message body must be provided on stdin; use a heredoc" >&2
     return 2
@@ -67,6 +83,9 @@ narrate() {
 
   if [ -n "$to" ]; then
     printf '%s' "$to" > "$event_dir/to" || return 1
+  fi
+  if [ "$continue_loop" = "1" ]; then
+    printf '%s' "1" > "$event_dir/continue" || return 1
   fi
   cat > "$event_dir/body" || return 1
   if [ ! -s "$event_dir/body" ]; then
@@ -106,6 +125,11 @@ func readNarrationEvents(dir string) ([]message.CommandNarration, error) {
 		to, err := os.ReadFile(filepath.Join(eventDir, "to"))
 		if err == nil {
 			narration.To = strings.TrimSpace(string(to))
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+		if _, err := os.Stat(filepath.Join(eventDir, "continue")); err == nil {
+			narration.Continue = true
 		} else if !os.IsNotExist(err) {
 			return nil, err
 		}
@@ -166,23 +190,47 @@ func appendNarrationObservation(body string, narrations []message.CommandNarrati
 	lines := make([]string, 0, len(narrations))
 	for _, narration := range narrations {
 		if narration.To == "" {
-			lines = append(lines, "narration rendered to user; body omitted from result replay")
+			line := "narration rendered to user"
+			if narration.Continue {
+				line += "; continue requested"
+			}
+			lines = append(lines, line+"; body omitted from result replay")
 			continue
 		}
 		to := html.EscapeString(narration.To)
 		if narration.DeliveryExitCode != nil && *narration.DeliveryExitCode != 0 {
-			line := fmt.Sprintf("narration delivery failed for %s (exit code: %d); body omitted from result replay",
+			line := fmt.Sprintf("narration delivery failed for %s (exit code: %d)",
 				to, *narration.DeliveryExitCode)
+			if narration.Continue {
+				line += "; continue requested"
+			}
+			line += "; body omitted from result replay"
 			if narration.DeliveryOutput != "" {
 				line += "\nDELIVERY OUTPUT:\n" + html.EscapeString(narration.DeliveryOutput)
 			}
 			lines = append(lines, line)
 			continue
 		}
-		lines = append(lines, "narration delivered to "+to+"; body omitted from result replay")
+		line := "narration delivered to " + to
+		if narration.Continue {
+			line += "; continue requested"
+		}
+		lines = append(lines, line+"; body omitted from result replay")
 	}
 
 	return body + "\n" + strings.Join(lines, "\n")
+}
+
+func shouldStopAfterNarration(narrations []message.CommandNarration, exitCode int, deliveryFailed bool) bool {
+	if len(narrations) == 0 || exitCode != 0 || deliveryFailed {
+		return false
+	}
+	for _, narration := range narrations {
+		if narration.Continue {
+			return false
+		}
+	}
+	return true
 }
 
 func narrateCommandForBody(body string) string {
