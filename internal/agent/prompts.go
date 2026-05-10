@@ -137,7 +137,11 @@ func InitializePrompt(cfg *config.ConfigStore) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return systemPrompt.Build(context.Background(), "", "", cfg)
+	body, err := systemPrompt.Build(context.Background(), "", "", cfg)
+	if err != nil {
+		return "", err
+	}
+	return bashNarrateSection("LENOS_INITIALIZE_PROMPT", body), nil
 }
 
 // stripYAMLFrontmatter removes a single leading YAML frontmatter block

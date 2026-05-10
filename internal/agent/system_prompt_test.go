@@ -191,6 +191,26 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 	assertValidBashSyntax(t, got)
 }
 
+func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+
+	got, err := InitializePrompt(store)
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "Analyze this codebase")
+	assert.Contains(t, got, "narrate <<'")
+	assert.NotContains(t, got, "```")
+	assertValidBashSyntax(t, got)
+}
+
 func assertValidBashSyntax(t *testing.T, script string) {
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), "bash", "-n")

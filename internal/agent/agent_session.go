@@ -69,7 +69,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	}
 
 	// Build prompt: system(s) + history + final user prompt.
-	prompt := fantasy.Prompt{fantasy.NewSystemMessage(string(summaryPrompt))}
+	prompt := fantasy.Prompt{fantasy.NewSystemMessage(summarySystemPrompt())}
 	if systemPromptPrefix != "" {
 		prompt = append(prompt, fantasy.NewSystemMessage(systemPromptPrefix))
 	}
@@ -365,6 +365,10 @@ func (a *sessionAgent) Model() Model {
 	return a.primaryModel.Get()
 }
 
+func summarySystemPrompt() string {
+	return bashNarrateSection("LENOS_SUMMARY_SYSTEM", string(summaryPrompt))
+}
+
 // formatSummaryPrompt formats the session summarization prompt from a todo list.
 // Kept separate so benchmarks can test formatting without requiring a context.
 func formatSummaryPrompt(todos []session.Todo) string {
@@ -378,7 +382,7 @@ func formatSummaryPrompt(todos []session.Todo) string {
 		sb.WriteString("\nInclude these tasks and their statuses in your summary. ")
 		sb.WriteString("Instruct the resuming assistant to use `task <uuid> done` to mark completed subtasks.")
 	}
-	return sb.String()
+	return bashNarrateSection("LENOS_SUMMARY_REQUEST", sb.String())
 }
 
 // buildSummaryPrompt fetches subtasks from taskwarrior and builds the summarization prompt.

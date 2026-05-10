@@ -35,6 +35,8 @@ func TestBuildSummaryPrompt(t *testing.T) {
 		result := buildSummaryPrompt(context.Background(), "")
 		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
 		require.NotContains(t, result, "Current Todo List")
+		require.Contains(t, result, "narrate <<'")
+		assertValidBashSyntax(t, result)
 	})
 
 	t.Run("cancelled context returns base prompt", func(t *testing.T) {
@@ -44,6 +46,7 @@ func TestBuildSummaryPrompt(t *testing.T) {
 		result := buildSummaryPrompt(ctx, "fake-nonexistent-job-id")
 		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
 		require.NotContains(t, result, "Current Todo List")
+		assertValidBashSyntax(t, result)
 	})
 
 	t.Run("successful poll with real jobID returns prompt", func(t *testing.T) {
@@ -53,7 +56,19 @@ func TestBuildSummaryPrompt(t *testing.T) {
 		// the base prompt will.
 		result := buildSummaryPrompt(context.Background(), "00000000-0000-0000-0000-000000000000")
 		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
+		assertValidBashSyntax(t, result)
 	})
+}
+
+func TestSummarySystemPrompt_IsBashNarrateScript(t *testing.T) {
+	t.Parallel()
+
+	got := summarySystemPrompt()
+
+	require.Contains(t, got, "You are summarizing a conversation")
+	require.Contains(t, got, "narrate <<'")
+	require.NotContains(t, got, "```")
+	assertValidBashSyntax(t, got)
 }
 
 // chdirIntoWorktree creates a tempdir shaped like
