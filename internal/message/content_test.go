@@ -68,6 +68,24 @@ func TestToAIMessage_Result(t *testing.T) {
 	require.Contains(t, text.Text, "total 8")
 }
 
+func TestToAIMessage_ResultTextContent(t *testing.T) {
+	t.Parallel()
+
+	msg := Message{
+		Role: Result,
+		Parts: []ContentPart{
+			TextContent{Text: "[runtime] your last response was empty"},
+		},
+	}
+	result := msg.ToAIMessage()
+	require.Len(t, result, 1)
+	require.Equal(t, fantasy.MessageRoleUser, result[0].Role)
+	require.Len(t, result[0].Content, 1)
+	text, ok := result[0].Content[0].(fantasy.TextPart)
+	require.True(t, ok, "expected TextPart, got %T", result[0].Content[0])
+	require.Equal(t, "[runtime] your last response was empty", text.Text)
+}
+
 func TestToAIMessage_ResultMultiCommand(t *testing.T) {
 	t.Parallel()
 
