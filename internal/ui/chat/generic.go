@@ -117,7 +117,7 @@ func (m *ResultMessageItem) renderNarrationDelivery(width int, narration message
 		target = "recipient"
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("narration delivery failed for %s", target))
+	fmt.Fprintf(&sb, "narration delivery failed for %s", target)
 	if narration.DeliveryOutput != "" {
 		sb.WriteString("\n")
 		sb.WriteString(strings.TrimSpace(narration.DeliveryOutput))
