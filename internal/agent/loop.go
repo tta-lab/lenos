@@ -106,6 +106,13 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		}
 
 		cls, aux := classify(ctx, emit)
+		if cls == classifyExec && aux != "" {
+			emit = aux
+			replaceAssistantText(&assistantMsg, emit)
+			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+				slog.Warn("loop: persist rewritten bash emit", "error", updateErr)
+			}
+		}
 
 		switch cls {
 		case classifyExit:
@@ -317,6 +324,28 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 	}
 
 	return stopStepCap, ErrStepCap
+}
+
+func replaceAssistantText(msg *message.Message, text string) {
+	parts := make([]message.ContentPart, 0, len(msg.Parts)+1)
+	replaced := false
+	for _, part := range msg.Parts {
+		switch part.(type) {
+		case message.TextContent:
+			if !replaced {
+				parts = append(parts, message.TextContent{Text: text})
+				replaced = true
+			}
+		case message.Finish:
+			continue
+		default:
+			parts = append(parts, part)
+		}
+	}
+	if !replaced {
+		parts = append(parts, message.TextContent{Text: text})
+	}
+	msg.Parts = parts
 }
 
 // streamOne pumps a single model stream into assistantMsg, returning the

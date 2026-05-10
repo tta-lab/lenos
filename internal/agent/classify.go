@@ -48,7 +48,8 @@ var blockedCmdPatterns = []*regexp.Regexp{
 }
 
 // classify inspects an agent emit and returns the action class plus an
-// auxiliary string (bash stderr for classifyInvalidBash; "" otherwise).
+// auxiliary string (bash stderr for classifyInvalidBash; rewritten bash for
+// classifyExec when natural-language first-line rewrite applies; "" otherwise).
 //
 // Classification order: empty → exit → banned → tool-call → :md →
 // natural-language → bash-syntax → exec.
@@ -85,6 +86,9 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 			}
 			return classifyMdExit, ""
 		}
+	}
+	if rewritten, ok := rewriteNaturalLanguageFirstLineBash(ctx, emit); ok {
+		return classifyExec, rewritten
 	}
 	if isNaturalLanguageEmit(emit) {
 		return classifyNaturalLanguage, ""
@@ -129,6 +133,36 @@ func isNaturalLanguageEmit(emit string) bool {
 	}
 
 	return true
+}
+
+func rewriteNaturalLanguageFirstLineBash(ctx context.Context, emit string) (string, bool) {
+	trimmed := strings.TrimLeft(emit, " \t\r\n")
+	firstLine, rest, found := strings.Cut(trimmed, "\n")
+	if !found || strings.TrimSpace(rest) == "" {
+		return "", false
+	}
+	if !isNaturalLanguageEmit(firstLine) {
+		return "", false
+	}
+
+	rest = strings.TrimLeft(rest, "\n")
+	restTrimmed := strings.TrimSpace(rest)
+	if restTrimmed == "" || exitRe.MatchString(restTrimmed) {
+		return "", false
+	}
+	if strings.HasPrefix(restTrimmed, MdPrefix) ||
+		strings.HasPrefix(restTrimmed, ":continue") ||
+		strings.HasPrefix(restTrimmed, ":exit") {
+		return "", false
+	}
+	if containsBlockedPattern(rest) || containsToolCallPattern(rest) {
+		return "", false
+	}
+	if err := bashSyntaxCheck(ctx, rest); err != "" {
+		return "", false
+	}
+
+	return "# " + strings.TrimSpace(firstLine) + "\n" + rest, true
 }
 
 // bashSyntaxCheck runs `bash -n` against the emit on stdin. Returns "" on

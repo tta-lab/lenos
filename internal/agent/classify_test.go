@@ -153,6 +153,20 @@ func TestClassify_NaturalLanguage(t *testing.T) {
 	}
 }
 
+func TestClassify_NaturalLanguageFirstLineWithValidBashRestRewritesToExec(t *testing.T) {
+	t.Parallel()
+	if _, err := os.Stat("/bin/bash"); err != nil {
+		t.Skip("/bin/bash not available")
+	}
+	ctx := context.Background()
+	emit := "I'll inspect the repo.\ncat README.md && ls"
+
+	cls, aux := classify(ctx, emit)
+
+	require.Equal(t, classifyExec, cls)
+	assert.Equal(t, "# I'll inspect the repo.\ncat README.md && ls", aux)
+}
+
 func TestClassify_Exec(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/bash"); err != nil {

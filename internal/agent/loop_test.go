@@ -1274,6 +1274,82 @@ func TestRunLoop_NaturalLanguageWithEqualsStaysBash(t *testing.T) {
 	assert.Equal(t, []string{"Output=$(pwd)"}, runner.bash)
 }
 
+func TestRunLoop_NaturalLanguageFirstLineWithValidBashRestExecutesAsCommentedBash(t *testing.T) {
+	t.Parallel()
+	emit := "I'll inspect the repo.\ncat README.md && ls"
+	rewritten := "# I'll inspect the repo.\ncat README.md && ls"
+	model := &scriptedModel{emits: []string{emit, ":md\nDone."}}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("README.md\n"), ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{rewritten}, runner.bash)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 2)
+	assert.Equal(t, message.FinishReasonToolUse, assistants[0].FinishReason())
+	assert.Equal(t, rewritten, assistants[0].Content().Text)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[1].FinishReason())
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	assert.Equal(t, rewritten, results[0].CommandContent().Command)
+}
+
+func TestReplaceAssistantTextPreservesReasoning(t *testing.T) {
+	t.Parallel()
+	msg := message.Message{
+		Parts: []message.ContentPart{
+			message.ReasoningContent{Thinking: "thought"},
+			message.TextContent{Text: "old"},
+		},
+	}
+
+	replaceAssistantText(&msg, "new")
+
+	assert.Equal(t, "thought", msg.ReasoningContent().Thinking)
+	assert.Equal(t, "new", msg.Content().Text)
+	require.Len(t, msg.Parts, 2)
+}
+
+func TestRunLoop_NaturalLanguageFirstLineWithInvalidBashRestStillCoercesToMd(t *testing.T) {
+	t.Parallel()
+	emit := "I'll inspect the repo.\nif true then"
+	model := &scriptedModel{emits: []string{emit}}
+	runner := &fakeRunner{}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Empty(t, runner.bash)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+	assert.Equal(t, ":md\n"+emit, assistants[0].Content().Text)
+}
+
+func TestRunLoop_ExplicitMdMixedWithBashRemainsMd(t *testing.T) {
+	t.Parallel()
+	emit := ":md\nI'll inspect the repo.\ncat README.md && ls"
+	model := &scriptedModel{emits: []string{emit}}
+	runner := &fakeRunner{}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Empty(t, runner.bash)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+	assert.Equal(t, emit, assistants[0].Content().Text)
+}
+
 // TestRunLoop_DrainOnToolCall ensures queued user input still drains after the
 // tool-call re-prompt branch, matching other non-exec re-prompt paths.
 func TestRunLoop_DrainOnToolCall(t *testing.T) {

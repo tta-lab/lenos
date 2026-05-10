@@ -62,6 +62,17 @@ with `:md`. Bare `:md` sends the message to the user. `:md ->agent-name`
 sends it to that agent. Natural-language text without `:md` is treated like
 bare `:md` and ends the loop; it cannot address another agent and cannot
 continue.
+Natural-language first line followed by valid bash is treated as a bash
+comment plus that bash, so this common mistake can still execute:
+
+  I will inspect the project.
+  cat README.md && ls
+
+becomes:
+
+  # I will inspect the project.
+  cat README.md && ls
+
 For any other inline notes, use `# comment`.
 If you want to stop without sending a message, emit `exit`.
 

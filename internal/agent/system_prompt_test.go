@@ -32,6 +32,7 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.Contains(t, got, ":md")
 	assert.Contains(t, got, ":continue")
 	assert.Contains(t, got, "auto-coerces to :md")
+	assert.Contains(t, got, "Natural-language first line followed by valid bash")
 	// :md is the sole agent communication channel — single-line or multi-line.
 	assert.Contains(t, got, ":md ->agent",
 		":md protocol must be advertised with ->agent syntax")
