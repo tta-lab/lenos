@@ -9,6 +9,8 @@ heredoc body.
 
 ## Core Documents
 
+- [Protocol Pipeline](protocol-pipeline.html): a human-readable visual overview
+  of the current protocol, processing pipeline, parser gates, and rewrite rules.
 - [Protocol](protocol.md): the bash-only contract and loop lifecycle.
 - [Classifier](classifier.md): how an emit becomes exit, bash, prose rewrite,
   or a runtime correction.

@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lenos Agent Protocol Pipeline</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10110f;
+      --panel: #171915;
+      --panel-2: #1f231d;
+      --ink: #ece8da;
+      --muted: #aaa58f;
+      --line: #3c402f;
+      --green: #b8d982;
+      --cyan: #87c8c1;
+      --gold: #e3bc67;
+      --red: #dc7b69;
+      --shadow: rgba(0, 0, 0, .28);
+      --mono: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
+      --sans: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      --serif: Georgia, "Times New Roman", serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px) 0 0 / 42px 42px,
+        linear-gradient(0deg, rgba(255,255,255,.018) 1px, transparent 1px) 0 0 / 42px 42px,
+        radial-gradient(circle at 18% 0%, rgba(184,217,130,.14), transparent 28rem),
+        radial-gradient(circle at 90% 12%, rgba(135,200,193,.12), transparent 30rem),
+        var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--cyan);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code,
+    pre {
+      font-family: var(--mono);
+    }
+
+    code {
+      color: #f0d89a;
+      font-size: .94em;
+    }
+
+    pre {
+      margin: 0;
+      overflow: auto;
+      border: 1px solid rgba(227,188,103,.24);
+      border-radius: 8px;
+      background: #0b0c0a;
+      color: #efe7cf;
+      padding: 1rem;
+      font-size: .82rem;
+      line-height: 1.45;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .hero {
+      min-height: 78vh;
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(320px, .88fr);
+      gap: 28px;
+      align-items: stretch;
+      padding: 22px 0 34px;
+    }
+
+    .hero-main,
+    .hero-aside,
+    .panel,
+    .rule,
+    .step,
+    .card {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012)), var(--panel);
+      box-shadow: 0 18px 60px var(--shadow);
+    }
+
+    .hero-main {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(28px, 6vw, 72px);
+      min-height: 520px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: .55rem;
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: .82rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 11px;
+      height: 11px;
+      border: 2px solid var(--green);
+      transform: rotate(45deg);
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 10ch;
+      margin-top: 38px;
+      font-family: var(--serif);
+      font-size: clamp(4.8rem, 10vw, 9.5rem);
+      font-weight: 500;
+    }
+
+    .subtitle {
+      max-width: 58rem;
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 1.7vw, 1.32rem);
+    }
+
+    .hero-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 52px;
+    }
+
+    .metric {
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+      min-width: 0;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: .9rem;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .hero-aside {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 18px;
+      padding: 22px;
+      background: linear-gradient(180deg, rgba(135,200,193,.06), rgba(255,255,255,.012)), var(--panel);
+    }
+
+    .toc {
+      display: grid;
+      gap: 8px;
+    }
+
+    .toc a {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px;
+      padding: 11px 12px;
+      color: var(--ink);
+      background: rgba(0,0,0,.14);
+    }
+
+    .toc span {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: .8rem;
+    }
+
+    .summary-card {
+      align-self: end;
+      border: 1px solid rgba(184,217,130,.28);
+      border-radius: 8px;
+      background: rgba(184,217,130,.08);
+      padding: 18px;
+    }
+
+    .summary-card h2 {
+      font-size: 1.05rem;
+      color: var(--green);
+      font-family: var(--mono);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .summary-card p {
+      margin: 12px 0 0;
+      color: var(--ink);
+    }
+
+    section {
+      margin-top: 24px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid var(--line);
+      padding: 30px 0 16px;
+    }
+
+    .section-head h2 {
+      font-family: var(--serif);
+      font-size: clamp(2rem, 4vw, 4.4rem);
+      font-weight: 500;
+    }
+
+    .section-head p {
+      max-width: 42rem;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .card,
+    .panel {
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .card h3,
+    .panel h3 {
+      color: var(--gold);
+      font-family: var(--mono);
+      font-size: .92rem;
+      text-transform: uppercase;
+    }
+
+    .card p,
+    .panel p {
+      margin: 12px 0 0;
+      color: var(--muted);
+    }
+
+    .pipeline {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+      counter-reset: step;
+    }
+
+    .step {
+      counter-increment: step;
+      display: grid;
+      grid-template-columns: 72px minmax(180px, .42fr) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .step::before {
+      content: counter(step, decimal-leading-zero);
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 1.45rem;
+    }
+
+    .step h3 {
+      color: var(--ink);
+      font-size: 1.02rem;
+    }
+
+    .step p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .step .detail {
+      display: grid;
+      gap: 10px;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .tag {
+      border: 1px solid rgba(135,200,193,.26);
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: var(--cyan);
+      background: rgba(135,200,193,.07);
+      font-family: var(--mono);
+      font-size: .78rem;
+    }
+
+    .rule-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .rule {
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .rule h3 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-family: var(--mono);
+      font-size: .92rem;
+      color: var(--ink);
+    }
+
+    .rule h3 span {
+      color: var(--gold);
+      font-size: .78rem;
+    }
+
+    .rule p,
+    .rule li {
+      color: var(--muted);
+    }
+
+    .rule ul {
+      margin: 12px 0 0;
+      padding-left: 1.15rem;
+    }
+
+    .matrix {
+      width: 100%;
+      margin-top: 18px;
+      border-collapse: collapse;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .matrix th,
+    .matrix td {
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      padding: 13px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .matrix th {
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: .82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      background: rgba(184,217,130,.06);
+    }
+
+    .matrix td {
+      color: var(--muted);
+    }
+
+    .matrix tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .matrix td:first-child {
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: .9rem;
+      white-space: nowrap;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .callout {
+      border-left: 4px solid var(--gold);
+      border-radius: 8px;
+      background: rgba(227,188,103,.08);
+      padding: 18px 20px;
+      color: var(--ink);
+    }
+
+    .callout strong {
+      color: var(--gold);
+    }
+
+    .footer {
+      margin-top: 36px;
+      border-top: 1px solid var(--line);
+      padding-top: 18px;
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    @media (max-width: 900px) {
+      .hero,
+      .grid,
+      .rule-grid,
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: auto;
+      }
+
+      .hero-main {
+        min-height: auto;
+      }
+
+      .hero-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .step {
+        grid-template-columns: 54px 1fr;
+      }
+
+      .step .detail {
+        grid-column: 2;
+      }
+
+      .section-head {
+        display: block;
+      }
+
+      .section-head p {
+        margin-top: 12px;
+      }
+
+      .matrix {
+        display: block;
+        overflow-x: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero" id="top">
+      <div class="hero-main">
+        <div>
+          <div class="eyebrow">Current Runtime Contract</div>
+          <h1>Lenos Protocol</h1>
+          <p class="subtitle">
+            Lenos has one top-level agent output protocol: bash. Human prose,
+            routing, recovery, storage, and TUI rendering all sit behind that
+            single shape instead of adding a second in-band markdown mode.
+          </p>
+        </div>
+        <div class="hero-strip">
+          <div class="metric">
+            <strong>Top-level emit</strong>
+            <span>Raw shell text, or bare <code>exit</code>.</span>
+          </div>
+          <div class="metric">
+            <strong>Human prose</strong>
+            <span><code>narrate</code> heredoc events, not <code>:md</code>.</span>
+          </div>
+          <div class="metric">
+            <strong>State owner</strong>
+            <span>SQLite message rows remain the persistent source of truth.</span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="hero-aside">
+        <nav class="toc" aria-label="Protocol sections">
+          <a href="#contract">Contract <span>01</span></a>
+          <a href="#pipeline">Pipeline <span>02</span></a>
+          <a href="#rules">Parsers and Rules <span>03</span></a>
+          <a href="#rewrites">Rewrite Paths <span>04</span></a>
+          <a href="#narrate">Narrate IPC <span>05</span></a>
+          <a href="#loop">Loop Outcomes <span>06</span></a>
+          <a href="#rendering">Storage and Rendering <span>07</span></a>
+        </nav>
+        <div class="summary-card">
+          <h2>Design Rule</h2>
+          <p>
+            If a behavior cannot be expressed as bash plus runtime-owned result
+            metadata, it does not belong in the agent emit format.
+          </p>
+        </div>
+      </aside>
+    </section>
+
+    <section id="contract">
+      <div class="section-head">
+        <h2>Protocol Contract</h2>
+        <p>
+          The model does not call JSON tools and does not switch into markdown.
+          Every assistant response is shell input. Communication uses shell too:
+          the runtime injects a <code>narrate</code> function before execution.
+        </p>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>Execution</h3>
+          <p>Normal work is plain bash. Comments are allowed because bash ignores them and the transcript keeps them.</p>
+          <pre><code># inspect the protocol package
+rg -n "narrate|classify" internal/agent</code></pre>
+        </article>
+        <article class="card">
+          <h3>Prose</h3>
+          <p>Reader-facing markdown is stdin to <code>narrate</code>. Positional message arguments are rejected.</p>
+          <pre><code>narrate <<'EOF'
+Done. Tests pass.
+EOF</code></pre>
+        </article>
+        <article class="card">
+          <h3>Control</h3>
+          <p>Use <code>--continue</code> for progress notes that should not end the loop. Bare <code>exit</code> ends without bash execution.</p>
+          <pre><code>narrate --continue <<'EOF'
+I found the parser and will patch it next.
+EOF</code></pre>
+        </article>
+      </div>
+    </section>
+
+    <section id="pipeline">
+      <div class="section-head">
+        <h2>Processing Pipeline</h2>
+        <p>
+          The runtime turns one model emission into either a corrective
+          observation, one bash subprocess, or a loop stop.
+        </p>
+      </div>
+      <div class="pipeline">
+        <article class="step">
+          <h3>Stream and Persist</h3>
+          <div class="detail">
+            <p>The assistant row is created before streaming. Text and reasoning deltas are persisted live so the TUI can follow generation.</p>
+            <div class="tags"><span class="tag">message.Assistant</span><span class="tag">TextContent</span></div>
+          </div>
+        </article>
+        <article class="step">
+          <h3>Classify</h3>
+          <div class="detail">
+            <p><code>classify.go</code> applies ordered gates: empty, bare exit, banned edits, tool-call wrappers, salvage, natural language, <code>bash -n</code>, then exec.</p>
+            <div class="tags"><span class="tag">regex gates</span><span class="tag">bash -n</span><span class="tag">sandbox probes</span></div>
+          </div>
+        </article>
+        <article class="step">
+          <h3>Rewrite When Safe</h3>
+          <div class="detail">
+            <p>Two rewrites can mutate the assistant row before execution: prose-first-line salvage to a bash comment, or full natural-language prose to a <code>narrate</code> heredoc.</p>
+            <div class="tags"><span class="tag">stored rewritten emit</span><span class="tag">no :md branch</span></div>
+          </div>
+        </article>
+        <article class="step">
+          <h3>Execute Bash</h3>
+          <div class="detail">
+            <p>The runtime creates a temp IPC directory, prepends the <code>narrate()</code> shell function, adds temp write scope, and runs one fresh bash subprocess.</p>
+            <div class="tags"><span class="tag">LENOS_NARRATE_DIR</span><span class="tag">bash -c</span></div>
+          </div>
+        </article>
+        <article class="step">
+          <h3>Read Narration Events</h3>
+          <div class="detail">
+            <p>After bash exits, parent code sorts event directories and reads raw <code>body</code>, optional <code>to</code>, and optional <code>continue</code>.</p>
+            <div class="tags"><span class="tag">body</span><span class="tag">to</span><span class="tag">continue</span></div>
+          </div>
+        </article>
+        <article class="step">
+          <h3>Deliver Addressed Prose</h3>
+          <div class="detail">
+            <p><code>narrate --to name</code> is delivered by the parent through <code>ttal send --to</code>. Delivery status is stored on the narration metadata.</p>
+            <div class="tags"><span class="tag">DeliveryExitCode</span><span class="tag">DeliveryOutput</span></div>
+          </div>
+        </article>
+        <article class="step">
+          <h3>Persist Result</h3>
+          <div class="detail">
+            <p>The result row stores command output, exit code, model replay observation, and narration metadata. The replay observation omits narration bodies.</p>
+            <div class="tags"><span class="tag">CommandContent</span><span class="tag">CommandNarration</span></div>
+          </div>
+        </article>
+        <article class="step">
+          <h3>Decide Loop Fate</h3>
+          <div class="detail">
+            <p>Successful narration stops the loop only when bash exits 0, delivery did not fail, and no narration requested <code>--continue</code>.</p>
+            <div class="tags"><span class="tag">stopExit</span><span class="tag">runtime observation</span></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="rules">
+      <div class="section-head">
+        <h2>Parsers and Rules</h2>
+        <p>
+          Lenos deliberately avoids a full shell parser. It combines small
+          structural gates, bash's own syntax checker, and a few targeted
+          recovery rules.
+        </p>
+      </div>
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Gate</th>
+            <th>Parser or Rule</th>
+            <th>Runtime Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>empty emit</td>
+            <td><code>strings.TrimSpace</code> is empty.</td>
+            <td>Persist a runtime re-prompt asking for bash, comment, narrate, or exit.</td>
+          </tr>
+          <tr>
+            <td>bare exit</td>
+            <td><code>^\s*exit(\s+-?\d+)?\s*$</code>. Multi-line exit and <code>cmd &amp;&amp; exit</code> do not match.</td>
+            <td>Finish the assistant row and stop the loop without bash execution.</td>
+          </tr>
+          <tr>
+            <td>banned edits</td>
+            <td>Regexes for <code>sed -i</code>, <code>sed --in-place</code>, and <code>perl -i</code> after command separators.</td>
+            <td>Block before <code>bash -n</code> and re-prompt toward safer edit tools.</td>
+          </tr>
+          <tr>
+            <td>tool-call wrappers</td>
+            <td>Regexes for XML and bracket-shaped tool/function call hallucinations.</td>
+            <td>Delete the bad assistant row and send a high-salience protocol correction.</td>
+          </tr>
+          <tr>
+            <td>salvage</td>
+            <td>First line is natural language; remaining lines are valid, strongly bash-shaped, and command/path probes pass.</td>
+            <td>Rewrite first line into <code># comment</code>, then execute the rest as bash.</td>
+          </tr>
+          <tr>
+            <td>natural language</td>
+            <td>First non-whitespace byte is not lowercase ASCII and not <code>#</code>; uppercase first lines containing <code>=</code> are spared; <code>##</code> headings are prose.</td>
+            <td>Rewrite whole emit into a random-delimited <code>narrate</code> heredoc and execute it.</td>
+          </tr>
+          <tr>
+            <td>bash syntax</td>
+            <td><code>/bin/bash -n</code> reads the emit on stdin.</td>
+            <td>Invalid syntax gets a runtime correction. Host-level checker failures are logged and treated as valid.</td>
+          </tr>
+          <tr>
+            <td>command not found</td>
+            <td>After execution, stderr is scanned for the first missing command.</td>
+            <td>Prepend a high-salience alert before the result envelope and continue the loop.</td>
+          </tr>
+          <tr>
+            <td>timeout</td>
+            <td>Runner returns <code>context.DeadlineExceeded</code>.</td>
+            <td>Store exit code 124 and re-prompt with guidance to use bash-native <code>timeout</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="rewrites">
+      <div class="section-head">
+        <h2>Rewrite Paths</h2>
+        <p>
+          Rewrites are intentionally narrow. They repair common model mistakes
+          without creating a second protocol mode.
+        </p>
+      </div>
+      <div class="two-col">
+        <article class="panel">
+          <h3>Salvage: prose header plus bash</h3>
+          <p>The first line becomes a comment only if the rest is valid and has command evidence.</p>
+          <pre><code>I will inspect the repo.
+rg -n "narrate" internal/agent &amp;&amp; go test ./internal/agent
+
+# rewritten to:
+# I will inspect the repo.
+rg -n "narrate" internal/agent &amp;&amp; go test ./internal/agent</code></pre>
+        </article>
+        <article class="panel">
+          <h3>Natural language to narrate</h3>
+          <p>High-confidence prose is treated as reader-facing markdown. CJK and <code>##</code> headings are covered.</p>
+          <pre><code>实现已经完成，测试通过。
+
+# rewritten to:
+narrate <<'LENOS_NARRATE_EOF_8HEX'
+实现已经完成，测试通过。
+LENOS_NARRATE_EOF_8HEX</code></pre>
+        </article>
+      </div>
+      <div class="callout" style="margin-top: 14px;">
+        <strong>Important:</strong> strings like <code>:md</code>, <code>:continue</code>, and
+        <code>:exit</code> no longer have protocol meaning. They are just bytes inside the
+        bash-only classification flow.
+      </div>
+    </section>
+
+    <section id="narrate">
+      <div class="section-head">
+        <h2>Narrate IPC</h2>
+        <p>
+          <code>narrate</code> is a shell function injected by Lenos. It is not a
+          standalone protocol marker and it does not interrupt the surrounding bash.
+        </p>
+      </div>
+      <div class="rule-grid">
+        <article class="rule">
+          <h3>Function Contract <span>stdin only</span></h3>
+          <ul>
+            <li><code>narrate "Done"</code> fails; body must come from stdin.</li>
+            <li>Empty body fails and removes the temporary event directory.</li>
+            <li>Multiple calls are allowed and sorted by event directory prefix.</li>
+          </ul>
+        </article>
+        <article class="rule">
+          <h3>Options <span>composable</span></h3>
+          <ul>
+            <li><code>--to agent</code> writes an addressee for parent-side delivery.</li>
+            <li><code>--continue</code> writes a marker that prevents successful narration from ending the loop.</li>
+            <li>Options can appear in either order before stdin redirection.</li>
+          </ul>
+        </article>
+        <article class="rule">
+          <h3>Event Shape <span>raw files</span></h3>
+          <pre><code>$LENOS_NARRATE_DIR/
+  000001.xxxxxx/
+    body
+    to
+    continue
+  000002.xxxxxx/
+    body</code></pre>
+        </article>
+        <article class="rule">
+          <h3>Delivery <span>parent-owned</span></h3>
+          <p>The child process never calls <code>ttal send</code>. Parent code shells out through the runner and stores delivery output on <code>CommandNarration</code>.</p>
+          <pre><code>cat <<'EOF' | ttal send --to reviewer
+message
+EOF</code></pre>
+        </article>
+      </div>
+    </section>
+
+    <section id="loop">
+      <div class="section-head">
+        <h2>Loop Outcomes</h2>
+        <p>
+          Narration is visible to the human even when bash fails, but failure
+          paths continue the agent loop so the model can recover.
+        </p>
+      </div>
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Condition</th>
+            <th>Human View</th>
+            <th>Next Model Input</th>
+            <th>Loop</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>exit 0, no narration</td>
+            <td>Successful result row is hidden.</td>
+            <td>Result envelope with stdout/stderr summary.</td>
+            <td>Continue.</td>
+          </tr>
+          <tr>
+            <td>exit 0, narration</td>
+            <td>Narration body renders as assistant-style markdown.</td>
+            <td>No narration body replay.</td>
+            <td>Stop unless any narration has <code>--continue</code>.</td>
+          </tr>
+          <tr>
+            <td>exit 0, <code>--continue</code></td>
+            <td>Narration renders normally.</td>
+            <td>Status says <code>continue requested</code>; body omitted.</td>
+            <td>Continue.</td>
+          </tr>
+          <tr>
+            <td>non-zero bash</td>
+            <td>Failed command result first, narration after it.</td>
+            <td>Failure observation plus narration status; body omitted.</td>
+            <td>Continue.</td>
+          </tr>
+          <tr>
+            <td>delivery failure</td>
+            <td>Local narration plus delivery failure row.</td>
+            <td>Delivery failure details; body omitted.</td>
+            <td>Continue.</td>
+          </tr>
+          <tr>
+            <td>bare <code>exit</code></td>
+            <td>No bash result.</td>
+            <td>No result observation.</td>
+            <td>Stop.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="rendering">
+      <div class="section-head">
+        <h2>Storage and Rendering</h2>
+        <p>
+          The model sees what it emitted as assistant text. Runtime result
+          metadata can render to humans without duplicating private body text in
+          result replay.
+        </p>
+      </div>
+      <div class="two-col">
+        <article class="panel">
+          <h3>Persisted Result Shape</h3>
+          <pre><code>type CommandNarration struct {
+    Body string
+    To string
+    Continue bool
+    DeliveryExitCode *int
+    DeliveryOutput string
+}
+
+type CommandContent struct {
+    Command string
+    Output string
+    ExitCode *int
+    Pending bool
+    Observation string
+    Narrations []CommandNarration
+}</code></pre>
+        </article>
+        <article class="panel">
+          <h3>TUI Extraction</h3>
+          <ul>
+            <li>Assistant rows render as bash previews with a <code>$</code> prefix.</li>
+            <li>Exit 0 command results with no narration are skipped.</li>
+            <li>Failed results render command output and an exit badge.</li>
+            <li>Narration bodies render in separate assistant-style markdown items.</li>
+            <li>Delivery failures render as result rows without including the body.</li>
+          </ul>
+        </article>
+      </div>
+      <div class="callout" style="margin-top: 14px;">
+        <strong>Token rule:</strong> assistant history keeps the full emitted bash, including
+        <code>narrate</code> heredoc bodies. <code>FormatResults()</code> omits
+        <code>CommandNarration.Body</code> and only reports status such as
+        <code>narration rendered to user; body omitted from result replay</code>.
+      </div>
+    </section>
+
+    <footer class="footer">
+      Current companion docs:
+      <a href="protocol.md">Protocol</a>,
+      <a href="classifier.md">Classifier</a>,
+      <a href="salvage.md">Salvage</a>,
+      <a href="narrate-ipc.md">Narrate IPC</a>,
+      <a href="storage-rendering.md">Storage and Rendering</a>.
+    </footer>
+  </main>
+</body>
+</html>
