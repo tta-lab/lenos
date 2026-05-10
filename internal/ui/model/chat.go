@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -34,8 +33,7 @@ type DelayedClickMsg struct {
 // Chat represents the chat UI model that handles chat interactions and
 // messages.
 //
-// Per the 680e5b5d audit, items are sourced from the session .md transcript
-// (via transcript.SplitBlocks → chat.MdBlockItem) instead of pubsub message
+// Items are sourced from DB messages via pubsub (no .md transcript)
 // events. The list infrastructure stays unchanged: each block is one
 // navigable / focusable / highlightable / copyable item.
 type Chat struct {
@@ -98,53 +96,21 @@ func (m *Chat) Height() int {
 }
 
 // Draw renders the chat UI component to the screen and the given area.
-// The first row is reserved for the sticky-lambda turn header (rendered
-// when the chat has been scrolled past a turn-start; blank otherwise so
-// the list rendering stays at a stable height).
 func (m *Chat) Draw(scr uv.Screen, area uv.Rectangle) {
 	if area.Dy() <= 0 {
 		return
 	}
-	stickyArea := area
-	stickyArea.Max.Y = stickyArea.Min.Y + 1
-	listArea := area
-	listArea.Min.Y = stickyArea.Max.Y
-
-	uv.NewStyledString(m.renderStickyBand(area.Dx())).Draw(scr, stickyArea)
-	uv.NewStyledString(m.list.Render()).Draw(scr, listArea)
+	uv.NewStyledString(m.list.Render()).Draw(scr, area)
 }
 
-// SetSize sets the size of the chat view port. The first row of area is
-// reserved for the sticky-lambda band so the list itself shrinks by one.
+// SetSize sets the size of the chat view port.
 func (m *Chat) SetSize(width, height int) {
-	listHeight := max(0, height-1)
+	listHeight := max(0, height)
 	m.list.SetSize(width, listHeight)
 	// Anchor to bottom if we were at the bottom.
 	if m.AtBottom() {
 		m.ScrollToBottom()
 	}
-}
-
-// renderStickyBand renders the sticky-lambda turn header for the current
-// scroll position, or "" (blank row) when no turn is scrolled past.
-func (m *Chat) renderStickyBand(width int) string {
-	info, ok := m.StickyTurn()
-	if !ok || width <= 0 {
-		return ""
-	}
-	t := m.com.Styles
-	turnLabel := t.Subtle.Render(fmt.Sprintf("turn %d ↑", info.TurnNumber))
-	left := info.Line
-	leftWidth := ansi.StringWidth(left)
-	rightWidth := ansi.StringWidth(turnLabel)
-	gap := width - leftWidth - rightWidth
-	if gap < 1 {
-		// Truncate the left side so the right label still fits.
-		maxLeft := max(0, width-rightWidth-1)
-		left = ansi.Truncate(left, maxLeft, "…")
-		gap = 1
-	}
-	return left + strings.Repeat(" ", gap) + turnLabel
 }
 
 // Len returns the number of items in the chat list.
@@ -326,71 +292,7 @@ func (m *Chat) SelectedItemInView() bool {
 	return m.list.SelectedItemInView()
 }
 
-// stickyBandRows is the number of rows Draw reserves above the list for
-// the sticky-lambda turn header. Mouse handlers must subtract this from
-// the incoming chat-area y before passing into list coordinates, or
-// every click lands one row low (selecting the item below where the user
-// pointed).
-const stickyBandRows = 1
-
-// chatToListY converts a chat-area y coordinate to the list's coordinate
-// space by subtracting the sticky-band offset. Returns the unchanged
-// value if the input is at or above the sticky row (negative result is
-// passed through to the list, which treats it as "before any item").
-func (m *Chat) chatToListY(y int) int {
-	return y - stickyBandRows
-}
-
-// StickyTurnInfo carries the data needed to render the sticky-lambda band.
-// Empty Line means there is no active sticky (chat scrolled to a turn-start
-// or no turns at all).
-type StickyTurnInfo struct {
-	Line       string // first rendered line of the active user-msg block, including styled λ
-	TurnNumber int    // 1-indexed count of user-msg blocks at or before the active one
-}
-
-// StickyTurn returns the sticky-lambda info for the current scroll
-// position. The active sticky is the latest user-msg block at or before
-// the top-of-viewport item. The user-msg block at the top counts as
-// scrolled-past only when its head is partially off-screen (offsetLine > 0)
-// — fully visible turn-start means no sticky overlay.
-func (m *Chat) StickyTurn() (StickyTurnInfo, bool) {
-	if m.list.Len() == 0 {
-		return StickyTurnInfo{}, false
-	}
-	offsetIdx := m.list.OffsetIdx()
-	offsetLine := m.list.OffsetLine()
-
-	pivot := offsetIdx - 1
-	if anchor, ok := m.list.ItemAt(offsetIdx).(chat.StickyAnchor); ok && anchor.IsStickyAnchor() && offsetLine > 0 {
-		pivot = offsetIdx
-	}
-	if pivot < 0 {
-		return StickyTurnInfo{}, false
-	}
-
-	stickyIdx := -1
-	for i := pivot; i >= 0; i-- {
-		anchor, ok := m.list.ItemAt(i).(chat.StickyAnchor)
-		if ok && anchor.IsStickyAnchor() {
-			stickyIdx = i
-			break
-		}
-	}
-	if stickyIdx < 0 {
-		return StickyTurnInfo{}, false
-	}
-
-	turnNumber := 0
-	for i := 0; i <= stickyIdx; i++ {
-		if anchor, ok := m.list.ItemAt(i).(chat.StickyAnchor); ok && anchor.IsStickyAnchor() {
-			turnNumber++
-		}
-	}
-
-	anchor := m.list.ItemAt(stickyIdx).(chat.StickyAnchor)
-	return StickyTurnInfo{Line: anchor.StickyLine(), TurnNumber: turnNumber}, true
-}
+// (removed - see AGENTS.md)'s coordinate
 
 func (m *Chat) isSelectable(index int) bool {
 	item := m.list.ItemAt(index)
@@ -585,7 +487,7 @@ func (m *Chat) HandleMouseDown(x, y int) (bool, tea.Cmd) {
 		return false, nil
 	}
 
-	itemIdx, itemY := m.list.ItemIndexAtPosition(x, m.chatToListY(y))
+	itemIdx, itemY := m.list.ItemIndexAtPosition(x, y)
 	if itemIdx < 0 {
 		return false, nil
 	}
@@ -701,7 +603,7 @@ func (m *Chat) HandleMouseDrag(x, y int) bool {
 		return false
 	}
 
-	itemIdx, itemY := m.list.ItemIndexAtPosition(x, m.chatToListY(y))
+	itemIdx, itemY := m.list.ItemIndexAtPosition(x, y)
 	if itemIdx < 0 {
 		return false
 	}

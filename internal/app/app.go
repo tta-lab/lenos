@@ -410,7 +410,6 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		app.Sessions,
 		app.Messages,
 		app.agentNotifications,
-		nil,
 		sandboxClient,
 	)
 	if err != nil {

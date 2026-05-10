@@ -225,8 +225,6 @@ type Styles struct {
 		Message struct {
 			UserBlurred      lipgloss.Style
 			UserFocused      lipgloss.Style
-			BlockBlurred     lipgloss.Style // transparent 2-char gutter on non-user blocks at rest (matches BlockFocused width — prevents focus-toggle shift)
-			BlockFocused     lipgloss.Style // slate bar shown on focused non-user blocks (j/k navigation marker)
 			AssistantBlurred lipgloss.Style
 			AssistantFocused lipgloss.Style
 			NoContent        lipgloss.Style
@@ -1203,13 +1201,6 @@ func DefaultStyles() Styles {
 		BorderForeground(primary).BorderStyle(normalBorder)
 	s.Chat.Message.UserFocused = lipgloss.NewStyle().Foreground(secondary).PaddingLeft(1).BorderLeft(true).
 		BorderForeground(primary).BorderStyle(messageFocussedBorder)
-	// Non-user blocks get a subtle slate bar only when focused so j/k navigation
-	// is visible across the whole transcript (user blocks already have a permanent
-	// terracotta bar). At rest a transparent 2-char gutter (BlockBlurred) holds
-	// the same horizontal slot so the content never shifts when focus toggles.
-	s.Chat.Message.BlockBlurred = lipgloss.NewStyle().PaddingLeft(2)
-	s.Chat.Message.BlockFocused = lipgloss.NewStyle().PaddingLeft(1).BorderLeft(true).
-		BorderForeground(fgSubtle).BorderStyle(messageFocussedBorder)
 	// Assistant messages - green accent
 	s.Chat.Message.AssistantBlurred = lipgloss.NewStyle().Foreground(fgBase).PaddingLeft(2)
 	s.Chat.Message.AssistantFocused = lipgloss.NewStyle().Foreground(green).PaddingLeft(1).BorderLeft(true).

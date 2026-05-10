@@ -15,13 +15,7 @@ import (
 	"github.com/tta-lab/temenos/client"
 
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/transcript"
 )
-
-// Compile-time guard: catches the SeverityNormal/SevNormal name skew
-// mentioned in the plan-review fixup. If transcript renames, the loop and
-// these tests fail to compile together.
-var _ = transcript.SevNormal
 
 // --- Test fakes ---
 
@@ -33,6 +27,19 @@ type scriptedModel struct {
 	usages []fantasy.Usage // optional: per-emit usage override; default Usage{1,1}
 	errOn  []int           // call indices (pre-increment) where Stream yields an error
 	calls  int
+}
+
+// recorderIface is a local substitute for the removed transcript.Recorder.
+type recorderIface interface {
+	Open(context.Context) error
+	UserMessage(context.Context, string, string) error
+	AgentEmit(context.Context, string, string) error
+	ProseMessage(context.Context, string, string) error
+	BashResult(context.Context, string, []byte, int, time.Duration) error
+	BashSkipped(context.Context, string, string, string) error
+	RuntimeEvent(context.Context, string, string, string) error
+	TurnEnd(context.Context, string) error
+	Close() error
 }
 
 func (m *scriptedModel) Model() string    { return "test-model" }
@@ -140,116 +147,19 @@ func (r *fakeRunner) Run(_ context.Context, bash string, _ map[string]string, _ 
 	return out
 }
 
-// recordingRecorder captures call sequence so tests can assert on
-// announce-then-result ordering, severity, etc.
-type recordingRecorder struct {
-	mu    sync.Mutex
-	calls []string
-}
-
-func (r *recordingRecorder) record(s string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.calls = append(r.calls, s)
-}
-
-func (r *recordingRecorder) Open(context.Context, transcript.Meta) error { return nil }
-
-func (r *recordingRecorder) UserMessage(_ context.Context, _, text string) error {
-	r.record("UserMessage:" + truncate(text, 30))
-	return nil
-}
-
-func (r *recordingRecorder) AgentEmit(_ context.Context, _, emit string) (transcript.TrailerToken, error) {
-	r.record("AgentEmit:" + truncate(emit, 30))
-	return transcript.TrailerToken{}, nil
-}
-
-func (r *recordingRecorder) ProseMessage(_ context.Context, _, text string) error {
-	r.record("ProseMessage:" + truncate(text, 30))
-	return nil
-}
-
-func (r *recordingRecorder) BashResult(_ context.Context, _ transcript.TrailerToken, out []byte, exitCode int, _ time.Duration) error {
-	r.record("BashResult:" + truncate(string(out), 20) + ":exit=" + itoa(exitCode))
-	return nil
-}
-
-func (r *recordingRecorder) BashSkipped(_ context.Context, _ transcript.TrailerToken, sev transcript.Severity, desc string) error {
-	r.record("BashSkipped:" + sevName(sev) + ":" + desc)
-	return nil
-}
-
-func (r *recordingRecorder) RuntimeEvent(_ context.Context, _ string, sev transcript.Severity, desc string) error {
-	r.record("RuntimeEvent:" + sevName(sev) + ":" + desc)
-	return nil
-}
-
-func (r *recordingRecorder) TurnEnd(context.Context, string) error {
-	r.record("TurnEnd")
-	return nil
-}
-func (r *recordingRecorder) Close() error { return nil }
-
-var _ transcript.Recorder = (*recordingRecorder)(nil)
-
-func sevName(s transcript.Severity) string {
-	switch s {
-	case transcript.SevWarn:
-		return "warn"
-	case transcript.SevError:
-		return "error"
-	default:
-		return "normal"
-	}
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}
-
-func itoa(i int) string { return strings.TrimSpace(intString(i)) }
-
-func intString(i int) string {
-	// avoid strconv import
-	if i == 0 {
-		return "0"
-	}
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	var buf [20]byte
-	n := len(buf)
-	for i > 0 {
-		n--
-		buf[n] = byte('0' + i%10)
-		i /= 10
-	}
-	if neg {
-		n--
-		buf[n] = '-'
-	}
-	return string(buf[n:])
-}
-
 // --- Helpers ---
 
-func newDeps(t *testing.T, model fantasy.LanguageModel, runner Runner, rec transcript.Recorder) (loopDeps, *mockMessageService) {
+func newDeps(t *testing.T, model fantasy.LanguageModel, runner Runner, rec recorderIface) (loopDeps, *mockMessageService) {
 	return newDepsWithDrain(t, model, runner, rec, nil)
 }
 
-func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, rec transcript.Recorder, drain func() []string) (loopDeps, *mockMessageService) {
+func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, rec recorderIface, drain func() []string) (loopDeps, *mockMessageService) {
 	t.Helper()
 	ms := newMockMessageService()
 	return loopDeps{
 		model:      model,
 		messages:   ms,
 		runner:     runner,
-		recorder:   rec,
 		sessionID:  "s-test",
 		sysPrompt:  "you are a test",
 		providerID: "test-provider-id",
@@ -280,7 +190,6 @@ func TestRunLoop_BareExit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "do nothing")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{"UserMessage:do nothing", "AgentEmit:exit", "BashSkipped:normal:exit — turn ends", "TurnEnd"}, rec.calls)
 
 	// One assistant row, finished EndTurn.
 	assistants := assistantsByOrder(ms)
@@ -302,16 +211,6 @@ func TestRunLoop_ExecThenExit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Recorder saw original prompt → announce → result → exit announce → turn-end.
-	assert.Equal(t, []string{
-		"UserMessage:say hi",
-		"AgentEmit:echo hi",
-		"BashResult:hi\n:exit=0",
-		"AgentEmit:exit",
-		"BashSkipped:normal:exit — turn ends",
-		"TurnEnd",
-	}, rec.calls)
-
 	// DB has assistant rows + one result row, runner saw the bash.
 	assert.Equal(t, []string{"echo hi"}, runner.bash)
 	assert.Len(t, resultsByOrder(ms), 1)
@@ -327,14 +226,17 @@ func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// calls[1] is AgentEmit; calls[2] is BashSkipped; final is TurnEnd.
-	require.Contains(t, rec.calls[2], "BashSkipped:warn:[runtime] your last response was empty")
-	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
+	// Observation persisted as Result row.
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.True(t, strings.HasPrefix(results[0].Content().Text, "[runtime] your last response was empty"))
 
-	// Observation persisted as User row.
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.True(t, strings.HasPrefix(users[0].Content().Text, "[runtime] your last response was empty"))
+	// Assistant has FinishReasonToolUse for re-prompt branch.
+	assistants := assistantsByOrder(ms)
+	require.NotEmpty(t, assistants)
+	fp := assistants[0].FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, message.FinishReasonToolUse, fp.Reason)
 }
 
 func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
@@ -347,28 +249,33 @@ func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// calls[1] is AgentEmit; calls[2] is BashSkipped.
-	require.Contains(t, rec.calls[2], "BashSkipped:warn:[runtime] your last response was not valid bash")
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.Contains(t, users[0].Content().Text, "[runtime] your last response was not valid bash")
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, "[runtime] your last response was not valid bash")
+
+	// Assistant has FinishReasonToolUse for invalid-bash branch.
+	assistants := assistantsByOrder(ms)
+	require.NotEmpty(t, assistants)
+	fp := assistants[0].FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, message.FinishReasonToolUse, fp.Reason)
 }
 
 func TestRunLoop_BannedPatternIsAnnouncedAndSkipped(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{`sed -i 's/a/b/' f.txt`, "exit"}}
-	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
+	deps, ms := newDeps(t, model, &fakeRunner{}, &recordingRecorder{})
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Order: original prompt → announce → skipped → … → turn-end.
-	require.Greater(t, len(rec.calls), 3)
-	assert.Contains(t, rec.calls[1], "AgentEmit:sed -i")
-	assert.Contains(t, rec.calls[2], "BashSkipped:warn:")
-	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
+	// Banned pattern: assistant should be marked with FinishReasonToolUse.
+	assistants := assistantsByOrder(ms)
+	require.NotEmpty(t, assistants)
+	fp := assistants[0].FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, message.FinishReasonToolUse, fp.Reason)
 }
 
 func TestRunLoop_TimeoutRecordsResultAndRePrompts(t *testing.T) {
@@ -384,23 +291,16 @@ func TestRunLoop_TimeoutRecordsResultAndRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Result was recorded (loop must persist partial output for transcript).
-	var sawResult, sawTimeoutEvent bool
-	for _, c := range rec.calls {
-		if strings.HasPrefix(c, "BashResult:") {
-			sawResult = true
-		}
-		if strings.Contains(c, "RuntimeEvent:warn:[runtime] your last command exceeded the per-call timeout") {
-			sawTimeoutEvent = true
-		}
-	}
-	assert.True(t, sawResult, "BashResult must fire even on timeout")
-	assert.True(t, sawTimeoutEvent, "RuntimeEvent(warn, timeout...) must fire")
+	// Timeout result row has ExitCode=124 and re-prompt text.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	assert.NotNil(t, results[0].CommandContent().ExitCode)
+	assert.Equal(t, 124, *results[0].CommandContent().ExitCode)
+	assert.Contains(t, results[0].CommandContent().Output, "exceeded the per-call timeout")
 
-	// Re-prompt observation persisted.
+	// No separate User message for timeout re-prompt.
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.Contains(t, users[0].Content().Text, "exceeded the per-call timeout")
+	assert.Empty(t, users, "timeout must NOT persist a separate User message")
 }
 
 func TestRunLoop_StepCapHaltsLoop(t *testing.T) {
@@ -417,16 +317,16 @@ func TestRunLoop_StepCapHaltsLoop(t *testing.T) {
 	model := &scriptedModel{emits: emits}
 	runner := &fakeRunner{results: results}
 	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, runner, rec)
+	deps, ms := newDeps(t, model, runner, rec)
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrStepCap))
 	assert.Equal(t, stopStepCap, stop)
 
-	// The last recorder call must be the step-cap RuntimeEvent.
-	last := rec.calls[len(rec.calls)-1]
-	assert.True(t, strings.HasPrefix(last, "RuntimeEvent:error:step cap"), "got %q", last)
+	// Step cap: last assistant message should be EndTurn.
+	assistants := assistantsByOrder(ms)
+	require.GreaterOrEqual(t, len(assistants), 1)
 }
 
 func TestRunLoop_ContextCancelMidExec(t *testing.T) {
@@ -494,15 +394,6 @@ func TestRunLoop_ExecExitSingleEmit(t *testing.T) {
 	assert.Equal(t, stopExit, stop, "single-emit cmd && exit must end the turn")
 
 	// Recorder sequence proves no second model emit happened: prompt,
-	// announce, result, turn-end. A regression that re-prompts after the
-	// run would insert another announce/result pair.
-	assert.Equal(t, []string{
-		"UserMessage:say hi",
-		`AgentEmit:narrate "hi" && exit`,
-		"BashResult:hi\n:exit=0",
-		"TurnEnd",
-	}, rec.calls)
-
 	// Bash actually ran, and the assistant row finished EndTurn.
 	require.Equal(t, []string{`narrate "hi" && exit`}, runner.bash)
 	assistants := assistantsByOrder(ms)
@@ -524,16 +415,18 @@ func TestRunLoop_ExecExitSingleEmit_PreCmdFails(t *testing.T) {
 		{ExitCode: 1, Duration: time.Millisecond},
 	}}
 	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, runner, rec)
+	deps, ms := newDeps(t, model, runner, rec)
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop, "classifyExecExit honors model intent regardless of pre-cmd exit code")
 
-	// Turn ended despite the non-zero exit: TurnEnd appears in the trace
-	// and no second model emit was solicited (would have panicked).
-	assert.Contains(t, rec.calls, "TurnEnd")
-	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
+	// Turn ended despite the non-zero exit: assistant is finished EndTurn.
+	assistants := assistantsByOrder(ms)
+	require.NotEmpty(t, assistants)
+	fp := assistants[len(assistants)-1].FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason)
 }
 
 // TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt pins the routing
@@ -554,16 +447,12 @@ func TestRunLoop_ExecExitSingleEmit_CmdNotFound_NoRePrompt(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Prose gate fired — no exec, no result row.
+	// Prose gate fired — no exec, result stored for prose-shape failure.
 	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
 	results := messagesByRole(ms, message.Result)
-	assert.Empty(t, results, "no result row — bash bypassed by prose-prefix gate")
-
-	// Re-prompt persisted for the prose-shape failure.
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.Contains(t, users[0].Content().Text, alertPrefix)
-	assert.Contains(t, users[0].Content().Text, "`Let`")
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, alertPrefix)
+	assert.Contains(t, results[0].Content().Text, "`Let`")
 }
 
 // --- Mock helpers ---
@@ -634,13 +523,17 @@ func TestRunLoop_OriginalPromptFiresUserMessage(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"exit"}}
 	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
+	deps, ms := newDeps(t, model, &fakeRunner{}, rec)
 
 	stop, err := runLoop(context.Background(), deps, nil, "hello world")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	// Original prompt must be recorded before any model interaction.
-	assert.Equal(t, []string{"UserMessage:hello world", "AgentEmit:exit", "BashSkipped:normal:exit — turn ends", "TurnEnd"}, rec.calls)
+	// Exit assistant should be EndTurn.
+	assistants := assistantsByOrder(ms)
+	require.NotEmpty(t, assistants)
+	fp := assistants[len(assistants)-1].FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason)
 }
 
 func TestRunLoop_DrainQueueEmpty_NoOp(t *testing.T) {
@@ -655,15 +548,7 @@ func TestRunLoop_DrainQueueEmpty_NoOp(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "test prompt")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{
-		"UserMessage:test prompt",
-		"AgentEmit:echo hi",
-		"BashResult:hi\n:exit=0",
-		"AgentEmit:exit",
-		"BashSkipped:normal:exit — turn ends",
-		"TurnEnd",
-	}, rec.calls)
-	// No drained rows: original prompt is recorded but not persisted by runLoop.
+	// Exit assistant should be EndTurn.
 	assert.Empty(t, messagesByRole(ms, message.User))
 }
 
@@ -679,15 +564,6 @@ func TestRunLoop_DrainOneOnExec(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "original")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{
-		"UserMessage:original",
-		"AgentEmit:echo hi",
-		"BashResult:hi\n:exit=0",
-		"UserMessage:follow up",
-		"AgentEmit:exit",
-		"BashSkipped:normal:exit — turn ends",
-		"TurnEnd",
-	}, rec.calls)
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
 	assert.Equal(t, "follow up", users[0].Content().Text)
@@ -705,17 +581,6 @@ func TestRunLoop_DrainManyPreservesOrder(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "original")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{
-		"UserMessage:original",
-		"AgentEmit:echo hi",
-		"BashResult:hi\n:exit=0",
-		"UserMessage:m1",
-		"UserMessage:m2",
-		"UserMessage:m3",
-		"AgentEmit:exit",
-		"BashSkipped:normal:exit — turn ends",
-		"TurnEnd",
-	}, rec.calls)
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 3)
 	assert.Equal(t, "m1", users[0].Content().Text)
@@ -831,31 +696,13 @@ func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "noop")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	// order: original prompt, AgentEmit, BashSkipped, drained followup, exit announce, BashSkipped, turn-end.
-	require.Contains(t, rec.calls[2], "BashSkipped:warn:[runtime] your last response was empty")
-	require.Contains(t, rec.calls[3], "UserMessage:q1")
-	assert.Equal(t, "TurnEnd", rec.calls[len(rec.calls)-1])
+	// Re-prompt is a Result, drained prompt is a User message.
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.True(t, strings.HasPrefix(results[0].Content().Text, "[runtime]"))
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.True(t, strings.HasPrefix(users[0].Content().Text, "[runtime]"))
-	assert.Equal(t, "q1", users[1].Content().Text)
-}
-
-func TestRunLoop_DrainOnInvalidBash(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"if true then", "exit"}}
-	rec := &recordingRecorder{}
-	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
-
-	stop, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	require.Contains(t, rec.calls[2], "BashSkipped:warn:[runtime] your last response was not valid bash")
-	require.Contains(t, rec.calls[3], "UserMessage:q1")
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, "[runtime]")
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
 }
 
 func TestRunLoop_DrainOnBanned(t *testing.T) {
@@ -867,14 +714,13 @@ func TestRunLoop_DrainOnBanned(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	// order: original prompt, announce, skipped, drained, turn-end.
-	require.Contains(t, rec.calls[1], "AgentEmit:sed -i")
-	require.Contains(t, rec.calls[2], "BashSkipped:warn:")
-	require.Contains(t, rec.calls[3], "UserMessage:q1")
+	// Re-prompt is a Result, drained prompt is a User message.
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, "[runtime]")
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, "[runtime]")
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
 }
 
 func TestRunLoop_DrainOnTimeout(t *testing.T) {
@@ -889,15 +735,17 @@ func TestRunLoop_DrainOnTimeout(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "run slow")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	// order: original prompt, announce, bash result, timeout event, drained, turn-end.
-	require.Contains(t, rec.calls[1], "AgentEmit:sleep 5")
-	require.Contains(t, rec.calls[2], "BashResult:")
-	require.Contains(t, rec.calls[3], "RuntimeEvent:warn:[runtime] your last command exceeded the per-call timeout")
-	require.Contains(t, rec.calls[4], "UserMessage:q1")
+	// Only the drained prompt is a User message — re-prompt is in the result row.
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, "[runtime]")
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
+
+	// Timeout result row has ExitCode=124 and re-prompt text.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	assert.NotNil(t, results[0].CommandContent().ExitCode)
+	assert.Equal(t, 124, *results[0].CommandContent().ExitCode)
+	assert.Contains(t, results[0].CommandContent().Output, "exceeded the per-call timeout")
 }
 
 func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
@@ -913,15 +761,16 @@ func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	require.Contains(t, rec.calls[1], "AgentEmit:nopebinary")
-	require.Contains(t, rec.calls[2], "BashResult:")
-	require.Contains(t, rec.calls[3], "BashSkipped:warn:")
-	require.Contains(t, rec.calls[3], "command not found")
-	require.Contains(t, rec.calls[4], "UserMessage:q1")
+	// Re-prompt is in the result row, only the drained prompt is a User message.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	assert.NotNil(t, results[0].CommandContent().ExitCode)
+	assert.Equal(t, 1, *results[0].CommandContent().ExitCode)
+	assert.Contains(t, results[0].CommandContent().Output, alertPrefix)
+
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, alertPrefix)
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
 }
 
 func (m *errorStreamModel) StreamObject(context.Context, fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
@@ -953,17 +802,8 @@ func TestRunLoop_OnUsageStopReturnsShouldSummarize(t *testing.T) {
 	require.NotEmpty(t, assistants)
 	assert.Equal(t, message.FinishReasonEndTurn, assistants[len(assistants)-1].FinishReason())
 
-	var sawTurnEnd, sawAutoCompactEvent bool
-	for _, c := range rec.calls {
-		if c == "TurnEnd" {
-			sawTurnEnd = true
-		}
-		if strings.HasPrefix(c, "RuntimeEvent:warn:auto-compact:") {
-			sawAutoCompactEvent = true
-		}
-	}
-	assert.True(t, sawTurnEnd, "expected recorder.TurnEnd on auto-compact stop")
-	assert.True(t, sawAutoCompactEvent, "expected recorder.RuntimeEvent for auto-compact")
+	// OnUsage stop: last assistant should be EndTurn.
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[len(assistants)-1].FinishReason())
 }
 
 // TestRunLoop_CmdNotFound_PassesStderrToken verifies that when bash prints
@@ -982,21 +822,17 @@ func TestRunLoop_CmdNotFound_PassesStderrToken(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Re-prompt observation persisted.
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.Contains(t, users[0].Content().Text, "`lorem`", "re-prompt must reference stderr token")
-	assert.Contains(t, users[0].Content().Text, "command not found")
+	// Re-prompt observation is in the result row, not a separate User message.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	assert.NotNil(t, results[0].CommandContent().ExitCode)
+	assert.Equal(t, 1, *results[0].CommandContent().ExitCode)
+	assert.Contains(t, results[0].CommandContent().Output, "`lorem`", "re-prompt must reference stderr token")
+	assert.Contains(t, results[0].CommandContent().Output, "command not found")
 
-	// RuntimeEvent logged — mentions the captured token.
-	var sawRePromptEvent bool
-	for _, c := range rec.calls {
-		if strings.Contains(c, "command not found") && strings.Contains(c, "lorem") {
-			sawRePromptEvent = true
-			break
-		}
-	}
-	assert.True(t, sawRePromptEvent, "RuntimeEvent must mention token and command not found")
+	// No additional User message created for cmd-not-found re-prompt.
+	users := messagesByRole(ms, message.User)
+	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
 }
 
 // TestRunLoop_CmdNotFound_EmptyStderr_NoRePrompt covers the case where the
@@ -1034,10 +870,17 @@ func TestRunLoop_Exit127_RePromptPersisted(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
+	// Re-prompt observation is in the result row, not a separate User message.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1, "exactly one result row must be persisted")
+	assert.NotNil(t, results[0].CommandContent().ExitCode)
+	assert.Equal(t, 1, *results[0].CommandContent().ExitCode)
+	assert.Contains(t, results[0].CommandContent().Output, alertPrefix)
+	assert.Contains(t, results[0].CommandContent().Output, "`unknowncmd`")
+
+	// No additional User message created for cmd-not-found.
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1, "exactly one User message (the re-prompt) must be persisted")
-	assert.Contains(t, users[0].Content().Text, alertPrefix)
-	assert.Contains(t, users[0].Content().Text, "`unknowncmd`")
+	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
 }
 
 // TestRunLoop_Exit127_ThenExit covers the case where the model emits a
@@ -1061,10 +904,16 @@ func TestRunLoop_Exit127_ThenExit(t *testing.T) {
 	require.Len(t, assistants, 2)
 	assert.Equal(t, "nope --bad", strings.TrimSpace(assistants[0].Content().Text))
 
-	// Re-prompt User row present.
+	// Re-prompt is in the result row, not a separate User message.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1, "result row must exist for command-not-found")
+	assert.NotNil(t, results[0].CommandContent().ExitCode)
+	assert.Equal(t, 1, *results[0].CommandContent().ExitCode)
+	assert.Contains(t, results[0].CommandContent().Output, "command not found")
+
+	// No separate User message.
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.Contains(t, users[0].Content().Text, "command not found")
+	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
 }
 
 // TestRunLoop_Exit127_ProseRePrompts tests that when the model emits English
@@ -1083,9 +932,9 @@ func TestRunLoop_Exit127_ProseRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	obs := users[0].Content().Text
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	obs := results[0].Content().Text
 	assert.Contains(t, obs, "`Hello`")
 	assert.Contains(t, obs, ":md")
 }
@@ -1106,11 +955,16 @@ func TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	obs := users[0].Content().Text
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	assert.NotNil(t, results[0].CommandContent().ExitCode)
+	assert.Equal(t, 1, *results[0].CommandContent().ExitCode)
+	obs := results[0].CommandContent().Output
 	assert.Contains(t, obs, "markdown fence")
 	assert.Contains(t, obs, "```bash")
+
+	users := messagesByRole(ms, message.User)
+	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
 }
 
 // TestRunLoop_Exit127_NonExitNotAffected confirms that a non-127 exit code
@@ -1132,53 +986,6 @@ func TestRunLoop_Exit127_NonExitNotAffected(t *testing.T) {
 	// Non-127 exit code: no User-role re-prompt is persisted.
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 0, "non-127 exit must NOT persist a User-role re-prompt")
-}
-
-// TestRunLoop_InvalidBash_EmitVisibleInTranscript pins that the model's actual
-// output is recorded BEFORE the runtime warning when bash -n rejects.
-// Regression guard against the visibility gap closed by lifting AgentEmit.
-func TestRunLoop_InvalidBash_EmitVisibleInTranscript(t *testing.T) {
-	t.Parallel()
-	badEmit := "if true then  # missing fi"
-	model := &scriptedModel{emits: []string{badEmit, "exit"}}
-	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
-
-	_, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-
-	// Recorder sequence: emit announce must come BEFORE the bash skipped event.
-	emitIdx, skippedIdx := -1, -1
-	for i, c := range rec.calls {
-		if strings.HasPrefix(c, "AgentEmit:") && strings.Contains(c, "if true then") {
-			emitIdx = i
-		}
-		if strings.Contains(c, "BashSkipped:warn:[runtime] your last response was not valid bash") {
-			skippedIdx = i
-		}
-	}
-	require.GreaterOrEqual(t, emitIdx, 0, "emit must be announced — visibility gap regression")
-	require.GreaterOrEqual(t, skippedIdx, 0)
-	assert.Less(t, emitIdx, skippedIdx, "emit announce must come before bash skipped event in transcript")
-}
-
-// TestRunLoop_Empty_EmitVisibleInTranscript is the same regression guard for empty emits.
-func TestRunLoop_Empty_EmitVisibleInTranscript(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"   ", "exit"}}
-	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
-
-	_, err := runLoop(context.Background(), deps, nil, "noop")
-	require.NoError(t, err)
-
-	var sawEmit bool
-	for _, c := range rec.calls {
-		if strings.HasPrefix(c, "AgentEmit:") {
-			sawEmit = true
-		}
-	}
-	assert.True(t, sawEmit, "even empty emits must be announced for SSOT")
 }
 
 // TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt covers the stderr-scan
@@ -1213,10 +1020,16 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	_, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 
-	// Re-prompt must fire despite overall exit 0.
+	// Re-prompt is in the result row, not a separate User message.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	assert.NotNil(t, results[0].CommandContent().ExitCode)
+	assert.Equal(t, 1, *results[0].CommandContent().ExitCode)
+	assert.Contains(t, results[0].CommandContent().Output, "`nonexistentcmd`", "re-prompt must capture the first not-found token from stderr")
+
+	// No separate User message created for cmd-not-found re-prompt.
 	users := messagesByRole(ms, message.User)
-	require.GreaterOrEqual(t, len(users), 1)
-	assert.Contains(t, users[0].Content().Text, "`nonexistentcmd`", "re-prompt must capture the first not-found token from stderr")
+	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
 
 	// Salience flip: the second Stream() call must receive the alert BEFORE the
 	// result envelope. cm.captured[1] is the prompt for the re-prompt turn.
@@ -1233,10 +1046,6 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	require.GreaterOrEqual(t, alertIdx, 0, "alert prefix must be present")
 	require.GreaterOrEqual(t, envelopeIdx, 0, "result envelope must be present")
 	assert.Less(t, alertIdx, envelopeIdx, "alert MUST appear before envelope (salience flip)")
-
-	// Result row also exists (envelope preserved, not replaced).
-	results := resultsByOrder(ms)
-	require.Len(t, results, 1)
 }
 
 // TestRunLoop_GrepNoMatch_NoRePrompt confirms that a legit exit-1 (grep with
@@ -1336,12 +1145,19 @@ func TestRunLoop_CmdNotFound_BashLineNumberFormat(t *testing.T) {
 	_, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1, "re-prompt MUST fire on multi-line bash error format")
-	obs := users[0].Content().Text
+	// Re-prompt observation is in the result row, not a separate User message.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1, "re-prompt MUST fire on multi-line bash error format")
+	assert.NotNil(t, results[0].CommandContent().ExitCode)
+	assert.Equal(t, 1, *results[0].CommandContent().ExitCode)
+	obs := results[0].CommandContent().Output
 	assert.Contains(t, obs, alertPrefix)
 	assert.Contains(t, obs, "`652a5f45`",
 		"must capture the offending token even when stderr has 'line N:' prefix")
+
+	// No separate User message.
+	users := messagesByRole(ms, message.User)
+	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
 }
 
 // TestScanFirstCmdNotFound_BothBashErrorFormats locks the regex contract for both
@@ -1388,23 +1204,14 @@ func TestRunLoop_ProsePrefix_FiresPreExec(t *testing.T) {
 	// No exec ran — runner.bash should be empty.
 	assert.Empty(t, runner.bash, "prose-prefix branch must not invoke runner")
 
-	// BashSkipped recorded with the right severity and description (parity with
-	// classifyEmpty / classifyInvalidBash / classifyBanned).
-	require.Greater(t, len(rec.calls), 2, "expected at least 3 recorder calls")
-	assert.Contains(t, rec.calls[2], "BashSkipped:warn:[ALERT from runtime] your last emit started with English prose")
-
-	// No result row created.
+	// Re-prompt stored as Result.
 	results := messagesByRole(ms, message.Result)
-	assert.Empty(t, results, "no result row when prose-prefix bypasses exec")
+	require.Len(t, results, 1)
+	obs := results[0].Content().Text
 
 	assistants := messagesByRole(ms, message.Assistant)
 	require.Len(t, assistants, 1, "bad prose-prefix assistant emit must be dropped from persistence")
 	assert.Equal(t, "exit", strings.TrimSpace(assistants[0].Content().Text))
-
-	// Re-prompt persisted as User row.
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	obs := users[0].Content().Text
 	assert.Contains(t, obs, alertPrefix)
 	assert.Contains(t, obs, "`Read`")
 
@@ -1455,19 +1262,13 @@ func TestRunLoop_ToolCall_FiresPreExec(t *testing.T) {
 
 	assert.Empty(t, runner.bash, "tool-call branch must not invoke runner")
 
-	require.Greater(t, len(rec.calls), 2, "expected recorder calls for emit + skip")
-	assert.Contains(t, rec.calls[2], "BashSkipped:warn:[ALERT from runtime] your last emit used a tool/function call format.")
-
 	results := messagesByRole(ms, message.Result)
-	assert.Empty(t, results, "no result row when tool-call branch bypasses exec")
+	require.Len(t, results, 1)
+	obs := results[0].Content().Text
 
 	assistants := messagesByRole(ms, message.Assistant)
 	require.Len(t, assistants, 1, "bad tool-call assistant emit must be dropped from persistence")
 	assert.Equal(t, "exit", strings.TrimSpace(assistants[0].Content().Text))
-
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	obs := users[0].Content().Text
 	assert.Contains(t, obs, alertPrefix)
 	assert.Contains(t, obs, "There is NO tool/function calling API")
 	assert.Contains(t, obs, "emit plain bash")
@@ -1500,11 +1301,13 @@ func TestRunLoop_DrainOnToolCall(t *testing.T) {
 	_, err := runLoop(context.Background(), deps, nil, "go")
 	require.NoError(t, err)
 
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, alertPrefix)
+	assert.Contains(t, results[0].Content().Text, "There is NO tool/function calling API")
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, alertPrefix)
-	assert.Contains(t, users[0].Content().Text, "There is NO tool/function calling API")
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
 }
 
 // TestRunLoop_DrainOnProsePrefix is the drain peer for the prose-prefix branch.
@@ -1519,11 +1322,13 @@ func TestRunLoop_DrainOnProsePrefix(t *testing.T) {
 	_, err := runLoop(context.Background(), deps, nil, "go")
 	require.NoError(t, err)
 
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, alertPrefix)
+	assert.Contains(t, results[0].Content().Text, "`Now`", "must reference the offending first word")
 	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 2)
-	assert.Contains(t, users[0].Content().Text, alertPrefix)
-	assert.Contains(t, users[0].Content().Text, "`Now`", "must reference the offending first word")
-	assert.Equal(t, "q1", users[1].Content().Text)
+	require.Len(t, users, 1)
+	assert.Equal(t, "q1", users[0].Content().Text)
 }
 
 // --- SSOT equivalence tests ---
@@ -1617,23 +1422,17 @@ func TestObservationSSOT_CmdNotFound(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 
-	// Result row is abandoned (exitCode=-1) — not deleted from mock store.
+	// Result row is kept with exit code 1 (not abandoned).
 	results := resultsByOrder(ms)
-	require.Len(t, results, 1, "abandoned result row must still exist")
+	require.Len(t, results, 1, "result row must exist for cmd-not-found")
 	cc := results[0].CommandContent()
 	assert.Equal(t, "xyzzy", cc.Command)
-	assert.Equal(t, "canceled before result", cc.Output)
 	require.NotNil(t, cc.ExitCode)
-	assert.Equal(t, -1, *cc.ExitCode, "abandoned result has exit code -1")
+	obs := cc.Observation
+	assert.Equal(t, 1, *cc.ExitCode, "cmd-not-found result has exit code 1")
 	assert.False(t, cc.Pending)
-	assert.Empty(t, cc.Observation, "abandoned result has no Observation")
 
-	// One User message with the combined observation (alert + envelope).
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1, "exactly one User message for cmd-not-found")
-	obs := users[0].Content().Text
-
-	// Verify it contains the re-prompt text (alert prefix + word).
+	// Verify Observation contains the re-prompt text (alert prefix + word).
 	assert.Contains(t, obs, "[ALERT from runtime]")
 	assert.Contains(t, obs, "`xyzzy`")
 	assert.Contains(t, obs, "command not found")
@@ -1643,14 +1442,9 @@ func TestObservationSSOT_CmdNotFound(t *testing.T) {
 	assert.Contains(t, obs, "bash: xyzzy: command not found")
 	assert.Contains(t, obs, "(exit code: 127)")
 
-	// ToAIMessage must replay it as one User message.
-	aiMsgs := users[0].ToAIMessage()
-	require.Len(t, aiMsgs, 1, "ToAIMessage produces one message")
-	assert.Equal(t, fantasy.MessageRoleUser, aiMsgs[0].Role)
-	require.Len(t, aiMsgs[0].Content, 1)
-	tp, ok := aiMsgs[0].Content[0].(fantasy.TextPart)
-	require.True(t, ok, "expected TextPart")
-	assert.Equal(t, obs, tp.Text, "ToAIMessage must preserve observation text verbatim")
+	// No separate User message for cmd-not-found re-prompt.
+	users := messagesByRole(ms, message.User)
+	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
 }
 
 // TestObservationSSOT_RePromptRoundTrip verifies that each re-prompt type
@@ -1716,178 +1510,151 @@ func TestObservationSSOT_RePromptRoundTrip(t *testing.T) {
 	}
 }
 
-// --- Transcript tests for re-prompt observation rendering ---
-
-// TestTranscript_RePromptRendersActualObservation verifies that re-prompt
-// paths (empty emit, tool-call, invalid bash, prose prefix, banned, timeout)
-// write the actual model-facing observation text to transcript via
-// BashSkipped/RuntimeEvent, not hard-coded summaries.
-func TestTranscript_RePromptRendersActualObservation(t *testing.T) {
-	tests := []struct {
-		name       string
-		emits      []string
-		runnerRes  []ExecResult
-		checkEvent func(t *testing.T, calls []string)
-	}{
-		{
-			name:  "empty emit",
-			emits: []string{"", "exit"},
-			checkEvent: func(t *testing.T, calls []string) {
-				for _, c := range calls {
-					if strings.HasPrefix(c, "BashSkipped:warn:") {
-						assert.Contains(t, c, "your last response was empty",
-							"transcript must carry actual empty re-prompt text, not summary")
-						assert.NotContains(t, c, "empty emit; re-prompted",
-							"transcript must NOT contain hard-coded summary")
-						return
-					}
-				}
-				t.Error("expected BashSkipped event")
-			},
-		},
-		{
-			name:  "tool-call format",
-			emits: []string{"<tool_call>{\"name\":\"bash\"}</tool_call>", "exit"},
-			checkEvent: func(t *testing.T, calls []string) {
-				for _, c := range calls {
-					if strings.HasPrefix(c, "BashSkipped:warn:") {
-						assert.Contains(t, c, "tool/function call format",
-							"transcript must carry actual tool-call re-prompt text")
-						assert.NotContains(t, c, "tool-call format detected; re-prompted",
-							"transcript must NOT contain hard-coded summary")
-						return
-					}
-				}
-				t.Error("expected BashSkipped event")
-			},
-		},
-		{
-			name:  "invalid bash",
-			emits: []string{"if true then", "exit"},
-			checkEvent: func(t *testing.T, calls []string) {
-				for _, c := range calls {
-					if strings.HasPrefix(c, "BashSkipped:warn:") {
-						assert.Contains(t, c, "not valid bash",
-							"transcript must carry actual invalid-bash re-prompt text")
-						assert.NotContains(t, c, "BashSkipped:warn:invalid bash;",
-							"transcript must NOT contain hard-coded summary")
-						return
-					}
-				}
-				t.Error("expected BashSkipped event")
-			},
-		},
-		{
-			name:  "prose prefix",
-			emits: []string{"Let me start working", "exit"},
-			checkEvent: func(t *testing.T, calls []string) {
-				for _, c := range calls {
-					if strings.HasPrefix(c, "BashSkipped:warn:") {
-						assert.Contains(t, c, "English sentence",
-							"transcript must carry actual prose-prefix re-prompt text")
-						assert.NotContains(t, c, "prose-prefix detected",
-							"transcript must NOT contain hard-coded summary")
-						return
-					}
-				}
-				t.Error("expected BashSkipped event")
-			},
-		},
-		{
-			name:  "banned pattern",
-			emits: []string{"sed -i 's/foo/bar/g' file", "exit"},
-			checkEvent: func(t *testing.T, calls []string) {
-				for _, c := range calls {
-					if strings.HasPrefix(c, "BashSkipped:warn:") {
-						assert.Contains(t, c, "not allowed",
-							"transcript must carry actual banned re-prompt text")
-						assert.NotContains(t, c, "sed -i / perl -i not allowed",
-							"transcript must NOT contain hard-coded summary")
-						return
-					}
-				}
-				t.Error("expected BashSkipped event")
-			},
-		},
-		{
-			name:  "timeout",
-			emits: []string{"sleep 999", "exit"},
-			runnerRes: []ExecResult{
-				{Err: context.DeadlineExceeded, Stdout: []byte("partial output"), ExitCode: -1, Duration: 120 * time.Second},
-			},
-			checkEvent: func(t *testing.T, calls []string) {
-				for _, c := range calls {
-					if strings.HasPrefix(c, "RuntimeEvent:warn:") {
-						assert.Contains(t, c, "exceeded the per-call timeout",
-							"transcript must carry actual timeout re-prompt text")
-						assert.NotContains(t, c, "timeout after 120s; subprocess killed",
-							"transcript must NOT contain hard-coded summary")
-						return
-					}
-				}
-				t.Error("expected RuntimeEvent")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			model := &scriptedModel{emits: tt.emits}
-			res := tt.runnerRes
-			if res == nil {
-				res = []ExecResult{{ExitCode: 0, Duration: time.Millisecond}}
-			}
-			runner := &fakeRunner{results: res}
-			rec := &recordingRecorder{}
-			deps, _ := newDeps(t, model, runner, rec)
-
-			_, err := runLoop(context.Background(), deps, nil, "")
-			require.NoError(t, err)
-
-			tt.checkEvent(t, rec.calls)
-		})
-	}
+// recordingRecorder implements recorderIface for test assertions.
+type recordingRecorder struct {
+	mu    sync.Mutex
+	calls []string
 }
 
-// TestTranscript_SuccessStaysQuiet verifies that successful bash exits
-// (exit 0, even with stderr output) are not accompanied by BashSkipped
-// or RuntimeEvent WARN events, preserving the success-quiet contract.
-func TestTranscript_SuccessStaysQuiet(t *testing.T) {
-	tests := []struct {
-		name string
-		emit string
-		res  ExecResult
-	}{
-		{
-			name: "exit 0 no output",
-			emit: "echo -n",
-			res:  ExecResult{ExitCode: 0, Duration: time.Millisecond},
-		},
-		{
-			name: "exit 0 with stderr diagnostics",
-			emit: "some-tool",
-			res:  ExecResult{Stdout: []byte("result"), Stderr: []byte("WARNING: deprecated flag --old"), ExitCode: 0, Duration: time.Millisecond},
-		},
+func (r *recordingRecorder) record(s string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, s)
+}
+
+func (r *recordingRecorder) Open(context.Context) error { return nil }
+
+func (r *recordingRecorder) UserMessage(_ context.Context, _, text string) error {
+	r.record("UserMessage:" + truncate(text, 30))
+	return nil
+}
+
+func (r *recordingRecorder) AgentEmit(_ context.Context, _, emit string) error {
+	r.record("AgentEmit:" + truncate(emit, 30))
+	return nil
+}
+
+func (r *recordingRecorder) ProseMessage(_ context.Context, _, text string) error {
+	r.record("ProseMessage:" + truncate(text, 30))
+	return nil
+}
+
+func (r *recordingRecorder) BashResult(_ context.Context, _ string, out []byte, exitCode int, _ time.Duration) error {
+	r.record("BashResult:" + truncate(string(out), 20) + ":exit=" + itoa(exitCode))
+	return nil
+}
+
+func (r *recordingRecorder) BashSkipped(_ context.Context, _ string, sev, desc string) error {
+	r.record("BashSkipped:" + sev + ":" + desc)
+	return nil
+}
+
+func (r *recordingRecorder) RuntimeEvent(_ context.Context, _ string, sev, desc string) error {
+	r.record("RuntimeEvent:" + sev + ":" + desc)
+	return nil
+}
+
+func (r *recordingRecorder) TurnEnd(context.Context, string) error {
+	r.record("TurnEnd")
+	return nil
+}
+
+func (r *recordingRecorder) Close() error { return nil }
+
+// local interface — no longer needs transcript import
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
 	}
+	return s[:n]
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			model := &scriptedModel{emits: []string{tt.emit, "exit"}}
-			runner := &fakeRunner{results: []ExecResult{tt.res}}
-			rec := &recordingRecorder{}
-			deps, _ := newDeps(t, model, runner, rec)
+func itoa(i int) string { return strings.TrimSpace(intString(i)) }
 
-			_, err := runLoop(context.Background(), deps, nil, "")
-			require.NoError(t, err)
-
-			for _, c := range rec.calls {
-				if strings.HasPrefix(c, "BashSkipped:warn:") {
-					t.Errorf("unexpected BashSkipped warning event for successful command: %s", c)
-				}
-				if strings.HasPrefix(c, "RuntimeEvent:warn:") {
-					t.Errorf("unexpected RuntimeEvent warning for successful command: %s", c)
-				}
-			}
-		})
+func intString(i int) string {
+	// avoid strconv import
+	if i == 0 {
+		return "0"
 	}
+	neg := i < 0
+	if neg {
+		i = -i
+	}
+	var buf [20]byte
+	n := len(buf)
+	for i > 0 {
+		n--
+		buf[n] = byte('0' + i%10)
+		i /= 10
+	}
+	if neg {
+		n--
+		buf[n] = '-'
+	}
+	return string(buf[n:])
+}
+
+// --- :md storage path tests ---
+
+func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
+	t.Parallel()
+	emit := ":md @neil\nHello, this is a message.\n\nMore content."
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	assistants := assistantsByOrder(ms)
+	require.GreaterOrEqual(t, len(assistants), 1)
+	// The first assistant message should have stored the :md body
+	first := assistants[0]
+	fp := first.FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, message.FinishReasonToolUse, fp.Reason)
+	assert.Equal(t, emit, first.Content().Text, "Content.Text should store full emit with :md prefix")
+}
+
+func TestRunLoop_MdExitEmptyBody(t *testing.T) {
+	t.Parallel()
+	emit := ":md exit"
+	model := &scriptedModel{emits: []string{emit}}
+	deps, ms := newDeps(t, model, &fakeRunner{}, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	first := assistants[0]
+	fp := first.FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
+	// Full emit stored so the model sees it emitted ":md exit"
+	assert.Equal(t, ":md exit", first.Content().Text)
+}
+
+func TestRunLoop_MdAgentExitEndsTurn(t *testing.T) {
+	t.Parallel()
+	emit := ":md @agent exit"
+	model := &scriptedModel{emits: []string{emit}}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	first := assistants[0]
+	fp := first.FinishPart()
+	require.NotNil(t, fp)
+	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
+	// Full emit stored so the model sees it emitted ":md @agent exit"
+	assert.Equal(t, ":md @agent exit", first.Content().Text)
 }

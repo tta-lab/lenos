@@ -18,7 +18,6 @@ import (
 	"github.com/tta-lab/temenos/client"
 
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/transcript"
 )
 
 // StepCap bounds how many model emissions one Run() call can issue. Each
@@ -42,7 +41,6 @@ type loopDeps struct {
 	provOpts   fantasy.ProviderOptions
 	messages   message.Service
 	runner     Runner
-	recorder   transcript.Recorder
 	sessionID  string
 	sysPrompt  string
 	providerID string // config provider ID (for assistant message Provider field)
@@ -77,9 +75,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 	msgs := make([]fantasy.Message, 0, len(history)+2)
 	msgs = append(msgs, fantasy.NewSystemMessage(deps.sysPrompt))
 	msgs = append(msgs, history...)
-	if err := deps.recorder.UserMessage(ctx, deps.sessionID, prompt); err != nil {
-		slog.Warn("loop: record original user prompt", "error", err)
-	}
 	msgs = append(msgs, fantasy.NewUserMessage(prompt))
 
 	for step := 0; step < StepCap; step++ {
@@ -106,28 +101,14 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		if deps.onUsage != nil {
 			if deps.onUsage(step, usage, meta) {
 				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonEndTurn)
-				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
-					"auto-compact: context window threshold reached; summarizing")
-				_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
 				return stopShouldSummarize, nil
 			}
 		}
 
-		// Classify first, then emit to transcript: :md results use ProseMessage
-		// (raw markdown, no fence), all other results use AgentEmit (lenos-bash fence).
 		cls, aux := classify(ctx, emit)
 
-		var tok transcript.TrailerToken
-		if cls == classifyMd || cls == classifyMdExit {
-			// :md protocol messages write raw prose via ProseMessage in the switch
-			// case below — no AgentEmit needed, no bash fence wrapping.
-		} else {
-			tok, _ = deps.recorder.AgentEmit(ctx, deps.sessionID, emit)
-		}
 		switch cls {
 		case classifyExit:
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevNormal, "exit — turn ends")
-			_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 				slog.Warn("loop: persist exit finish", "error", updateErr)
@@ -136,7 +117,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 		case classifyEmpty:
 			obs := rePromptEmpty()
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -158,11 +138,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// no tool_use_id / tool-result pairing invariant to preserve. See
 			// flicknote 4ddde3f1 for the regression analysis behind this asymmetry.
 			obs := rePromptToolCall()
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete tool-call assistant message", "error", err)
-				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
-					"history mutation failed; bad emit remains in DB")
 			}
 			msgs = append(msgs, fantasy.NewUserMessage(obs))
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
@@ -172,7 +149,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 		case classifyInvalidBash:
 			obs := rePromptInvalidBash(aux)
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -187,7 +163,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// Same asymmetry as classifyToolCall above: prose-prefix is a shape
 			// error at the transport boundary ("English sentence in bash slot"),
 			// so preserving it in history hurts more than it helps. The runtime
-			// keeps the raw emit in the transcript for auditability but deletes the
+			// keeps the raw emit for auditability but deletes the
 			// assistant row so the next prompt only contains the corrective user
 			// observation. See flicknote 4ddde3f1.
 			// aux carries the first prose word from classify(); call detectProsePrefix
@@ -196,11 +172,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			proseWord, proseLine := detectProsePrefix(emit)
 			_ = aux // aux == proseWord; acknowledged, full line obtained above
 			obs := rePromptProsePrefix(proseWord, proseLine)
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete prose-prefix assistant message", "error", err)
-				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn,
-					"history mutation failed; bad emit remains in DB")
 			}
 			msgs = append(msgs, fantasy.NewUserMessage(obs))
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
@@ -210,7 +183,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 		case classifyBanned:
 			obs := rePromptBlockedPattern()
-			_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -223,16 +195,24 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 		case classifyMd, classifyMdExit:
 			// :md protocol message — route, persist, acknowledge.
-			// Three-step pattern: (1) write :md text to .md transcript verbatim,
-			// (2) route via ttal send if @agent, (3) write ack into model history.
-			body := transcript.StripMdPrefixLine(emit)
-			addressee := transcript.ParseMdAddressee(emit)
+			// Stores the :md body (after stripping the `:md @agent` first line) in the
+			// assistant message's Content().Text. The assistant message starts with empty
+			// TextContent — replace it with the body text and set Finish.Title == ":md".
+			body := StripMdPrefixLine(emit)
+			addressee := ParseMdAddressee(emit)
 
-			// (1) Persist the full :md text to the .md transcript as raw markdown
-			// so SplitBlocks() classifies it as BlockMdMessage.
-			// Skip if body is empty (e.g. `:md exit` with no message body).
-			if body != "" {
-				_ = deps.recorder.ProseMessage(ctx, deps.sessionID, emit)
+			// (1) Store :md body in assistant message Content, preserving reasoning content.
+			var newParts []message.ContentPart
+			if rc := assistantMsg.ReasoningContent(); rc.Thinking != "" {
+				newParts = append(newParts, rc)
+			}
+			newParts = append(newParts,
+				message.TextContent{Text: emit},
+				message.Finish{Reason: message.FinishReasonToolUse, Time: time.Now().Unix()},
+			)
+			assistantMsg.Parts = newParts
+			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+				slog.Warn("loop: persist :md message", "error", updateErr)
 			}
 
 			// (2) Route: if :md @agent with body, send via ttal send.
@@ -263,13 +243,14 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			if obsErr := persistObservation(ctx, deps, ack); obsErr != nil {
 				slog.Warn("loop: persist :md ack", "error", obsErr)
 			}
-			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = drainAndAppend(ctx, deps, msgs)
 
 			// If :md had exit on first line, end the loop after delivering the message.
 			if cls == classifyMdExit {
-				_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
-				assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
+				assistantMsg.Parts = []message.ContentPart{
+					message.TextContent{Text: emit},
+					message.Finish{Reason: message.FinishReasonEndTurn, Time: time.Now().Unix()},
+				}
 				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 					slog.Warn("loop: persist :md exit finish", "error", updateErr)
 				}
@@ -287,16 +268,12 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 			res := deps.runner.Run(ctx, emit, deps.env, deps.paths)
 
-			// Honor mid-exec cancellation BEFORE writing the recorder /
-			// updating rows: a canceled context means the agent loop is
-			// shutting down and we should not pretend the command finished.
+			// Honor mid-exec cancellation: a canceled context means the agent
+			// loop is shutting down and we should not pretend the command finished.
 			if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-				_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, "canceled")
 				abandonPending(ctx, deps.messages, &resultMsg)
 				return stopCanceled, ctx.Err()
 			}
-
-			_ = deps.recorder.BashResult(ctx, tok, combine(res.Stdout, res.Stderr), res.ExitCode, res.Duration)
 
 			exitCode := res.ExitCode
 			stderr := string(res.Stderr)
@@ -317,15 +294,22 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 
 			if errors.Is(res.Err, context.DeadlineExceeded) {
+				exitCode := 124
 				obs := rePromptTimeout(int(DefaultPerCmdTimeout / time.Second))
-				_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevWarn, obs)
+				resultMsg.Parts = []message.ContentPart{message.CommandContent{
+					Command:     emit,
+					Output:      obs,
+					ExitCode:    &exitCode,
+					Pending:     false,
+					Observation: obs,
+				}}
+				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+					slog.Warn("loop: persist timeout result row", "error", updateErr)
+				}
 				msgs = append(msgs,
 					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 					fantasy.NewUserMessage(obs),
 				)
-				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-					slog.Warn("loop: persist timeout re-prompt", "error", obsErr)
-				}
 				msgs = drainAndAppend(ctx, deps, msgs)
 				continue
 			}
@@ -335,7 +319,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// — no point continuing the loop just to re-prompt the model
 			// for an empty next step.
 			if cls == classifyExecExit {
-				_ = deps.recorder.TurnEnd(ctx, deps.sessionID)
 				assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 				if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 					slog.Warn("loop: failed to persist message after exec-exit", "error", updateErr)
@@ -351,18 +334,19 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				// d2f0a207: model reasoning ignored 20 trailing [runtime] re-prompts because
 				// the envelope showed exit-0 with apparently-successful trailing command output.
 				obs = rePrompt + "\n\n" + envelope
+				exitCode := 1
 
-				// DELETE the result row — cmd-not-found is handled as a single TextContent
-				// User message, not a result row. This avoids the nested-envelope problem.
-				abandonPending(ctx, deps.messages, &resultMsg)
-
-				// Persist the EXACT observation the model received as a TextContent User message.
-				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-					slog.Warn("loop: persist cmd-not-found observation", "error", obsErr)
+				// Keep the result row with non-zero exit code instead of abandoning it.
+				resultMsg.Parts = []message.ContentPart{message.CommandContent{
+					Command:     emit,
+					Output:      obs,
+					ExitCode:    &exitCode,
+					Pending:     false,
+					Observation: obs,
+				}}
+				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+					slog.Warn("loop: persist cmd-not-found result row", "error", updateErr)
 				}
-
-				// Transcript: carry the actual model-facing observation text.
-				_ = deps.recorder.BashSkipped(ctx, tok, transcript.SevWarn, obs)
 			}
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
@@ -372,8 +356,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		}
 	}
 
-	_ = deps.recorder.RuntimeEvent(ctx, deps.sessionID, transcript.SevError,
-		fmt.Sprintf("step cap (%d) reached; loop halted; awaiting owner", StepCap))
 	return stopStepCap, ErrStepCap
 }
 
@@ -502,7 +484,7 @@ func assistantTextMessage(text string, rc message.ReasoningContent) fantasy.Mess
 // text. The next turn's history will replay this as the [runtime] guidance.
 func persistObservation(ctx context.Context, deps loopDeps, obs string) error {
 	_, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-		Role:  message.User,
+		Role:  message.Result,
 		Parts: []message.ContentPart{message.TextContent{Text: obs}},
 	})
 	return err
@@ -589,7 +571,7 @@ func isCanceled(err error) bool {
 }
 
 // drainAndAppend pulls any queued user prompts off the session queue,
-// persists each as a User-role message + transcript line, and appends them
+// persists each as a User-role message and appends them
 // as separate fantasy.NewUserMessage entries to msgs.
 //
 // Called after the bash result / re-prompt observation has already been
@@ -607,9 +589,6 @@ func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) 
 			Parts: []message.ContentPart{message.TextContent{Text: prompt}},
 		}); err != nil {
 			slog.Warn("loop: persist drained user msg", "error", err)
-		}
-		if err := deps.recorder.UserMessage(ctx, deps.sessionID, prompt); err != nil {
-			slog.Warn("loop: record drained user msg", "error", err)
 		}
 		msgs = append(msgs, fantasy.NewUserMessage(prompt))
 	}

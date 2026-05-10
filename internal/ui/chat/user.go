@@ -78,7 +78,11 @@ func (m *UserMessageItem) Render(width int) string {
 	}
 	lines := strings.Split(m.RawRender(width), "\n")
 	for i, line := range lines {
-		lines[i] = prefix + line
+		if i == 0 {
+			lines[i] = prefix + "λ  " + line
+		} else {
+			lines[i] = prefix + line
+		}
 	}
 	return strings.Join(lines, "\n")
 }

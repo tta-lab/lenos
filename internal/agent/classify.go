@@ -6,8 +6,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-
-	"github.com/tta-lab/lenos/internal/transcript"
 )
 
 // classifyResult enumerates how the loop should handle a model emit.
@@ -84,14 +82,14 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 	if containsToolCallPattern(emit) {
 		return classifyToolCall, ""
 	}
-	if strings.HasPrefix(trimmed, transcript.MdPrefix) {
+	if strings.HasPrefix(trimmed, MdPrefix) {
 		// :md at the very start of the emit (bare or followed by @agent).
 		// Must fire before prose-prefix so `:md @agent` is not caught by
 		// the Title-Case detector on the `@agent` portion.
 		// Require space, tab, or newline after :md to avoid matching
 		// commands like `:mdata` or `:md5sum`. The trimmed emit may start
 		// with `:md`, `:md @agent`, or `:md\nbody` — all valid forms.
-		rest := strings.TrimPrefix(trimmed, transcript.MdPrefix)
+		rest := strings.TrimPrefix(trimmed, MdPrefix)
 		if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
 			// Check if the first line contains `exit` as a space-delimited token.
 			// Only scan line 1 — the rest is body content. No substring matching:
@@ -101,7 +99,7 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 				firstLine = trimmed[:idx]
 			}
 			// Re-check :md prefix on firstLine to get the portion after :md.
-			firstRest := strings.TrimPrefix(firstLine, transcript.MdPrefix)
+			firstRest := strings.TrimPrefix(firstLine, MdPrefix)
 			firstRest = strings.TrimSpace(firstRest)
 			hasExit := false
 			if firstRest != "" {

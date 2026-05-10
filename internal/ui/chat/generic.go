@@ -67,35 +67,22 @@ func (m *ResultMessageItem) RawRender(width int) string {
 
 // renderCommandResult renders a command result with header and output.
 func (m *ResultMessageItem) renderCommandResult(width int, cmd message.CommandContent) string {
-	var sb strings.Builder
-
-	// Render command header: $ <command>
-	header := m.sty.Chat.Message.ResultHeader.Render("$ " + cmd.Command)
-	sb.WriteString(header)
-	sb.WriteString("\n")
-
 	if cmd.Pending {
 		pendingStyle := m.sty.Tool.StateWaiting.Width(width)
-		sb.WriteString(pendingStyle.Render("running..."))
-	} else {
-		if cmd.Output != "" {
-			bodyStyle := m.sty.Tool.Body.Width(width)
-			sb.WriteString(bodyStyle.Render(cmd.Output))
-		}
-		// Show exit code badge if available.
-		if cmd.ExitCode != nil {
-			exitCode := *cmd.ExitCode
-			var badgeStyle lipgloss.Style
-			if exitCode == 0 {
-				badgeStyle = m.sty.Tool.IconSuccess
-			} else {
-				badgeStyle = m.sty.Tool.IconError
-			}
-			sb.WriteString(" ")
-			sb.WriteString(badgeStyle.Render(fmt.Sprintf("exit code: %d", exitCode)))
-		}
+		return pendingStyle.Render("running...")
 	}
-
+	if cmd.ExitCode == nil || *cmd.ExitCode == 0 {
+		// Exit 0: assistant already shows the command — nothing extra to render.
+		return ""
+	}
+	// Non-zero exit: output body and compact × N badge.
+	var sb strings.Builder
+	if cmd.Output != "" {
+		bodyStyle := m.sty.Tool.Body.Width(width)
+		sb.WriteString(bodyStyle.Render(cmd.Output))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(m.sty.Tool.IconError.Render(fmt.Sprintf("%d", *cmd.ExitCode)))
 	return sb.String()
 }
 
@@ -122,8 +109,18 @@ func (m *ResultMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 func (m *ResultMessageItem) formatCommandForCopy() string {
 	cmd := m.message.CommandContent()
 
+	// TextContent (runtime responses): return text directly.
+	if cmd.Command == "" {
+		return m.message.Content().Text
+	}
+
 	// Pending commands: just the command line.
 	if cmd.Pending {
+		return "$ " + cmd.Command
+	}
+
+	// Exit 0: just the command line (compact).
+	if cmd.ExitCode != nil && *cmd.ExitCode == 0 {
 		return "$ " + cmd.Command
 	}
 
@@ -138,9 +135,9 @@ func (m *ResultMessageItem) formatCommandForCopy() string {
 
 	// Append exit code for non-zero exits on its own line.
 	if cmd.ExitCode != nil && *cmd.ExitCode != 0 {
-		sb.WriteString("\n(exit code: ")
+		sb.WriteString("\n[")
 		fmt.Fprintf(&sb, "%d", *cmd.ExitCode)
-		sb.WriteString(")")
+		sb.WriteString("]")
 	}
 
 	return sb.String()

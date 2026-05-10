@@ -124,6 +124,7 @@ type Finish struct {
 	Time    int64        `json:"time"`
 	Message string       `json:"message,omitempty"`
 	Details string       `json:"details,omitempty"`
+	Title   string       `json:"title,omitempty"`
 }
 
 func (Finish) isPart() {}

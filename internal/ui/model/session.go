@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
 	"github.com/tta-lab/lenos/internal/ui/common"
@@ -27,7 +28,8 @@ type twPollMsg struct {
 // loadSessionMsg is a message indicating that a session and its files have
 // been loaded.
 type loadSessionMsg struct {
-	session *session.Session
+	session  *session.Session
+	messages []message.Message
 }
 
 // loadSession loads the session. It returns a tea.Cmd that, when executed,
@@ -38,7 +40,11 @@ func (m *UI) loadSession(sessionID string) tea.Cmd {
 		if err != nil {
 			return util.ReportError(err)
 		}
-		return loadSessionMsg{session: &sess}
+		msgs, err := m.com.Workspace.ListMessages(context.Background(), sessionID)
+		if err != nil {
+			slog.Warn("failed to load session messages", "session", sessionID, "err", err)
+		}
+		return loadSessionMsg{session: &sess, messages: msgs}
 	}
 }
 
