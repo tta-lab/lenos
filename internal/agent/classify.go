@@ -44,11 +44,12 @@ var mdTrailingExitRe = regexp.MustCompile(`\n:exit\s*$`)
 // trailingExitRe matches an emit whose final command is `exit` joined by a
 // shell separator: `... && exit`, `... ; exit`, `... || exit`, or a newline
 // (e.g. heredoc body followed by `exit` on the next line). The model uses
-// this idiom to combine an action (typically `:md`) with turn-end
-// in a single response — common enough that ignoring the exit signal would
-// force every turn into a redundant follow-up emit. We strip the trailing
-// exit clause and run the command portion via classifyExec, then the loop
-// returns stopExit instead of continuing.
+// this idiom to combine a bash action with turn-end in a single response —
+// common enough that ignoring the exit signal would force every turn into a
+// redundant follow-up emit. We strip the trailing exit clause and run the
+// command portion via classifyExec, then the loop returns stopExit instead
+// of continuing.
+// NOTE: :md blocks use mdTrailingExitRe (trailing \n:exit), not this regex.
 var trailingExitRe = regexp.MustCompile(`(?:&&|\|\||;|\n)\s*exit(?:\s+-?\d+)?\s*$`)
 
 // toolCallXMLRe matches XML-style tool/function call hallucinations.
@@ -75,8 +76,8 @@ var blockedCmdPatterns = []*regexp.Regexp{
 // `bash -n` on a refused pattern; tool-call and prose-prefix both run before
 // bash-syntax so obviously wrong non-bash shapes get dedicated corrections
 // instead of generic shell errors; :md fires BEFORE prose-prefix so
-// `:md @agent` doesn't match prose-prefix's Title-Case detection (the `:`
-// is not a capital letter, but `@agent` contains `@` which is not alphabetic
+// `:md ->agent` doesn't match prose-prefix's Title-Case detection (the `:`
+// is not a capital letter, but `->agent` contains `-` which is not alphabetic
 // — safe guard regardless). prose-prefix runs before trailing-exit so
 // prose shapes like "Read files && exit" are caught as prose, not executed.
 func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {

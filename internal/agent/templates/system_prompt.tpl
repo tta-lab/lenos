@@ -124,9 +124,12 @@ Chain steps with the operators below.
    to the human. Anything else, even a single word like "done", is treated
    as bash and will likely be a syntax error.
 
-   **You MUST emit `exit` whenever you finish your work or have nothing more
-   to do.** The runtime keeps re-prompting until you exit; if you don't, you
-   will burn turns emitting redundant commands.
+   You may also use `:exit` (text-mode variant) as a bare emit to end the
+   turn without executing a command or delivering an :md message.
+
+   **You MUST emit `exit` or `:exit` whenever you finish your work or have
+   nothing more to do.** The runtime keeps re-prompting until you exit; if
+   you don't, you will burn turns emitting redundant commands.
 
 Do NOT wrap your output in fenced markdown, XML tags, or any other container.
 The whole response IS the bash input.
