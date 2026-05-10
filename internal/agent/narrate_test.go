@@ -26,3 +26,35 @@ func TestNarrateInvocationWritesEventsThroughBashFunction(t *testing.T) {
 	assert.Equal(t, "Second\n", narrations[1].Body)
 	assert.Empty(t, narrations[1].To)
 }
+
+func TestNarrateInvocationRejectsPositionalBodyArgs(t *testing.T) {
+	t.Parallel()
+	inv, err := newNarrateInvocation(`narrate "Done"`, nil, nil)
+	require.NoError(t, err)
+	defer inv.cleanup()
+
+	res := LocalRunner{}.Run(context.Background(), inv.bash, inv.env, inv.paths)
+	require.NoError(t, res.Err)
+	require.NotEqual(t, 0, res.ExitCode)
+	assert.Contains(t, string(res.Stderr), "stdin")
+
+	narrations, err := readNarrationEvents(inv.dir)
+	require.NoError(t, err)
+	assert.Empty(t, narrations)
+}
+
+func TestNarrateInvocationRejectsEmptyBody(t *testing.T) {
+	t.Parallel()
+	inv, err := newNarrateInvocation("narrate <<'EOF'\nEOF", nil, nil)
+	require.NoError(t, err)
+	defer inv.cleanup()
+
+	res := LocalRunner{}.Run(context.Background(), inv.bash, inv.env, inv.paths)
+	require.NoError(t, res.Err)
+	require.NotEqual(t, 0, res.ExitCode)
+	assert.Contains(t, string(res.Stderr), "empty")
+
+	narrations, err := readNarrationEvents(inv.dir)
+	require.NoError(t, err)
+	assert.Empty(t, narrations)
+}

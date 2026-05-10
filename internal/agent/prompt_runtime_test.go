@@ -26,6 +26,7 @@ func TestRePromptInvalidBash(t *testing.T) {
 	assert.Contains(t, got, "syntax error near token `then'")
 	assert.Contains(t, got, "neither bash nor a valid")
 	assert.Contains(t, got, "narrate <<'EOF'")
+	assertHeredocTerminatorsStartAtColumnZero(t, got)
 	assert.Contains(t, got, "exit")
 }
 
@@ -43,6 +44,7 @@ func TestRePromptToolCall_NoLiteralPatterns(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got, alertPrefix+" "))
 	assert.Contains(t, got, "There is NO tool/function calling API")
 	assert.Contains(t, got, "emit plain bash")
+	assertHeredocTerminatorsStartAtColumnZero(t, got)
 	forbidden := []string{"<tool_call>", "</tool_call>", "<function_call>", "[tool_call]", "<invoke"}
 	for _, s := range forbidden {
 		assert.NotContains(t, got, s, "literal wrong-shape pattern leaked into rePromptToolCall body")

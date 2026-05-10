@@ -34,9 +34,9 @@ func rePromptInvalidBash(bashErr string) string {
 THE MOST LIKELY CAUSE: you emitted text that is neither bash nor a valid
 narrate heredoc. To say something explicitly, emit:
 
-  narrate <<'EOF'
-  your message here — apostrophes, "quotes", $vars all pass through.
-  EOF
+narrate <<'EOF'
+your message here — apostrophes, "quotes", $vars all pass through.
+EOF
 
 To end the turn without sending a message, emit literally:  exit
 
@@ -78,14 +78,14 @@ To act, emit plain bash only:
   src edit internal/agent/loop.go
 
 To talk to the human, use:
-  narrate <<'EOF'
-  your message here
-  EOF
+narrate <<'EOF'
+your message here
+EOF
 
 To talk to a specific agent, use:
-  narrate --to agent-name <<'EOF'
-  message for a specific agent
-  EOF
+narrate --to agent-name <<'EOF'
+message for a specific agent
+EOF
 
 To leave a short note before a command, use a bash comment:
   # checking the agent loop

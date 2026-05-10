@@ -1764,6 +1764,24 @@ func TestRunLoop_NarrateWithFailedBashContinuesWithoutReplayingBody(t *testing.T
 	assert.NotContains(t, cc.Observation, "Partial update.")
 }
 
+func TestRunLoop_NarrateWithoutStdinFailsAndContinues(t *testing.T) {
+	model := &scriptedModel{emits: []string{`narrate "Done"`, "exit"}}
+	deps, ms := newDeps(t, model, LocalRunner{}, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, 2, model.calls, "invalid narrate call should not end the loop")
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+	require.NotNil(t, cc.ExitCode)
+	assert.NotEqual(t, 0, *cc.ExitCode)
+	assert.Empty(t, cc.Narrations)
+	assert.Contains(t, cc.Observation, "stdin")
+}
+
 // TestObservationSSOT_FailureWithStderr proves a failing command's
 // Observation includes stderr text and exit code appendix, and replay
 // matches live.

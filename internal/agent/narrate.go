@@ -48,8 +48,16 @@ const narrateShellPrelude = `LENOS_NARRATE_SEQ=0
 narrate() {
   local to=""
   if [ "${1:-}" = "--to" ]; then
+    if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then
+      printf '%s\n' "narrate: --to requires an addressee" >&2
+      return 2
+    fi
     to="${2:-}"
     shift 2
+  fi
+  if [ "$#" -ne 0 ]; then
+    printf '%s\n' "narrate: message body must be provided on stdin; use a heredoc" >&2
+    return 2
   fi
 
   LENOS_NARRATE_SEQ=$((LENOS_NARRATE_SEQ + 1))
@@ -60,7 +68,12 @@ narrate() {
   if [ -n "$to" ]; then
     printf '%s' "$to" > "$event_dir/to" || return 1
   fi
-  cat > "$event_dir/body"
+  cat > "$event_dir/body" || return 1
+  if [ ! -s "$event_dir/body" ]; then
+    rm -rf "$event_dir"
+    printf '%s\n' "narrate: empty message body" >&2
+    return 2
+  fi
 }`
 
 func readNarrationEvents(dir string) ([]message.CommandNarration, error) {

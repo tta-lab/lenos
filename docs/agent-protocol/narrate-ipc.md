@@ -8,12 +8,16 @@ Before executing the model's bash, the runtime prepends a shell function named
 `narrate`. It:
 
 1. Parses optional `--to <agent>`.
-2. Allocates an event directory under `$LENOS_NARRATE_DIR`.
-3. Writes the optional addressee to `to`.
-4. Reads stdin into `body`.
-5. Returns 0 if the event was written.
+2. Rejects any remaining positional arguments.
+3. Allocates an event directory under `$LENOS_NARRATE_DIR`.
+4. Writes the optional addressee to `to`.
+5. Reads stdin into `body`.
+6. Rejects an empty body and removes the event directory.
+7. Returns 0 if the event was written.
 
 The function does not end the bash subprocess. Later shell commands still run.
+The body must come from stdin, normally a heredoc. `narrate "Done"` fails
+because the quoted string is an argument, not stdin.
 
 ## Event Format
 

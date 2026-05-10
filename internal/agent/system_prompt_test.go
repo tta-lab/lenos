@@ -32,6 +32,7 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.Contains(t, got, "narrate <<'EOF'")
 	assert.Contains(t, got, "narrate --to agent-name")
 	assert.Contains(t, got, "rewrite it into a `narrate` heredoc")
+	assertHeredocTerminatorsStartAtColumnZero(t, got)
 	assert.Contains(t, got, "Natural-language first line followed by valid bash")
 	assert.NotContains(t, got, ":md")
 	assert.NotContains(t, got, ":continue")
@@ -53,6 +54,19 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 		"base prompt must not reference legacy log warn CLI")
 	assert.False(t, strings.Contains(got, "log error"),
 		"base prompt must not reference legacy log error CLI")
+}
+
+func assertHeredocTerminatorsStartAtColumnZero(t *testing.T, text string) {
+	t.Helper()
+	count := 0
+	for _, line := range strings.Split(text, "\n") {
+		if strings.TrimSpace(line) != "EOF" {
+			continue
+		}
+		count++
+		assert.Equal(t, "EOF", line, "heredoc terminator must start at column zero")
+	}
+	require.NotZero(t, count, "prompt should include heredoc examples")
 }
 
 func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {

@@ -222,6 +222,40 @@ func TestResultMessageItem_RendersFailureBeforeNarration(t *testing.T) {
 	assert.Contains(t, rendered, "shown to human")
 }
 
+func TestResultMessageItem_RendersNarrationDeliveryFailure(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	exitCode := 0
+	deliveryExitCode := 9
+	msg := &message.Message{
+		ID:   "result-delivery-failure-render",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{
+				Command:  "narrate --to reviewer <<'EOF'\n# Sent\nEOF",
+				ExitCode: &exitCode,
+				Pending:  false,
+				Narrations: []message.CommandNarration{
+					{
+						Body:             "# Sent\nshown locally",
+						To:               "reviewer",
+						DeliveryExitCode: &deliveryExitCode,
+						DeliveryOutput:   "send failed",
+					},
+				},
+			},
+		},
+	}
+	item := NewResultMessageItem(&sty, msg)
+
+	rendered := ansi.Strip(item.RawRender(80))
+
+	assert.Contains(t, rendered, "delivery failed")
+	assert.Contains(t, rendered, "reviewer")
+	assert.Contains(t, rendered, "send failed")
+	assert.Contains(t, rendered, "shown locally")
+}
+
 func intPtr(v int) *int {
 	return &v
 }

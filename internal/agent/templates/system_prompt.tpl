@@ -12,15 +12,15 @@ protocol and no tool-call API.
 If you need to tell the human or another agent something, use the injected
 `narrate` bash function:
 
-  narrate <<'EOF'
-  message here
-  EOF
+narrate <<'EOF'
+message here
+EOF
 
 To address another agent:
 
-  narrate --to agent-name <<'EOF'
-  message here
-  EOF
+narrate --to agent-name <<'EOF'
+message here
+EOF
 
 If your response looks like natural-language reader text, the runtime may
 rewrite it into a `narrate` heredoc and run that. Do not rely on that safety
@@ -51,14 +51,14 @@ There is no normal chat channel. The shapes that work are:
       cat README.md
 
   - A message to the human:
-      narrate <<'EOF'
-      Done. Tests pass.
-      EOF
+narrate <<'EOF'
+Done. Tests pass.
+EOF
 
   - A message to another agent:
-      narrate --to reviewer <<'EOF'
-      Please review the auth change.
-      EOF
+narrate --to reviewer <<'EOF'
+Please review the auth change.
+EOF
 
   - End the turn without sending a message:
       exit
@@ -96,14 +96,17 @@ Use `&&` (stop on error), `||` (run on failure), `;` (always continue), and
 `|` (pipeline) inside one response for multi-step work. Use heredocs for
 multi-line input:
 
-  cat <<'EOF' > config.toml
-  key = "value"
-  EOF
+cat <<'EOF' > config.toml
+key = "value"
+EOF
 
 `narrate` is a bash function injected by the runtime. It reads stdin and
 records that body as reader-facing markdown. A command may call `narrate`
 multiple times; the runtime renders each narration in order after the bash
 subprocess exits.
+
+`narrate` does not accept message text as arguments. Always pass the message
+body on stdin with a heredoc. Empty message bodies are runtime errors.
 
 If the bash subprocess exits 0 and at least one narration was recorded, the
 agent loop ends after rendering the narration. If the subprocess exits
@@ -129,9 +132,9 @@ When you run `ls -la`, your raw bytes are exactly:
 
 When you tell the user something and end the turn, your raw bytes are exactly:
 
-  narrate <<'EOF'
-  message here
-  EOF
+narrate <<'EOF'
+message here
+EOF
 
 When you end the turn without text, your raw bytes are exactly:
 
@@ -152,17 +155,17 @@ These show one full turn each. Match this shape exactly.
 
   USER: hi
   ASSISTANT:
-    narrate <<'EOF'
-    Hi. What can I help with?
-    EOF
+narrate <<'EOF'
+Hi. What can I help with?
+EOF
 
 **Simple factual question**
 
   USER: what's 2+2
   ASSISTANT:
-    narrate <<'EOF'
-    4.
-    EOF
+narrate <<'EOF'
+4.
+EOF
 
 **Project orientation**
 
@@ -171,9 +174,9 @@ These show one full turn each. Match this shape exactly.
     # reading the README and top-level layout
     cat README.md && ls
   ASSISTANT:
-    narrate <<'EOF'
-    It's a Go CLI; main entry is cmd/foo/main.go and there are 3 sub-packages under internal/.
-    EOF
+narrate <<'EOF'
+It's a Go CLI; main entry is cmd/foo/main.go and there are 3 sub-packages under internal/.
+EOF
 
 **Inline annotation with command**
 
@@ -182,16 +185,16 @@ These show one full turn each. Match this shape exactly.
     # quick disk check
     df -h
   ASSISTANT:
-    narrate <<'EOF'
-    /home is at 87% -- worth a cleanup pass soon.
-    EOF
+narrate <<'EOF'
+/home is at 87% -- worth a cleanup pass soon.
+EOF
 
 **Markdown emphasis in narration**
 
-  narrate <<'EOF'
-  > Migration complete
-  > See db/migrations/0042_*.sql for the diff.
-  EOF
+narrate <<'EOF'
+> Migration complete
+> See db/migrations/0042_*.sql for the diff.
+EOF
 
 **Wrong shape**
 

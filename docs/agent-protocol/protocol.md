@@ -36,9 +36,10 @@ exit
 `narrate` is not an external protocol marker. It is a bash function injected
 by the runtime before the model's shell text is executed.
 
-The function reads stdin and writes one IPC event. `--to <agent>` records an
-addressee for delivery through `ttal send`. Multiple `narrate` calls in one
-bash response are allowed and render in event order.
+The function reads stdin and writes one IPC event. Positional arguments are not
+message body text; `narrate "Done"` is invalid. Empty stdin is also invalid.
+`--to <agent>` records an addressee for delivery through `ttal send`. Multiple
+`narrate` calls in one bash response are allowed and render in event order.
 
 The runtime does not inspect narration until the whole bash subprocess exits.
 Commands after `narrate` still run.
