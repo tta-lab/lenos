@@ -1599,7 +1599,7 @@ func intString(i int) string {
 
 func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
 	t.Parallel()
-	emit := ":md @neil\nHello, this is a message.\n\nMore content."
+	emit := ":md ->neil\nHello, this is a message.\n\nMore content."
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1610,17 +1610,18 @@ func TestRunLoop_MdBodyStoredInAssistantMessage(t *testing.T) {
 
 	assistants := assistantsByOrder(ms)
 	require.GreaterOrEqual(t, len(assistants), 1)
-	// The first assistant message should have stored the :md body
+	// The first assistant message should have stored the stripped :md body
 	first := assistants[0]
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
 	assert.Equal(t, message.FinishReasonToolUse, fp.Reason)
-	assert.Equal(t, emit, first.Content().Text, "Content.Text should store full emit with :md prefix")
+	want := "Hello, this is a message.\n\nMore content."
+	assert.Equal(t, want, first.Content().Text, "Content.Text should store stripped :md body without prefix")
 }
 
 func TestRunLoop_MdExitEmptyBody(t *testing.T) {
 	t.Parallel()
-	emit := ":md exit"
+	emit := ":md\n:exit"
 	model := &scriptedModel{emits: []string{emit}}
 	deps, ms := newDeps(t, model, &fakeRunner{}, nil)
 
@@ -1634,13 +1635,13 @@ func TestRunLoop_MdExitEmptyBody(t *testing.T) {
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
 	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
-	// Full emit stored so the model sees it emitted ":md exit"
-	assert.Equal(t, ":md exit", first.Content().Text)
+	// :exit stripped from stored body — Content.Text should be empty
+	assert.Equal(t, "", first.Content().Text)
 }
 
 func TestRunLoop_MdAgentExitEndsTurn(t *testing.T) {
 	t.Parallel()
-	emit := ":md @agent exit"
+	emit := ":md ->agent\n:exit"
 	model := &scriptedModel{emits: []string{emit}}
 	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1655,6 +1656,6 @@ func TestRunLoop_MdAgentExitEndsTurn(t *testing.T) {
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
 	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
-	// Full emit stored so the model sees it emitted ":md @agent exit"
-	assert.Equal(t, ":md @agent exit", first.Content().Text)
+	// :exit stripped from stored body — Content.Text should be empty
+	assert.Equal(t, "", first.Content().Text)
 }

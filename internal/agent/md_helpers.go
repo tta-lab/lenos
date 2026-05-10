@@ -3,7 +3,7 @@ package agent
 import "strings"
 
 // MdPrefix is the first line prefix that identifies an :md protocol message.
-// Bare `:md` sends to the session owner; `:md @agent` sends to a named agent.
+// Bare `:md` sends to the session owner; `:md ->agent` sends to a named agent.
 const MdPrefix = ":md"
 
 // StripMdPrefixLine removes the first line from a block's source if it
@@ -25,9 +25,9 @@ func StripMdPrefixLine(source string) string {
 	return source
 }
 
-// ParseMdAddressee extracts the agent name after `:md @` from the first line
+// ParseMdAddressee extracts the agent name after `:md ->` from the first line
 // of an :md protocol message. Returns "" for bare `:md` (routed to owner),
-// for text without an `:md` prefix, or for `:md @` with no name.
+// for text without an `:md` prefix, or for `:md ->` with no name.
 //
 // Used by both classifyBlock() (to confirm :md classification) and the chat
 // renderer's linePrefix() (to display the addressee).
@@ -41,8 +41,8 @@ func ParseMdAddressee(text string) string {
 	if first == MdPrefix {
 		return "" // bare :md → owner
 	}
-	// Check for :md @agent-name
-	prefix := MdPrefix + " @"
+	// Check for :md ->agent-name
+	prefix := MdPrefix + " ->"
 	if strings.HasPrefix(first, prefix) {
 		after := strings.TrimPrefix(first, prefix)
 		// Take only the first word (agent name)

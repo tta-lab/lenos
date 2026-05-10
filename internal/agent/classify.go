@@ -30,6 +30,17 @@ const (
 // classify() trims the input first and only this regex is applied.
 var exitRe = regexp.MustCompile(`^\s*exit(\s+-?\d+)?\s*$`)
 
+// exitColonRe matches a bare `:exit` / `:exit N` turn-end signal (text-mode
+// variant of `exit`). Only matches when :exit is the entire emit (after trim).
+// Multi-line emits with `:exit` in the body are handled by mdTrailingExitRe.
+var exitColonRe = regexp.MustCompile(`^\s*:exit(\s+-?\d+)?\s*$`)
+
+// mdTrailingExitRe matches `\n:exit` at the very end of an emit (with optional
+// trailing whitespace). This is the text-mode turn-end signal inside :md blocks.
+// Unlike trailingExitRe (bash-mode chain exit), this regex is ONLY used inside
+// the :md classification branch — :exit is a text-mode signal, not bash.
+var mdTrailingExitRe = regexp.MustCompile(`\n:exit\s*$`)
+
 // trailingExitRe matches an emit whose final command is `exit` joined by a
 // shell separator: `... && exit`, `... ; exit`, `... || exit`, or a newline
 // (e.g. heredoc body followed by `exit` on the next line). The model uses
@@ -76,6 +87,9 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 	if exitRe.MatchString(trimmed) {
 		return classifyExit, ""
 	}
+	if exitColonRe.MatchString(trimmed) {
+		return classifyExit, ""
+	}
 	if containsBlockedPattern(emit) {
 		return classifyBanned, ""
 	}
@@ -83,34 +97,18 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 		return classifyToolCall, ""
 	}
 	if strings.HasPrefix(trimmed, MdPrefix) {
-		// :md at the very start of the emit (bare or followed by @agent).
-		// Must fire before prose-prefix so `:md @agent` is not caught by
-		// the Title-Case detector on the `@agent` portion.
+		// :md at the very start of the emit (bare or followed by ->agent).
+		// Must fire before prose-prefix so `:md ->agent` is not caught by
+		// the Title-Case detector on the `->agent` portion.
 		// Require space, tab, or newline after :md to avoid matching
 		// commands like `:mdata` or `:md5sum`. The trimmed emit may start
-		// with `:md`, `:md @agent`, or `:md\nbody` — all valid forms.
+		// with `:md`, `:md ->agent`, or `:md\nbody` — all valid forms.
 		rest := strings.TrimPrefix(trimmed, MdPrefix)
 		if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
-			// Check if the first line contains `exit` as a space-delimited token.
-			// Only scan line 1 — the rest is body content. No substring matching:
-			// `exiting` or `@agent-exit` should NOT match.
-			firstLine := trimmed
-			if idx := strings.IndexByte(trimmed, '\n'); idx >= 0 {
-				firstLine = trimmed[:idx]
-			}
-			// Re-check :md prefix on firstLine to get the portion after :md.
-			firstRest := strings.TrimPrefix(firstLine, MdPrefix)
-			firstRest = strings.TrimSpace(firstRest)
-			hasExit := false
-			if firstRest != "" {
-				for _, tok := range strings.Fields(firstRest) {
-					if tok == "exit" {
-						hasExit = true
-						break
-					}
-				}
-			}
-			if hasExit {
+			// Check if the emit ends with a trailing `\n:exit` (text-mode
+			// turn-end signal). Only matches at the very end of the emit.
+			hasTrailingExit := mdTrailingExitRe.MatchString(trimmed)
+			if hasTrailingExit {
 				return classifyMdExit, ""
 			}
 			return classifyMd, ""

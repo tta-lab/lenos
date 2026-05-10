@@ -20,6 +20,11 @@ func TestClassify_Exit(t *testing.T) {
 		"  exit 1  ",
 		"exit\t0",  // tab between exit and N is bash-legal
 		"\texit\n", // leading tab + trailing newline
+		// :exit variants (text-mode turn-end signal)
+		":exit",
+		":exit 0",
+		":exit 1",
+		"  :exit  ",
 	}
 	for _, in := range cases {
 		cls, _ := classify(ctx, in)
@@ -216,15 +221,16 @@ func TestClassify_MdMessage(t *testing.T) {
 	}{
 		{":md", classifyMd},
 		{":md\nhello world", classifyMd},
-		{":md @mira", classifyMd},
-		{":md @mira\nhello world", classifyMd},
-		{":md @mira\nmulti\nline", classifyMd},
+		{":md ->mira", classifyMd},
+		{":md ->mira\nhello world", classifyMd},
+		{":md ->mira\nmulti\nline", classifyMd},
 		// Whitespace before :md is allowed (trimmed).
 		{"  :md\nhello", classifyMd},
-		// :md must beat prose-prefix (the @agent part starts with non-alpha).
-		{":md @mira && exit", classifyMdExit},
 		// :md must beat trailing-exit.
 		{":md\nhello\nexit", classifyMd},
+		// Trailing :exit triggers MdExit.
+		{":md\nhello\n:exit", classifyMdExit},
+		{":md ->mira\nhello\n:exit", classifyMdExit},
 	}
 	for _, tc := range cases {
 		t.Run(tc.emit, func(t *testing.T) {
@@ -242,14 +248,20 @@ func TestClassify_MdExit(t *testing.T) {
 		emit string
 		want classifyResult
 	}{
-		{":md exit\nhello", classifyMdExit},
-		{":md @neil exit\nhello world", classifyMdExit},
-		{":md @neil\nbody has exit inside", classifyMd},
-		{":md exit @neil\nhello", classifyMdExit},
+		// Trailing :exit cases (new protocol: body\n:exit)
+		{":md ->neil\nhello world\n:exit", classifyMdExit},
+		{":md ->neil\n:exit", classifyMdExit},
+		{":md\nhello\n:exit", classifyMdExit},
+		{":md ->neil\nmulti\nline\nbody\n:exit", classifyMdExit},
+		// Anti-match: :exit in middle of body (not at end)
+		{":md ->neil\n:exit\nmore body", classifyMd},
+		// Anti-match: bare "exit" at end (not :exit)
 		{":md\nbody\nexit", classifyMd},
-		{":md exit", classifyMdExit},
-		// exit as substring in agent name must NOT match
-		{":md @agent-exit\nbody", classifyMd},
+		// Anti-match: :exit as substring in command
+		{":md ->neil\ncode :exit", classifyMd},
+		// exit as substring in agent name must NOT match (no longer applies
+		// since we use trailing :exit, but keep for regression)
+		{":md ->agent-exit\nbody", classifyMd},
 	}
 	for _, tc := range cases {
 		t.Run(tc.emit, func(t *testing.T) {

@@ -31,8 +31,8 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.Contains(t, got, "exit")
 	assert.Contains(t, got, ":md")
 	// :md is the sole agent communication channel — single-line or multi-line.
-	assert.Contains(t, got, ":md @agent",
-		":md protocol must be advertised with @agent syntax")
+	assert.Contains(t, got, ":md ->agent",
+		":md protocol must be advertised with ->agent syntax")
 
 	// MUST NOT mention the legacy <cmd> markup — that's the whole point.
 	assert.False(t, strings.Contains(got, "<cmd>"),
