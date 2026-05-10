@@ -1634,7 +1634,8 @@ func TestRunLoop_MdExitEmptyBody(t *testing.T) {
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
 	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
-	assert.Equal(t, "", first.Content().Text, "Content.Text should be empty for no-body :md exit")
+	// Full emit stored so the model sees it emitted ":md exit"
+	assert.Equal(t, ":md exit", first.Content().Text)
 }
 
 func TestRunLoop_MdAgentExitEndsTurn(t *testing.T) {
@@ -1654,5 +1655,6 @@ func TestRunLoop_MdAgentExitEndsTurn(t *testing.T) {
 	fp := first.FinishPart()
 	require.NotNil(t, fp)
 	assert.Equal(t, message.FinishReasonEndTurn, fp.Reason, "should be EndTurn for exit")
-	assert.Equal(t, "", first.Content().Text, "Content.Text should be empty — 'exit' is a protocol marker, not body")
+	// Full emit stored so the model sees it emitted ":md @agent exit"
+	assert.Equal(t, ":md @agent exit", first.Content().Text)
 }
