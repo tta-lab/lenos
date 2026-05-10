@@ -9,6 +9,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type testBashSalvageProbe struct {
+	commands map[string]bool
+	paths    map[string]bool
+}
+
+func (p testBashSalvageProbe) commandExists(_ context.Context, name string) bool {
+	return p.commands[name]
+}
+
+func (p testBashSalvageProbe) pathExecutable(_ context.Context, path string) bool {
+	return p.paths[path]
+}
+
 func TestClassify_Exit(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -139,6 +152,8 @@ func TestClassify_NaturalLanguage(t *testing.T) {
 		{"Hello world", classifyNaturalLanguage},
 		{"我已经完成了。", classifyNaturalLanguage},
 		{"確認しました。", classifyNaturalLanguage},
+		{"## Done", classifyNaturalLanguage},
+		{"### Done", classifyNaturalLanguage},
 		{"> Done", classifyNaturalLanguage},
 		{"```bash\necho hi\n```", classifyNaturalLanguage},
 		{"Output=$(pwd)", classifyExec},
@@ -163,7 +178,9 @@ func TestClassify_NaturalLanguageFirstLineWithValidBashRestRewritesToExec(t *tes
 	ctx := context.Background()
 	emit := "I'll inspect the repo.\ncat README.md && ls"
 
-	cls, aux := classify(ctx, emit)
+	cls, aux := classifyWithSalvageProbe(ctx, emit, testBashSalvageProbe{
+		commands: map[string]bool{"cat": true},
+	})
 
 	require.Equal(t, classifyExec, cls)
 	assert.Equal(t, "# I'll inspect the repo.\ncat README.md && ls", aux)

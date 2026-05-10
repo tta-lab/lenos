@@ -47,9 +47,16 @@ var blockedCmdPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?m)(?:^|&&|\|\||;|\|)\s*perl\s+(?:-[a-zA-Z]*i)`),
 }
 
-// bashActionStartRe is deliberately stricter than `bash -n`: shell syntax
-// accepts arbitrary command names, including prose-like CJK lines.
-var bashActionStartRe = regexp.MustCompile(`^(?:[A-Za-z_][A-Za-z0-9_]*=|(?:\./|\../|/|~/)|[({]|(?:alias|awk|bash|bun|cargo|case|cat|cd|chmod|chown|command|cp|curl|date|deno|docker|echo|env|export|false|find|for|function|gh|git|go|gofmt|gofumpt|goimports|grep|head|if|jq|just|kubectl|ls|make|mkdir|mv|narrate|node|npm|perl|pnpm|printf|pwd|pytest|python|python3|rg|rm|rmdir|rsync|sed|set|sh|sleep|sort|source|src|sudo|tail|tar|task|test|touch|true|ttal|type|ulimit|uv|wc|while|which|xargs|yarn)\b)`)
+var (
+	envAssignmentTokenRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=.*$`)
+	flagTokenRe          = regexp.MustCompile(`(?:^|\s)--?[A-Za-z0-9]`)
+	pathLikeTokenRe      = regexp.MustCompile(`(?:^|\s)(?:\.{1,2}/|~/|/|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+|[A-Za-z0-9_.-]+\.[A-Za-z0-9]{1,8})(?:\s|$|[;&|<>])`)
+)
+
+type bashSalvageProbe interface {
+	commandExists(context.Context, string) bool
+	pathExecutable(context.Context, string) bool
+}
 
 // classify inspects an agent emit and returns the action class plus an
 // auxiliary string (bash stderr for classifyInvalidBash; rewritten bash for
@@ -63,6 +70,10 @@ var bashActionStartRe = regexp.MustCompile(`^(?:[A-Za-z_][A-Za-z0-9_]*=|(?:\./|\
 // bash-syntax so obviously wrong non-bash shapes get dedicated corrections
 // instead of generic shell errors.
 func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {
+	return classifyWithSalvageProbe(ctx, emit, nil)
+}
+
+func classifyWithSalvageProbe(ctx context.Context, emit string, probe bashSalvageProbe) (cls classifyResult, aux string) {
 	trimmed := strings.TrimSpace(emit)
 	if trimmed == "" {
 		return classifyEmpty, ""
@@ -91,7 +102,7 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 			return classifyMdExit, ""
 		}
 	}
-	if rewritten, ok := rewriteNaturalLanguageFirstLineBash(ctx, emit); ok {
+	if rewritten, ok := rewriteNaturalLanguageFirstLineBash(ctx, emit, probe); ok {
 		return classifyExec, rewritten
 	}
 	if isNaturalLanguageEmit(emit) {
@@ -116,14 +127,19 @@ func containsToolCallPattern(emit string) bool {
 	return toolCallXMLRe.MatchString(emit) || toolCallBracketRe.MatchString(emit)
 }
 
-// isNaturalLanguageEmit implements the natural-language auto-md heuristic:
-// the first non-whitespace byte must not be a lowercase English letter or '#'.
-// If that byte is uppercase English, the first line must not contain '=' so
+// isNaturalLanguageEmit implements the natural-language auto-md heuristic.
+// Markdown headings that start with two or more `#` are communication.
+// Otherwise, the first non-whitespace byte must not be a lowercase English
+// letter or `#`.
+// If that byte is uppercase English, the first line must not contain `=` so
 // assignment-like command forms such as `Output=$(pwd)` can still execute.
 func isNaturalLanguageEmit(emit string) bool {
 	trimmed := strings.TrimLeft(emit, " \t\r\n")
 	if trimmed == "" {
 		return false
+	}
+	if isMarkdownHeadingFirstLine(trimmed) {
+		return true
 	}
 
 	first := trimmed[0]
@@ -139,10 +155,16 @@ func isNaturalLanguageEmit(emit string) bool {
 	return true
 }
 
-func rewriteNaturalLanguageFirstLineBash(ctx context.Context, emit string) (string, bool) {
+func rewriteNaturalLanguageFirstLineBash(ctx context.Context, emit string, probe bashSalvageProbe) (string, bool) {
+	if probe == nil {
+		return "", false
+	}
 	trimmed := strings.TrimLeft(emit, " \t\r\n")
 	firstLine, rest, found := strings.Cut(trimmed, "\n")
 	if !found || strings.TrimSpace(rest) == "" {
+		return "", false
+	}
+	if isMarkdownHeadingFirstLine(firstLine) {
 		return "", false
 	}
 	if !isNaturalLanguageEmit(firstLine) {
@@ -162,25 +184,100 @@ func rewriteNaturalLanguageFirstLineBash(ctx context.Context, emit string) (stri
 	if containsBlockedPattern(rest) || containsToolCallPattern(rest) {
 		return "", false
 	}
-	if !looksLikeBashAction(rest) {
+	if err := bashSyntaxCheck(ctx, rest); err != "" {
 		return "", false
 	}
-	if err := bashSyntaxCheck(ctx, rest); err != "" {
+	if !shouldSalvageBashRest(ctx, rest, probe) {
 		return "", false
 	}
 
 	return "# " + strings.TrimSpace(firstLine) + "\n" + rest, true
 }
 
-func looksLikeBashAction(emit string) bool {
+func isMarkdownHeadingFirstLine(emit string) bool {
+	trimmed := strings.TrimLeft(emit, " \t")
+	return strings.HasPrefix(trimmed, "##")
+}
+
+func shouldSalvageBashRest(ctx context.Context, emit string, probe bashSalvageProbe) bool {
+	lines := effectiveShellLines(emit)
+	if len(lines) == 0 {
+		return false
+	}
+
+	line := lines[0]
+	word, hadAssignment := firstCommandWord(line)
+	if word == "" {
+		return false
+	}
+	if isPathCommandWord(word) {
+		return probe.pathExecutable(ctx, word)
+	}
+	if !startsLowerASCII(word) || !hasCommandEvidence(line, hadAssignment) {
+		return false
+	}
+	return probe.commandExists(ctx, word)
+}
+
+func effectiveShellLines(emit string) []string {
+	var lines []string
 	for _, line := range strings.Split(emit, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		return bashActionStartRe.MatchString(trimmed)
+		lines = append(lines, trimmed)
 	}
-	return false
+	return lines
+}
+
+func firstCommandWord(line string) (string, bool) {
+	hadAssignment := false
+	for _, token := range strings.Fields(line) {
+		token = cleanProbeToken(token)
+		if token == "" {
+			continue
+		}
+		if envAssignmentTokenRe.MatchString(token) {
+			hadAssignment = true
+			continue
+		}
+		return token, hadAssignment
+	}
+	return "", hadAssignment
+}
+
+func cleanProbeToken(token string) string {
+	token = strings.Trim(token, `"'`)
+	token = strings.TrimRight(token, ";|&<>")
+	if strings.ContainsAny(token, "$`\\") {
+		return ""
+	}
+	return token
+}
+
+func isPathCommandWord(word string) bool {
+	return strings.HasPrefix(word, "./") ||
+		strings.HasPrefix(word, "../") ||
+		strings.HasPrefix(word, "/") ||
+		strings.HasPrefix(word, "~/")
+}
+
+func startsLowerASCII(word string) bool {
+	if word == "" {
+		return false
+	}
+	first := word[0]
+	return first >= 'a' && first <= 'z'
+}
+
+func hasCommandEvidence(line string, hadAssignment bool) bool {
+	return hadAssignment ||
+		strings.Contains(line, "&&") ||
+		strings.Contains(line, "||") ||
+		strings.ContainsAny(line, "|;<>") ||
+		flagTokenRe.MatchString(line) ||
+		pathLikeTokenRe.MatchString(line)
 }
 
 // bashSyntaxCheck runs `bash -n` against the emit on stdin. Returns "" on

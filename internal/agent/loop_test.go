@@ -1274,18 +1274,48 @@ func TestRunLoop_NaturalLanguageWithEqualsStaysBash(t *testing.T) {
 	assert.Equal(t, []string{"Output=$(pwd)"}, runner.bash)
 }
 
+func TestRunLoop_MarkdownHeadingFirstLineCoercesToMd(t *testing.T) {
+	t.Parallel()
+	for _, emit := range []string{
+		"## Done\ncat README.md && ls",
+		"### Done\ncat README.md && ls",
+	} {
+		t.Run(emit, func(t *testing.T) {
+			t.Parallel()
+			model := &scriptedModel{emits: []string{emit, ":md\nunreachable"}}
+			runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
+			deps, ms := newDeps(t, model, runner, nil)
+
+			stop, err := runLoop(context.Background(), deps, nil, "")
+			require.NoError(t, err)
+			assert.Equal(t, stopExit, stop)
+			assert.Empty(t, runner.bash)
+
+			assistants := assistantsByOrder(ms)
+			require.Len(t, assistants, 1)
+			assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+			assert.Equal(t, ":md\n"+emit, assistants[0].Content().Text)
+		})
+	}
+}
+
 func TestRunLoop_NaturalLanguageFirstLineWithValidBashRestExecutesAsCommentedBash(t *testing.T) {
 	t.Parallel()
 	emit := "I'll inspect the repo.\ncat README.md && ls"
 	rewritten := "# I'll inspect the repo.\ncat README.md && ls"
 	model := &scriptedModel{emits: []string{emit, ":md\nDone."}}
-	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("README.md\n"), ExitCode: 0}}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 0}, // command -v cat
+		{Stdout: []byte("README.md\n"), ExitCode: 0},
+	}}
 	deps, ms := newDeps(t, model, runner, nil)
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{rewritten}, runner.bash)
+	require.Len(t, runner.bash, 2)
+	assert.Contains(t, runner.bash[0], "command -v")
+	assert.Equal(t, rewritten, runner.bash[1])
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 2)
@@ -1296,6 +1326,88 @@ func TestRunLoop_NaturalLanguageFirstLineWithValidBashRestExecutesAsCommentedBas
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
 	assert.Equal(t, rewritten, results[0].CommandContent().Command)
+}
+
+func TestRunLoop_NaturalLanguageFirstLineWithResolvedCustomCommandRestExecutes(t *testing.T) {
+	t.Parallel()
+	emit := "I'll inspect.\nmytool --check"
+	rewritten := "# I'll inspect.\nmytool --check"
+	model := &scriptedModel{emits: []string{emit, ":md\nDone."}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 0},                         // command -v mytool
+		{Stdout: []byte("ok\n"), ExitCode: 0}, // rewritten command
+	}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	require.Len(t, runner.bash, 2)
+	assert.Contains(t, runner.bash[0], "command -v")
+	assert.Contains(t, runner.bash[0], "mytool")
+	assert.Equal(t, rewritten, runner.bash[1])
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 2)
+	assert.Equal(t, rewritten, assistants[0].Content().Text)
+}
+
+func TestRunLoop_NaturalLanguageFirstLineWithProseStartingWithExistingBinaryStaysMd(t *testing.T) {
+	t.Parallel()
+	emit := "Done.\ngo ahead"
+	model := &scriptedModel{emits: []string{emit, ":md\nunreachable"}}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Empty(t, runner.bash)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, ":md\n"+emit, assistants[0].Content().Text)
+}
+
+func TestRunLoop_NaturalLanguageFirstLineWithNonExecutablePathRestStaysMd(t *testing.T) {
+	t.Parallel()
+	emit := "I'll run it.\n./scripts/test.sh"
+	model := &scriptedModel{emits: []string{emit, ":md\nunreachable"}}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 1}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	require.Len(t, runner.bash, 1)
+	assert.Contains(t, runner.bash[0], "test -x")
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, ":md\n"+emit, assistants[0].Content().Text)
+}
+
+func TestRunLoop_NaturalLanguageFirstLineWithExecutablePathRestExecutes(t *testing.T) {
+	t.Parallel()
+	emit := "I'll run it.\n./scripts/test.sh"
+	rewritten := "# I'll run it.\n./scripts/test.sh"
+	model := &scriptedModel{emits: []string{emit, ":md\nDone."}}
+	runner := &fakeRunner{results: []ExecResult{
+		{ExitCode: 0},                         // test -x ./scripts/test.sh
+		{Stdout: []byte("ok\n"), ExitCode: 0}, // rewritten command
+	}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	require.Len(t, runner.bash, 2)
+	assert.Contains(t, runner.bash[0], "test -x")
+	assert.Equal(t, rewritten, runner.bash[1])
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 2)
+	assert.Equal(t, rewritten, assistants[0].Content().Text)
 }
 
 func TestReplaceAssistantTextPreservesReasoning(t *testing.T) {

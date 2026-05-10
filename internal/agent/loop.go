@@ -41,6 +41,7 @@ type loopDeps struct {
 	provOpts   fantasy.ProviderOptions
 	messages   message.Service
 	runner     Runner
+	salvage    bashSalvageProbe
 	sessionID  string
 	sysPrompt  string
 	providerID string // config provider ID (for assistant message Provider field)
@@ -105,7 +106,15 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			}
 		}
 
-		cls, aux := classify(ctx, emit)
+		probe := deps.salvage
+		if probe == nil {
+			probe = runnerBashSalvageProbe{
+				runner: deps.runner,
+				env:    deps.env,
+				paths:  deps.paths,
+			}
+		}
+		cls, aux := classifyWithSalvageProbe(ctx, emit, probe)
 		if cls == classifyExec && aux != "" {
 			emit = aux
 			replaceAssistantText(&assistantMsg, emit)
