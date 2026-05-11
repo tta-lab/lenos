@@ -7,7 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/ui/common"
@@ -136,8 +135,8 @@ func renderHeaderDetails(
 		parts = append(parts, t.Header.SandboxOff.Render("sandbox off"))
 	}
 
-	if contextWindow := headerContextWindow(com); contextWindow > 0 {
-		percentage := (float64(sess.CompletionTokens+sess.PromptTokens) / float64(contextWindow)) * 100
+	if model := selectedAgentModel(com); model != nil && model.CatwalkCfg.ContextWindow > 0 {
+		percentage := (float64(sess.CompletionTokens+sess.PromptTokens) / float64(model.CatwalkCfg.ContextWindow)) * 100
 		formattedPercentage := t.Header.Percentage.Render(fmt.Sprintf("%d%%", int(percentage)))
 		parts = append(parts, formattedPercentage)
 	}
@@ -163,31 +162,6 @@ func renderHeaderDetails(
 
 	result := cwd + metadata
 	return ansi.Truncate(result, max(0, availWidth), "…")
-}
-
-func headerContextWindow(com *common.Common) int64 {
-	if com == nil || com.Workspace == nil {
-		return 0
-	}
-	if com.Workspace.AgentIsReady() {
-		model := com.Workspace.AgentModel()
-		if model.CatwalkCfg.ContextWindow > 0 {
-			return model.CatwalkCfg.ContextWindow
-		}
-	}
-	cfg := com.Config()
-	if cfg == nil {
-		return 0
-	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
-	if !ok {
-		return 0
-	}
-	model := cfg.GetModelByType(agentCfg.Model)
-	if model == nil {
-		return 0
-	}
-	return model.ContextWindow
 }
 
 // formatTodoSegment formats the `TODO done/total` segment shown in the

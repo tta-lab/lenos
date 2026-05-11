@@ -2038,16 +2038,8 @@ func (m *UI) FullHelp() [][]key.Binding {
 }
 
 func (m *UI) currentModelSupportsImages() bool {
-	cfg := m.com.Config()
-	if cfg == nil {
-		return false
-	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
-	if !ok {
-		return false
-	}
-	model := cfg.GetModelByType(agentCfg.Model)
-	return model != nil && model.SupportsImages
+	model := m.selectedAgentModel()
+	return model != nil && model.CatwalkCfg.SupportsImages
 }
 
 // updateLayoutAndSize updates the layout and sizes of UI components.
