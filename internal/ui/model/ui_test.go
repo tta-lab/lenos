@@ -79,6 +79,40 @@ func TestCurrentModelSupportsImages(t *testing.T) {
 		ui := newTestUIWithConfig(t, cfg)
 		require.True(t, ui.currentModelSupportsImages())
 	})
+
+	t.Run("uses active agent model when agent is ready", func(t *testing.T) {
+		t.Parallel()
+
+		providers := csync.NewMap[string, config.ProviderConfig]()
+		providers.Set("test-provider", config.ProviderConfig{
+			ID: "test-provider",
+			Models: []catwalk.Model{
+				{ID: "large-model", SupportsImages: false},
+			},
+		})
+
+		cfg := &config.Config{
+			Models: map[config.SelectedModelType]config.SelectedModel{
+				config.SelectedModelTypeLarge: {
+					Provider: "test-provider",
+					Model:    "large-model",
+				},
+			},
+			Providers: providers,
+			Agents: map[string]config.Agent{
+				config.AgentCoder: {Model: config.SelectedModelTypeLarge},
+			},
+		}
+
+		ui := newTestUIWithConfig(t, cfg)
+		tw := ui.com.Workspace.(*testWorkspace)
+		tw.agentReady = true
+		tw.agentModel = workspace.AgentModel{
+			CatwalkCfg: catwalk.Model{SupportsImages: true},
+		}
+
+		require.True(t, ui.currentModelSupportsImages())
+	})
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -98,6 +132,8 @@ func newTestUIWithConfig(t *testing.T, cfg *config.Config) *UI {
 type testWorkspace struct {
 	workspace.Workspace
 	cfg            *config.Config
+	agentReady     bool
+	agentModel     workspace.AgentModel
 	gitWorktree    bool
 	modifiedFiles  []workspace.ModifiedFile
 	listModifiedFn func() ([]workspace.ModifiedFile, error)
@@ -109,6 +145,14 @@ func (w *testWorkspace) Config() *config.Config {
 
 func (w *testWorkspace) WorkingDir() string {
 	return "/tmp"
+}
+
+func (w *testWorkspace) AgentIsReady() bool {
+	return w.agentReady
+}
+
+func (w *testWorkspace) AgentModel() workspace.AgentModel {
+	return w.agentModel
 }
 
 func (w *testWorkspace) IsGitWorktree(ctx context.Context) bool {

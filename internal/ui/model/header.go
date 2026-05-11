@@ -7,7 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/fsext"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/ui/common"
@@ -136,10 +135,8 @@ func renderHeaderDetails(
 		parts = append(parts, t.Header.SandboxOff.Render("sandbox off"))
 	}
 
-	agentCfg := com.Config().Agents[config.AgentCoder]
-	model := com.Config().GetModelByType(agentCfg.Model)
-	if model != nil && model.ContextWindow > 0 {
-		percentage := (float64(sess.CompletionTokens+sess.PromptTokens) / float64(model.ContextWindow)) * 100
+	if model := selectedAgentModel(com); model != nil && model.CatwalkCfg.ContextWindow > 0 {
+		percentage := (float64(sess.CompletionTokens+sess.PromptTokens) / float64(model.CatwalkCfg.ContextWindow)) * 100
 		formattedPercentage := t.Header.Percentage.Render(fmt.Sprintf("%d%%", int(percentage)))
 		parts = append(parts, formattedPercentage)
 	}

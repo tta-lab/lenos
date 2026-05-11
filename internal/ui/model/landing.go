@@ -2,18 +2,45 @@ package model
 
 import (
 	"charm.land/lipgloss/v2"
+	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/workspace"
 )
 
-// selectedLargeModel returns the currently selected large language model from
-// the agent coordinator, if one exists.
-func (m *UI) selectedLargeModel() *workspace.AgentModel {
-	if m.com.Workspace.AgentIsReady() {
-		model := m.com.Workspace.AgentModel()
+// selectedAgentModel returns the active agent model. It falls back to the
+// configured coder model only before the agent coordinator is ready.
+func (m *UI) selectedAgentModel() *workspace.AgentModel {
+	return selectedAgentModel(m.com)
+}
+
+func selectedAgentModel(com *common.Common) *workspace.AgentModel {
+	if com == nil || com.Workspace == nil {
+		return nil
+	}
+	if com.Workspace.AgentIsReady() {
+		model := com.Workspace.AgentModel()
 		return &model
 	}
-	return nil
+	cfg := com.Config()
+	if cfg == nil {
+		return nil
+	}
+	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	if !ok {
+		return nil
+	}
+	catwalkModel := cfg.GetModelByType(agentCfg.Model)
+	if catwalkModel == nil {
+		return nil
+	}
+	modelCfg, ok := cfg.Models[agentCfg.Model]
+	if !ok {
+		return nil
+	}
+	return &workspace.AgentModel{
+		CatwalkCfg: *catwalkModel,
+		ModelCfg:   modelCfg,
+	}
 }
 
 // landingView renders the landing page view showing the current working
