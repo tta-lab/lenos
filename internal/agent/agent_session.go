@@ -31,7 +31,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	}
 
 	// Copy mutable fields under lock to avoid races with SetModels.
-	largeModel := a.largeModel.Get()
+	summaryModel := a.primaryModel.Get()
 	systemPromptPrefix := a.systemPromptPrefix.Get()
 
 	currentSession, err := a.sessions.Get(ctx, sessionID)
@@ -54,8 +54,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 
 	summaryMessage, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
 		Role:             message.Assistant,
-		Model:            largeModel.Model.Model(),
-		Provider:         largeModel.Model.Provider(),
+		Model:            summaryModel.messageModelID(),
+		Provider:         summaryModel.messageProviderID(),
 		IsSummaryMessage: true,
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	baseline := summaryMessage.Clone()
 	streamResult, err := retryModelStream(genCtx,
 		func() (summaryStreamResult, error) {
-			return streamSummaryAttempt(genCtx, largeModel.Model, prompt, opts, a.messages, &summaryMessage)
+			return streamSummaryAttempt(genCtx, summaryModel.Model, prompt, opts, a.messages, &summaryMessage)
 		},
 		func() {
 			resetMessageForStreamRetry(genCtx, a.messages, &summaryMessage, baseline, "summary: reset message for stream retry")
@@ -102,7 +102,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	}
 
 	openrouterCost := a.openrouterCost(providerMeta)
-	a.updateSessionUsage(largeModel, &currentSession, totalUsage, openrouterCost)
+	a.updateSessionUsage(summaryModel, &currentSession, totalUsage, openrouterCost)
 	currentSession.SummaryMessageID = summaryMessage.ID
 	currentSession.CompletionTokens = totalUsage.OutputTokens
 	currentSession.PromptTokens = 0

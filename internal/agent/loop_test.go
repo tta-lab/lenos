@@ -25,11 +25,13 @@ import (
 // scriptedModel returns a sequence of canned emits via Stream(). Each call
 // to Stream consumes one entry; missing entries panic the test.
 type scriptedModel struct {
-	mu     sync.Mutex
-	emits  []string
-	usages []fantasy.Usage // optional: per-emit usage override; default Usage{1,1}
-	errOn  []int           // call indices (pre-increment) where Stream yields an error
-	calls  int
+	mu       sync.Mutex
+	emits    []string
+	usages   []fantasy.Usage // optional: per-emit usage override; default Usage{1,1}
+	errOn    []int           // call indices (pre-increment) where Stream yields an error
+	calls    int
+	modelID  string
+	provider string
 }
 
 // recorderIface is a local substitute for the removed transcript.Recorder.
@@ -45,8 +47,19 @@ type recorderIface interface {
 	Close() error
 }
 
-func (m *scriptedModel) Model() string    { return "test-model" }
-func (m *scriptedModel) Provider() string { return "test-provider" }
+func (m *scriptedModel) Model() string {
+	if m.modelID != "" {
+		return m.modelID
+	}
+	return "test-model"
+}
+
+func (m *scriptedModel) Provider() string {
+	if m.provider != "" {
+		return m.provider
+	}
+	return "test-provider"
+}
 
 func (m *scriptedModel) Generate(context.Context, fantasy.Call) (*fantasy.Response, error) {
 	panic("not used")
@@ -214,12 +227,11 @@ func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, 
 	t.Helper()
 	ms := newMockMessageService()
 	return loopDeps{
-		model:      model,
+		model:      Model{Model: model},
 		messages:   ms,
 		runner:     runner,
 		sessionID:  "s-test",
 		sysPrompt:  "you are a test",
-		providerID: "test-provider-id",
 		drainQueue: drain,
 	}, ms
 }

@@ -32,7 +32,7 @@ var ErrStepCap = errors.New("agent: step cap reached")
 // loopDeps wires the bash-first loop to its environment. Every field is
 // required except onUsage, which may be nil (no per-step usage callback).
 type loopDeps struct {
-	model fantasy.LanguageModel
+	model Model
 	// drainQueue pulls queued user prompts off the session queue. Called at
 	// every mid-loop step boundary so user followups ride the next model
 	// request alongside the bash-result observation. nil-safe: drainAndAppend
@@ -44,7 +44,6 @@ type loopDeps struct {
 	salvage    bashSalvageProbe
 	sessionID  string
 	sysPrompt  string
-	providerID string // config provider ID (for assistant message Provider field)
 	env        map[string]string
 	paths      []client.AllowedPath
 	// defaultNarrationTarget is applied to narrate calls without --to.
@@ -93,8 +92,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		assistantMsg, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 			Role:     message.Assistant,
 			Parts:    []message.ContentPart{message.TextContent{Text: ""}},
-			Model:    deps.model.Model(),
-			Provider: deps.providerID,
+			Model:    deps.model.messageModelID(),
+			Provider: deps.model.messageProviderID(),
 		})
 		if err != nil {
 			return stopError, fmt.Errorf("create assistant message: %w", err)
@@ -371,7 +370,7 @@ func streamOneAttempt(
 	msgs []fantasy.Message,
 	assistantMsg *message.Message,
 ) (streamOneResult, error) {
-	stream, err := deps.model.Stream(ctx, fantasy.Call{
+	stream, err := deps.model.Model.Stream(ctx, fantasy.Call{
 		Prompt:          msgs,
 		ProviderOptions: deps.provOpts,
 		UserAgent:       userAgent,

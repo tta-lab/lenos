@@ -179,13 +179,12 @@ runLoopReentry:
 		}
 	}
 	deps := loopDeps{
-		model:                  primaryModel.Model,
+		model:                  primaryModel,
 		provOpts:               call.ProviderOptions,
 		messages:               a.messages,
 		runner:                 resolveRunner(call),
 		sessionID:              call.SessionID,
 		sysPrompt:              a.systemPrompt.Get(),
-		providerID:             call.ProviderID,
 		env:                    call.Env,
 		paths:                  call.AllowedPaths,
 		defaultNarrationTarget: call.DefaultNarrationTarget,

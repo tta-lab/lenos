@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 )
@@ -222,9 +223,8 @@ func TestRun_BusySession_QueuesPrompt(t *testing.T) {
 
 	// Second call should queue silently and return nil.
 	err = agent.Run(ctx, SessionAgentCall{
-		SessionID:  sess.ID,
-		Prompt:     "second",
-		ProviderID: "test",
+		SessionID: sess.ID,
+		Prompt:    "second",
 	})
 	require.NoError(t, err, "queueing a prompt on a busy session should return nil")
 
@@ -266,14 +266,12 @@ func (m *blockingModel) StreamObject(context.Context, fantasy.ObjectCall) (fanta
 func TestCombineQueuedCalls_SingleCall(t *testing.T) {
 	t.Parallel()
 	calls := []SessionAgentCall{{
-		SessionID:  "s1",
-		Prompt:     "hello",
-		ProviderID: "test",
+		SessionID: "s1",
+		Prompt:    "hello",
 	}}
 	out := combineQueuedCalls(calls)
 	require.Equal(t, "hello", out.Prompt)
 	require.Equal(t, "s1", out.SessionID)
-	require.Equal(t, "test", out.ProviderID)
 }
 
 // recRunner records every Run call's payload for assertions.
@@ -335,7 +333,7 @@ func TestRun_HookRunnerFiresPerStep(t *testing.T) {
 		HookRunner:   rec,
 	}).(*sessionAgent)
 
-	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
+	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go"})
 	require.NoError(t, err)
 
 	// Wait for hook goroutines to complete (deterministic: blocks until N Run calls)
@@ -371,7 +369,7 @@ func TestRun_HookRunnerFailingDoesNotAbortLoop(t *testing.T) {
 		HookRunner:   errRunner{},
 	}).(*sessionAgent)
 
-	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
+	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go"})
 	require.NoError(t, err, "loop should not abort on hook failure")
 }
 
@@ -392,7 +390,7 @@ func TestRun_HookRunnerNoopGating(t *testing.T) {
 	}).(*sessionAgent)
 
 	before := runtime.NumGoroutine()
-	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
+	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go"})
 	require.NoError(t, err)
 	time.Sleep(100 * time.Millisecond) // settle goroutines
 	after := runtime.NumGoroutine()
@@ -424,20 +422,19 @@ func TestRun_HookRunnerTimeout(t *testing.T) {
 	// Shrink timeout so test runs in 50ms instead of 5s
 	defer SetHookTimeout(50 * time.Millisecond)()
 
-	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go", ProviderID: "test"})
+	err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "go"})
 	require.NoError(t, err, "loop should continue even if hook times out")
 }
 
 func TestCombineQueuedCalls_ManyCallsJoinedWithSeparator(t *testing.T) {
 	t.Parallel()
 	calls := []SessionAgentCall{
-		{SessionID: "s1", Prompt: "first", ProviderID: "p1"},
-		{SessionID: "s1", Prompt: "second", ProviderID: "p2"},
-		{SessionID: "s1", Prompt: "third", ProviderID: "p3"},
+		{SessionID: "s1", Prompt: "first"},
+		{SessionID: "s1", Prompt: "second"},
+		{SessionID: "s1", Prompt: "third"},
 	}
 	out := combineQueuedCalls(calls)
 	require.Equal(t, "first\n\nsecond\n\nthird", out.Prompt)
-	require.Equal(t, "p1", out.ProviderID, "first call provider preserved")
 	require.Equal(t, "s1", out.SessionID)
 }
 
@@ -463,7 +460,7 @@ func TestRun_PostLoopDrainAllQueued(t *testing.T) {
 	agent.activeRequests.Set(sess.ID, cancel)
 
 	for _, prompt := range []string{"q1", "q2", "q3"} {
-		err := agent.Run(ctx, SessionAgentCall{SessionID: sess.ID, Prompt: prompt, ProviderID: "test"})
+		err := agent.Run(ctx, SessionAgentCall{SessionID: sess.ID, Prompt: prompt})
 		require.NoError(t, err)
 	}
 	require.Equal(t, 3, agent.QueuedPrompts(sess.ID), "3 prompts should queue")
@@ -518,9 +515,8 @@ func TestRun_AutoCompactBeforeFirstStepRunsBeforePersistingCurrentPrompt(t *test
 	require.NoError(t, err)
 
 	err = agent.Run(t.Context(), SessionAgentCall{
-		SessionID:  sess.ID,
-		Prompt:     "new request",
-		ProviderID: "test",
+		SessionID: sess.ID,
+		Prompt:    "new request",
 	})
 	require.NoError(t, err)
 
@@ -572,9 +568,8 @@ func TestRun_AutoCompactWaitsUntilNextStepAfterBashResult(t *testing.T) {
 	agent.SetModels(testModel, testModel, testModel)
 
 	err = agent.Run(t.Context(), SessionAgentCall{
-		SessionID:  sess.ID,
-		Prompt:     "go",
-		ProviderID: "test",
+		SessionID: sess.ID,
+		Prompt:    "go",
 	})
 	require.NoError(t, err)
 
@@ -621,9 +616,8 @@ func TestRun_AutoCompactSummarizeErrorPropagates(t *testing.T) {
 	})
 
 	err = agent.Run(t.Context(), SessionAgentCall{
-		SessionID:  sess.ID,
-		Prompt:     "go",
-		ProviderID: "test",
+		SessionID: sess.ID,
+		Prompt:    "go",
 	})
 	require.Error(t, err, "Summarize failure must propagate from Run (parity with pre-bash-first behavior)")
 
@@ -661,9 +655,8 @@ func TestRun_AutoCompactSummarizeSucceedsButReentryFails(t *testing.T) {
 	})
 
 	err = agent.Run(t.Context(), SessionAgentCall{
-		SessionID:  sess.ID,
-		Prompt:     "go",
-		ProviderID: "test",
+		SessionID: sess.ID,
+		Prompt:    "go",
 	})
 	require.Error(t, err, "second Summarize error should propagate from Run")
 
@@ -694,9 +687,8 @@ func TestRun_DisableAutoSummarizePreventsCompact(t *testing.T) {
 	agent.disableAutoSummarize = true
 
 	err = agent.Run(t.Context(), SessionAgentCall{
-		SessionID:  sess.ID,
-		Prompt:     "go",
-		ProviderID: "test",
+		SessionID: sess.ID,
+		Prompt:    "go",
 	})
 	require.NoError(t, err)
 
@@ -791,53 +783,90 @@ func TestAgent_Model_SwitchesToSmall(t *testing.T) {
 	require.Equal(t, sm, got.Model, "Model() should return primaryModel (small)")
 }
 
-func TestAgent_Summarize_AlwaysUsesLargeModel(t *testing.T) {
+func TestRun_AssistantMessageUsesPrimaryModelConfigIDs(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	sess, err := env.sessions.Create(t.Context(), "model ids")
+	require.NoError(t, err)
+
+	model := &scriptedModel{
+		emits:    []string{"exit"},
+		modelID:  "fantasy-model-id",
+		provider: "fantasy-provider",
+	}
+	primary := Model{
+		Model:      model,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+		ModelCfg:   config.SelectedModel{Provider: "config-provider", Model: "config-model"},
+	}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   primary,
+		SmallModel:   primary,
+		PrimaryModel: primary,
+		SystemPrompt: "sys",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+	}).(*sessionAgent)
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID: sess.ID,
+		Prompt:    "go",
+	})
+	require.NoError(t, err)
+
+	messages, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	var assistant message.Message
+	for _, msg := range messages {
+		if msg.Role == message.Assistant {
+			assistant = msg
+			break
+		}
+	}
+	require.NotEmpty(t, assistant.ID)
+	require.Equal(t, "config-model", assistant.Model)
+	require.Equal(t, "config-provider", assistant.Provider)
+}
+
+func TestAgent_Summarize_UsesPrimaryModelAndConfigIDs(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
 
 	sess, err := env.sessions.Create(t.Context(), "summarize test")
 	require.NoError(t, err)
 
-	// largeModel - will be used by Summarize
 	largeModel := &scriptedModel{
-		emits: []string{"summary content"},
+		emits:    []string{"large summary"},
+		modelID:  "gpt-5.5",
+		provider: "openai",
 	}
-
-	// smallModel - should NOT be used by Summarize
 	smallModel := &scriptedModel{
-		emits: []string{"should not be called"},
+		emits:    []string{"small summary"},
+		usages:   []fantasy.Usage{{InputTokens: 100, OutputTokens: 50}},
+		modelID:  "deepseek-v4-flash",
+		provider: "openai",
 	}
 
+	large := Model{
+		Model:      largeModel,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+		ModelCfg:   config.SelectedModel{Provider: "openai-main", Model: "gpt-5.5"},
+	}
+	small := Model{
+		Model:      smallModel,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+		ModelCfg:   config.SelectedModel{Provider: "deepseek-main", Model: "deepseek-v4-flash"},
+	}
 	agent := NewSessionAgent(SessionAgentOptions{
-		LargeModel:   Model{Model: largeModel, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024}},
-		SmallModel:   Model{Model: smallModel, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024}},
-		PrimaryModel: Model{Model: smallModel, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024}}, // primary=small
+		LargeModel:   large,
+		SmallModel:   small,
+		PrimaryModel: small,
 		SystemPrompt: "sys",
 		Sessions:     env.sessions,
 		Messages:     env.messages,
 	}).(*sessionAgent)
 
-	// Wrap largeModel to record calls
-	wrapped := &scriptedModel{
-		emits:  []string{"summary content"},
-		usages: []fantasy.Usage{{InputTokens: 100, OutputTokens: 50}},
-	}
-	agent.largeModel.Set(Model{
-		Model:      wrapped,
-		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
-	})
-
-	// Wrap smallModel to detect any calls
-	wrappedSmall := &scriptedModel{
-		emits:  []string{"should not be called"},
-		usages: []fantasy.Usage{{InputTokens: 0, OutputTokens: 0}},
-	}
-	agent.smallModel.Set(Model{
-		Model:      wrappedSmall,
-		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
-	})
-
-	// Verify primary is small
 	require.Equal(t, smallModel, agent.primaryModel.Get().Model, "sanity: primary should be small")
 
 	// Add a user message so Summarize has something to summarize
@@ -855,13 +884,22 @@ func TestAgent_Summarize_AlwaysUsesLargeModel(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	streamCallsBefore := wrapped.calls // track large model calls
 	err = agent.Summarize(t.Context(), sess.ID, fantasy.ProviderOptions{})
 	require.NoError(t, err)
 
-	// largeModel should have received the Stream call since Summarize always uses largeModel
-	require.Equal(t, streamCallsBefore+1, wrapped.calls, "largeModel should have been called by Summarize")
-	require.Equal(t, 0, wrappedSmall.calls, "smallModel should NOT have been called by Summarize")
+	require.Equal(t, 0, largeModel.calls, "largeModel should not be called by Summarize")
+	require.Equal(t, 1, smallModel.calls, "primary smallModel should be called by Summarize")
+
+	updated, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, updated.SummaryMessageID)
+
+	summaryMsg, err := env.messages.Get(t.Context(), updated.SummaryMessageID)
+	require.NoError(t, err)
+	require.Equal(t, "small summary", summaryMsg.Content().Text)
+	require.Equal(t, "deepseek-v4-flash", summaryMsg.Model)
+	require.Equal(t, "deepseek-main", summaryMsg.Provider)
+	require.True(t, summaryMsg.IsSummaryMessage)
 
 	// Also verify primary model is still small (invariant: Summarize doesn't change primary)
 	require.Equal(t, smallModel, agent.primaryModel.Get().Model, "primary should still be small after Summarize")

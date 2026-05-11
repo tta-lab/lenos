@@ -270,7 +270,6 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 	return SessionAgentCall{
 		SessionID:              sessionID,
 		Prompt:                 prompt,
-		ProviderID:             model.ModelCfg.Provider,
 		ProviderOptions:        getProviderOptions(model, providerCfg),
 		Sandbox:                useSandbox,
 		SandboxClient:          sandboxClient,
@@ -879,11 +878,12 @@ func (c *coordinator) QueuedPromptsList(sessionID string) []string {
 }
 
 func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
-	providerCfg, ok := c.cfg.Config().Providers.Get(c.currentAgent.Model().ModelCfg.Provider)
+	model := c.currentAgent.Model()
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 	if !ok {
 		return errModelProviderNotConfigured
 	}
-	return c.currentAgent.Summarize(ctx, sessionID, getProviderOptions(c.currentAgent.Model(), providerCfg))
+	return c.currentAgent.Summarize(ctx, sessionID, getProviderOptions(model, providerCfg))
 }
 
 // isUnauthorized reports whether err is a fantasy.ProviderError with a 401 status

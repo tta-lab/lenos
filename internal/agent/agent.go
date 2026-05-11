@@ -67,13 +67,6 @@ type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
 
-	// ProviderID is the config-side provider identifier (e.g.
-	// "minimax-china", "openrouter"), NOT the fantasy protocol name (e.g.
-	// "anthropic"). This is what the UI looks up via cfg.GetModel; storing
-	// the fantasy Provider.Name() here was a regression that caused
-	// "Unknown Model" in the footer.
-	ProviderID string
-
 	// ProviderOptions are the per-provider streaming options merged from
 	// catwalk + provider config + model config (anthropic thinking, openai
 	// reasoning_effort, etc).
@@ -119,6 +112,26 @@ type Model struct {
 	Model      fantasy.LanguageModel
 	CatwalkCfg catwalk.Model
 	ModelCfg   config.SelectedModel
+}
+
+func (m Model) messageModelID() string {
+	if m.ModelCfg.Model != "" {
+		return m.ModelCfg.Model
+	}
+	if m.Model != nil {
+		return m.Model.Model()
+	}
+	return ""
+}
+
+func (m Model) messageProviderID() string {
+	if m.ModelCfg.Provider != "" {
+		return m.ModelCfg.Provider
+	}
+	if m.Model != nil {
+		return m.Model.Provider()
+	}
+	return ""
 }
 
 type sessionAgent struct {
