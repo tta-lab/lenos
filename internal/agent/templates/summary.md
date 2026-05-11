@@ -1,4 +1,4 @@
-You are summarizing a conversation to preserve context for continuing work later.
+You are performing a CONTEXT CHECKPOINT COMPACTION to preserve context for continuing work later.
 
 **Critical**: This summary will be the ONLY context available when the conversation resumes. Assume all previous messages will be lost. Be thorough.
 

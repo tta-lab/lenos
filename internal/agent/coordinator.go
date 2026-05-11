@@ -130,7 +130,6 @@ func NewCoordinator(
 		LargeModel:           large,
 		SmallModel:           small,
 		PrimaryModel:         primary,
-		SystemPromptPrefix:   "",
 		SystemPrompt:         "",
 		IsSubAgent:           false,
 		DisableAutoSummarize: cfg.Config().Options.DisableAutoSummarize,

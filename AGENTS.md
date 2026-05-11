@@ -89,6 +89,10 @@ The coder turn dispatches on `RuntimeOverrides.ActiveTier`:
 `agent_session.go` all use `a.primaryModel.Get()`.
 `Summarize()` also uses `a.primaryModel.Get()` so compact uses the same
 active tier/provider/model as the current session.
+Compact summarization keeps the normal bash-first system prompt as the first
+message and appends the compact instruction as the final user message. This
+keeps the shared prompt prefix cacheable while still instructing the model to
+emit one `narrate <<'LENOS_CONTEXT_COMPACTION'` heredoc.
 
 ### CLI behavior matrix
 

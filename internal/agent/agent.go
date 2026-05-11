@@ -135,11 +135,10 @@ func (m Model) messageProviderID() string {
 }
 
 type sessionAgent struct {
-	largeModel         *csync.Value[Model]
-	smallModel         *csync.Value[Model]
-	primaryModel       *csync.Value[Model]
-	systemPromptPrefix *csync.Value[string]
-	systemPrompt       *csync.Value[string]
+	largeModel   *csync.Value[Model]
+	smallModel   *csync.Value[Model]
+	primaryModel *csync.Value[Model]
+	systemPrompt *csync.Value[string]
 
 	isSubAgent           bool
 	sessions             session.Service
@@ -156,7 +155,6 @@ type SessionAgentOptions struct {
 	LargeModel           Model
 	SmallModel           Model
 	PrimaryModel         Model
-	SystemPromptPrefix   string
 	SystemPrompt         string
 	IsSubAgent           bool
 	DisableAutoSummarize bool
@@ -175,7 +173,6 @@ func NewSessionAgent(
 		largeModel:           csync.NewValue(opts.LargeModel),
 		smallModel:           csync.NewValue(opts.SmallModel),
 		primaryModel:         csync.NewValue(opts.PrimaryModel),
-		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),
 		systemPrompt:         csync.NewValue(opts.SystemPrompt),
 		isSubAgent:           opts.IsSubAgent,
 		sessions:             opts.Sessions,

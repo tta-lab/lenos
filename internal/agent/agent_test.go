@@ -59,12 +59,13 @@ func TestBuildSummaryPrompt(t *testing.T) {
 	})
 }
 
-func TestSummarySystemPrompt_InstructsNarrateCompactionOutput(t *testing.T) {
+func TestBuildCompactSummaryPrompt_InstructsNarrateCompactionOutput(t *testing.T) {
 	t.Parallel()
 
-	got := summarySystemPrompt()
+	got := buildCompactSummaryPrompt(context.Background(), "")
 
-	require.Contains(t, got, "You are summarizing a conversation")
+	require.Contains(t, got, "CONTEXT CHECKPOINT COMPACTION")
+	require.Contains(t, got, "Provide a detailed summary")
 	require.Contains(t, got, "emit exactly one bash heredoc")
 	require.Contains(t, got, "LENOS_CONTEXT_COMPACTION")
 	require.Contains(t, got, "narrate <<'")

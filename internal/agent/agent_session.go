@@ -32,7 +32,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 
 	// Copy mutable fields under lock to avoid races with SetModels.
 	summaryModel := a.primaryModel.Get()
-	systemPromptPrefix := a.systemPromptPrefix.Get()
+	systemPrompt := a.systemPrompt.Get()
 
 	currentSession, err := a.sessions.Get(ctx, sessionID)
 	if err != nil {
@@ -68,13 +68,10 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		history = append(history, m.ToAIMessage()...)
 	}
 
-	// Build prompt: system(s) + history + final user prompt.
-	prompt := fantasy.Prompt{fantasy.NewSystemMessage(summarySystemPrompt())}
-	if systemPromptPrefix != "" {
-		prompt = append(prompt, fantasy.NewSystemMessage(systemPromptPrefix))
-	}
+	// Build prompt: normal system prompt + history + final compact request.
+	prompt := fantasy.Prompt{fantasy.NewSystemMessage(systemPrompt)}
 	prompt = append(prompt, history...)
-	prompt = append(prompt, fantasy.NewUserMessage(buildSummaryPrompt(ctx, taskwarrior.ResolveJobIDFromCwd())))
+	prompt = append(prompt, fantasy.NewUserMessage(buildCompactSummaryPrompt(ctx, taskwarrior.ResolveJobIDFromCwd())))
 
 	baseline := summaryMessage.Clone()
 	streamResult, err := retryModelStream(genCtx,
@@ -422,10 +419,12 @@ func (a *sessionAgent) Model() Model {
 	return a.primaryModel.Get()
 }
 
-func summarySystemPrompt() string {
-	return strings.TrimRight(string(summaryPrompt), "\n") + `
+func summaryInstructionsPrompt() string {
+	return strings.TrimRight(string(summaryPrompt), "\n")
+}
 
-Output protocol:
+func summaryOutputProtocolPrompt() string {
+	return `Output protocol:
 
 You must emit exactly one bash heredoc in this form:
 
@@ -436,6 +435,14 @@ LENOS_CONTEXT_COMPACTION
 Do not emit Markdown fences, JSON, XML, comments, or any text before or after
 the heredoc.
 `
+}
+
+func buildCompactSummaryPrompt(ctx context.Context, jobID string) string {
+	return strings.Join([]string{
+		summaryInstructionsPrompt(),
+		buildSummaryPrompt(ctx, jobID),
+		summaryOutputProtocolPrompt(),
+	}, "\n\n")
 }
 
 // formatSummaryPrompt formats the session summarization prompt from a todo list.

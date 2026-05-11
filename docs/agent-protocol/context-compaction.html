@@ -697,9 +697,10 @@ LENOS_CONTEXT_COMPACTION</code></pre>
             summary，要接着做，不要重复劳动。
           </p>
           <p>
-            Lenos 当前 prompt 更像“完整会话总结清单”，要求很多分区和细节。好处是
-            不容易漏信息，坏处是冗长，且没有明确说 summary 本身必须是 bash-first
-            世界里的单个 <code>narrate</code> emit。
+            Lenos prompt 仍然更像“完整会话总结清单”，要求很多分区和细节。好处是
+            不容易漏信息，坏处是偏长。当前实现已把 compact 指令放在最后一条 user
+            message，并明确要求 summary 本身是 bash-first 世界里的单个
+            <code>narrate</code> emit。
           </p>
         </article>
         <article class="lane">
@@ -812,8 +813,9 @@ LENOS_CONTEXT_COMPACTION</code></pre>
           <div>
             <h3>规范 summary 输出</h3>
             <p>
-              Summary prompt 改成要求单个 <code>narrate</code> handoff。v1 不做 runtime
-              包装；只用测试覆盖 prompt 文案里必须包含的格式约束。
+              Summary prompt 要求单个 <code>narrate</code> handoff。v1 不做 runtime
+              包装；compact 指令作为最后一条 user message，前缀复用正常会话的
+              bash-first system prompt。
             </p>
           </div>
         </article>

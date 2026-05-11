@@ -155,6 +155,19 @@ func TestBuildHistory_DoesNotIncludePrompt(t *testing.T) {
 	assert.Equal(t, fantasy.MessageRoleAssistant, last.Role, "last element should be the assistant reply")
 }
 
+func fantasyMessageText(msg fantasy.Message) string {
+	var sb strings.Builder
+	for _, part := range msg.Content {
+		switch p := part.(type) {
+		case fantasy.TextPart:
+			sb.WriteString(p.Text)
+		case *fantasy.TextPart:
+			sb.WriteString(p.Text)
+		}
+	}
+	return sb.String()
+}
+
 func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
@@ -903,6 +916,71 @@ func TestAgent_Summarize_UsesPrimaryModelAndConfigIDs(t *testing.T) {
 
 	// Also verify primary model is still small (invariant: Summarize doesn't change primary)
 	require.Equal(t, smallModel, agent.primaryModel.Get().Model, "primary should still be small after Summarize")
+}
+
+func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	sess, err := env.sessions.Create(t.Context(), "summarize prompt shape")
+	require.NoError(t, err)
+
+	inner := &scriptedModel{
+		emits: []string{"narrate <<'LENOS_CONTEXT_COMPACTION'\nSummary\nLENOS_CONTEXT_COMPACTION"},
+	}
+	model := &streamCapturingModel{inner: inner}
+	primary := Model{
+		Model:      model,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+		ModelCfg:   config.SelectedModel{Provider: "config-provider", Model: "config-model"},
+	}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   primary,
+		SmallModel:   primary,
+		PrimaryModel: primary,
+		SystemPrompt: "NORMAL BASH SYSTEM",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+	}).(*sessionAgent)
+
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "continue the work"}},
+	})
+	require.NoError(t, err)
+
+	err = agent.Summarize(t.Context(), sess.ID, fantasy.ProviderOptions{})
+	require.NoError(t, err)
+
+	require.Len(t, model.captured, 1)
+	prompt := model.captured[0]
+	require.GreaterOrEqual(t, len(prompt), 3)
+
+	first := prompt[0]
+	require.Equal(t, fantasy.MessageRoleSystem, first.Role)
+	firstText := fantasyMessageText(first)
+	require.Equal(t, "NORMAL BASH SYSTEM", firstText)
+	require.NotContains(t, firstText, "CONTEXT CHECKPOINT COMPACTION")
+	require.NotContains(t, firstText, "LENOS_CONTEXT_COMPACTION")
+
+	last := prompt[len(prompt)-1]
+	require.Equal(t, fantasy.MessageRoleUser, last.Role)
+	lastText := fantasyMessageText(last)
+	require.Contains(t, lastText, "CONTEXT CHECKPOINT COMPACTION")
+	require.Contains(t, lastText, "narrate <<'LENOS_CONTEXT_COMPACTION'")
+	require.Contains(t, lastText, "Provide a detailed summary")
+
+	systemMessages := 0
+	for _, msg := range prompt[:len(prompt)-1] {
+		if msg.Role != fantasy.MessageRoleSystem {
+			continue
+		}
+		systemMessages++
+		systemText := fantasyMessageText(msg)
+		require.NotContains(t, systemText, "CONTEXT CHECKPOINT COMPACTION")
+		require.NotContains(t, systemText, "LENOS_CONTEXT_COMPACTION")
+	}
+	require.Equal(t, 1, systemMessages)
 }
 
 func TestAgent_Summarize_RetriesRetryableStreamEOFAndClearsPartialSummary(t *testing.T) {
