@@ -77,11 +77,15 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	prompt = append(prompt, history...)
 	prompt = append(prompt, fantasy.NewUserMessage(buildSummaryPrompt(ctx, taskwarrior.ResolveJobIDFromCwd())))
 
-	stream, err := largeModel.Model.Stream(genCtx, fantasy.Call{
-		Prompt:          prompt,
-		ProviderOptions: opts,
-		UserAgent:       userAgent,
-	})
+	baseline := summaryMessage.Clone()
+	streamResult, err := retryModelStream(genCtx,
+		func() (summaryStreamResult, error) {
+			return streamSummaryAttempt(genCtx, largeModel.Model, prompt, opts, a.messages, &summaryMessage)
+		},
+		func() {
+			resetMessageForStreamRetry(genCtx, a.messages, &summaryMessage, baseline, "summary: reset message for stream retry")
+		},
+	)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return a.messages.Delete(ctx, summaryMessage.ID)
@@ -89,40 +93,9 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return err
 	}
 
-	var totalUsage fantasy.Usage
-	var providerMeta fantasy.ProviderMetadata
-	for part := range stream {
-		switch part.Type {
-		case fantasy.StreamPartTypeTextDelta:
-			summaryMessage.AppendContent(part.Delta)
-			if err := a.messages.Update(genCtx, summaryMessage); err != nil {
-				slog.Warn("failed to persist summary text delta", "session_id", sessionID, "err", err)
-			}
-		case fantasy.StreamPartTypeReasoningDelta:
-			summaryMessage.AppendReasoningContent(part.Delta)
-			if err := a.messages.Update(genCtx, summaryMessage); err != nil {
-				slog.Warn("failed to persist summary reasoning delta", "session_id", sessionID, "err", err)
-			}
-		case fantasy.StreamPartTypeReasoningEnd:
-			if anthropicData, ok := part.ProviderMetadata["anthropic"]; ok {
-				if sig, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && sig.Signature != "" {
-					summaryMessage.AppendReasoningSignature(sig.Signature)
-				}
-			}
-			summaryMessage.FinishThinking()
-			if err := a.messages.Update(genCtx, summaryMessage); err != nil {
-				slog.Warn("failed to persist summary reasoning end", "session_id", sessionID, "err", err)
-			}
-		case fantasy.StreamPartTypeFinish:
-			totalUsage = part.Usage
-			providerMeta = part.ProviderMetadata
-		case fantasy.StreamPartTypeError:
-			if errors.Is(part.Error, context.Canceled) {
-				return a.messages.Delete(ctx, summaryMessage.ID)
-			}
-			return part.Error
-		}
-	}
+	totalUsage := streamResult.usage
+	providerMeta := streamResult.meta
+	summaryMessage = streamResult.message
 
 	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
 	if err := a.messages.Update(genCtx, summaryMessage); err != nil {
@@ -136,6 +109,64 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	currentSession.PromptTokens = 0
 	_, err = a.sessions.Save(genCtx, currentSession)
 	return err
+}
+
+type summaryStreamResult struct {
+	message message.Message
+	usage   fantasy.Usage
+	meta    fantasy.ProviderMetadata
+}
+
+func streamSummaryAttempt(
+	ctx context.Context,
+	model fantasy.LanguageModel,
+	prompt fantasy.Prompt,
+	opts fantasy.ProviderOptions,
+	messages message.Service,
+	summaryMessage *message.Message,
+) (summaryStreamResult, error) {
+	stream, err := model.Stream(ctx, fantasy.Call{
+		Prompt:          prompt,
+		ProviderOptions: opts,
+		UserAgent:       userAgent,
+	})
+	if err != nil {
+		return summaryStreamResult{message: *summaryMessage}, err
+	}
+
+	var totalUsage fantasy.Usage
+	var providerMeta fantasy.ProviderMetadata
+	for part := range stream {
+		switch part.Type {
+		case fantasy.StreamPartTypeTextDelta:
+			summaryMessage.AppendContent(part.Delta)
+			if err := messages.Update(ctx, *summaryMessage); err != nil {
+				slog.Warn("failed to persist summary text delta", "err", err)
+			}
+		case fantasy.StreamPartTypeReasoningDelta:
+			summaryMessage.AppendReasoningContent(part.Delta)
+			if err := messages.Update(ctx, *summaryMessage); err != nil {
+				slog.Warn("failed to persist summary reasoning delta", "err", err)
+			}
+		case fantasy.StreamPartTypeReasoningEnd:
+			if anthropicData, ok := part.ProviderMetadata["anthropic"]; ok {
+				if sig, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && sig.Signature != "" {
+					summaryMessage.AppendReasoningSignature(sig.Signature)
+				}
+			}
+			summaryMessage.FinishThinking()
+			if err := messages.Update(ctx, *summaryMessage); err != nil {
+				slog.Warn("failed to persist summary reasoning end", "err", err)
+			}
+		case fantasy.StreamPartTypeFinish:
+			totalUsage = part.Usage
+			providerMeta = part.ProviderMetadata
+		case fantasy.StreamPartTypeError:
+			return summaryStreamResult{message: *summaryMessage, usage: totalUsage, meta: providerMeta}, part.Error
+		}
+	}
+
+	return summaryStreamResult{message: *summaryMessage, usage: totalUsage, meta: providerMeta}, nil
 }
 
 func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
