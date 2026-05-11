@@ -139,7 +139,8 @@ func NewCoordinator(
 		HookRunner:           hookRunner,
 	})
 
-	// Build system prompt: bash-first base + cmd-git.tpl + lenos.md.tpl (universal rules + identity body + memory tails).
+	// Build system prompt: bash-first base + git guidance + lenos.md.tpl
+	// (universal rules + identity body + memory tails).
 	contextPaths := getCoderContextPaths(c.cfg)
 	c.systemPrompt, err = SystemPrompt(
 		ctx,

@@ -32,8 +32,8 @@ type promptData struct {
 }
 
 // buildBaseSystemPrompt renders the bash-first system prompt with runtime
-// context. The result is the base prompt; SystemPrompt() appends git status
-// and the lenos coder post-template.
+// context. The result is the base prompt; SystemPrompt() appends git repo
+// guidance and the lenos coder post-template.
 func buildBaseSystemPrompt(d promptData) (string, error) {
 	var buf strings.Builder
 	if err := systemPromptTmpl.Execute(&buf, d); err != nil {

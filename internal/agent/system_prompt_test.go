@@ -196,6 +196,36 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 	assertValidBashSyntax(t, got)
 }
 
+func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
+	dataDir := t.TempDir()
+	cmd := exec.CommandContext(t.Context(), "git", "init")
+	cmd.Dir = dataDir
+	require.NoError(t, cmd.Run())
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "dirty.txt"), []byte("dirty"), 0o644))
+
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "narrate <<'LENOS_GIT_CONTEXT'")
+	assert.Contains(t, got, "Working directory is a git repository.")
+	assert.Contains(t, got, "git status --short")
+	assert.NotContains(t, got, "Git status (snapshot at conversation start")
+	assert.NotContains(t, got, "?? dirty.txt")
+	assert.NotContains(t, got, "Recent commits:")
+	assertValidBashSyntax(t, got)
+}
+
 func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()

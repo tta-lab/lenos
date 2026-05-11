@@ -24,7 +24,7 @@ var initializePromptTmpl []byte
 
 // SystemPrompt builds the full system prompt by concatenating:
 //  1. The bash-first base prompt (env, output protocol, available commands).
-//  2. cmd-git.tpl (git section with attribution).
+//  2. cmd-git.tpl (git repo guidance with attribution).
 //  3. The lenos wrapper template (universal rules + identity body + memory).
 func SystemPrompt(
 	ctx context.Context,
@@ -51,7 +51,6 @@ func SystemPrompt(
 
 	gitData := GitTemplateData{
 		IsGitRepo:   prompt.IsGitRepo(workingDir),
-		GitStatus:   prompt.GetGitStatus(ctx, workingDir),
 		Attribution: store.Config().Options.Attribution.Render(),
 	}
 	gitSection, err := renderGitTemplate(gitData)
