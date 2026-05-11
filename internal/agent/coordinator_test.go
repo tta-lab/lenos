@@ -176,14 +176,18 @@ func TestCoordinator_Run_TextAttachmentPassthrough(t *testing.T) {
 	call := <-captured
 	prompt := call.Prompt
 
-	assert.Contains(t, prompt, `<file path='/path/to/test.txt'>`)
+	assert.Contains(t, prompt, "# Attached Files")
+	assert.Contains(t, prompt, "narrate <<'LENOS_ATTACHMENT_0'")
+	assert.Contains(t, prompt, "# File: /path/to/test.txt")
 	assert.Contains(t, prompt, "hello world")
-	assert.Contains(t, prompt, `<file path='/path/to/notes.md'>`)
+	assert.Contains(t, prompt, "narrate <<'LENOS_ATTACHMENT_1'")
+	assert.Contains(t, prompt, "# File: /path/to/notes.md")
 	assert.Contains(t, prompt, "# notes")
-	assert.Contains(t, prompt, "</file>")
-	assert.Contains(t, prompt, "<system_info>")
+	assert.NotContains(t, prompt, "<file")
+	assert.NotContains(t, prompt, "</file>")
+	assert.NotContains(t, prompt, "<system_info>")
 	// Verify header appears exactly once (both attachments share it)
-	assert.Equal(t, 1, strings.Count(prompt, "<system_info>"))
+	assert.Equal(t, 1, strings.Count(prompt, "# Attached Files"))
 }
 
 func TestCoordinator_Run_EmptyAttachments(t *testing.T) {
@@ -428,4 +432,25 @@ func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 		require.NotEmpty(t, call.AllowedPaths)
 		assert.True(t, call.AllowedPaths[0].ReadOnly, "RO override should set cwd ReadOnly=true")
 	})
+}
+
+func TestBuildCall_DefaultNarrationTargetFromOverrides(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	cfg, err := config.Init(tmp, "", false)
+	require.NoError(t, err)
+	cfg.Overrides().PairWith = "reviewer"
+
+	c := &coordinator{
+		cfg:          cfg,
+		dataDir:      cfg.WorkingDir(),
+		currentAgent: &stubAgent{modelName: "test-model"},
+	}
+	call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
+
+	assert.Equal(t, "reviewer", call.DefaultNarrationTarget)
 }

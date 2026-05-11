@@ -23,6 +23,20 @@ func TestRootCmd_ReadonlyFlagParse(t *testing.T) {
 	require.True(t, v)
 }
 
+func TestRootCmd_PairWithFlagDeclared(t *testing.T) {
+	f := rootCmd.Flags().Lookup("pair-with")
+	require.NotNil(t, f, "--pair-with flag must be declared on rootCmd")
+	require.Equal(t, "", f.Shorthand, "--pair-with should have no shorthand")
+	require.Equal(t, "", f.DefValue, "--pair-with default must be empty")
+}
+
+func TestRootCmd_PairWithFlagParse(t *testing.T) {
+	err := rootCmd.ParseFlags([]string{"--pair-with", "reviewer"})
+	require.NoError(t, err)
+	v, _ := rootCmd.Flags().GetString("pair-with")
+	require.Equal(t, "reviewer", v)
+}
+
 func TestResolveAgentFile_FoundOnDisk(t *testing.T) {
 	td := t.TempDir()
 	agentContent := "# Test Agent\nBody"

@@ -14,6 +14,8 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
+
+	"github.com/tta-lab/lenos/internal/protocol"
 )
 
 type MessageRole string
@@ -361,22 +363,25 @@ func PromptWithTextAttachments(prompt string, attachments []Attachment) string {
 	var sb strings.Builder
 	sb.WriteString(prompt)
 	addedAttachments := false
+	textIndex := 0
 	for _, content := range attachments {
 		if !content.IsText() {
 			continue
 		}
 		if !addedAttachments {
-			sb.WriteString("\n<system_info>The files below have been attached by the user, consider them in your response</system_info>\n")
+			sb.WriteString("\n\n# Attached Files\n")
+			sb.WriteString("The files below have been attached by the user; consider them in your response.\n\n")
 			addedAttachments = true
 		}
+		var body strings.Builder
 		if content.FilePath != "" {
-			fmt.Fprintf(&sb, "<file path='%s'>\n", content.FilePath)
+			fmt.Fprintf(&body, "# File: %s\n\n", content.FilePath)
 		} else {
-			sb.WriteString("<file>\n")
+			body.WriteString("# File\n\n")
 		}
-		sb.WriteString("\n")
-		sb.Write(content.Content)
-		sb.WriteString("\n</file>\n")
+		body.Write(content.Content)
+		sb.WriteString(protocol.NarrateSection(fmt.Sprintf("LENOS_ATTACHMENT_%d", textIndex), body.String()))
+		textIndex++
 	}
 	return sb.String()
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/protocol"
 )
 
 //go:embed templates/lenos.md.tpl
@@ -68,7 +69,18 @@ func SystemPrompt(
 		return "", err
 	}
 
-	return base + "\n" + gitSection + "\n" + lenosWrapper, nil
+	var b strings.Builder
+	b.WriteString(base)
+	b.WriteString("\n")
+	b.WriteString(protocol.NarrateSection("LENOS_GIT_CONTEXT", gitSection))
+	b.WriteString("\n")
+	if pairWith := strings.TrimSpace(store.Overrides().PairWith); pairWith != "" {
+		b.WriteString(protocol.NarrateSection("LENOS_NARRATION_PAIR",
+			"# Narration Pair\n\nNarration without `--to` is delivered to "+pairWith+". Explicit `narrate --to` calls keep their target."))
+		b.WriteString("\n")
+	}
+	b.WriteString(lenosWrapper)
+	return b.String(), nil
 }
 
 // resolveIdentityBody resolves the agent identity body used for the
@@ -107,7 +119,11 @@ func InitializePrompt(cfg *config.ConfigStore) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return systemPrompt.Build(context.Background(), "", "", cfg)
+	body, err := systemPrompt.Build(context.Background(), "", "", cfg)
+	if err != nil {
+		return "", err
+	}
+	return protocol.NarrateSection("LENOS_INITIALIZE_PROMPT", body), nil
 }
 
 // stripYAMLFrontmatter removes a single leading YAML frontmatter block

@@ -49,6 +49,35 @@ func BenchmarkPromptWithTextAttachments(b *testing.B) {
 	}
 }
 
+func TestPromptWithTextAttachments_UsesNarrateBoundaries(t *testing.T) {
+	t.Parallel()
+
+	got := PromptWithTextAttachments("review these", []Attachment{
+		{
+			FilePath: "/path/to/test.txt",
+			MimeType: "text/plain",
+			Content:  []byte("hello world"),
+		},
+		{
+			FilePath: "/path/to/notes.md",
+			MimeType: "text/markdown",
+			Content:  []byte("# notes"),
+		},
+	})
+
+	require.Contains(t, got, "# Attached Files")
+	require.Contains(t, got, "narrate <<'LENOS_ATTACHMENT_0'")
+	require.Contains(t, got, "# File: /path/to/test.txt")
+	require.Contains(t, got, "hello world")
+	require.Contains(t, got, "narrate <<'LENOS_ATTACHMENT_1'")
+	require.Contains(t, got, "# File: /path/to/notes.md")
+	require.Contains(t, got, "# notes")
+	require.NotContains(t, got, "<system_info>")
+	require.NotContains(t, got, "<file")
+	require.NotContains(t, got, "</file>")
+	require.Equal(t, 1, strings.Count(got, "# Attached Files"))
+}
+
 func TestToAIMessage_Result(t *testing.T) {
 	t.Parallel()
 

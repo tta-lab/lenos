@@ -82,11 +82,6 @@ narrate <<'EOF'
 your message here
 EOF
 
-To talk to a specific agent, use:
-narrate --to agent-name <<'EOF'
-message for a specific agent
-EOF
-
 To leave a short note before a command, use a bash comment:
   # checking the agent loop
 
@@ -120,12 +115,11 @@ if `+"`%s`"+` is a real binary you expected:
 then either install it, or pick an alternative.
 
 if `+"`%s`"+` looks like part of an English sentence ("let me ...", "i'll ...",
-"here's ...") OR you wrapped your command in a markdown fence
-(`+"```bash ... ```"+`), DROP THAT shape:
+"here's ...") OR you wrapped your command in a markdown fence, drop that shape:
   - the runtime parses your ENTIRE response as bash via bash -c
   - shell-looking prose runs as commands and fails
-  - markdown fences (`+"```...```"+`) are bash command-substitution syntax,
-    not chat-rendering boundaries
+  - markdown fences are command-substitution syntax, not chat-rendering
+    boundaries
 
 to annotate one command (one line):  # this is a bash comment — bash ignores it
 to talk to the human (multi-line):   narrate <<'EOF' ... EOF

@@ -268,14 +268,15 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 	}
 
 	return SessionAgentCall{
-		SessionID:       sessionID,
-		Prompt:          prompt,
-		ProviderID:      model.ModelCfg.Provider,
-		ProviderOptions: getProviderOptions(model, providerCfg),
-		Sandbox:         useSandbox,
-		SandboxClient:   sandboxClient,
-		Env:             sandboxEnv,
-		AllowedPaths:    BuildAllowedPaths(ctx, cwd, access, additionalReadOnlyPaths...),
+		SessionID:              sessionID,
+		Prompt:                 prompt,
+		ProviderID:             model.ModelCfg.Provider,
+		ProviderOptions:        getProviderOptions(model, providerCfg),
+		Sandbox:                useSandbox,
+		SandboxClient:          sandboxClient,
+		Env:                    sandboxEnv,
+		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access, additionalReadOnlyPaths...),
+		DefaultNarrationTarget: strings.TrimSpace(c.cfg.Overrides().PairWith),
 	}
 }
 

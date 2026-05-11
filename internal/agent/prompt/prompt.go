@@ -16,6 +16,7 @@ import (
 
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/home"
+	"github.com/tta-lab/lenos/internal/protocol"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
 )
 
@@ -95,7 +96,9 @@ func NewPrompt(name, promptTemplate string, opts ...Option) (*Prompt, error) {
 }
 
 func (p *Prompt) Build(ctx context.Context, provider, model string, store *config.ConfigStore) (string, error) {
-	t, err := template.New(p.name).Parse(p.template)
+	t, err := template.New(p.name).Funcs(template.FuncMap{
+		"narrateSection": protocol.NarrateSection,
+	}).Parse(p.template)
 	if err != nil {
 		return "", fmt.Errorf("parsing template: %w", err)
 	}
@@ -199,7 +202,7 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	contextPaths := cfg.Options.ContextPaths
 	if len(p.contextPaths) > 0 {
 		// Merge global and per-prompter paths, deduplicating by lowercased
-		// expanded path so the same file doesn't render twice in <memory>.
+		// expanded path so the same file doesn't render twice.
 		seen := make(map[string]struct{}, len(contextPaths)+len(p.contextPaths))
 		merged := make([]string, 0, len(contextPaths)+len(p.contextPaths))
 		for _, pth := range append(contextPaths, p.contextPaths...) {

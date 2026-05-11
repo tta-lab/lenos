@@ -47,6 +47,9 @@ type loopDeps struct {
 	providerID string // config provider ID (for assistant message Provider field)
 	env        map[string]string
 	paths      []client.AllowedPath
+	// defaultNarrationTarget is applied to narrate calls without --to.
+	// Explicit --to values remain unchanged.
+	defaultNarrationTarget string
 	// onUsage is called after each step with usage metrics.
 	// Return true to request an early stop with stopShouldSummarize.
 	onUsage func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool
@@ -204,7 +207,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopError, fmt.Errorf("create result row: %w", createErr)
 			}
 
-			inv, invErr := newNarrateInvocation(emit, deps.env, deps.paths)
+			inv, invErr := newNarrateInvocation(emit, deps.env, deps.paths, deps.defaultNarrationTarget)
 			if invErr != nil {
 				abandonPending(ctx, deps.messages, &resultMsg)
 				return stopError, fmt.Errorf("create narrate IPC directory: %w", invErr)

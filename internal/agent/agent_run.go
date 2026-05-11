@@ -165,16 +165,17 @@ runLoopReentry:
 		}
 	}
 	deps := loopDeps{
-		model:        primaryModel.Model,
-		provOpts:     call.ProviderOptions,
-		messages:     a.messages,
-		runner:       resolveRunner(call),
-		sessionID:    call.SessionID,
-		sysPrompt:    a.systemPrompt.Get(),
-		providerID:   call.ProviderID,
-		env:          call.Env,
-		paths:        call.AllowedPaths,
-		postStepHook: postStepHook,
+		model:                  primaryModel.Model,
+		provOpts:               call.ProviderOptions,
+		messages:               a.messages,
+		runner:                 resolveRunner(call),
+		sessionID:              call.SessionID,
+		sysPrompt:              a.systemPrompt.Get(),
+		providerID:             call.ProviderID,
+		env:                    call.Env,
+		paths:                  call.AllowedPaths,
+		defaultNarrationTarget: call.DefaultNarrationTarget,
+		postStepHook:           postStepHook,
 		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) bool {
 			s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
 			if !ok {

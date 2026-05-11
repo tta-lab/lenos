@@ -21,9 +21,10 @@ identity body + memory tails).
 Flags:
   --agent, -a      Agent identity file name (e.g. coder, pr-review-lead).
                    Defaults to "coder". The agent body is injected into the
-                   identity slot at the prompt top — NOT in <memory>.
+                   identity slot at the prompt top, not in memory.
+  --pair-with      Default target for narrate calls without --to.
   --context-file, -f  Extra context file (repeatable). Injected into the
-                   <memory> block at the prompt tail.`,
+                   memory section at the prompt tail.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agentName, _ := cmd.Flags().GetString("agent")
 		contextFiles, _ := cmd.Flags().GetStringArray("context-file")
@@ -49,4 +50,5 @@ Flags:
 func init() {
 	systemPromptCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder, pr-review-lead)")
 	systemPromptCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file (repeatable)")
+	systemPromptCmd.Flags().String("pair-with", "", "Default target for narrate calls without --to")
 }

@@ -10,7 +10,7 @@ import (
 
 func TestNarrateInvocationWritesEventsThroughBashFunction(t *testing.T) {
 	t.Parallel()
-	inv, err := newNarrateInvocation("narrate --to owner <<'EOF'\nFirst\nEOF\nnarrate --continue <<'EOF'\nSecond\nEOF", nil, nil)
+	inv, err := newNarrateInvocation("narrate --to owner <<'EOF'\nFirst\nEOF\nnarrate --continue <<'EOF'\nSecond\nEOF", nil, nil, "")
 	require.NoError(t, err)
 	defer inv.cleanup()
 
@@ -31,7 +31,7 @@ func TestNarrateInvocationWritesEventsThroughBashFunction(t *testing.T) {
 
 func TestNarrateInvocationAcceptsToAndContinueInEitherOrder(t *testing.T) {
 	t.Parallel()
-	inv, err := newNarrateInvocation("narrate --continue --to owner <<'EOF'\nFirst\nEOF\nnarrate --to reviewer --continue <<'EOF'\nSecond\nEOF", nil, nil)
+	inv, err := newNarrateInvocation("narrate --continue --to owner <<'EOF'\nFirst\nEOF\nnarrate --to reviewer --continue <<'EOF'\nSecond\nEOF", nil, nil, "")
 	require.NoError(t, err)
 	defer inv.cleanup()
 
@@ -50,9 +50,28 @@ func TestNarrateInvocationAcceptsToAndContinueInEitherOrder(t *testing.T) {
 	assert.True(t, narrations[1].Continue)
 }
 
+func TestNarrateInvocationAppliesDefaultToWhenMissing(t *testing.T) {
+	t.Parallel()
+	inv, err := newNarrateInvocation("narrate <<'EOF'\nFirst\nEOF\nnarrate --to reviewer <<'EOF'\nSecond\nEOF", nil, nil, "pair")
+	require.NoError(t, err)
+	defer inv.cleanup()
+
+	res := LocalRunner{}.Run(context.Background(), inv.bash, inv.env, inv.paths)
+	require.NoError(t, res.Err)
+	require.Equal(t, 0, res.ExitCode, "stderr=%s", string(res.Stderr))
+
+	narrations, err := readNarrationEvents(inv.dir)
+	require.NoError(t, err)
+	require.Len(t, narrations, 2)
+	assert.Equal(t, "First\n", narrations[0].Body)
+	assert.Equal(t, "pair", narrations[0].To)
+	assert.Equal(t, "Second\n", narrations[1].Body)
+	assert.Equal(t, "reviewer", narrations[1].To)
+}
+
 func TestNarrateInvocationRejectsPositionalBodyArgs(t *testing.T) {
 	t.Parallel()
-	inv, err := newNarrateInvocation(`narrate "Done"`, nil, nil)
+	inv, err := newNarrateInvocation(`narrate "Done"`, nil, nil, "")
 	require.NoError(t, err)
 	defer inv.cleanup()
 
@@ -68,7 +87,7 @@ func TestNarrateInvocationRejectsPositionalBodyArgs(t *testing.T) {
 
 func TestNarrateInvocationRejectsEmptyBody(t *testing.T) {
 	t.Parallel()
-	inv, err := newNarrateInvocation("narrate <<'EOF'\nEOF", nil, nil)
+	inv, err := newNarrateInvocation("narrate <<'EOF'\nEOF", nil, nil, "")
 	require.NoError(t, err)
 	defer inv.cleanup()
 
