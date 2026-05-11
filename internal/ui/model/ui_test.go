@@ -108,10 +108,7 @@ func TestCurrentModelSupportsImages(t *testing.T) {
 		tw := ui.com.Workspace.(*testWorkspace)
 		tw.agentReady = true
 		tw.agentModel = workspace.AgentModel{
-			CatwalkCfg: catwalk.Model{
-				ID:             "active-model",
-				SupportsImages: true,
-			},
+			CatwalkCfg: catwalk.Model{SupportsImages: true},
 		}
 
 		require.True(t, ui.currentModelSupportsImages())

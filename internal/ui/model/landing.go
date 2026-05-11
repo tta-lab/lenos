@@ -19,9 +19,7 @@ func selectedAgentModel(com *common.Common) *workspace.AgentModel {
 	}
 	if com.Workspace.AgentIsReady() {
 		model := com.Workspace.AgentModel()
-		if model.CatwalkCfg.ID != "" || model.ModelCfg.Model != "" || model.CatwalkCfg.ContextWindow > 0 {
-			return &model
-		}
+		return &model
 	}
 	cfg := com.Config()
 	if cfg == nil {
