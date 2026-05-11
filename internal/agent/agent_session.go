@@ -21,7 +21,6 @@ import (
 	"charm.land/fantasy/providers/vercel"
 
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/protocol"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
 )
@@ -201,11 +200,37 @@ func (a *sessionAgent) getSessionMessages(ctx context.Context, s session.Session
 			}
 		}
 		if summaryMsgIndex != -1 {
-			msgs = msgs[summaryMsgIndex:]
-			msgs[0].Role = message.User
+			summaryMsg := msgs[summaryMsgIndex]
+			summaryMsg.Role = message.User
+
+			compacted := make([]message.Message, 0, 1+recentUserMessagesAfterCompact+len(msgs[summaryMsgIndex+1:]))
+			compacted = append(compacted, summaryMsg)
+			compacted = append(compacted, recentUserMessages(msgs[:summaryMsgIndex], recentUserMessagesAfterCompact)...)
+			compacted = append(compacted, msgs[summaryMsgIndex+1:]...)
+			msgs = compacted
 		}
 	}
 	return msgs, nil
+}
+
+func recentUserMessages(msgs []message.Message, limit int) []message.Message {
+	if limit <= 0 {
+		return nil
+	}
+	recent := make([]message.Message, 0, limit)
+	for i := len(msgs) - 1; i >= 0 && len(recent) < limit; i-- {
+		if msgs[i].Role != message.User {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(msgs[i].Content().Text), autoCompactContinuationPrefix) {
+			continue
+		}
+		recent = append(recent, msgs[i])
+	}
+	for i, j := 0, len(recent)-1; i < j; i, j = i+1, j-1 {
+		recent[i], recent[j] = recent[j], recent[i]
+	}
+	return recent
 }
 
 // generateTitle generates a session titled based on the initial prompt.
@@ -398,7 +423,19 @@ func (a *sessionAgent) Model() Model {
 }
 
 func summarySystemPrompt() string {
-	return protocol.NarrateSection("LENOS_SUMMARY_SYSTEM", string(summaryPrompt))
+	return strings.TrimRight(string(summaryPrompt), "\n") + `
+
+Output protocol:
+
+You must emit exactly one bash heredoc in this form:
+
+narrate <<'LENOS_CONTEXT_COMPACTION'
+Summary markdown goes here.
+LENOS_CONTEXT_COMPACTION
+
+Do not emit Markdown fences, JSON, XML, comments, or any text before or after
+the heredoc.
+`
 }
 
 // formatSummaryPrompt formats the session summarization prompt from a todo list.
@@ -414,7 +451,7 @@ func formatSummaryPrompt(todos []session.Todo) string {
 		sb.WriteString("\nInclude these tasks and their statuses in your summary. ")
 		sb.WriteString("Instruct the resuming assistant to use `task <uuid> done` to mark completed subtasks.")
 	}
-	return protocol.NarrateSection("LENOS_SUMMARY_REQUEST", sb.String())
+	return sb.String()
 }
 
 // buildSummaryPrompt fetches subtasks from taskwarrior and builds the summarization prompt.

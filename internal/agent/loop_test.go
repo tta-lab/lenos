@@ -718,9 +718,8 @@ func TestRunLoop_PostStepHookFiresBeforeOnUsage(t *testing.T) {
 	deps.postStepHook = func(stepIdx int, u fantasy.Usage) {
 		hookSteps = append(hookSteps, stepIdx)
 	}
-	deps.onUsage = func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool {
+	deps.onUsage = func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) {
 		usageSteps = append(usageSteps, stepIdx)
-		return false // don't auto-compact
 	}
 
 	stop, err := runLoop(context.Background(), deps, nil, "go")
@@ -731,25 +730,34 @@ func TestRunLoop_PostStepHookFiresBeforeOnUsage(t *testing.T) {
 	require.Len(t, usageSteps, 2, "onUsage: both steps")
 }
 
-func TestRunLoop_PostStepHookExecutesBeforeAutoCompact(t *testing.T) {
+func TestRunLoop_PostStepHookExecutesBeforePreStepAutoCompact(t *testing.T) {
 	t.Parallel()
 	var hookCalled bool
-	model := &scriptedModel{emits: []string{"exit"}}
+	var usageCalled bool
+	model := &scriptedModel{emits: []string{"echo ok"}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("ok\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
 	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, &fakeRunner{}, rec)
+	deps, _ := newDeps(t, model, runner, rec)
 	deps.postStepHook = func(int, fantasy.Usage) {
 		hookCalled = true
 	}
-	deps.onUsage = func(int, fantasy.Usage, fantasy.ProviderMetadata) bool {
-		return true // trigger auto-compact
+	deps.onUsage = func(int, fantasy.Usage, fantasy.ProviderMetadata) {
+		usageCalled = true
+	}
+	deps.shouldSummarizeBeforeStep = func(stepIdx int) bool {
+		return stepIdx > 0
 	}
 
 	stop, err := runLoop(context.Background(), deps, nil, "go")
 	require.NoError(t, err)
 	assert.Equal(t, stopShouldSummarize, stop)
-	// Even though onUsage returned true on step 0, postStepHook should have fired first
 	if !hookCalled {
-		t.Fatal("postStepHook was not called before onUsage returned true")
+		t.Fatal("postStepHook was not called before pre-step compact")
+	}
+	if !usageCalled {
+		t.Fatal("onUsage was not called before pre-step compact")
 	}
 }
 
@@ -866,22 +874,24 @@ func TestRunLoop_OnUsageStopReturnsShouldSummarize(t *testing.T) {
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
 	var calls int
-	deps.onUsage = func(_ int, _ fantasy.Usage, _ fantasy.ProviderMetadata) bool {
+	deps.onUsage = func(_ int, _ fantasy.Usage, _ fantasy.ProviderMetadata) {
 		calls++
-		return calls >= 2 // request compact on second step
+	}
+	deps.shouldSummarizeBeforeStep = func(stepIdx int) bool {
+		return stepIdx > 0 && calls >= 1
 	}
 
 	stop, err := runLoop(context.Background(), deps, nil, "do work")
 	require.NoError(t, err)
 	assert.Equal(t, stopShouldSummarize, stop)
-	assert.Equal(t, 2, calls, "onUsage should fire once per emit, including the triggering one")
+	assert.Equal(t, 1, calls, "onUsage should fire for the completed emit before compact")
 
 	assistants := assistantsByOrder(ms)
 	require.NotEmpty(t, assistants)
-	assert.Equal(t, message.FinishReasonEndTurn, assistants[len(assistants)-1].FinishReason())
+	assert.Equal(t, message.FinishReasonToolUse, assistants[len(assistants)-1].FinishReason())
 
-	// OnUsage stop: last assistant should be EndTurn.
-	assert.Equal(t, message.FinishReasonEndTurn, assistants[len(assistants)-1].FinishReason())
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1, "pre-step compact should happen after the completed bash result")
 }
 
 // TestRunLoop_CmdNotFound_PassesStderrToken verifies that when bash prints

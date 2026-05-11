@@ -51,8 +51,12 @@ type loopDeps struct {
 	// Explicit --to values remain unchanged.
 	defaultNarrationTarget string
 	// onUsage is called after each step with usage metrics.
-	// Return true to request an early stop with stopShouldSummarize.
-	onUsage func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool
+	onUsage func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
+
+	// shouldSummarizeBeforeStep is called immediately before a model stream
+	// starts. Return true to stop at the pre-step boundary and let the caller
+	// compact the session before re-entering.
+	shouldSummarizeBeforeStep func(stepIdx int) bool
 
 	// postStepHook is called after each step with the just-completed step's
 	// usage. Nil-safe: a nil value is a no-op.
@@ -68,7 +72,7 @@ const (
 	stopStepCap                           // 500 emissions without exit
 	stopError                             // unrecoverable error (provider, persistence)
 	stopCanceled                          // ctx canceled mid-stream or mid-exec
-	stopShouldSummarize                   // onUsage callback requested mid-turn auto-compact
+	stopShouldSummarize                   // pre-step callback requested auto-compact
 )
 
 // runLoop drives one turn of the bash-first agent: stream → classify → exec
@@ -82,6 +86,10 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 	msgs = append(msgs, fantasy.NewUserMessage(prompt))
 
 	for step := 0; step < StepCap; step++ {
+		if deps.shouldSummarizeBeforeStep != nil && deps.shouldSummarizeBeforeStep(step) {
+			return stopShouldSummarize, nil
+		}
+
 		assistantMsg, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 			Role:     message.Assistant,
 			Parts:    []message.ContentPart{message.TextContent{Text: ""}},
@@ -103,10 +111,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			deps.postStepHook(step, usage)
 		}
 		if deps.onUsage != nil {
-			if deps.onUsage(step, usage, meta) {
-				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonEndTurn)
-				return stopShouldSummarize, nil
-			}
+			deps.onUsage(step, usage, meta)
 		}
 
 		probe := deps.salvage

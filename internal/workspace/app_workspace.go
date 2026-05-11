@@ -143,6 +143,10 @@ func (w *AppWorkspace) AgentClearQueue(sessionID string) {
 	}
 }
 
+func (w *AppWorkspace) AgentCompact(ctx context.Context, sessionID string) error {
+	return w.AgentSummarize(ctx, sessionID)
+}
+
 func (w *AppWorkspace) AgentSummarize(ctx context.Context, sessionID string) error {
 	if w.app.AgentCoordinator == nil {
 		return errors.New("agent coordinator not initialized")

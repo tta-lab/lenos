@@ -1,0 +1,890 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lenos Context Compaction Design</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0e1111;
+      --paper: #f3ead6;
+      --ink: #efe8d9;
+      --muted: #a8b0a8;
+      --panel: #151a18;
+      --panel-2: #1b221f;
+      --line: #344139;
+      --line-soft: rgba(239, 232, 217, .14);
+      --mint: #9dd6b8;
+      --steel: #8eb6d3;
+      --amber: #d8b36a;
+      --clay: #cf776b;
+      --violet: #b6a1d9;
+      --shadow: rgba(0, 0, 0, .34);
+      --mono: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
+      --sans: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      --serif: Georgia, "Times New Roman", serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, .026) 1px, transparent 1px) 0 0 / 36px 36px,
+        linear-gradient(0deg, rgba(255, 255, 255, .018) 1px, transparent 1px) 0 0 / 36px 36px,
+        linear-gradient(135deg, rgba(157, 214, 184, .13), transparent 34rem),
+        linear-gradient(315deg, rgba(142, 182, 211, .11), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.56;
+    }
+
+    a {
+      color: var(--steel);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code,
+    pre {
+      font-family: var(--mono);
+    }
+
+    code {
+      color: #f2d899;
+      font-size: .94em;
+    }
+
+    pre {
+      margin: 0;
+      overflow: auto;
+      border: 1px solid rgba(216, 179, 106, .28);
+      border-radius: 8px;
+      background: #090b0b;
+      color: #f3ead6;
+      padding: 1rem;
+      font-size: .86rem;
+      line-height: 1.48;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 30px 0 62px;
+    }
+
+    .hero {
+      min-height: 74vh;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, .62fr);
+      gap: 20px;
+      align-items: stretch;
+      padding: 18px 0 28px;
+    }
+
+    .hero-main,
+    .hero-index,
+    .finding,
+    .lane,
+    .decision,
+    .todo {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .012)), var(--panel);
+      box-shadow: 0 18px 60px var(--shadow);
+    }
+
+    .hero-main {
+      min-height: 520px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(28px, 6vw, 70px);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: .6rem;
+      color: var(--mint);
+      font-family: var(--mono);
+      font-size: .78rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--mint);
+      transform: rotate(45deg);
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 11ch;
+      margin-top: 34px;
+      font-family: var(--serif);
+      font-size: clamp(4.4rem, 9vw, 8.5rem);
+      font-weight: 500;
+    }
+
+    h2 {
+      font-size: clamp(2rem, 4vw, 3.8rem);
+      font-family: var(--serif);
+      font-weight: 500;
+    }
+
+    h3 {
+      font-size: 1.08rem;
+      color: var(--paper);
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .subtitle {
+      max-width: 58rem;
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 1.6vw, 1.28rem);
+    }
+
+    .hero-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 52px;
+    }
+
+    .metric {
+      min-width: 0;
+      border-top: 1px solid var(--line);
+      padding-top: 13px;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: .9rem;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .hero-index {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 20px;
+      background: linear-gradient(180deg, rgba(142, 182, 211, .075), rgba(255, 255, 255, .01)), var(--panel);
+    }
+
+    .toc {
+      display: grid;
+      gap: 8px;
+    }
+
+    .toc a {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      padding: 11px 12px;
+      color: var(--ink);
+      background: rgba(0, 0, 0, .16);
+    }
+
+    .toc span {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: .78rem;
+    }
+
+    .status-box {
+      border-top: 1px solid var(--line);
+      padding-top: 18px;
+    }
+
+    .status-box strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--amber);
+      font-family: var(--mono);
+      font-size: .8rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .section {
+      padding: 58px 0 0;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(220px, .42fr) minmax(0, .58fr);
+      gap: 28px;
+      align-items: end;
+      margin-bottom: 22px;
+    }
+
+    .section-head p {
+      font-size: 1.02rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .finding,
+    .decision,
+    .todo {
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .finding {
+      min-height: 220px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border: 1px solid var(--line-soft);
+      border-radius: 999px;
+      padding: 0 9px;
+      color: var(--mint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .finding h3,
+    .decision h3,
+    .todo h3 {
+      margin-top: 16px;
+    }
+
+    .finding p,
+    .decision p,
+    .todo p {
+      margin-top: 10px;
+    }
+
+    .finding.problem {
+      border-color: rgba(207, 119, 107, .46);
+    }
+
+    .finding.problem .tag {
+      color: var(--clay);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, .96fr) minmax(320px, 1.04fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .lane {
+      border-radius: 8px;
+      padding: 18px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .012)), var(--panel-2);
+    }
+
+    .lane + .lane {
+      margin-top: 12px;
+    }
+
+    .lane-label {
+      color: var(--amber);
+      font-family: var(--mono);
+      font-size: .78rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .lane h3 {
+      margin-top: 12px;
+    }
+
+    .lane p {
+      margin-top: 9px;
+    }
+
+    .flow {
+      display: grid;
+      gap: 10px;
+    }
+
+    .flow-row {
+      display: grid;
+      grid-template-columns: 130px minmax(0, 1fr);
+      gap: 12px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(0, 0, 0, .16);
+    }
+
+    .flow-row strong {
+      color: var(--steel);
+      font-family: var(--mono);
+      font-size: .8rem;
+    }
+
+    .flow-row span {
+      color: var(--muted);
+      min-width: 0;
+    }
+
+    .callout {
+      border-left: 3px solid var(--mint);
+      margin-top: 18px;
+      padding: 14px 0 14px 16px;
+      color: var(--paper);
+      background: linear-gradient(90deg, rgba(157, 214, 184, .08), transparent);
+    }
+
+    .callout p {
+      color: var(--paper);
+    }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+    }
+
+    .todo-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .todo {
+      display: grid;
+      grid-template-columns: 62px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .todo-num {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      color: var(--amber);
+      font-family: var(--mono);
+      background: rgba(0, 0, 0, .18);
+    }
+
+    .footer {
+      margin-top: 62px;
+      border-top: 1px solid var(--line);
+      padding-top: 22px;
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    @media (max-width: 920px) {
+      .hero,
+      .section-head,
+      .split,
+      .decision-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-main {
+        min-height: auto;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-strip {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .page {
+        width: min(100% - 20px, 1180px);
+        padding-top: 14px;
+      }
+
+      h1 {
+        font-size: clamp(3.2rem, 18vw, 4.6rem);
+      }
+
+      .hero-main,
+      .hero-index,
+      .lane,
+      .finding,
+      .decision,
+      .todo {
+        padding: 14px;
+      }
+
+      .flow-row,
+      .todo {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero" aria-labelledby="title">
+      <div class="hero-main">
+        <div>
+          <div class="eyebrow">Lenos agent protocol</div>
+          <h1 id="title">Context Compaction</h1>
+          <p class="subtitle">
+            这页记录当前自动 compact 的真实行为、它和 bash-first protocol 的冲突、
+            以及下一步设计。目标不是引入第二种语言，而是让 compact 成为协议边界上的
+            一个清楚阶段。
+          </p>
+        </div>
+        <div class="hero-strip" aria-label="核心结论">
+          <div class="metric">
+            <strong>one language</strong>
+            <span>summary 可以是 bash，推荐收窄为单个 <code>narrate</code> handoff。</span>
+          </div>
+          <div class="metric">
+            <strong>wrong boundary</strong>
+            <span>当前 auto compact 在 emit 执行前触发，能跳过 <code>exit</code> 或 bash。</span>
+          </div>
+          <div class="metric">
+            <strong>next shape</strong>
+            <span>每次采样前检查 compact：turn 第一采样前，以及 result 后继续采样前。</span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="hero-index" aria-label="目录">
+        <nav class="toc">
+          <a href="#state">现状 <span>01</span></a>
+          <a href="#problem">问题 <span>02</span></a>
+          <a href="#summary-shape">Summary 形态 <span>03</span></a>
+          <a href="#codex">Codex 可借鉴点 <span>04</span></a>
+          <a href="#design">下一步设计 <span>05</span></a>
+          <a href="#tasks">实施顺序 <span>06</span></a>
+          <a href="#open-questions">Decisions <span>07</span></a>
+        </nav>
+        <div class="status-box">
+          <strong>Design stance</strong>
+          <p>
+            Compact 是每次模型采样前的门禁，不是“打断当前 assistant emit”的异常分支。
+            已经拿到的 emit 必须先走完 bash-first 生命周期。
+          </p>
+        </div>
+      </aside>
+    </section>
+
+    <section class="section" id="state">
+      <div class="section-head">
+        <h2>现状</h2>
+        <p>
+          Lenos 的 compact 机制已经保留 <code>SummaryMessageID</code> 作为恢复边界。
+          本轮设计把触发点从旧的 post-stream 分支移到 pre-step 门禁。
+        </p>
+      </div>
+      <div class="grid">
+        <article class="finding">
+          <span class="tag">threshold</span>
+          <h3>阈值按剩余上下文算</h3>
+          <p>
+            <code>shouldAutoCompact</code> 对大窗口保留固定 20k token buffer，
+            小窗口保留 20%。触发依据来自 session 上一次保存的
+            <code>PromptTokens + CompletionTokens</code>。
+          </p>
+        </article>
+        <article class="finding">
+          <span class="tag">trigger</span>
+          <h3>旧触发点在 stream 之后</h3>
+          <p>
+            旧实现里 <code>runLoop</code> 先创建 assistant row，流式写入模型 emit，
+            然后调用 <code>onUsage</code>。如果此时达到阈值，loop 直接返回
+            <code>stopShouldSummarize</code>。
+          </p>
+        </article>
+        <article class="finding">
+          <span class="tag">summary</span>
+          <h3>Summary 会替换可见历史</h3>
+          <p>
+            <code>Summarize</code> 生成一条 <code>IsSummaryMessage</code>
+            assistant message，并把 session 的 <code>SummaryMessageID</code>
+            指到它。恢复时从这条 summary 开始，并额外保留最近 3 条真实用户消息。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="problem">
+      <div class="section-head">
+        <h2>问题</h2>
+        <p>
+          真正的问题不是“summary 是否长得像 bash”，而是 auto compact 现在可以抢在
+          bash-first 生命周期之前发生。
+        </p>
+      </div>
+      <div class="split">
+        <div>
+          <article class="lane">
+            <div class="lane-label">current order</div>
+            <h3>旧 step 顺序</h3>
+            <div class="flow" aria-label="旧顺序">
+              <div class="flow-row">
+                <strong>1 stream</strong>
+                <span>模型输出 assistant emit，增量写入 SQLite。</span>
+              </div>
+              <div class="flow-row">
+                <strong>2 usage</strong>
+                <span>保存 token usage，并立刻检查 compact 阈值。</span>
+              </div>
+              <div class="flow-row">
+                <strong>3 compact</strong>
+                <span>达到阈值就 summarize，再 re-enter runLoop。</span>
+              </div>
+              <div class="flow-row">
+                <strong>4 classify</strong>
+                <span>只有没 compact 才会分类、执行 bash、处理 narrate 或 exit。</span>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="grid" style="grid-template-columns: 1fr;">
+          <article class="finding problem">
+            <span class="tag">protocol break</span>
+            <h3>当前 emit 可能被丢在半路</h3>
+            <p>
+              emit 是 <code>exit</code> 时不会结束 turn；emit 是有效 bash 时不会执行；
+              emit 是 <code>narrate</code> 时用户不会看到结果。测试里甚至固定了
+              “<code>exit</code> + compact 阈值 = compact 优先”的行为。
+            </p>
+          </article>
+          <article class="finding problem">
+            <span class="tag">late rescue</span>
+            <h3>只靠 post-stream usage 不够</h3>
+            <p>
+              如果下一次请求在发送前已经超窗，旧设计救不了。需要 pre-turn compact，
+              在新用户输入和上下文增量进入 prompt 之前先降历史。
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="summary-shape">
+      <div class="section-head">
+        <h2>Summary 形态</h2>
+        <p>
+          Q1 的结论应更精确：如果 summary 输出 <code>narrate</code>，这不是坏事。
+          对 Lenos 来说，这反而符合“只有一种 agent 输出语言”的方向。
+        </p>
+      </div>
+      <div class="split">
+        <article class="lane">
+          <div class="lane-label">accept</div>
+          <h3>推荐：summary 是单个 narrate handoff</h3>
+          <p>
+            Compact summary 可以是合法 bash，但应限制为单个 <code>narrate</code>
+            heredoc，不允许前后带其他命令。这样它既是 bash-first 世界里的 artifact，
+            又不会表达“还要执行某个动作”的副作用。
+          </p>
+          <div class="callout">
+            <p>
+              Summary 的语义是“给恢复模型看的 handoff”，不是“下一步要执行的 shell”。
+              用 <code>narrate</code> 可以保留单语言原则，但需要明确它是 compact
+              产物。v1 依赖 prompt 约束，不由 runtime 包装 summary body。
+            </p>
+          </div>
+        </article>
+        <pre><code># lenos context compaction: handoff from prior history
+narrate <<'LENOS_CONTEXT_COMPACTION'
+## Current State
+- User asked to inspect context pressure and compact behavior.
+- We found auto compact can fire before classify/exec.
+
+## Next Steps
+1. Move compact check to the continuation boundary.
+2. Add pre-turn compact before new user input can exceed the window.
+LENOS_CONTEXT_COMPACTION</code></pre>
+      </div>
+    </section>
+
+    <section class="section" id="codex">
+      <div class="section-head">
+        <h2>Codex 可借鉴点</h2>
+        <p>
+          Codex CLI 的 remote compact 服务端细节看不到，但本地触发、历史替换和
+          mid-turn 边界能看到。它的 inline compact prompt 也在本地，是一个短的
+          checkpoint handoff prompt。
+        </p>
+      </div>
+      <div class="grid">
+        <article class="finding">
+          <span class="tag">pre-turn</span>
+          <h3>采样前先 compact</h3>
+          <p>
+            Codex 在 turn 开始先检查历史 token，如果已经超过 auto compact limit，
+            先 compact 再进入正常采样。这能处理“下一次请求还没发就已经太大”的情况。
+          </p>
+        </article>
+        <article class="finding">
+          <span class="tag">mid-turn</span>
+          <h3>只在需要 follow-up 时 mid-turn compact</h3>
+          <p>
+            Codex 在一次 sampling 完成并处理输出后，只有还需要继续请求模型时才
+            compact。最终 assistant message 已经结束 turn 时，不再为了 compact
+            打断它。
+          </p>
+        </article>
+        <article class="finding">
+          <span class="tag">history</span>
+          <h3>替换历史是显式安装动作</h3>
+          <p>
+            Codex 的 compact 不是只写一个 summary 字段；它安装
+            <code>replacement_history</code>，通常包含保留的近期用户消息和 summary，
+            并把这个动作持久化为 compaction item。
+          </p>
+        </article>
+      </div>
+      <div class="split" style="margin-top: 16px;">
+        <article class="lane">
+          <div class="lane-label">prompt comparison</div>
+          <h3>Codex prompt 更短，目标更窄</h3>
+          <p>
+            Codex 的 prompt 直接说这是 context checkpoint compaction，要求为接手的
+            LLM 写 handoff summary：进度、关键决定、约束、用户偏好、剩余步骤和继续
+            所需资料。它还用一个 summary prefix 告诉下一轮模型：这是另一个模型留下的
+            summary，要接着做，不要重复劳动。
+          </p>
+          <p>
+            Lenos 当前 prompt 更像“完整会话总结清单”，要求很多分区和细节。好处是
+            不容易漏信息，坏处是冗长，且没有明确说 summary 本身必须是 bash-first
+            世界里的单个 <code>narrate</code> emit。
+          </p>
+        </article>
+        <article class="lane">
+          <div class="lane-label">learning</div>
+          <h3>可学的是压缩目标，不是格式</h3>
+          <p>
+            Lenos 应保留自己的输出语言约束：compact summary 必须 emit 单个
+            <code>narrate</code> heredoc，不能输出 heredoc 外命令。可以学习 Codex 的
+            简洁度：少写模板化栏目，多强调“handoff 给下一个模型继续做事”。
+          </p>
+          <p>
+            还应学习它的 replay 语义：summary 不是孤立字段，而是替换历史的一部分。
+            除 summary 外，最好保留最近真实用户消息，让最新需求和纠正不只依赖模型总结。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="design">
+      <div class="section-head">
+        <h2>下一步设计</h2>
+        <p>
+          设计目标：只做 pre-step compact。这里的 step 指一次模型采样和它对应的
+          bash-first 处理；pre-step 指下一次采样开始前，不是当前 emit 被处理前。
+        </p>
+      </div>
+      <div class="decision-grid">
+        <article class="decision">
+          <span class="tag">boundary</span>
+          <h3>把 compact check 移到采样前</h3>
+          <p>
+            用户 turn 的第一步，是 <code>Run</code> 收到新 prompt 后触发的第一次模型
+            采样。它不是“会话第一条用户消息”。这一步前可以先检查旧历史是否已到阈值，
+            必要时 compact，再把当前用户请求送进采样。
+          </p>
+        </article>
+        <article class="decision">
+          <span class="tag">continuation</span>
+          <h3>result 后的下一步也走同一门禁</h3>
+          <p>
+            bash result、runtime re-prompt、queued user prompts 持久化后，如果 loop
+            还需要下一次模型采样，就在采样前检查 compact。若上一步已经通过
+            <code>exit</code> 或 non-continue <code>narrate</code> 结束 turn，就没有
+            下一步，也就不触发 compact。
+          </p>
+        </article>
+        <article class="decision">
+          <span class="tag">summary spec</span>
+          <h3>Summary 输出约束为 handoff bash</h3>
+          <p>
+            Summary prompt 明确要求输出一个 <code>narrate</code> heredoc，正文是结构化
+            handoff。禁止在 heredoc 外输出命令。runtime 不用
+            <code>protocol.NarrateSection</code> 包 summary body；v1 先依赖模型遵循
+            指令，不做复杂校验。
+          </p>
+        </article>
+        <article class="decision">
+          <span class="tag">state</span>
+          <h3>保留 summary message，但提高语义清晰度</h3>
+          <p>
+            短期可以继续用 <code>SummaryMessageID</code> 和
+            <code>IsSummaryMessage</code>。后续可加 dedicated compaction record，
+            记录 trigger、phase、replacement boundary 和 token before/after。
+          </p>
+        </article>
+        <article class="decision">
+          <span class="tag">manual</span>
+          <h3>手动入口叫 Compact Session</h3>
+          <p>
+            自动 compact 继续按阈值触发；用户也需要主动入口。命令面板里提供
+            <code>Compact Session</code>，底层复用同一条 summary/恢复机制。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="tasks">
+      <div class="section-head">
+        <h2>实施顺序</h2>
+        <p>
+          先用测试固定“compact 只发生在采样前”，再改 summary prompt，最后处理历史
+          替换的细节。每一步都能独立验证。
+        </p>
+      </div>
+      <div class="todo-list">
+        <article class="todo">
+          <div class="todo-num">01</div>
+          <div>
+            <h3>写失败测试：compact 不能抢占当前 emit</h3>
+            <p>
+              覆盖 <code>exit</code>、有效 bash、成功 <code>narrate</code> 三类。
+              期望它们先按 bash-first 生命周期完成；compact 只在下一次采样前发生。
+            </p>
+          </div>
+        </article>
+        <article class="todo">
+          <div class="todo-num">02</div>
+          <div>
+            <h3>实现 pre-step compact 门禁</h3>
+            <p>
+              <code>onUsage</code> 只保存 usage，不再返回
+              <code>stopShouldSummarize</code>。在每次调用模型前检查
+              <code>shouldAutoCompact</code>：用户 turn 第一采样前，以及 continuation
+              采样前。
+            </p>
+          </div>
+        </article>
+        <article class="todo">
+          <div class="todo-num">03</div>
+          <div>
+            <h3>规范 summary 输出</h3>
+            <p>
+              Summary prompt 改成要求单个 <code>narrate</code> handoff。v1 不做 runtime
+              包装；只用测试覆盖 prompt 文案里必须包含的格式约束。
+            </p>
+          </div>
+        </article>
+        <article class="todo">
+          <div class="todo-num">04</div>
+          <div>
+            <h3>保留最近用户消息</h3>
+            <p>
+              参考 Codex 的 replacement history，summary 之外固定保留最近 3 条真实用户消息。
+              这样最新需求、纠正和偏好不会只依赖 summary 模型是否写全。
+            </p>
+          </div>
+        </article>
+        <article class="todo">
+          <div class="todo-num">05</div>
+          <div>
+            <h3>加手动 Compact Session 命令</h3>
+            <p>
+              命令面板暴露主动 compact 入口，busy 时拒绝，空闲时调用和自动 compact
+              相同的总结路径。
+            </p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="open-questions">
+      <div class="section-head">
+        <h2>已收敛的决议</h2>
+        <p>
+          目前这轮实现没有阻塞性 open question。以下是已经拍板的 v1 边界。
+        </p>
+      </div>
+      <div class="grid">
+        <article class="finding">
+          <span class="tag">history</span>
+          <h3>保留多少最近用户消息</h3>
+          <p>
+            v1 固定保留最近 3 条真实 user messages；不保留 runtime result、旧
+            summary，也不把 compact re-entry 的运行时提示算作真实用户消息。
+          </p>
+        </article>
+        <article class="finding">
+          <span class="tag">reentry</span>
+          <h3>continuation 如何重建 prompt</h3>
+          <p>
+            新用户 turn 前如果已超阈值，先 compact，再写入当前用户请求。mid-turn
+            compact 只发生在 result/re-prompt 已持久化后的下一次采样前，然后用现有
+            re-entry prompt 继续。
+          </p>
+        </article>
+        <article class="finding">
+          <span class="tag">validation</span>
+          <h3>是否校验单个 narrate</h3>
+          <p>
+            当前结论是 v1 先不做复杂校验。可以保留一个简单测试和后续入口：如果模型不遵守
+            heredoc 格式，再考虑轻量检测或重试。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <footer class="footer">
+      Source map:
+      <code>internal/agent/loop.go</code>,
+      <code>internal/agent/agent_run.go</code>,
+      <code>internal/agent/agent_session.go</code>,
+      <code>docs/agent-protocol/protocol.md</code>,
+      and the Codex reference under
+      <code>/Users/neil/Code/2026-references/github.com/openai/codex/codex-rs/core/src/compact.rs</code>.
+    </footer>
+  </main>
+</body>
+</html>

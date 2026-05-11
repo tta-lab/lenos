@@ -481,33 +481,45 @@ func TestRun_PostLoopDrainAllQueued(t *testing.T) {
 	agent.activeRequests.Del(sess.ID)
 }
 
-func TestRun_AutoCompactFiresAndReentersWithPrefix(t *testing.T) {
+func TestRun_AutoCompactBeforeFirstStepRunsBeforePersistingCurrentPrompt(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
-	sess, err := env.sessions.Create(t.Context(), "auto-compact e2e test")
+	sess, err := env.sessions.Create(t.Context(), "auto-compact before first step test")
 	require.NoError(t, err)
 
 	model := &scriptedModel{
-		emits: []string{"do nothing", "summary text", "exit"},
-		usages: []fantasy.Usage{
-			{InputTokens: 200_000, OutputTokens: 0},
-			{InputTokens: 0, OutputTokens: 0},
-			{InputTokens: 0, OutputTokens: 0},
-		},
+		emits: []string{"summary text", "exit"},
 	}
 
 	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
-	agent.largeModel.Set(Model{
+	testModel := Model{
 		Model: model,
 		CatwalkCfg: catwalk.Model{
-			ContextWindow:    200_001,
+			ContextWindow:    100,
 			DefaultMaxTokens: 1024,
 		},
+	}
+	agent.SetModels(testModel, testModel, testModel)
+
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "old request"}},
 	})
+	require.NoError(t, err)
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.Assistant,
+		Parts: []message.ContentPart{message.TextContent{Text: "old response"}},
+	})
+	require.NoError(t, err)
+
+	sess.PromptTokens = 81
+	sess.CompletionTokens = 0
+	sess, err = env.sessions.Save(t.Context(), sess)
+	require.NoError(t, err)
 
 	err = agent.Run(t.Context(), SessionAgentCall{
 		SessionID:  sess.ID,
-		Prompt:     "go",
+		Prompt:     "new request",
 		ProviderID: "test",
 	})
 	require.NoError(t, err)
@@ -518,17 +530,73 @@ func TestRun_AutoCompactFiresAndReentersWithPrefix(t *testing.T) {
 
 	msgs, err := env.messages.List(t.Context(), sess.ID)
 	require.NoError(t, err)
-	var sawPrefix bool
-	for _, m := range msgs {
-		if m.Role != message.User {
-			continue
+	summaryIndex := -1
+	currentPromptIndex := -1
+	for i, m := range msgs {
+		switch {
+		case m.ID == persisted.SummaryMessageID:
+			summaryIndex = i
+		case m.Role == message.User && m.Content().Text == "new request":
+			currentPromptIndex = i
 		}
-		if strings.Contains(m.Content().Text, "previous session was interrupted because it got too long") {
-			sawPrefix = true
-			break
+		assert.NotContains(t, m.Content().Text, "previous session was interrupted because it got too long")
+	}
+	require.NotEqual(t, -1, summaryIndex, "summary message should be present")
+	require.NotEqual(t, -1, currentPromptIndex, "current prompt should be persisted")
+	assert.Less(t, summaryIndex, currentPromptIndex, "pre-turn compact should happen before persisting the current prompt")
+}
+
+func TestRun_AutoCompactWaitsUntilNextStepAfterBashResult(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "auto-compact after result test")
+	require.NoError(t, err)
+
+	model := &scriptedModel{
+		emits: []string{"printf 'ok\\n'", "summary text", "exit"},
+		usages: []fantasy.Usage{
+			{InputTokens: 81, OutputTokens: 0},
+			{InputTokens: 0, OutputTokens: 0},
+			{InputTokens: 0, OutputTokens: 0},
+		},
+	}
+
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+	testModel := Model{
+		Model: model,
+		CatwalkCfg: catwalk.Model{
+			ContextWindow:    100,
+			DefaultMaxTokens: 1024,
+		},
+	}
+	agent.SetModels(testModel, testModel, testModel)
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID:  sess.ID,
+		Prompt:     "go",
+		ProviderID: "test",
+	})
+	require.NoError(t, err)
+
+	persisted, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, persisted.SummaryMessageID, "auto-compact should have set SummaryMessageID")
+
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	resultIndex := -1
+	summaryIndex := -1
+	for i, m := range msgs {
+		if m.ID == persisted.SummaryMessageID {
+			summaryIndex = i
+		}
+		if m.Role == message.Result && strings.Contains(m.CommandContent().Command, "printf 'ok\\n'") {
+			resultIndex = i
 		}
 	}
-	assert.True(t, sawPrefix, "post-compact re-entry should record the interruption-prefixed user prompt")
+	require.NotEqual(t, -1, resultIndex, "bash result should be persisted before compact")
+	require.NotEqual(t, -1, summaryIndex, "summary message should be present")
+	assert.Less(t, resultIndex, summaryIndex, "compact should run only at the next pre-step boundary")
 }
 
 func TestRun_AutoCompactSummarizeErrorPropagates(t *testing.T) {
@@ -571,10 +639,10 @@ func TestRun_AutoCompactSummarizeSucceedsButReentryFails(t *testing.T) {
 	require.NoError(t, err)
 
 	// Call sequence:
-	// [0] "trigger" — onUsage fires, returns true → runLoop returns stopShouldSummarize
-	// [1] "summary" — consumed by Summarize()
-	// [2] "do work" — re-entry: onUsage fires again (200k), returns true, runLoop returns
-	// [3] "err" — re-entry: errOn=[3] causes Stream to yield error
+	// [0] "trigger" — usage crosses threshold, then the bash result is persisted.
+	// [1] "summary" — consumed by the first Summarize().
+	// [2] "do work" — re-entry crosses the threshold after its bash result.
+	// [3] "err" — errOn=[3] makes the second Summarize() fail.
 	model := &scriptedModel{
 		emits: []string{"trigger", "summary", "do work", "err"},
 		usages: []fantasy.Usage{
@@ -597,9 +665,7 @@ func TestRun_AutoCompactSummarizeSucceedsButReentryFails(t *testing.T) {
 		Prompt:     "go",
 		ProviderID: "test",
 	})
-	// Re-entry's second onUsage fire → runLoop returns → second compact attempt.
-	// But errOn=[3] causes Stream error on the step after that trigger.
-	require.Error(t, err, "re-entry stream error should propagate from Run")
+	require.Error(t, err, "second Summarize error should propagate from Run")
 
 	persisted, gerr := env.sessions.Get(t.Context(), sess.ID)
 	require.NoError(t, gerr)
@@ -637,6 +703,52 @@ func TestRun_DisableAutoSummarizePreventsCompact(t *testing.T) {
 	persisted, gerr := env.sessions.Get(t.Context(), sess.ID)
 	require.NoError(t, gerr)
 	assert.Empty(t, persisted.SummaryMessageID, "no summary should be set when disableAutoSummarize is true")
+}
+
+func TestGetSessionMessagesAfterSummaryKeepsRecentUserMessages(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "recent user retention test")
+	require.NoError(t, err)
+
+	for _, text := range []string{"u1", "u2", "u3", "u4"} {
+		_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+			Role:  message.User,
+			Parts: []message.ContentPart{message.TextContent{Text: text}},
+		})
+		require.NoError(t, err)
+		_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+			Role:  message.Assistant,
+			Parts: []message.ContentPart{message.TextContent{Text: "answer " + text}},
+		})
+		require.NoError(t, err)
+	}
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: autoCompactContinuationPrompt("u4")}},
+	})
+	require.NoError(t, err)
+
+	summary, err := env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:             message.Assistant,
+		Parts:            []message.ContentPart{message.TextContent{Text: "summary"}},
+		IsSummaryMessage: true,
+	})
+	require.NoError(t, err)
+	sess.SummaryMessageID = summary.ID
+	sess, err = env.sessions.Save(t.Context(), sess)
+	require.NoError(t, err)
+
+	agent := testSessionAgent(env, &mockLanguageModel{}, &mockLanguageModel{}, "sys").(*sessionAgent)
+	got, err := agent.getSessionMessages(t.Context(), sess)
+	require.NoError(t, err)
+
+	require.Len(t, got, 4)
+	require.Equal(t, "summary", got[0].Content().Text)
+	require.Equal(t, message.User, got[0].Role, "summary should still enter model context as a user message")
+	require.Equal(t, "u2", got[1].Content().Text)
+	require.Equal(t, "u3", got[2].Content().Text)
+	require.Equal(t, "u4", got[3].Content().Text)
 }
 
 func TestAgent_Model_ReturnsPrimaryModel(t *testing.T) {

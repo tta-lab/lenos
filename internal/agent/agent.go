@@ -29,9 +29,11 @@ const (
 	DefaultSessionName = "Untitled Session"
 
 	// Constants for auto-summarization thresholds
-	largeContextWindowThreshold = 200_000
-	largeContextWindowBuffer    = 20_000
-	smallContextWindowRatio     = 0.2
+	largeContextWindowThreshold    = 200_000
+	largeContextWindowBuffer       = 20_000
+	smallContextWindowRatio        = 0.2
+	recentUserMessagesAfterCompact = 3
+	autoCompactContinuationPrefix  = "The previous session was interrupted because it got too long"
 )
 
 // shouldAutoCompact returns true when the session has approached the

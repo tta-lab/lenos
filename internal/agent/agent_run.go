@@ -107,6 +107,22 @@ runLoopReentry:
 		return fmt.Errorf("failed to get session: %w", err)
 	}
 
+	primaryModel := a.primaryModel.Get()
+	compactedBeforeRun := false
+	if !a.disableAutoSummarize {
+		used := currentSession.PromptTokens + currentSession.CompletionTokens
+		if shouldAutoCompact(int64(primaryModel.CatwalkCfg.ContextWindow), used) {
+			if summarizeErr := a.Summarize(ctx, call.SessionID, call.ProviderOptions); summarizeErr != nil {
+				return summarizeErr
+			}
+			compactedBeforeRun = true
+			currentSession, err = a.sessions.Get(ctx, call.SessionID)
+			if err != nil {
+				return fmt.Errorf("failed to get session after compact: %w", err)
+			}
+		}
+	}
+
 	msgs, err := a.getSessionMessages(ctx, currentSession)
 	if err != nil {
 		return fmt.Errorf("failed to get session messages: %w", err)
@@ -136,8 +152,6 @@ runLoopReentry:
 	history := buildHistory(msgs)
 	startTime := time.Now()
 	a.eventPromptSent(call.SessionID)
-
-	primaryModel := a.primaryModel.Get()
 
 	// postStepHook builds and fires the configured post_step hook, if any.
 	// Runs in a goroutine with hookTimeout deadline; errors are logged at
@@ -176,16 +190,21 @@ runLoopReentry:
 		paths:                  call.AllowedPaths,
 		defaultNarrationTarget: call.DefaultNarrationTarget,
 		postStepHook:           postStepHook,
-		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) bool {
+		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
 			s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
 			if !ok {
-				return false
+				return
 			}
 			currentSession = s
+		},
+		shouldSummarizeBeforeStep: func(step int) bool {
 			if a.disableAutoSummarize {
 				return false
 			}
-			used := s.PromptTokens + s.CompletionTokens
+			if step == 0 && compactedBeforeRun {
+				return false
+			}
+			used := currentSession.PromptTokens + currentSession.CompletionTokens
 			return shouldAutoCompact(int64(primaryModel.CatwalkCfg.ContextWindow), used)
 		},
 		drainQueue: func() []string {
@@ -213,10 +232,7 @@ runLoopReentry:
 		if summarizeErr := a.Summarize(ctx, call.SessionID, call.ProviderOptions); summarizeErr != nil {
 			return summarizeErr
 		}
-		call.Prompt = fmt.Sprintf(
-			"The previous session was interrupted because it got too long, the initial user request was: `%s`",
-			call.Prompt,
-		)
+		call.Prompt = autoCompactContinuationPrompt(call.Prompt)
 		goto runLoopReentry
 	}
 
@@ -278,6 +294,10 @@ func (a *sessionAgent) attachErrorFinish(ctx context.Context, sessionID string, 
 		}
 		return
 	}
+}
+
+func autoCompactContinuationPrompt(prompt string) string {
+	return fmt.Sprintf("%s, the initial user request was: `%s`", autoCompactContinuationPrefix, prompt)
 }
 
 // combineQueuedCalls collapses N queued calls into one re-entry call.

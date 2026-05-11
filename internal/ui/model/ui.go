@@ -1075,13 +1075,13 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
-	case dialog.ActionSummarize:
+	case dialog.ActionCompact:
 		if m.isAgentBusy() {
-			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
+			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before compacting session..."))
 			break
 		}
 		cmds = append(cmds, func() tea.Msg {
-			err := m.com.Workspace.AgentSummarize(context.Background(), msg.SessionID)
+			err := m.com.Workspace.AgentCompact(context.Background(), msg.SessionID)
 			if err != nil {
 				return util.ReportError(err)()
 			}
