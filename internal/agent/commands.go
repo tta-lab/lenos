@@ -94,6 +94,5 @@ func renderGitTemplate(data GitTemplateData) (string, error) {
 // GitTemplateData holds context for rendering cmd-git.tpl.
 type GitTemplateData struct {
 	IsGitRepo   bool
-	GitStatus   string
 	Attribution string
 }

@@ -33,10 +33,8 @@ func TestBuildSummaryPrompt(t *testing.T) {
 	t.Run("empty jobID returns base prompt without todos section", func(t *testing.T) {
 		t.Parallel()
 		result := buildSummaryPrompt(context.Background(), "")
-		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
-		require.NotContains(t, result, "Current Todo List")
-		require.Contains(t, result, "narrate <<'")
-		assertValidBashSyntax(t, result)
+		require.Equal(t, formatSummaryPrompt(nil), result)
+		require.NotContains(t, result, "LENOS_SUMMARY_REQUEST")
 	})
 
 	t.Run("cancelled context returns base prompt", func(t *testing.T) {
@@ -44,9 +42,8 @@ func TestBuildSummaryPrompt(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		result := buildSummaryPrompt(ctx, "fake-nonexistent-job-id")
-		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
-		require.NotContains(t, result, "Current Todo List")
-		assertValidBashSyntax(t, result)
+		require.Equal(t, formatSummaryPrompt(nil), result)
+		require.NotContains(t, result, "LENOS_SUMMARY_REQUEST")
 	})
 
 	t.Run("successful poll with real jobID returns prompt", func(t *testing.T) {
@@ -55,20 +52,23 @@ func TestBuildSummaryPrompt(t *testing.T) {
 		// task will return empty output, so todos section won't appear but
 		// the base prompt will.
 		result := buildSummaryPrompt(context.Background(), "00000000-0000-0000-0000-000000000000")
-		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
-		assertValidBashSyntax(t, result)
+		require.Equal(t, formatSummaryPrompt(nil), result)
+		require.NotContains(t, result, "LENOS_SUMMARY_REQUEST")
 	})
 }
 
-func TestSummarySystemPrompt_IsBashNarrateScript(t *testing.T) {
+func TestBuildCompactSummaryPrompt_InstructsNarrateCompactionOutput(t *testing.T) {
 	t.Parallel()
 
-	got := summarySystemPrompt()
+	got := buildCompactSummaryPrompt(context.Background(), "")
 
-	require.Contains(t, got, "You are summarizing a conversation")
+	require.Contains(t, got, summaryInstructionsPrompt())
+	require.Contains(t, got, formatSummaryPrompt(nil))
+	require.Contains(t, got, summaryOutputProtocolPrompt())
+	require.Contains(t, got, "LENOS_CONTEXT_COMPACTION")
 	require.Contains(t, got, "narrate <<'")
+	require.NotContains(t, got, "LENOS_SUMMARY_SYSTEM")
 	require.NotContains(t, got, "```")
-	assertValidBashSyntax(t, got)
 }
 
 // chdirIntoWorktree creates a tempdir shaped like

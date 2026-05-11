@@ -32,7 +32,7 @@ var ErrStepCap = errors.New("agent: step cap reached")
 // loopDeps wires the bash-first loop to its environment. Every field is
 // required except onUsage, which may be nil (no per-step usage callback).
 type loopDeps struct {
-	model fantasy.LanguageModel
+	model Model
 	// drainQueue pulls queued user prompts off the session queue. Called at
 	// every mid-loop step boundary so user followups ride the next model
 	// request alongside the bash-result observation. nil-safe: drainAndAppend
@@ -44,15 +44,18 @@ type loopDeps struct {
 	salvage    bashSalvageProbe
 	sessionID  string
 	sysPrompt  string
-	providerID string // config provider ID (for assistant message Provider field)
 	env        map[string]string
 	paths      []client.AllowedPath
 	// defaultNarrationTarget is applied to narrate calls without --to.
 	// Explicit --to values remain unchanged.
 	defaultNarrationTarget string
 	// onUsage is called after each step with usage metrics.
-	// Return true to request an early stop with stopShouldSummarize.
-	onUsage func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) bool
+	onUsage func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
+
+	// shouldSummarizeBeforeStep is called immediately before a model stream
+	// starts. Return true to stop at the pre-step boundary and let the caller
+	// compact the session before re-entering.
+	shouldSummarizeBeforeStep func(stepIdx int) bool
 
 	// postStepHook is called after each step with the just-completed step's
 	// usage. Nil-safe: a nil value is a no-op.
@@ -68,7 +71,7 @@ const (
 	stopStepCap                           // 500 emissions without exit
 	stopError                             // unrecoverable error (provider, persistence)
 	stopCanceled                          // ctx canceled mid-stream or mid-exec
-	stopShouldSummarize                   // onUsage callback requested mid-turn auto-compact
+	stopShouldSummarize                   // pre-step callback requested auto-compact
 )
 
 // runLoop drives one turn of the bash-first agent: stream → classify → exec
@@ -82,11 +85,15 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 	msgs = append(msgs, fantasy.NewUserMessage(prompt))
 
 	for step := 0; step < StepCap; step++ {
+		if deps.shouldSummarizeBeforeStep != nil && deps.shouldSummarizeBeforeStep(step) {
+			return stopShouldSummarize, nil
+		}
+
 		assistantMsg, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 			Role:     message.Assistant,
 			Parts:    []message.ContentPart{message.TextContent{Text: ""}},
-			Model:    deps.model.Model(),
-			Provider: deps.providerID,
+			Model:    deps.model.messageModelID(),
+			Provider: deps.model.messageProviderID(),
 		})
 		if err != nil {
 			return stopError, fmt.Errorf("create assistant message: %w", err)
@@ -103,10 +110,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			deps.postStepHook(step, usage)
 		}
 		if deps.onUsage != nil {
-			if deps.onUsage(step, usage, meta) {
-				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonEndTurn)
-				return stopShouldSummarize, nil
-			}
+			deps.onUsage(step, usage, meta)
 		}
 
 		probe := deps.salvage
@@ -366,7 +370,7 @@ func streamOneAttempt(
 	msgs []fantasy.Message,
 	assistantMsg *message.Message,
 ) (streamOneResult, error) {
-	stream, err := deps.model.Stream(ctx, fantasy.Call{
+	stream, err := deps.model.Model.Stream(ctx, fantasy.Call{
 		Prompt:          msgs,
 		ProviderOptions: deps.provOpts,
 		UserAgent:       userAgent,

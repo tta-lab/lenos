@@ -39,7 +39,6 @@ type PromptDat struct {
 	IsGitRepo    bool
 	Platform     string
 	Date         string
-	GitStatus    string
 	IdentityBody string
 	ContextFiles []ContextFile
 	JobID        string
@@ -244,13 +243,6 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		SkillList:    skillList,
 		JobID:        taskwarrior.ResolveJobIDFromCwd(),
 	}
-	if isGit {
-		var err error
-		data.GitStatus, err = getGitStatus(ctx, store.WorkingDir())
-		if err != nil {
-			return PromptDat{}, err
-		}
-	}
 
 	for _, contextFiles := range files {
 		data.ContextFiles = append(data.ContextFiles, contextFiles...)
@@ -263,71 +255,6 @@ func isGitRepo(dir string) bool {
 	return err == nil
 }
 
-func getGitStatus(ctx context.Context, dir string) (string, error) {
-	branch, err := getGitBranch(ctx, dir)
-	if err != nil {
-		return "", err
-	}
-	status, err := getGitStatusSummary(ctx, dir)
-	if err != nil {
-		return "", err
-	}
-	commits, err := getGitRecentCommits(ctx, dir)
-	if err != nil {
-		return "", err
-	}
-	return branch + status + commits, nil
-}
-
-func getGitBranch(ctx context.Context, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "branch", "--show-current")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		slog.Debug("getGitBranch failed", "dir", dir, "error", err)
-		return "", nil
-	}
-	outStr := strings.TrimSpace(string(out))
-	if outStr == "" {
-		return "", nil
-	}
-	return fmt.Sprintf("Current branch: %s\n", outStr), nil
-}
-
-func getGitStatusSummary(ctx context.Context, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "status", "--short")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		slog.Debug("getGitStatusSummary failed", "dir", dir, "error", err)
-		return "", nil
-	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) > 20 {
-		lines = lines[:20]
-	}
-	outStr := strings.Join(lines, "\n")
-	if outStr == "" {
-		return "Status: clean\n", nil
-	}
-	return fmt.Sprintf("Status:\n%s\n", outStr), nil
-}
-
-func getGitRecentCommits(ctx context.Context, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "log", "--oneline", "-n", "3")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		slog.Debug("getGitRecentCommits failed", "dir", dir, "error", err)
-		return "", nil
-	}
-	if len(out) == 0 {
-		return "", nil
-	}
-	outStr := strings.TrimSpace(string(out))
-	return fmt.Sprintf("Recent commits:\n%s\n", outStr), nil
-}
-
 func (p *Prompt) Name() string {
 	return p.name
 }
@@ -335,11 +262,4 @@ func (p *Prompt) Name() string {
 // IsGitRepo reports whether dir is a git repository.
 func IsGitRepo(dir string) bool {
 	return isGitRepo(dir)
-}
-
-// GetGitStatus returns the git status for dir (branch + status + recent commits).
-// Returns empty string if dir is not a git repo or on error.
-func GetGitStatus(ctx context.Context, dir string) string {
-	status, _ := getGitStatus(ctx, dir)
-	return status
 }

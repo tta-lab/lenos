@@ -196,6 +196,52 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 	assertValidBashSyntax(t, got)
 }
 
+func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
+	dataDir := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = dataDir
+		require.NoError(t, cmd.Run())
+	}
+
+	runGit("init")
+	branchName := "prompt-snapshot-branch"
+	runGit("checkout", "-b", branchName)
+	committedFile := "committed-snapshot-sentinel.txt"
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, committedFile), []byte("tracked"), 0o644))
+	runGit("add", committedFile)
+	commitMessage := "prompt snapshot sentinel commit"
+	runGit(
+		"-c",
+		"user.name=Lenos Test",
+		"-c", "user.email=lenos-test@example.com",
+		"commit", "-m", commitMessage,
+	)
+	dirtyFile := "dirty-snapshot-sentinel.txt"
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, dirtyFile), []byte("dirty"), 0o644))
+
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "narrate <<'LENOS_GIT_CONTEXT'")
+	assert.NotContains(t, got, branchName)
+	assert.NotContains(t, got, dirtyFile)
+	assert.NotContains(t, got, commitMessage)
+	assertValidBashSyntax(t, got)
+}
+
 func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()

@@ -29,9 +29,11 @@ const (
 	DefaultSessionName = "Untitled Session"
 
 	// Constants for auto-summarization thresholds
-	largeContextWindowThreshold = 200_000
-	largeContextWindowBuffer    = 20_000
-	smallContextWindowRatio     = 0.2
+	largeContextWindowThreshold    = 200_000
+	largeContextWindowBuffer       = 20_000
+	smallContextWindowRatio        = 0.2
+	recentUserMessagesAfterCompact = 3
+	autoCompactContinuationPrefix  = "The previous session was interrupted because it got too long"
 )
 
 // shouldAutoCompact returns true when the session has approached the
@@ -64,13 +66,6 @@ var summaryPrompt []byte
 type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
-
-	// ProviderID is the config-side provider identifier (e.g.
-	// "minimax-china", "openrouter"), NOT the fantasy protocol name (e.g.
-	// "anthropic"). This is what the UI looks up via cfg.GetModel; storing
-	// the fantasy Provider.Name() here was a regression that caused
-	// "Unknown Model" in the footer.
-	ProviderID string
 
 	// ProviderOptions are the per-provider streaming options merged from
 	// catwalk + provider config + model config (anthropic thinking, openai
@@ -119,12 +114,31 @@ type Model struct {
 	ModelCfg   config.SelectedModel
 }
 
+func (m Model) messageModelID() string {
+	if m.ModelCfg.Model != "" {
+		return m.ModelCfg.Model
+	}
+	if m.Model != nil {
+		return m.Model.Model()
+	}
+	return ""
+}
+
+func (m Model) messageProviderID() string {
+	if m.ModelCfg.Provider != "" {
+		return m.ModelCfg.Provider
+	}
+	if m.Model != nil {
+		return m.Model.Provider()
+	}
+	return ""
+}
+
 type sessionAgent struct {
-	largeModel         *csync.Value[Model]
-	smallModel         *csync.Value[Model]
-	primaryModel       *csync.Value[Model]
-	systemPromptPrefix *csync.Value[string]
-	systemPrompt       *csync.Value[string]
+	largeModel   *csync.Value[Model]
+	smallModel   *csync.Value[Model]
+	primaryModel *csync.Value[Model]
+	systemPrompt *csync.Value[string]
 
 	isSubAgent           bool
 	sessions             session.Service
@@ -141,7 +155,6 @@ type SessionAgentOptions struct {
 	LargeModel           Model
 	SmallModel           Model
 	PrimaryModel         Model
-	SystemPromptPrefix   string
 	SystemPrompt         string
 	IsSubAgent           bool
 	DisableAutoSummarize bool
@@ -160,7 +173,6 @@ func NewSessionAgent(
 		largeModel:           csync.NewValue(opts.LargeModel),
 		smallModel:           csync.NewValue(opts.SmallModel),
 		primaryModel:         csync.NewValue(opts.PrimaryModel),
-		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),
 		systemPrompt:         csync.NewValue(opts.SystemPrompt),
 		isSubAgent:           opts.IsSubAgent,
 		sessions:             opts.Sessions,

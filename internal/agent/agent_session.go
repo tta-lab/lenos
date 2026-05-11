@@ -21,7 +21,6 @@ import (
 	"charm.land/fantasy/providers/vercel"
 
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/protocol"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
 )
@@ -32,8 +31,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	}
 
 	// Copy mutable fields under lock to avoid races with SetModels.
-	largeModel := a.largeModel.Get()
-	systemPromptPrefix := a.systemPromptPrefix.Get()
+	summaryModel := a.primaryModel.Get()
+	systemPrompt := a.systemPrompt.Get()
 
 	currentSession, err := a.sessions.Get(ctx, sessionID)
 	if err != nil {
@@ -55,8 +54,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 
 	summaryMessage, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
 		Role:             message.Assistant,
-		Model:            largeModel.Model.Model(),
-		Provider:         largeModel.Model.Provider(),
+		Model:            summaryModel.messageModelID(),
+		Provider:         summaryModel.messageProviderID(),
 		IsSummaryMessage: true,
 	})
 	if err != nil {
@@ -69,18 +68,15 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		history = append(history, m.ToAIMessage()...)
 	}
 
-	// Build prompt: system(s) + history + final user prompt.
-	prompt := fantasy.Prompt{fantasy.NewSystemMessage(summarySystemPrompt())}
-	if systemPromptPrefix != "" {
-		prompt = append(prompt, fantasy.NewSystemMessage(systemPromptPrefix))
-	}
+	// Build prompt: normal system prompt + history + final compact request.
+	prompt := fantasy.Prompt{fantasy.NewSystemMessage(systemPrompt)}
 	prompt = append(prompt, history...)
-	prompt = append(prompt, fantasy.NewUserMessage(buildSummaryPrompt(ctx, taskwarrior.ResolveJobIDFromCwd())))
+	prompt = append(prompt, fantasy.NewUserMessage(buildCompactSummaryPrompt(ctx, taskwarrior.ResolveJobIDFromCwd())))
 
 	baseline := summaryMessage.Clone()
 	streamResult, err := retryModelStream(genCtx,
 		func() (summaryStreamResult, error) {
-			return streamSummaryAttempt(genCtx, largeModel.Model, prompt, opts, a.messages, &summaryMessage)
+			return streamSummaryAttempt(genCtx, summaryModel.Model, prompt, opts, a.messages, &summaryMessage)
 		},
 		func() {
 			resetMessageForStreamRetry(genCtx, a.messages, &summaryMessage, baseline, "summary: reset message for stream retry")
@@ -103,7 +99,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	}
 
 	openrouterCost := a.openrouterCost(providerMeta)
-	a.updateSessionUsage(largeModel, &currentSession, totalUsage, openrouterCost)
+	a.updateSessionUsage(summaryModel, &currentSession, totalUsage, openrouterCost)
 	currentSession.SummaryMessageID = summaryMessage.ID
 	currentSession.CompletionTokens = totalUsage.OutputTokens
 	currentSession.PromptTokens = 0
@@ -201,11 +197,37 @@ func (a *sessionAgent) getSessionMessages(ctx context.Context, s session.Session
 			}
 		}
 		if summaryMsgIndex != -1 {
-			msgs = msgs[summaryMsgIndex:]
-			msgs[0].Role = message.User
+			summaryMsg := msgs[summaryMsgIndex]
+			summaryMsg.Role = message.User
+
+			compacted := make([]message.Message, 0, 1+recentUserMessagesAfterCompact+len(msgs[summaryMsgIndex+1:]))
+			compacted = append(compacted, summaryMsg)
+			compacted = append(compacted, recentUserMessages(msgs[:summaryMsgIndex], recentUserMessagesAfterCompact)...)
+			compacted = append(compacted, msgs[summaryMsgIndex+1:]...)
+			msgs = compacted
 		}
 	}
 	return msgs, nil
+}
+
+func recentUserMessages(msgs []message.Message, limit int) []message.Message {
+	if limit <= 0 {
+		return nil
+	}
+	recent := make([]message.Message, 0, limit)
+	for i := len(msgs) - 1; i >= 0 && len(recent) < limit; i-- {
+		if msgs[i].Role != message.User {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(msgs[i].Content().Text), autoCompactContinuationPrefix) {
+			continue
+		}
+		recent = append(recent, msgs[i])
+	}
+	for i, j := 0, len(recent)-1; i < j; i, j = i+1, j-1 {
+		recent[i], recent[j] = recent[j], recent[i]
+	}
+	return recent
 }
 
 // generateTitle generates a session titled based on the initial prompt.
@@ -397,8 +419,30 @@ func (a *sessionAgent) Model() Model {
 	return a.primaryModel.Get()
 }
 
-func summarySystemPrompt() string {
-	return protocol.NarrateSection("LENOS_SUMMARY_SYSTEM", string(summaryPrompt))
+func summaryInstructionsPrompt() string {
+	return strings.TrimRight(string(summaryPrompt), "\n")
+}
+
+func summaryOutputProtocolPrompt() string {
+	return `Output protocol:
+
+You must emit exactly one bash heredoc in this form:
+
+narrate <<'LENOS_CONTEXT_COMPACTION'
+Summary markdown goes here.
+LENOS_CONTEXT_COMPACTION
+
+Do not emit Markdown fences, JSON, XML, comments, or any text before or after
+the heredoc.
+`
+}
+
+func buildCompactSummaryPrompt(ctx context.Context, jobID string) string {
+	return strings.Join([]string{
+		summaryInstructionsPrompt(),
+		buildSummaryPrompt(ctx, jobID),
+		summaryOutputProtocolPrompt(),
+	}, "\n\n")
 }
 
 // formatSummaryPrompt formats the session summarization prompt from a todo list.
@@ -414,7 +458,7 @@ func formatSummaryPrompt(todos []session.Todo) string {
 		sb.WriteString("\nInclude these tasks and their statuses in your summary. ")
 		sb.WriteString("Instruct the resuming assistant to use `task <uuid> done` to mark completed subtasks.")
 	}
-	return protocol.NarrateSection("LENOS_SUMMARY_REQUEST", sb.String())
+	return sb.String()
 }
 
 // buildSummaryPrompt fetches subtasks from taskwarrior and builds the summarization prompt.

@@ -11,6 +11,8 @@ heredoc body.
 
 - [Protocol Pipeline](protocol-pipeline.html): a human-readable visual overview
   of the current protocol, processing pipeline, parser gates, and rewrite rules.
+- [Context Compaction](context-compaction.html): pre-step auto compact,
+  bash-first boundaries, and manual compact design.
 - [Protocol](protocol.md): the bash-only contract and loop lifecycle.
 - [Classifier](classifier.md): how an emit becomes exit, bash, prose rewrite,
   or a runtime correction.
