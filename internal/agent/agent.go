@@ -92,6 +92,10 @@ type SessionAgentCall struct {
 	// AllowedPaths is the read/write bound for the runner. The first entry
 	// also becomes the subprocess working directory.
 	AllowedPaths []client.AllowedPath
+
+	// DefaultNarrationTarget is used when `narrate` is called without --to.
+	// Explicit `narrate --to` calls take precedence.
+	DefaultNarrationTarget string
 }
 
 type SessionAgent interface {

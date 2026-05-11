@@ -12,6 +12,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringP("agent", "a", "", "")
 	cmd.Flags().StringArrayP("context-file", "f", nil, "")
 	cmd.Flags().Bool("readonly", false, "")
+	cmd.Flags().String("pair-with", "", "")
 	return cmd
 }
 
@@ -72,4 +73,19 @@ func TestRunCmd_ReadonlyFlagParse(t *testing.T) {
 	require.NoError(t, err)
 	v, _ := cmd.Flags().GetBool("readonly")
 	require.True(t, v)
+}
+
+func TestRunCmd_PairWithFlagDeclared(t *testing.T) {
+	f := runCmd.Flags().Lookup("pair-with")
+	require.NotNil(t, f, "--pair-with flag must be declared on runCmd")
+	require.Equal(t, "", f.Shorthand, "--pair-with should have no shorthand")
+	require.Equal(t, "", f.DefValue, "--pair-with default must be empty")
+}
+
+func TestRunCmd_PairWithFlagParse(t *testing.T) {
+	cmd := newRunCmd()
+	err := cmd.ParseFlags([]string{"--pair-with", "reviewer", "hi"})
+	require.NoError(t, err)
+	v, _ := cmd.Flags().GetString("pair-with")
+	require.Equal(t, "reviewer", v)
 }

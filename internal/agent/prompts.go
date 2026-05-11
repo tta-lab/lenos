@@ -69,9 +69,18 @@ func SystemPrompt(
 		return "", err
 	}
 
-	return base + "\n" +
-		protocol.NarrateSection("LENOS_GIT_CONTEXT", gitSection) + "\n" +
-		lenosWrapper, nil
+	var b strings.Builder
+	b.WriteString(base)
+	b.WriteString("\n")
+	b.WriteString(protocol.NarrateSection("LENOS_GIT_CONTEXT", gitSection))
+	b.WriteString("\n")
+	if pairWith := strings.TrimSpace(store.Overrides().PairWith); pairWith != "" {
+		b.WriteString(protocol.NarrateSection("LENOS_NARRATION_PAIR",
+			"# Narration Pair\n\nNarration without `--to` is delivered to "+pairWith+". Explicit `narrate --to` calls keep their target."))
+		b.WriteString("\n")
+	}
+	b.WriteString(lenosWrapper)
+	return b.String(), nil
 }
 
 // resolveIdentityBody resolves the agent identity body used for the

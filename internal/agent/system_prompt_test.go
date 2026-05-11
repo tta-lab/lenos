@@ -289,6 +289,28 @@ func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
 	assertValidBashSyntax(t, got)
 }
 
+func TestSystemPrompt_PairWithDocumentsDefaultNarrationTarget(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+	store.Overrides().PairWith = "reviewer"
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "narrate <<'LENOS_NARRATION_PAIR'")
+	assert.Contains(t, got, "reviewer")
+	assertValidBashSyntax(t, got)
+}
+
 func TestSystemPrompt_AgentMode_FrontmatterStripped(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()

@@ -16,7 +16,10 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 )
 
-const narrateDirEnv = "LENOS_NARRATE_DIR"
+const (
+	narrateDirEnv       = "LENOS_NARRATE_DIR"
+	narrateDefaultToEnv = "LENOS_NARRATE_DEFAULT_TO"
+)
 
 type narrateInvocation struct {
 	bash    string
@@ -26,7 +29,7 @@ type narrateInvocation struct {
 	cleanup func()
 }
 
-func newNarrateInvocation(emit string, env map[string]string, paths []client.AllowedPath) (narrateInvocation, error) {
+func newNarrateInvocation(emit string, env map[string]string, paths []client.AllowedPath, defaultTo string) (narrateInvocation, error) {
 	dir, err := os.MkdirTemp("", "lenos-narrate-*")
 	if err != nil {
 		return narrateInvocation{}, err
@@ -34,6 +37,9 @@ func newNarrateInvocation(emit string, env map[string]string, paths []client.All
 
 	runEnv := cloneStringMap(env)
 	runEnv[narrateDirEnv] = dir
+	if strings.TrimSpace(defaultTo) != "" {
+		runEnv[narrateDefaultToEnv] = strings.TrimSpace(defaultTo)
+	}
 
 	return narrateInvocation{
 		bash:    narrateShellPrelude + "\n" + emit,
@@ -74,6 +80,9 @@ narrate() {
   if [ "$#" -ne 0 ]; then
     printf '%s\n' "narrate: message body must be provided on stdin; use a heredoc" >&2
     return 2
+  fi
+  if [ -z "$to" ] && [ -n "${LENOS_NARRATE_DEFAULT_TO:-}" ]; then
+    to="${LENOS_NARRATE_DEFAULT_TO:-}"
   fi
 
   LENOS_NARRATE_SEQ=$((LENOS_NARRATE_SEQ + 1))

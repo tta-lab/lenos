@@ -119,6 +119,7 @@ func init() {
 	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	runCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
 	runCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file to inject at startup (repeatable)")
+	runCmd.Flags().String("pair-with", "", "Default target for narrate calls without --to")
 	runCmd.Flags().Bool("readonly", false, "Enforce read-only filesystem access on the working directory via the temenos sandbox; agent cannot create or modify files in cwd.")
 	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
 }

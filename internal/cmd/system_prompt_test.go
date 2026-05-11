@@ -15,3 +15,8 @@ func TestSystemPromptCmd_ContextFileFlagDeclared(t *testing.T) {
 	f := systemPromptCmd.Flags().Lookup("context-file")
 	require.NotNil(t, f, "--context-file flag must be declared on systemPromptCmd")
 }
+
+func TestSystemPromptCmd_PairWithFlagDeclared(t *testing.T) {
+	f := systemPromptCmd.Flags().Lookup("pair-with")
+	require.NotNil(t, f, "--pair-with flag must be declared on systemPromptCmd")
+}
