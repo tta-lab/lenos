@@ -136,10 +136,8 @@ func renderHeaderDetails(
 		parts = append(parts, t.Header.SandboxOff.Render("sandbox off"))
 	}
 
-	agentCfg := com.Config().Agents[config.AgentCoder]
-	model := com.Config().GetModelByType(agentCfg.Model)
-	if model != nil && model.ContextWindow > 0 {
-		percentage := (float64(sess.CompletionTokens+sess.PromptTokens) / float64(model.ContextWindow)) * 100
+	if contextWindow := headerContextWindow(com); contextWindow > 0 {
+		percentage := (float64(sess.CompletionTokens+sess.PromptTokens) / float64(contextWindow)) * 100
 		formattedPercentage := t.Header.Percentage.Render(fmt.Sprintf("%d%%", int(percentage)))
 		parts = append(parts, formattedPercentage)
 	}
@@ -165,6 +163,31 @@ func renderHeaderDetails(
 
 	result := cwd + metadata
 	return ansi.Truncate(result, max(0, availWidth), "…")
+}
+
+func headerContextWindow(com *common.Common) int64 {
+	if com == nil || com.Workspace == nil {
+		return 0
+	}
+	if com.Workspace.AgentIsReady() {
+		model := com.Workspace.AgentModel()
+		if model.CatwalkCfg.ContextWindow > 0 {
+			return model.CatwalkCfg.ContextWindow
+		}
+	}
+	cfg := com.Config()
+	if cfg == nil {
+		return 0
+	}
+	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	if !ok {
+		return 0
+	}
+	model := cfg.GetModelByType(agentCfg.Model)
+	if model == nil {
+		return 0
+	}
+	return model.ContextWindow
 }
 
 // formatTodoSegment formats the `TODO done/total` segment shown in the
