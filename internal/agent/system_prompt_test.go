@@ -221,6 +221,7 @@ func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
 	assert.Contains(t, got, "Working directory is a git repository.")
 	assert.Contains(t, got, "git status --short")
 	assert.NotContains(t, got, "Git status (snapshot at conversation start")
+	assert.NotContains(t, got, "Current branch:")
 	assert.NotContains(t, got, "?? dirty.txt")
 	assert.NotContains(t, got, "Recent commits:")
 	assertValidBashSyntax(t, got)
