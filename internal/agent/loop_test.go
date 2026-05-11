@@ -865,7 +865,7 @@ func (m *errorStreamModel) StreamObject(context.Context, fantasy.ObjectCall) (fa
 
 var _ fantasy.LanguageModel = (*errorStreamModel)(nil)
 
-func TestRunLoop_OnUsageStopReturnsShouldSummarize(t *testing.T) {
+func TestRunLoop_PreStepCompactReturnsShouldSummarize(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"echo a", "echo b"}}
 	runner := &fakeRunner{results: []ExecResult{
