@@ -339,13 +339,40 @@ func streamOne(
 	msgs []fantasy.Message,
 	assistantMsg *message.Message,
 ) (string, fantasy.Usage, fantasy.ProviderMetadata, error) {
+	baseline := assistantMsg.Clone()
+	result, err := retryModelStream(ctx,
+		func() (streamOneResult, error) {
+			return streamOneAttempt(ctx, deps, msgs, assistantMsg)
+		},
+		func() {
+			resetMessageForStreamRetry(ctx, deps.messages, assistantMsg, baseline, "loop: reset assistant message for stream retry")
+		},
+	)
+	if err != nil {
+		return "", result.usage, result.meta, err
+	}
+	return result.emit, result.usage, result.meta, nil
+}
+
+type streamOneResult struct {
+	emit  string
+	usage fantasy.Usage
+	meta  fantasy.ProviderMetadata
+}
+
+func streamOneAttempt(
+	ctx context.Context,
+	deps loopDeps,
+	msgs []fantasy.Message,
+	assistantMsg *message.Message,
+) (streamOneResult, error) {
 	stream, err := deps.model.Stream(ctx, fantasy.Call{
 		Prompt:          msgs,
 		ProviderOptions: deps.provOpts,
 		UserAgent:       userAgent,
 	})
 	if err != nil {
-		return "", fantasy.Usage{}, nil, err
+		return streamOneResult{}, err
 	}
 
 	var (
@@ -398,11 +425,15 @@ func streamOne(
 			meta = part.ProviderMetadata
 
 		case fantasy.StreamPartTypeError:
-			return "", usage, meta, part.Error
+			return streamOneResult{usage: usage, meta: meta}, part.Error
 		}
 	}
 
-	return assistantMsg.Content().Text, usage, meta, nil
+	return streamOneResult{
+		emit:  assistantMsg.Content().Text,
+		usage: usage,
+		meta:  meta,
+	}, nil
 }
 
 // formatResultForModel renders the next-turn observation text. Stdout and

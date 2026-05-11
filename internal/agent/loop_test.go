@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"io"
 	"iter"
 	"os"
 	"path/filepath"
@@ -128,6 +129,56 @@ func (m *scriptedModel) StreamObject(context.Context, fantasy.ObjectCall) (fanta
 
 var _ fantasy.LanguageModel = (*scriptedModel)(nil)
 
+type retryableErrorThenSuccessModel struct {
+	attempts   int
+	firstDelta string
+	secondEmit string
+}
+
+func (m *retryableErrorThenSuccessModel) Model() string    { return "retry-model" }
+func (m *retryableErrorThenSuccessModel) Provider() string { return "test-provider" }
+func (m *retryableErrorThenSuccessModel) Generate(context.Context, fantasy.Call) (*fantasy.Response, error) {
+	panic("not used")
+}
+
+func (m *retryableErrorThenSuccessModel) Stream(context.Context, fantasy.Call) (fantasy.StreamResponse, error) {
+	m.attempts++
+	if m.attempts == 1 {
+		return func(yield func(fantasy.StreamPart) bool) {
+			if !yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextDelta, Delta: m.firstDelta}) {
+				return
+			}
+			yield(fantasy.StreamPart{
+				Type: fantasy.StreamPartTypeError,
+				Error: &fantasy.ProviderError{
+					Title:   "stream transport error",
+					Message: "unexpected EOF",
+					Cause:   io.ErrUnexpectedEOF,
+				},
+			})
+		}, nil
+	}
+	return func(yield func(fantasy.StreamPart) bool) {
+		if !yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextDelta, Delta: m.secondEmit}) {
+			return
+		}
+		yield(fantasy.StreamPart{
+			Type:  fantasy.StreamPartTypeFinish,
+			Usage: fantasy.Usage{InputTokens: 2, OutputTokens: 3},
+		})
+	}, nil
+}
+
+func (m *retryableErrorThenSuccessModel) GenerateObject(context.Context, fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
+	panic("not used")
+}
+
+func (m *retryableErrorThenSuccessModel) StreamObject(context.Context, fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
+	panic("not used")
+}
+
+var _ fantasy.LanguageModel = (*retryableErrorThenSuccessModel)(nil)
+
 // fakeRunner returns canned ExecResults in order. Tests use it to drive
 // classify=exec branches without touching /bin/bash.
 type fakeRunner struct {
@@ -237,6 +288,25 @@ func TestRunLoop_ExecThenExit(t *testing.T) {
 	// DB has assistant rows + one result row, runner saw the bash.
 	assert.Equal(t, []string{"echo hi"}, runner.bash)
 	assert.Len(t, resultsByOrder(ms), 1)
+}
+
+func TestRunLoop_RetriesRetryableStreamEOFAndClearsPartialEmit(t *testing.T) {
+	t.Parallel()
+	model := &retryableErrorThenSuccessModel{
+		firstDelta: "partial bad emit",
+		secondEmit: "exit",
+	}
+	deps, ms := newDeps(t, model, &fakeRunner{}, &recordingRecorder{})
+
+	stop, err := runLoop(context.Background(), deps, nil, "do nothing")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, 2, model.attempts)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, "exit", assistants[0].Content().Text)
+	assert.NotContains(t, assistants[0].Content().Text, "partial bad emit")
 }
 
 func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {

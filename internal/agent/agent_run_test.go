@@ -755,6 +755,37 @@ func TestAgent_Summarize_AlwaysUsesLargeModel(t *testing.T) {
 	require.Equal(t, smallModel, agent.primaryModel.Get().Model, "primary should still be small after Summarize")
 }
 
+func TestAgent_Summarize_RetriesRetryableStreamEOFAndClearsPartialSummary(t *testing.T) {
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "summarize retry test")
+	require.NoError(t, err)
+
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "hello world"}},
+	})
+	require.NoError(t, err)
+
+	model := &retryableErrorThenSuccessModel{
+		firstDelta: "partial stale summary",
+		secondEmit: "fresh summary",
+	}
+	agent := testSessionAgent(env, model, &mockLanguageModel{}, "sys").(*sessionAgent)
+
+	err = agent.Summarize(t.Context(), sess.ID, fantasy.ProviderOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, 2, model.attempts)
+
+	updated, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, updated.SummaryMessageID)
+
+	summaryMsg, err := env.messages.Get(t.Context(), updated.SummaryMessageID)
+	require.NoError(t, err)
+	assert.Equal(t, "fresh summary", summaryMsg.Content().Text)
+	assert.NotContains(t, summaryMsg.Content().Text, "partial stale summary")
+}
+
 func TestAgent_SetModels_UpdatesPrimaryModel(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
