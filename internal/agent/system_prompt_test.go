@@ -198,10 +198,28 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 
 func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
 	dataDir := t.TempDir()
-	cmd := exec.CommandContext(t.Context(), "git", "init")
-	cmd.Dir = dataDir
-	require.NoError(t, cmd.Run())
-	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "dirty.txt"), []byte("dirty"), 0o644))
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = dataDir
+		require.NoError(t, cmd.Run())
+	}
+
+	runGit("init")
+	branchName := "prompt-snapshot-branch"
+	runGit("checkout", "-b", branchName)
+	committedFile := "committed-snapshot-sentinel.txt"
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, committedFile), []byte("tracked"), 0o644))
+	runGit("add", committedFile)
+	commitMessage := "prompt snapshot sentinel commit"
+	runGit(
+		"-c",
+		"user.name=Lenos Test",
+		"-c", "user.email=lenos-test@example.com",
+		"commit", "-m", commitMessage,
+	)
+	dirtyFile := "dirty-snapshot-sentinel.txt"
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, dirtyFile), []byte("dirty"), 0o644))
 
 	configDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
@@ -218,12 +236,9 @@ func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "narrate <<'LENOS_GIT_CONTEXT'")
-	assert.Contains(t, got, "Working directory is a git repository.")
-	assert.Contains(t, got, "git status --short")
-	assert.NotContains(t, got, "Git status (snapshot at conversation start")
-	assert.NotContains(t, got, "Current branch:")
-	assert.NotContains(t, got, "?? dirty.txt")
-	assert.NotContains(t, got, "Recent commits:")
+	assert.NotContains(t, got, branchName)
+	assert.NotContains(t, got, dirtyFile)
+	assert.NotContains(t, got, commitMessage)
 	assertValidBashSyntax(t, got)
 }
 

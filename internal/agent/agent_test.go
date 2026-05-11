@@ -33,8 +33,7 @@ func TestBuildSummaryPrompt(t *testing.T) {
 	t.Run("empty jobID returns base prompt without todos section", func(t *testing.T) {
 		t.Parallel()
 		result := buildSummaryPrompt(context.Background(), "")
-		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
-		require.NotContains(t, result, "Current Todo List")
+		require.Equal(t, formatSummaryPrompt(nil), result)
 		require.NotContains(t, result, "LENOS_SUMMARY_REQUEST")
 	})
 
@@ -43,8 +42,7 @@ func TestBuildSummaryPrompt(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		result := buildSummaryPrompt(ctx, "fake-nonexistent-job-id")
-		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
-		require.NotContains(t, result, "Current Todo List")
+		require.Equal(t, formatSummaryPrompt(nil), result)
 		require.NotContains(t, result, "LENOS_SUMMARY_REQUEST")
 	})
 
@@ -54,7 +52,7 @@ func TestBuildSummaryPrompt(t *testing.T) {
 		// task will return empty output, so todos section won't appear but
 		// the base prompt will.
 		result := buildSummaryPrompt(context.Background(), "00000000-0000-0000-0000-000000000000")
-		require.Contains(t, result, "Provide a detailed summary of our conversation above.")
+		require.Equal(t, formatSummaryPrompt(nil), result)
 		require.NotContains(t, result, "LENOS_SUMMARY_REQUEST")
 	})
 }
@@ -64,9 +62,9 @@ func TestBuildCompactSummaryPrompt_InstructsNarrateCompactionOutput(t *testing.T
 
 	got := buildCompactSummaryPrompt(context.Background(), "")
 
-	require.Contains(t, got, "CONTEXT CHECKPOINT COMPACTION")
-	require.Contains(t, got, "Provide a detailed summary")
-	require.Contains(t, got, "emit exactly one bash heredoc")
+	require.Contains(t, got, summaryInstructionsPrompt())
+	require.Contains(t, got, formatSummaryPrompt(nil))
+	require.Contains(t, got, summaryOutputProtocolPrompt())
 	require.Contains(t, got, "LENOS_CONTEXT_COMPACTION")
 	require.Contains(t, got, "narrate <<'")
 	require.NotContains(t, got, "LENOS_SUMMARY_SYSTEM")

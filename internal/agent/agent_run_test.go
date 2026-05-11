@@ -960,15 +960,15 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.Equal(t, fantasy.MessageRoleSystem, first.Role)
 	firstText := fantasyMessageText(first)
 	require.Equal(t, "NORMAL BASH SYSTEM", firstText)
-	require.NotContains(t, firstText, "CONTEXT CHECKPOINT COMPACTION")
 	require.NotContains(t, firstText, "LENOS_CONTEXT_COMPACTION")
 
 	last := prompt[len(prompt)-1]
 	require.Equal(t, fantasy.MessageRoleUser, last.Role)
 	lastText := fantasyMessageText(last)
-	require.Contains(t, lastText, "CONTEXT CHECKPOINT COMPACTION")
+	require.Contains(t, lastText, summaryInstructionsPrompt())
+	require.Contains(t, lastText, formatSummaryPrompt(nil))
+	require.Contains(t, lastText, summaryOutputProtocolPrompt())
 	require.Contains(t, lastText, "narrate <<'LENOS_CONTEXT_COMPACTION'")
-	require.Contains(t, lastText, "Provide a detailed summary")
 
 	systemMessages := 0
 	for _, msg := range prompt[:len(prompt)-1] {
@@ -977,7 +977,6 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 		}
 		systemMessages++
 		systemText := fantasyMessageText(msg)
-		require.NotContains(t, systemText, "CONTEXT CHECKPOINT COMPACTION")
 		require.NotContains(t, systemText, "LENOS_CONTEXT_COMPACTION")
 	}
 	require.Equal(t, 1, systemMessages)
