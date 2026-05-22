@@ -1013,6 +1013,34 @@ func TestAgent_Summarize_RetriesRetryableStreamEOFAndClearsPartialSummary(t *tes
 	assert.NotContains(t, summaryMsg.Content().Text, "partial stale summary")
 }
 
+func TestAgent_SummarizeDeletesSummaryMessageOnStreamError(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "summarize error cleanup test")
+	require.NoError(t, err)
+
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "old request"}},
+	})
+	require.NoError(t, err)
+
+	model := &scriptedModel{
+		emits: []string{"err"},
+		errOn: []int{0},
+	}
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+
+	err = agent.Summarize(t.Context(), sess.ID, fantasy.ProviderOptions{})
+	require.Error(t, err)
+
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	for _, msg := range msgs {
+		require.False(t, msg.IsSummaryMessage, "failed summaries should not leave empty summary messages")
+	}
+}
+
 func TestAgent_SetModels_UpdatesPrimaryModel(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
