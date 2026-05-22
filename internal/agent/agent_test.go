@@ -194,8 +194,8 @@ func TestShouldAutoCompact(t *testing.T) {
 		{"small window, just above ratio (remaining 20_001)", 100_000, 79_999, false},
 		{"small window, exactly at ratio (remaining 20_000)", 100_000, 80_000, true},
 		{"small window, over ratio", 100_000, 95_000, true},
-		{"boundary cw == largeContextWindowThreshold uses ratio path", 200_000, 159_999, false},
-		{"boundary cw == largeContextWindowThreshold uses ratio path (over)", 200_000, 160_000, true},
+		{"200k window just below ratio", 200_000, 159_999, false},
+		{"200k window exactly at ratio", 200_000, 160_000, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
