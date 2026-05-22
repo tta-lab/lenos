@@ -28,9 +28,7 @@ import (
 const (
 	DefaultSessionName = "Untitled Session"
 
-	// Constants for auto-summarization thresholds
-	largeContextWindowThreshold    = 200_000
-	largeContextWindowBuffer       = 20_000
+	// Constants for auto-summarization thresholds.
 	contextWindowBufferRatio       = 0.2
 	recentUserMessagesAfterCompact = 3
 	autoCompactContinuationPrefix  = "The previous session was interrupted because it got too long"
@@ -45,9 +43,6 @@ func shouldAutoCompact(contextWindow, used int64) bool {
 	}
 	remaining := contextWindow - used
 	threshold := int64(float64(contextWindow) * contextWindowBufferRatio)
-	if contextWindow > largeContextWindowThreshold {
-		threshold = max(threshold, largeContextWindowBuffer)
-	}
 	return remaining <= threshold
 }
 
