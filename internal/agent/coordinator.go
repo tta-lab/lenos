@@ -25,7 +25,6 @@ import (
 	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
-	"github.com/tta-lab/lenos/internal/project"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/temenos/client"
@@ -246,14 +245,6 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 	}
 
 	cwd := c.cfg.WorkingDir()
-	var additionalReadOnlyPaths []string
-	if projects, err := project.List(ctx); err == nil {
-		for _, p := range projects {
-			if p.Path != "" && p.Path != cwd {
-				additionalReadOnlyPaths = append(additionalReadOnlyPaths, p.Path)
-			}
-		}
-	}
 
 	useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
 	// sandboxClient is wired at startup by app.initSandboxClient. When nil,
@@ -274,7 +265,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 		Sandbox:                useSandbox,
 		SandboxClient:          sandboxClient,
 		Env:                    sandboxEnv,
-		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access, additionalReadOnlyPaths...),
+		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access),
 		DefaultNarrationTarget: strings.TrimSpace(c.cfg.Overrides().PairWith),
 	}
 }
