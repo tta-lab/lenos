@@ -31,26 +31,22 @@ const (
 	// Constants for auto-summarization thresholds
 	largeContextWindowThreshold    = 200_000
 	largeContextWindowBuffer       = 20_000
-	smallContextWindowRatio        = 0.2
+	contextWindowBufferRatio       = 0.2
 	recentUserMessagesAfterCompact = 3
 	autoCompactContinuationPrefix  = "The previous session was interrupted because it got too long"
 )
 
 // shouldAutoCompact returns true when the session has approached the
-// auto-summarization threshold. Uses a fixed remaining-token buffer for
-// large context windows (>200k tokens) and a 20% ratio for smaller windows.
-// Restored for the bash-first loop in 090d8794; formula matches the
-// pre-bash-first auto-summarize logic from commit 632ba621.
+// auto-summarization threshold. The remaining-token reserve scales with the
+// context window so the summary request still has room for the runtime prompt.
 func shouldAutoCompact(contextWindow, used int64) bool {
 	if contextWindow <= 0 {
 		return false
 	}
 	remaining := contextWindow - used
-	var threshold int64
+	threshold := int64(float64(contextWindow) * contextWindowBufferRatio)
 	if contextWindow > largeContextWindowThreshold {
-		threshold = largeContextWindowBuffer
-	} else {
-		threshold = int64(float64(contextWindow) * smallContextWindowRatio)
+		threshold = max(threshold, largeContextWindowBuffer)
 	}
 	return remaining <= threshold
 }

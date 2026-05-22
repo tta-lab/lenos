@@ -83,10 +83,11 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		},
 	)
 	if err != nil {
+		deleteErr := a.messages.Delete(ctx, summaryMessage.ID)
 		if errors.Is(err, context.Canceled) {
-			return a.messages.Delete(ctx, summaryMessage.ID)
+			return deleteErr
 		}
-		return err
+		return errors.Join(err, deleteErr)
 	}
 
 	totalUsage := streamResult.usage
