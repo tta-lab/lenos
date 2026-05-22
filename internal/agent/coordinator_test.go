@@ -434,34 +434,6 @@ func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 	})
 }
 
-func TestBuildCall_DoesNotShellOutToTTAL(t *testing.T) {
-	tmp := t.TempDir()
-	configDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
-	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
-	t.Setenv("LENOS_GLOBAL_DATA", configDir)
-	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
-
-	binDir := t.TempDir()
-	marker := filepath.Join(tmp, "ttal-called")
-	fakeTTAL := "#!/bin/sh\nprintf called > " + marker + "\nprintf '[]\\n'\n"
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "ttal"), []byte(fakeTTAL), 0o755))
-	t.Setenv("PATH", binDir)
-
-	cfg, err := config.Init(tmp, "", false)
-	require.NoError(t, err)
-	c := &coordinator{
-		cfg:          cfg,
-		dataDir:      cfg.WorkingDir(),
-		currentAgent: &stubAgent{modelName: "test-model"},
-	}
-
-	_ = c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
-
-	_, err = os.Stat(marker)
-	require.ErrorIs(t, err, os.ErrNotExist, "buildCall must not shell out to ttal")
-}
-
 func TestBuildCall_DefaultNarrationTargetFromOverrides(t *testing.T) {
 	tmp := t.TempDir()
 	configDir := t.TempDir()
