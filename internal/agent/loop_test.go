@@ -1728,6 +1728,28 @@ func TestObservationSSOT_EmptySuccess(t *testing.T) {
 	assert.Equal(t, 0, *cc.ExitCode)
 }
 
+func TestRunLoop_RunnerErrorIsPersistedForModel(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"pwd", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{
+		ExitCode: -1,
+		Err:      errors.New(`temenos: daemon returned HTTP 400: {"error":"validation error: path must be absolute: \".cursor/rules/\""}`),
+	}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+	require.NotNil(t, cc.ExitCode)
+	assert.Equal(t, -1, *cc.ExitCode)
+	assert.Contains(t, cc.Output, "temenos: daemon returned HTTP 400")
+	assert.Contains(t, cc.Observation, "path must be absolute")
+	assert.NotContains(t, cc.Observation, "Bash completed with no output")
+}
+
 func TestRunLoop_NarrateEventPersistsNarrationAndStops(t *testing.T) {
 	emit := "cat <<'EOF' | narrate\nDone for the user.\nEOF"
 	model := &scriptedModel{emits: []string{emit, "exit"}}

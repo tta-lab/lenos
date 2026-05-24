@@ -124,10 +124,7 @@ func processFile(filePath string) *ContextFile {
 
 func processContextPath(p string, store *config.ConfigStore) []ContextFile {
 	var contexts []ContextFile
-	fullPath := p
-	if !filepath.IsAbs(p) {
-		fullPath = filepath.Join(store.WorkingDir(), p)
-	}
+	fullPath := resolveContextPath(p, store)
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		slog.Warn("Failed to stat context path", "path", fullPath, "error", err)
@@ -171,6 +168,14 @@ func expandPath(path string, store *config.ConfigStore) string {
 	return path
 }
 
+func resolveContextPath(path string, store *config.ConfigStore) string {
+	path = expandPath(path, store)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(store.WorkingDir(), path)
+	}
+	return filepath.Clean(path)
+}
+
 func LoadRuntimeContext(_ context.Context, store *config.ConfigStore, extraContextPaths []string) RuntimeContext {
 	cfg := store.Config()
 	contextPaths := cfg.Options.ContextPaths
@@ -180,13 +185,13 @@ func LoadRuntimeContext(_ context.Context, store *config.ConfigStore, extraConte
 		seen := make(map[string]struct{}, len(contextPaths)+len(extraContextPaths))
 		merged := make([]string, 0, len(contextPaths)+len(extraContextPaths))
 		for _, pth := range append(contextPaths, extraContextPaths...) {
-			expanded := expandPath(pth, store)
-			key := strings.ToLower(expanded)
+			resolved := resolveContextPath(pth, store)
+			key := strings.ToLower(resolved)
 			if _, ok := seen[key]; ok {
 				continue
 			}
 			seen[key] = struct{}{}
-			merged = append(merged, pth)
+			merged = append(merged, resolved)
 		}
 		contextPaths = merged
 	}
@@ -194,14 +199,25 @@ func LoadRuntimeContext(_ context.Context, store *config.ConfigStore, extraConte
 	var out RuntimeContext
 	seenFiles := map[string]struct{}{}
 	for _, pth := range contextPaths {
-		expanded := expandPath(pth, store)
-		out.ReadOnlyPaths = append(out.ReadOnlyPaths, expanded)
-		pathKey := strings.ToLower(expanded)
+		resolved := resolveContextPath(pth, store)
+		info, err := os.Stat(resolved)
+		if err != nil {
+			slog.Warn("Failed to stat context path", "path", resolved, "error", err)
+			continue
+		}
+		out.ReadOnlyPaths = append(out.ReadOnlyPaths, resolved)
+		pathKey := strings.ToLower(resolved)
 		if _, ok := seenFiles[pathKey]; ok {
 			continue
 		}
 		seenFiles[pathKey] = struct{}{}
-		out.ContextFiles = append(out.ContextFiles, processContextPath(expanded, store)...)
+		if info.IsDir() {
+			out.ContextFiles = append(out.ContextFiles, processContextPath(resolved, store)...)
+			continue
+		}
+		if result := processFile(resolved); result != nil {
+			out.ContextFiles = append(out.ContextFiles, *result)
+		}
 	}
 	return out
 }
