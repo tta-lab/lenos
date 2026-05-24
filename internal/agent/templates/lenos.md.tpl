@@ -144,17 +144,3 @@ For nested subtask trees: see `task-tree` skill syntax.
 **Deleting subtasks:** `task <uuid> delete` -- use when a subtask is no longer needed.
 LENOS_TASK
 {{end}}
-{{- if .SkillList}}
-
-{{ narrateSection "LENOS_AVAILABLE_SKILLS" (printf "# Available Skills\n\nThese skills are available. Use `skill get <name>` to read full instructions before following them.\n\n%s" .SkillList) }}
-{{end}}
-{{if .ContextFiles}}
-cat <<'LENOS_MEMORY' | narrate
-# Memory
-
-Extra context files attached to this session.
-LENOS_MEMORY
-{{range $i, $f := .ContextFiles}}
-{{ narrateSection (printf "LENOS_MEMORY_FILE_%d" $i) (printf "# File: %s\n\n%s" $f.Path $f.Content) }}
-{{end}}
-{{end}}

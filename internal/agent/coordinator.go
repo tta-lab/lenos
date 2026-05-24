@@ -20,6 +20,7 @@ import (
 	"github.com/tta-lab/lenos/internal/agent/codex"
 	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
+	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/hooks"
 	"github.com/tta-lab/lenos/internal/log"
@@ -236,7 +237,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 // buildCall assembles the per-turn SessionAgentCall with sandbox env, allowed
 // paths, and provider options. Extracted so the OAuth/API-key refresh path
 // can rebuild a call with fresh credentials without duplicating wiring.
-func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, model Model, providerCfg config.ProviderConfig) SessionAgentCall {
+func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt string, model Model, providerCfg config.ProviderConfig) SessionAgentCall {
 	sandboxEnv := make(map[string]string, len(os.Environ()))
 	for _, e := range os.Environ() {
 		if idx := strings.IndexByte(e, '='); idx >= 0 {
@@ -245,6 +246,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 	}
 
 	cwd := c.cfg.WorkingDir()
+	runtimeContext := prompt.LoadRuntimeContext(ctx, c.cfg, getCoderContextPaths(c.cfg))
 
 	useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
 	// sandboxClient is wired at startup by app.initSandboxClient. When nil,
@@ -260,13 +262,14 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, prompt string, m
 
 	return SessionAgentCall{
 		SessionID:              sessionID,
-		Prompt:                 prompt,
+		Prompt:                 userPrompt,
 		ProviderOptions:        getProviderOptions(model, providerCfg),
 		Sandbox:                useSandbox,
 		SandboxClient:          sandboxClient,
 		Env:                    sandboxEnv,
-		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access),
+		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access, runtimeContext.ReadOnlyPaths...),
 		DefaultNarrationTarget: strings.TrimSpace(c.cfg.Overrides().PairWith),
+		ContextCommands:        buildRuntimeContextCommands(runtimeContext),
 	}
 }
 

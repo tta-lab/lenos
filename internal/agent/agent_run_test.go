@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -14,6 +16,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/temenos/client"
 
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
@@ -153,6 +156,65 @@ func TestBuildHistory_DoesNotIncludePrompt(t *testing.T) {
 	// runLoop appends the prompt internally; buildHistory must not duplicate it.
 	assert.NotEqual(t, fantasy.MessageRoleUser, last.Role, "buildHistory must not append the prompt as a user message")
 	assert.Equal(t, fantasy.MessageRoleAssistant, last.Role, "last element should be the assistant reply")
+}
+
+func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	contextFile := filepath.Join(env.workingDir, "context.md")
+	require.NoError(t, os.WriteFile(contextFile, []byte("project instructions"), 0o644))
+
+	inner := &scriptedModel{emits: []string{"exit"}}
+	model := &streamCapturingModel{inner: inner}
+	primary := Model{
+		Model:      model,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+		ModelCfg:   config.SelectedModel{Provider: "test-provider", Model: "test-model"},
+	}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           primary,
+		SmallModel:           primary,
+		PrimaryModel:         primary,
+		SystemPrompt:         "system prompt",
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		DisableAutoSummarize: true,
+	}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "runtime context")
+	require.NoError(t, err)
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID: sess.ID,
+		Prompt:    "user prompt",
+		AllowedPaths: []client.AllowedPath{
+			{Path: env.workingDir},
+		},
+		ContextCommands: []RuntimeContextCommand{{
+			Command: "# read context file\ncat " + shellQuote(contextFile),
+		}},
+	})
+	require.NoError(t, err)
+
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(msgs), 4)
+	require.Equal(t, message.Assistant, msgs[0].Role)
+	require.Equal(t, "# read context file\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
+	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
+	require.Equal(t, message.Result, msgs[1].Role)
+	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)
+	require.Equal(t, message.User, msgs[2].Role)
+	require.Equal(t, "user prompt", msgs[2].Content().Text)
+
+	require.Len(t, model.captured, 1)
+	prompt := model.captured[0]
+	require.Len(t, prompt, 4)
+	require.Equal(t, fantasy.MessageRoleSystem, prompt[0].Role)
+	require.Equal(t, fantasy.MessageRoleAssistant, prompt[1].Role)
+	require.Equal(t, fantasy.MessageRoleUser, prompt[2].Role)
+	require.Contains(t, fantasyMessageText(prompt[2]), "project instructions")
+	require.Equal(t, "user prompt", fantasyMessageText(prompt[3]))
 }
 
 func fantasyMessageText(msg fantasy.Message) string {
@@ -926,7 +988,7 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.NoError(t, err)
 
 	inner := &scriptedModel{
-		emits: []string{"narrate <<'LENOS_CONTEXT_COMPACTION'\nSummary\nLENOS_CONTEXT_COMPACTION"},
+		emits: []string{"cat <<'LENOS_CONTEXT_COMPACTION' | narrate\nSummary\nLENOS_CONTEXT_COMPACTION"},
 	}
 	model := &streamCapturingModel{inner: inner}
 	primary := Model{

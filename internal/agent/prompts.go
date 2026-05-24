@@ -113,6 +113,19 @@ func buildLenosWrapper(
 	return p.Build(ctx, provider, model, store)
 }
 
+func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+	commands := []RuntimeContextCommand{{
+		Command:  "# list available skills\nskill list",
+		Optional: true,
+	}}
+	for _, file := range runtimeContext.ContextFiles {
+		commands = append(commands, RuntimeContextCommand{
+			Command: "# read context file\ncat " + shellQuote(file.Path),
+		})
+	}
+	return commands
+}
+
 func InitializePrompt(cfg *config.ConfigStore) (string, error) {
 	systemPrompt, err := prompt.NewPrompt("initialize", string(initializePromptTmpl))
 	if err != nil {

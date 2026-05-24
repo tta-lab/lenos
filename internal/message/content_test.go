@@ -227,7 +227,7 @@ func TestFormatResults_OmitsNarrationBody(t *testing.T) {
 
 	exitCode := 0
 	got := FormatResults([]CommandContent{{
-		Command:  "narrate <<'EOF'\nSecret body for the user.\nEOF",
+		Command:  "cat <<'EOF' | narrate\nSecret body for the user.\nEOF",
 		Output:   "",
 		ExitCode: &exitCode,
 		Pending:  false,
@@ -245,7 +245,7 @@ func TestFormatResults_PreservesNarrationContinueStatus(t *testing.T) {
 
 	exitCode := 0
 	got := FormatResults([]CommandContent{{
-		Command:  "narrate --continue <<'EOF'\nSecret body for the user.\nEOF",
+		Command:  "cat <<'EOF' | narrate --continue\nSecret body for the user.\nEOF",
 		Output:   "",
 		ExitCode: &exitCode,
 		Pending:  false,

@@ -458,7 +458,7 @@ func TestUpdateSessionMessage_Result(t *testing.T) {
 			Role: message.Result,
 			Parts: []message.ContentPart{
 				message.CommandContent{
-					Command:  "false\nnarrate <<'EOF'\nFirst\nEOF",
+					Command:  "false\ncat <<'EOF' | narrate\nFirst\nEOF",
 					Output:   "first failure",
 					ExitCode: &exitCode,
 					Narrations: []message.CommandNarration{
@@ -477,7 +477,7 @@ func TestUpdateSessionMessage_Result(t *testing.T) {
 			Role: message.Result,
 			Parts: []message.ContentPart{
 				message.CommandContent{
-					Command:  "false\nnarrate <<'EOF'\nSecond\nEOF",
+					Command:  "false\ncat <<'EOF' | narrate\nSecond\nEOF",
 					Output:   "second failure",
 					ExitCode: &exitCode,
 					Narrations: []message.CommandNarration{

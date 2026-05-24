@@ -259,7 +259,7 @@ func TestClassify_TrailingExitIsExec(t *testing.T) {
 		{"or exit", `echo go || exit 1`},
 		{"chained && exit", `cd /tmp && ls && exit`},
 		{"trailing whitespace", "echo hi && exit   "},
-		{"heredoc with exit on newline", "narrate <<'EOF'\nHi\nEOF\nexit"},
+		{"heredoc with exit on newline", "cat <<'EOF' | narrate\nHi\nEOF\nexit"},
 		{"multi-line cmds with trailing exit", "echo one\necho two\nexit"},
 		{"heredoc with exit N on newline", "cat <<EOF\nfoo\nEOF\nexit 2"},
 	}

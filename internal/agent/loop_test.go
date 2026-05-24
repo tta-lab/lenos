@@ -1729,7 +1729,7 @@ func TestObservationSSOT_EmptySuccess(t *testing.T) {
 }
 
 func TestRunLoop_NarrateEventPersistsNarrationAndStops(t *testing.T) {
-	emit := "narrate <<'EOF'\nDone for the user.\nEOF"
+	emit := "cat <<'EOF' | narrate\nDone for the user.\nEOF"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{
 		results: []ExecResult{{ExitCode: 0, Duration: time.Millisecond}},
@@ -1760,7 +1760,7 @@ func TestRunLoop_NarrateEventPersistsNarrationAndStops(t *testing.T) {
 }
 
 func TestRunLoop_NarrateContinueFlagContinuesWithoutReplayingBody(t *testing.T) {
-	emit := "narrate --continue <<'EOF'\nDone for the user.\nEOF"
+	emit := "cat <<'EOF' | narrate --continue\nDone for the user.\nEOF"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{
 		results: []ExecResult{{ExitCode: 0, Duration: time.Millisecond}},
@@ -1825,7 +1825,7 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateAndStops(t *testing.T) {
 }
 
 func TestRunLoop_NarrateDeliveryFailureContinuesWithoutReplayingBody(t *testing.T) {
-	emit := "narrate --to owner <<'EOF'\nPrivate update.\nEOF"
+	emit := "cat <<'EOF' | narrate --to owner\nPrivate update.\nEOF"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{
 		results: []ExecResult{
@@ -1866,7 +1866,7 @@ func TestRunLoop_NarrateDeliveryFailureContinuesWithoutReplayingBody(t *testing.
 }
 
 func TestRunLoop_NarrateWithFailedBashContinuesWithoutReplayingBody(t *testing.T) {
-	emit := "false\nnarrate <<'EOF'\nPartial update.\nEOF"
+	emit := "false\ncat <<'EOF' | narrate\nPartial update.\nEOF"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{
 		results: []ExecResult{{ExitCode: 1, Duration: time.Millisecond}},

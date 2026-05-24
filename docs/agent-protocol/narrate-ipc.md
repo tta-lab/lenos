@@ -46,9 +46,9 @@ out of the project tree.
 ## Heredoc Generation
 
 When natural-language detection rewrites prose into bash, the runtime creates
-a `narrate <<'DELIM'` heredoc. The delimiter has a fixed prefix plus random
-hex. If the body already contains that delimiter on its own line, generation
-retries.
+a `cat <<'DELIM' | narrate` heredoc pipeline. The delimiter has a fixed prefix
+plus random hex. If the body already contains that delimiter on its own line,
+generation retries.
 
 ## Delivery
 
