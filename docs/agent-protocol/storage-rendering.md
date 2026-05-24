@@ -7,8 +7,7 @@ runtime-owned narration metadata.
 ## Assistant Messages
 
 Assistant text stores bash. If natural-language detection rewrites prose, the
-stored assistant message is the generated `narrate <<'EOF'` bash, not the raw
-prose.
+stored assistant message is generated narration bash, not the raw prose.
 
 Assistant messages render in the TUI as bash previews. The first line is shown
 with a `$` prefix; multi-line bash is collapsed to one preview line.

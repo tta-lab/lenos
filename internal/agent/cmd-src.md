@@ -30,7 +30,7 @@ Each `src edit` call performs exactly one text replacement. The edit block uses 
 If you need two edits, call `src edit` twice — never put two `===BEFORE===`/`===AFTER===` pairs in one call.
 
 Targeted replacement within one symbol:
-  src edit <file> --section <id> <<'EOF'
+  cat <<'EOF' | src edit <file> --section <id>
   ===BEFORE===
   old text
   ===AFTER===
@@ -38,7 +38,7 @@ Targeted replacement within one symbol:
   EOF
 
 Global text replacement (any text anywhere in file):
-  src edit <file> <<'EOF'
+  cat <<'EOF' | src edit <file>
   ===BEFORE===
   old text
   ===AFTER===
@@ -46,7 +46,7 @@ Global text replacement (any text anywhere in file):
   EOF
 
 Single-edit example:
-  src edit some/file.go <<'EOF'
+  cat <<'EOF' | src edit some/file.go
   ===BEFORE===
   func greet() {
       fmt.Println("hello")
@@ -95,7 +95,7 @@ Recovery steps:
 **Only two tools may modify files:**
 
 1. **`src edit`** — symbol-aware editing (preferred for targeted changes)
-2. **`heredoc redirection`** — `cat <<"EOF" > file` for whole-file writes
+2. **`heredoc pipeline`** — `cat <<'EOF' | tee file >/dev/null` for whole-file writes
 
 **NEVER use these tools to modify files:** `sed -i`, `perl -i`, `awk ... > file`, `python script.py` (when writing), `printf ... > file`.
 

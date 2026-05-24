@@ -1036,7 +1036,7 @@ func TestRunLoop_Exit127_LowercaseProseRePrompts(t *testing.T) {
 	require.Len(t, results, 1)
 	obs := results[0].CommandContent().Output
 	assert.Contains(t, obs, "`hello`")
-	assert.Contains(t, obs, "narrate <<")
+	assert.Contains(t, obs, "narrate")
 }
 
 // TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance tests that the

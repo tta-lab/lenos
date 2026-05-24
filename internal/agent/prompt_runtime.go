@@ -32,9 +32,9 @@ func rePromptInvalidBash(bashErr string) string {
   %s
 
 THE MOST LIKELY CAUSE: you emitted text that is neither bash nor a valid
-narrate heredoc. To say something explicitly, emit:
+message heredoc. To say something explicitly, emit:
 
-narrate <<'EOF'
+cat <<'EOF' | narrate
 your message here — apostrophes, "quotes", $vars all pass through.
 EOF
 
@@ -78,7 +78,7 @@ To act, emit plain bash only:
   src edit internal/agent/loop.go
 
 To talk to the human, use:
-narrate <<'EOF'
+cat <<'EOF' | narrate
 your message here
 EOF
 
@@ -122,7 +122,7 @@ if `+"`%s`"+` looks like part of an English sentence ("let me ...", "i'll ...",
     boundaries
 
 to annotate one command (one line):  # this is a bash comment — bash ignores it
-to talk to the human (multi-line):   narrate <<'EOF' ... EOF
+to talk to the human (multi-line):   cat <<'EOF' | narrate ... EOF
 to end the turn without text:        exit
 to act:                              emit pure bash (chained with && / ; / | as needed).`,
 		firstWord, firstWord, firstWord, firstWord)

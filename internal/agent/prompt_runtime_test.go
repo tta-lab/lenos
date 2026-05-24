@@ -25,7 +25,7 @@ func TestRePromptInvalidBash(t *testing.T) {
 	assert.Contains(t, got, "bash -n said:")
 	assert.Contains(t, got, "syntax error near token `then'")
 	assert.Contains(t, got, "neither bash nor a valid")
-	assert.Contains(t, got, "narrate <<'EOF'")
+	assert.Contains(t, got, "narrate")
 	assertHeredocTerminatorsStartAtColumnZero(t, got)
 	assert.Contains(t, got, "exit")
 }
@@ -68,7 +68,7 @@ func TestRePromptCmdNotFound_Format(t *testing.T) {
 	assert.Contains(t, got, "command -v lorem")
 	assert.Contains(t, got, "# ", "must offer bash comment for one-line inline annotation")
 	assert.Contains(t, got, "comment")
-	assert.Contains(t, got, "narrate <<'EOF'")
+	assert.Contains(t, got, "narrate")
 	assert.Contains(t, got, "exit")
 	assert.NotContains(t, got, "```")
 	assert.Contains(t, got, "real binary you expected")

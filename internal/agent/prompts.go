@@ -75,7 +75,7 @@ func SystemPrompt(
 	b.WriteString("\n")
 	if pairWith := strings.TrimSpace(store.Overrides().PairWith); pairWith != "" {
 		b.WriteString(protocol.NarrateSection("LENOS_NARRATION_PAIR",
-			"# Narration Pair\n\nNarration without `--to` is delivered to "+pairWith+". Explicit `narrate --to` calls keep their target."))
+			"# Narration Pair\n\nNarration without an explicit addressee is delivered to "+pairWith+". Use `cat <<'EOF' | narrate --to <agent>` only when another target is needed. Lenos handles delivery."))
 		b.WriteString("\n")
 	}
 	b.WriteString(lenosWrapper)

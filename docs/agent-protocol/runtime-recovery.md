@@ -11,8 +11,8 @@ An empty response gets a short runtime prompt asking for bash, a comment,
 ## Invalid Bash
 
 If `bash -n` rejects the emit, the runtime sends the syntax error back and
-suggests an explicit `narrate <<'EOF'` heredoc when the likely mistake is
-reader-facing prose.
+suggests an explicit `cat <<'EOF' | narrate` heredoc pipeline when the likely
+mistake is reader-facing prose.
 
 ## Tool-Call Wrappers
 
@@ -33,9 +33,9 @@ suggesting bash-native `timeout`.
 
 ## Narration Delivery Failure
 
-If `narrate --to <agent>` fails during `ttal send`, the result stores the
-delivery exit code and output in `CommandNarration`. The next model observation
-mentions delivery failure but omits the narration body.
+If addressed narration delivery fails, the result stores the delivery exit code
+and output in `CommandNarration`. The next model observation mentions delivery
+failure but omits the narration body.
 
 ## Narration Continue
 

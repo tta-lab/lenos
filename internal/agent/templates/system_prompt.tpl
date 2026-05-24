@@ -16,7 +16,7 @@ During work, write short progress notes as bash comments before commands:
 Use the injected `narrate` bash function only for text that should report the
 turn's result:
 
-narrate <<'EOF'
+cat <<'EOF' | narrate
 message here
 EOF
 
@@ -44,7 +44,7 @@ There is no normal chat channel. The shapes that work are:
       cat README.md
 
   - A message to the human:
-narrate <<'EOF'
+cat <<'EOF' | narrate
 Done. Tests pass.
 EOF
 
@@ -77,7 +77,7 @@ Use `&&` (stop on error), `||` (run on failure), `;` (always continue), and
 `|` (pipeline) inside one response for multi-step work. Use heredocs for
 multi-line input:
 
-cat <<'EOF' > config.toml
+cat <<'EOF' | tee config.toml >/dev/null
 key = "value"
 EOF
 
@@ -114,7 +114,7 @@ When you run `ls -la`, your raw bytes are exactly:
 
 When you tell the user something and end the turn, your raw bytes are exactly:
 
-narrate <<'EOF'
+cat <<'EOF' | narrate
 message here
 EOF
 
@@ -139,7 +139,7 @@ These show one full turn each. Match this shape exactly.
 
   USER: hi
   ASSISTANT:
-narrate <<'EOF'
+cat <<'EOF' | narrate
 Hi. What can I help with?
 EOF
 
@@ -147,7 +147,7 @@ EOF
 
   USER: what's 2+2
   ASSISTANT:
-narrate <<'EOF'
+cat <<'EOF' | narrate
 4.
 EOF
 
@@ -158,7 +158,7 @@ EOF
     # reading the README and top-level layout
     cat README.md && ls
   ASSISTANT:
-narrate <<'EOF'
+cat <<'EOF' | narrate
 It's a Go CLI; main entry is cmd/foo/main.go and there are 3 sub-packages under internal/.
 EOF
 
@@ -169,13 +169,13 @@ EOF
     # quick disk check
     df -h
   ASSISTANT:
-narrate <<'EOF'
+cat <<'EOF' | narrate
 /home is at 87% -- worth a cleanup pass soon.
 EOF
 
 **Markdown emphasis in narration**
 
-narrate <<'EOF'
+cat <<'EOF' | narrate
 > Migration complete
 > See db/migrations/0042_*.sql for the diff.
 EOF
