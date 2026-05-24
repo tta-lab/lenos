@@ -30,7 +30,7 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	// Bash-first protocol is described.
 	assert.Contains(t, got, "raw bash")
 	assert.Contains(t, got, "exit")
-	assert.Contains(t, got, "narrate <<'")
+	assert.Contains(t, got, "cat <<'")
 	assert.Contains(t, got, "During work, write short progress notes as bash comments")
 	assertValidBashSyntax(t, got)
 	assert.NotContains(t, got, "Wrong shape")
@@ -235,7 +235,7 @@ func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
 	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "narrate <<'LENOS_GIT_CONTEXT'")
+	assert.Contains(t, got, "cat <<'LENOS_GIT_CONTEXT' | narrate")
 	assert.NotContains(t, got, branchName)
 	assert.NotContains(t, got, dirtyFile)
 	assert.NotContains(t, got, commitMessage)
@@ -257,7 +257,7 @@ func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "Analyze this codebase")
-	assert.Contains(t, got, "narrate <<'")
+	assert.Contains(t, got, "cat <<'")
 	assert.NotContains(t, got, "```")
 	assertValidBashSyntax(t, got)
 }
@@ -303,7 +303,7 @@ func TestSystemPrompt_AgentMode_RendersAgentBody(t *testing.T) {
 	if strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
 		t.Errorf("agent mode should NOT contain coder identity when agent file given")
 	}
-	assert.Contains(t, got, "narrate <<'LENOS_IDENTITY_BODY'")
+	assert.Contains(t, got, "cat <<'LENOS_IDENTITY_BODY' | narrate")
 	assertValidBashSyntax(t, got)
 }
 
@@ -328,7 +328,7 @@ func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
 	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "narrate <<'LENOS_IDENTITY_BODY'")
+	assert.Contains(t, got, "cat <<'LENOS_IDENTITY_BODY' | narrate")
 	assert.Contains(t, got, "Keep this payload unchanged.")
 	assert.Contains(t, got, "<external_rules>")
 	assert.NotContains(t, got, "LENOS_WRAPPER")
@@ -352,7 +352,7 @@ func TestSystemPrompt_PairWithDocumentsDefaultNarrationTarget(t *testing.T) {
 	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "narrate <<'LENOS_NARRATION_PAIR'")
+	assert.Contains(t, got, "cat <<'LENOS_NARRATION_PAIR' | narrate")
 	assert.Contains(t, got, "reviewer")
 	assertValidBashSyntax(t, got)
 }
@@ -421,8 +421,8 @@ func TestSystemPrompt_ExtraContextFilesStillInMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Contains(t, got, "narrate <<'LENOS_MEMORY'")
-	assert.Contains(t, got, "narrate <<'LENOS_MEMORY_FILE_")
+	assert.Contains(t, got, "cat <<'LENOS_MEMORY' | narrate")
+	assert.Contains(t, got, "cat <<'LENOS_MEMORY_FILE_")
 	assert.NotContains(t, got, "<memory>")
 	assert.NotContains(t, got, "<file path=")
 	if !strings.Contains(got, "Extra note") {
@@ -473,7 +473,7 @@ func TestSystemPrompt_AgentMode_ExtraContextFilesStillInMemory(t *testing.T) {
 	if !strings.Contains(got, "Context") {
 		t.Errorf("extra context file should appear in output")
 	}
-	assert.Contains(t, got, "narrate <<'LENOS_MEMORY'")
+	assert.Contains(t, got, "cat <<'LENOS_MEMORY' | narrate")
 	assert.NotContains(t, got, "<memory>")
 	assertValidBashSyntax(t, got)
 }

@@ -538,7 +538,7 @@ func TestRunLoop_TrailingExit_NaturalLanguageRewritesToNarrate(t *testing.T) {
 	assert.Equal(t, stopExit, stop)
 
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
 	assert.Equal(t, message.FinishReasonToolUse, assistants[0].FinishReason())
@@ -1363,7 +1363,7 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateCommandAndStops(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1435,7 +1435,7 @@ func TestRunLoop_MarkdownHeadingFirstLineRewritesToNarrate(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, stopExit, stop)
 			require.Len(t, runner.bash, 1)
-			assert.Contains(t, runner.bash[0], "narrate <<'")
+			assert.Contains(t, runner.bash[0], "cat <<'")
 
 			assistants := assistantsByOrder(ms)
 			require.Len(t, assistants, 1)
@@ -1514,7 +1514,7 @@ func TestRunLoop_NaturalLanguageFirstLineWithProseStartingWithExistingBinaryRewr
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1531,7 +1531,7 @@ func TestRunLoop_NaturalLanguageFirstLineWithNonExecutablePathRestRewritesToNarr
 			{ExitCode: 0}, // rewritten narration command
 		},
 		onRun: func(bash string, env map[string]string, _ []client.AllowedPath) {
-			if strings.Contains(bash, "narrate <<'") {
+			if strings.Contains(bash, "cat <<'") {
 				writeNarrationEvent(t, env, emit)
 			}
 		},
@@ -1543,7 +1543,7 @@ func TestRunLoop_NaturalLanguageFirstLineWithNonExecutablePathRestRewritesToNarr
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 2)
 	assert.Contains(t, runner.bash[0], "test -x")
-	assert.Contains(t, runner.bash[1], "narrate <<'")
+	assert.Contains(t, runner.bash[1], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1605,7 +1605,7 @@ func TestRunLoop_NaturalLanguageFirstLineWithInvalidBashRestRewritesToNarrate(t 
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1635,7 +1635,7 @@ func TestRunLoop_NaturalLanguageMultilineCJKRewritesToNarrate(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, stopExit, stop)
 			require.Len(t, runner.bash, 1)
-			assert.Contains(t, runner.bash[0], "narrate <<'")
+			assert.Contains(t, runner.bash[0], "cat <<'")
 
 			assistants := assistantsByOrder(ms)
 			require.Len(t, assistants, 1)
@@ -1661,7 +1661,7 @@ func TestRunLoop_ExplicitMdMixedWithBashHasNoSpecialProtocol(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1794,7 +1794,7 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateAndStops(t *testing.T) {
 		results: []ExecResult{{ExitCode: 0, Duration: time.Millisecond}},
 		onRun: func(bash string, env map[string]string, _ []client.AllowedPath) {
 			require.Contains(t, bash, "narrate()")
-			require.Contains(t, bash, "narrate <<'")
+			require.Contains(t, bash, "cat <<'")
 			require.Contains(t, bash, "Done for the user.")
 			dir := env["LENOS_NARRATE_DIR"]
 			require.NotEmpty(t, dir)
@@ -1813,7 +1813,7 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateAndStops(t *testing.T) {
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
 	stored := assistants[0].Content().Text
-	assert.Contains(t, stored, "narrate <<'")
+	assert.Contains(t, stored, "cat <<'")
 	assert.NotContains(t, stored, ":md")
 
 	results := resultsByOrder(ms)

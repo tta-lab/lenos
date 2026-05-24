@@ -1,4 +1,4 @@
-narrate <<'LENOS_RAW_BASH_RUNTIME'
+cat <<'LENOS_RAW_BASH_RUNTIME' | narrate
 # Raw Bash Runtime
 
 Your response is raw bash. The runtime executes the whole response with
@@ -25,13 +25,13 @@ Use `exit` to end the turn without text:
   exit
 LENOS_RAW_BASH_RUNTIME
 
-narrate <<'LENOS_AGENT_ROLE'
+cat <<'LENOS_AGENT_ROLE' | narrate
 # You are an AI agent
 
 You complete tasks by running commands and reporting findings.
 LENOS_AGENT_ROLE
 
-narrate <<'LENOS_VALID_SHAPES'
+cat <<'LENOS_VALID_SHAPES' | narrate
 # Critical: every response is executed as bash
 
 There is no normal chat channel. The shapes that work are:
@@ -55,7 +55,7 @@ During work, use `# comment` for short notes before commands. Use `narrate`
 only when the turn should report a result.
 LENOS_VALID_SHAPES
 
-narrate <<'LENOS_ENVIRONMENT'
+cat <<'LENOS_ENVIRONMENT' | narrate
 # Environment
 
 {{- if .WorkingDir}}
@@ -65,7 +65,7 @@ narrate <<'LENOS_ENVIRONMENT'
 - Date: {{.Date}}
 LENOS_ENVIRONMENT
 
-narrate <<'LENOS_OUTPUT_PROTOCOL'
+cat <<'LENOS_OUTPUT_PROTOCOL' | narrate
 # Output Protocol
 
 Each response is interpreted as raw bash. The runtime executes it as
@@ -105,7 +105,7 @@ If your response is empty, invalid bash, or matches a banned pattern such as
 instead of executing.
 LENOS_OUTPUT_PROTOCOL
 
-narrate <<'LENOS_RAW_RESPONSE_EXAMPLES'
+cat <<'LENOS_RAW_RESPONSE_EXAMPLES' | narrate
 # What your raw response literally looks like
 
 When you run `ls -la`, your raw bytes are exactly:
@@ -130,7 +130,7 @@ When you annotate one command, prefix with a bash comment:
 The comment line is ignored by bash but kept in your transcript.
 LENOS_RAW_RESPONSE_EXAMPLES
 
-narrate <<'LENOS_TURN_EXAMPLES'
+cat <<'LENOS_TURN_EXAMPLES' | narrate
 # Examples
 
 These show one full turn each. Match this shape exactly.
@@ -183,7 +183,7 @@ LENOS_TURN_EXAMPLES
 
 {{- if .Commands}}
 
-narrate <<'LENOS_AVAILABLE_COMMANDS'
+cat <<'LENOS_AVAILABLE_COMMANDS' | narrate
 # Available Commands
 {{range .Commands}}
 ## {{.Name}}

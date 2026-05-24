@@ -245,9 +245,9 @@ func shouldStopAfterNarration(narrations []message.CommandNarration, exitCode in
 func narrateCommandForBody(body string) string {
 	delimiter := narrateHeredocDelimiter(body)
 	if strings.HasSuffix(body, "\n") {
-		return "narrate <<'" + delimiter + "'\n" + body + delimiter
+		return "cat <<'" + delimiter + "' | narrate\n" + body + delimiter
 	}
-	return "narrate <<'" + delimiter + "'\n" + body + "\n" + delimiter
+	return "cat <<'" + delimiter + "' | narrate\n" + body + "\n" + delimiter
 }
 
 func narrateHeredocDelimiter(body string) string {

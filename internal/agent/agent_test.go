@@ -66,7 +66,7 @@ func TestBuildCompactSummaryPrompt_InstructsNarrateCompactionOutput(t *testing.T
 	require.Contains(t, got, formatSummaryPrompt(nil))
 	require.Contains(t, got, summaryOutputProtocolPrompt())
 	require.Contains(t, got, "LENOS_CONTEXT_COMPACTION")
-	require.Contains(t, got, "narrate <<'")
+	require.Contains(t, got, "cat <<'")
 	require.NotContains(t, got, "LENOS_SUMMARY_SYSTEM")
 	require.NotContains(t, got, "```")
 }

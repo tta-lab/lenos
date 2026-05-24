@@ -177,10 +177,10 @@ func TestCoordinator_Run_TextAttachmentPassthrough(t *testing.T) {
 	prompt := call.Prompt
 
 	assert.Contains(t, prompt, "# Attached Files")
-	assert.Contains(t, prompt, "narrate <<'LENOS_ATTACHMENT_0'")
+	assert.Contains(t, prompt, "cat <<'LENOS_ATTACHMENT_0' | narrate")
 	assert.Contains(t, prompt, "# File: /path/to/test.txt")
 	assert.Contains(t, prompt, "hello world")
-	assert.Contains(t, prompt, "narrate <<'LENOS_ATTACHMENT_1'")
+	assert.Contains(t, prompt, "cat <<'LENOS_ATTACHMENT_1' | narrate")
 	assert.Contains(t, prompt, "# File: /path/to/notes.md")
 	assert.Contains(t, prompt, "# notes")
 	assert.NotContains(t, prompt, "<file")

@@ -968,7 +968,7 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.Contains(t, lastText, summaryInstructionsPrompt())
 	require.Contains(t, lastText, formatSummaryPrompt(nil))
 	require.Contains(t, lastText, summaryOutputProtocolPrompt())
-	require.Contains(t, lastText, "narrate <<'LENOS_CONTEXT_COMPACTION'")
+	require.Contains(t, lastText, "cat <<'LENOS_CONTEXT_COMPACTION' | narrate")
 
 	systemMessages := 0
 	for _, msg := range prompt[:len(prompt)-1] {
