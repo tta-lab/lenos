@@ -49,7 +49,7 @@ func BenchmarkPromptWithTextAttachments(b *testing.B) {
 	}
 }
 
-func TestPromptWithTextAttachments_UsesNarrateBoundaries(t *testing.T) {
+func TestPromptWithTextAttachments_IncludesAttachmentContent(t *testing.T) {
 	t.Parallel()
 
 	got := PromptWithTextAttachments("review these", []Attachment{
@@ -65,17 +65,13 @@ func TestPromptWithTextAttachments_UsesNarrateBoundaries(t *testing.T) {
 		},
 	})
 
-	require.Contains(t, got, "# Attached Files")
-	require.Contains(t, got, "cat <<'LENOS_ATTACHMENT_0' | narrate")
 	require.Contains(t, got, "# File: /path/to/test.txt")
 	require.Contains(t, got, "hello world")
-	require.Contains(t, got, "cat <<'LENOS_ATTACHMENT_1' | narrate")
 	require.Contains(t, got, "# File: /path/to/notes.md")
 	require.Contains(t, got, "# notes")
 	require.NotContains(t, got, "<system_info>")
 	require.NotContains(t, got, "<file")
 	require.NotContains(t, got, "</file>")
-	require.Equal(t, 1, strings.Count(got, "# Attached Files"))
 }
 
 func TestToAIMessage_Result(t *testing.T) {

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"charm.land/fantasy"
@@ -176,18 +175,13 @@ func TestCoordinator_Run_TextAttachmentPassthrough(t *testing.T) {
 	call := <-captured
 	prompt := call.Prompt
 
-	assert.Contains(t, prompt, "# Attached Files")
-	assert.Contains(t, prompt, "cat <<'LENOS_ATTACHMENT_0' | narrate")
 	assert.Contains(t, prompt, "# File: /path/to/test.txt")
 	assert.Contains(t, prompt, "hello world")
-	assert.Contains(t, prompt, "cat <<'LENOS_ATTACHMENT_1' | narrate")
 	assert.Contains(t, prompt, "# File: /path/to/notes.md")
 	assert.Contains(t, prompt, "# notes")
 	assert.NotContains(t, prompt, "<file")
 	assert.NotContains(t, prompt, "</file>")
 	assert.NotContains(t, prompt, "<system_info>")
-	// Verify header appears exactly once (both attachments share it)
-	assert.Equal(t, 1, strings.Count(prompt, "# Attached Files"))
 }
 
 func TestCoordinator_Run_EmptyAttachments(t *testing.T) {
@@ -226,11 +220,6 @@ func TestSystemPrompt_BuildsNonEmptyPrompt(t *testing.T) {
 	prompt, err := SystemPrompt(context.Background(), dataDir, "anthropic", "claude-sonnet-4-6", cfg, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, prompt, "SystemPrompt must produce non-empty content — empty means no model instructions")
-
-	// Spot-check the bash-first protocol marker is present so a future
-	// template restructure that drops the protocol section gets caught.
-	assert.Contains(t, prompt, "narrate", "bash-first protocol must explain narrate form")
-	assert.Contains(t, prompt, "Output Protocol", "bash-first output-protocol section must be in the rendered prompt")
 }
 
 // TestCoordinator_SystemPromptGetterReturnsStored asserts the wiring

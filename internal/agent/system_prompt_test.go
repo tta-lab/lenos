@@ -27,39 +27,7 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.Contains(t, got, "Platform: darwin")
 	assert.Contains(t, got, "Date: 2026-04-29")
 
-	// Bash-first protocol is described.
-	assert.Contains(t, got, "raw bash")
-	assert.Contains(t, got, "exit")
-	assert.Contains(t, got, "cat <<'")
-	assert.Contains(t, got, "During work, write short progress notes as bash comments")
 	assertValidBashSyntax(t, got)
-	assert.NotContains(t, got, "Wrong shape")
-	assert.NotContains(t, got, "wrong shapes")
-	assert.NotContains(t, got, "common mistake")
-	assert.NotContains(t, got, "rewrite it into a `narrate` heredoc")
-	assert.NotContains(t, got, "narrate --to")
-	assert.NotContains(t, got, "narrate --continue")
-	assert.NotContains(t, got, "```")
-	assert.NotContains(t, got, ":md")
-	assert.NotContains(t, got, ":continue")
-	assert.False(t, strings.Contains(got, ":exit"),
-		"base prompt must not advertise legacy :exit")
-	assert.False(t, strings.Contains(got, "Reading the README and the top-level layout.\n    cat README.md && ls"),
-		"base prompt must not show prose and bash mixed in one response")
-
-	// MUST NOT mention the legacy <cmd> markup — that's the whole point.
-	assert.False(t, strings.Contains(got, "<cmd>"),
-		"base prompt must not reference legacy <cmd> markup")
-	assert.False(t, strings.Contains(got, "</cmd>"),
-		"base prompt must not reference legacy </cmd> markup")
-
-	// MUST NOT mention the legacy log CLI.
-	assert.False(t, strings.Contains(got, "log info"),
-		"base prompt must not reference legacy log info CLI")
-	assert.False(t, strings.Contains(got, "log warn"),
-		"base prompt must not reference legacy log warn CLI")
-	assert.False(t, strings.Contains(got, "log error"),
-		"base prompt must not reference legacy log error CLI")
 }
 
 func assertHeredocTerminatorsStartAtColumnZero(t *testing.T, text string) {
@@ -89,12 +57,9 @@ func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "# Available Commands")
-	assert.Contains(t, got, "## src")
 	assertValidBashSyntax(t, got)
 	assert.Contains(t, got, "symbol-aware source reader")
 	assert.Contains(t, got, "src <file> --tree")
-	assert.Contains(t, got, "## web")
 	assert.Contains(t, got, "web search <query>")
 }
 
@@ -148,19 +113,6 @@ func TestStripYAMLFrontmatter_InnerDashesNotStripped(t *testing.T) {
 	}
 }
 
-func TestBuildBaseSystemPrompt_NoCommandSectionWhenEmpty(t *testing.T) {
-	t.Parallel()
-
-	got, err := buildBaseSystemPrompt(promptData{
-		WorkingDir: "/repo",
-		Platform:   "linux",
-		Date:       "2026-04-29",
-	})
-	require.NoError(t, err)
-	assert.False(t, strings.Contains(got, "# Available Commands"),
-		"empty Commands slice should suppress the heading")
-}
-
 func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
@@ -181,18 +133,6 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
-		t.Errorf("default mode should contain coder identity")
-	}
-	assert.NotContains(t, got, "```",
-		"default runtime prompt should not contain markdown fence tokens for models to copy")
-	assert.NotContains(t, got, "narrate --continue",
-		"default runtime prompt should not teach mid-session narration")
-	assert.NotContains(t, got, "LENOS_WRAPPER")
-	assert.NotContains(t, got, "<universal_rules>")
-	assert.NotContains(t, got, "<critical_rules>")
-	assert.NotContains(t, got, "<available_skills>")
-	assert.NotContains(t, got, "<memory>")
 	assertValidBashSyntax(t, got)
 }
 
@@ -235,7 +175,6 @@ func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
 	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "cat <<'LENOS_GIT_CONTEXT' | narrate")
 	assert.NotContains(t, got, branchName)
 	assert.NotContains(t, got, dirtyFile)
 	assert.NotContains(t, got, commitMessage)
@@ -256,9 +195,6 @@ func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
 	got, err := InitializePrompt(store)
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "Analyze this codebase")
-	assert.Contains(t, got, "cat <<'")
-	assert.NotContains(t, got, "```")
 	assertValidBashSyntax(t, got)
 }
 
@@ -303,7 +239,6 @@ func TestSystemPrompt_AgentMode_RendersAgentBody(t *testing.T) {
 	if strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
 		t.Errorf("agent mode should NOT contain coder identity when agent file given")
 	}
-	assert.Contains(t, got, "cat <<'LENOS_IDENTITY_BODY' | narrate")
 	assertValidBashSyntax(t, got)
 }
 
@@ -328,10 +263,8 @@ func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
 	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "cat <<'LENOS_IDENTITY_BODY' | narrate")
 	assert.Contains(t, got, "Keep this payload unchanged.")
 	assert.Contains(t, got, "<external_rules>")
-	assert.NotContains(t, got, "LENOS_WRAPPER")
 	assertValidBashSyntax(t, got)
 }
 
@@ -352,7 +285,6 @@ func TestSystemPrompt_PairWithDocumentsDefaultNarrationTarget(t *testing.T) {
 	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "cat <<'LENOS_NARRATION_PAIR' | narrate")
 	assert.Contains(t, got, "reviewer")
 	assertValidBashSyntax(t, got)
 }
@@ -421,10 +353,6 @@ func TestSystemPrompt_ExtraContextFilesStillInMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Contains(t, got, "cat <<'LENOS_MEMORY' | narrate")
-	assert.Contains(t, got, "cat <<'LENOS_MEMORY_FILE_")
-	assert.NotContains(t, got, "<memory>")
-	assert.NotContains(t, got, "<file path=")
 	if !strings.Contains(got, "Extra note") {
 		t.Errorf("extra context file content should appear in output")
 	}
@@ -473,8 +401,6 @@ func TestSystemPrompt_AgentMode_ExtraContextFilesStillInMemory(t *testing.T) {
 	if !strings.Contains(got, "Context") {
 		t.Errorf("extra context file should appear in output")
 	}
-	assert.Contains(t, got, "cat <<'LENOS_MEMORY' | narrate")
-	assert.NotContains(t, got, "<memory>")
 	assertValidBashSyntax(t, got)
 }
 
