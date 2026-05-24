@@ -11,7 +11,8 @@ Browse file structure:
   src <file> --tree           # force tree view
 
 Read a specific symbol:
-  src <file> -s <id>          # 2-char symbol ID from tree output
+  src <file>                  # first get symbol IDs from the tree output
+  src <file> -s <id>          # then read one symbol by its ID
   src <file> -s 3f            # read symbol by ID
 
 Read markdown files:

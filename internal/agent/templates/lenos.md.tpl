@@ -47,6 +47,14 @@ narrate <<'LENOS_COMMAND_USE'
 - Only use commands you know exist in this runtime.
 LENOS_COMMAND_USE
 
+narrate <<'LENOS_READING_CODE'
+# Reading Code
+
+Use `src <file>` first to scan the symbol tree and get symbol IDs.
+Use `src <file> -s <id>` to read one symbol by its symbol ID.
+Do this before editing so you have the exact target and current text.
+LENOS_READING_CODE
+
 narrate <<'LENOS_EDITING_FILES'
 # Editing Files
 
