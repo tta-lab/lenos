@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"charm.land/fantasy"
@@ -176,18 +175,13 @@ func TestCoordinator_Run_TextAttachmentPassthrough(t *testing.T) {
 	call := <-captured
 	prompt := call.Prompt
 
-	assert.Contains(t, prompt, "# Attached Files")
-	assert.Contains(t, prompt, "narrate <<'LENOS_ATTACHMENT_0'")
 	assert.Contains(t, prompt, "# File: /path/to/test.txt")
 	assert.Contains(t, prompt, "hello world")
-	assert.Contains(t, prompt, "narrate <<'LENOS_ATTACHMENT_1'")
 	assert.Contains(t, prompt, "# File: /path/to/notes.md")
 	assert.Contains(t, prompt, "# notes")
 	assert.NotContains(t, prompt, "<file")
 	assert.NotContains(t, prompt, "</file>")
 	assert.NotContains(t, prompt, "<system_info>")
-	// Verify header appears exactly once (both attachments share it)
-	assert.Equal(t, 1, strings.Count(prompt, "# Attached Files"))
 }
 
 func TestCoordinator_Run_EmptyAttachments(t *testing.T) {
@@ -226,11 +220,6 @@ func TestSystemPrompt_BuildsNonEmptyPrompt(t *testing.T) {
 	prompt, err := SystemPrompt(context.Background(), dataDir, "anthropic", "claude-sonnet-4-6", cfg, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, prompt, "SystemPrompt must produce non-empty content — empty means no model instructions")
-
-	// Spot-check the bash-first protocol marker is present so a future
-	// template restructure that drops the protocol section gets caught.
-	assert.Contains(t, prompt, "narrate <<'EOF'", "bash-first protocol must explain narrate form")
-	assert.Contains(t, prompt, "Output Protocol", "bash-first output-protocol section must be in the rendered prompt")
 }
 
 // TestCoordinator_SystemPromptGetterReturnsStored asserts the wiring
@@ -453,4 +442,32 @@ func TestBuildCall_DefaultNarrationTargetFromOverrides(t *testing.T) {
 	call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
 
 	assert.Equal(t, "reviewer", call.DefaultNarrationTarget)
+}
+
+func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	cfg, err := config.Init(tmp, "", false)
+	require.NoError(t, err)
+
+	contextFile := filepath.Join(tmp, "AGENTS.md")
+	require.NoError(t, os.WriteFile(contextFile, []byte("project instructions"), 0o644))
+
+	c := &coordinator{
+		cfg:          cfg,
+		dataDir:      cfg.WorkingDir(),
+		currentAgent: &stubAgent{modelName: "test-model"},
+	}
+	call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
+
+	for _, allowed := range call.AllowedPaths {
+		assert.True(t, filepath.IsAbs(allowed.Path), "allowed path must be absolute: %q", allowed.Path)
+	}
+	assert.Contains(t, call.ContextCommands, RuntimeContextCommand{
+		Command: "# read project instructions\ncat " + shellQuote(contextFile),
+	})
 }

@@ -92,7 +92,7 @@ active tier/provider/model as the current session.
 Compact summarization keeps the normal bash-first system prompt as the first
 message and appends the compact instruction as the final user message. This
 keeps the shared prompt prefix cacheable while still instructing the model to
-emit one `narrate <<'LENOS_CONTEXT_COMPACTION'` heredoc.
+emit one `cat <<'LENOS_CONTEXT_COMPACTION' | narrate` heredoc pipeline.
 
 ### CLI behavior matrix
 

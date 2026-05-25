@@ -2,7 +2,7 @@ package protocol
 
 import "strings"
 
-// NarrateSection formats body as one bash narrate heredoc.
+// NarrateSection formats body as one bash narrate heredoc pipeline.
 func NarrateSection(delimiter, body string) string {
 	for containsHeredocTerminator(body, delimiter) {
 		delimiter += "_END"
@@ -10,9 +10,9 @@ func NarrateSection(delimiter, body string) string {
 
 	body = strings.TrimRight(body, "\n")
 	var b strings.Builder
-	b.WriteString("narrate <<'")
+	b.WriteString("cat <<'")
 	b.WriteString(delimiter)
-	b.WriteString("'\n")
+	b.WriteString("' | narrate\n")
 	b.WriteString(body)
 	if body != "" {
 		b.WriteByte('\n')

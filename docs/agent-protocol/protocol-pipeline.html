@@ -556,14 +556,14 @@ rg -n "narrate|classify" internal/agent</code></pre>
         <article class="card">
           <h3>Prose</h3>
           <p>Reader-facing markdown is stdin to <code>narrate</code>. Positional message arguments are rejected.</p>
-          <pre><code>narrate <<'EOF'
+          <pre><code>cat <<'EOF' | narrate
 Done. Tests pass.
 EOF</code></pre>
         </article>
         <article class="card">
           <h3>Control</h3>
           <p>Use <code>--continue</code> for progress notes that should not end the loop. Bare <code>exit</code> ends without bash execution.</p>
-          <pre><code>narrate --continue <<'EOF'
+          <pre><code>cat <<'EOF' | narrate --continue
 I found the parser and will patch it next.
 EOF</code></pre>
         </article>
@@ -617,7 +617,7 @@ EOF</code></pre>
         <article class="step">
           <h3>Deliver Addressed Prose</h3>
           <div class="detail">
-            <p><code>narrate --to name</code> is delivered by the parent through <code>ttal send --to</code>. Delivery status is stored on the narration metadata.</p>
+            <p><code>narrate --to name</code> is delivered by the parent after the shell exits. Delivery status is stored on the narration metadata.</p>
             <div class="tags"><span class="tag">DeliveryExitCode</span><span class="tag">DeliveryOutput</span></div>
           </div>
         </article>
@@ -730,7 +730,7 @@ rg -n "narrate" internal/agent &amp;&amp; go test ./internal/agent</code></pre>
           <pre><code>实现已经完成，测试通过。
 
 # rewritten to:
-narrate <<'LENOS_NARRATE_EOF_8HEX'
+cat <<'LENOS_NARRATE_EOF_8HEX' | narrate
 实现已经完成，测试通过。
 LENOS_NARRATE_EOF_8HEX</code></pre>
         </article>
@@ -779,8 +779,8 @@ LENOS_NARRATE_EOF_8HEX</code></pre>
         </article>
         <article class="rule">
           <h3>Delivery <span>parent-owned</span></h3>
-          <p>The child process never calls <code>ttal send</code>. Parent code shells out through the runner and stores delivery output on <code>CommandNarration</code>.</p>
-          <pre><code>cat <<'EOF' | ttal send --to reviewer
+          <p>The child process writes addressed prose with <code>narrate --to</code>. Parent code handles delivery and stores delivery output on <code>CommandNarration</code>.</p>
+          <pre><code>cat <<'EOF' | narrate --to reviewer
 message
 EOF</code></pre>
         </article>

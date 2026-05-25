@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -75,7 +76,7 @@ func SystemPrompt(
 	b.WriteString("\n")
 	if pairWith := strings.TrimSpace(store.Overrides().PairWith); pairWith != "" {
 		b.WriteString(protocol.NarrateSection("LENOS_NARRATION_PAIR",
-			"# Narration Pair\n\nNarration without `--to` is delivered to "+pairWith+". Explicit `narrate --to` calls keep their target."))
+			"# Narration Pair\n\nNarration without an explicit addressee is delivered to "+pairWith+". Use `cat <<'EOF' | narrate --to <agent>` only when another target is needed. Lenos handles delivery."))
 		b.WriteString("\n")
 	}
 	b.WriteString(lenosWrapper)
@@ -111,6 +112,39 @@ func buildLenosWrapper(
 		return "", err
 	}
 	return p.Build(ctx, provider, model, store)
+}
+
+func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+	commands := []RuntimeContextCommand{{
+		Command:  "# list registered projects\nttal project list",
+		Optional: true,
+	}, {
+		Command:  "# list available skills\nskill list",
+		Optional: true,
+	}}
+	for _, file := range runtimeContext.ContextFiles {
+		commands = append(commands, RuntimeContextCommand{
+			Command: runtimeContextReadComment(file.Path) + "\ncat " + shellQuote(file.Path),
+		})
+	}
+	return commands
+}
+
+func runtimeContextReadComment(path string) string {
+	if isUserScopeContextPath(path) {
+		return "# read user instructions"
+	}
+	return "# read project instructions"
+}
+
+func isUserScopeContextPath(path string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false
+	}
+	path = filepath.Clean(path)
+	home = filepath.Clean(home)
+	return path == home || strings.HasPrefix(path, home+string(os.PathSeparator))
 }
 
 func InitializePrompt(cfg *config.ConfigStore) (string, error) {

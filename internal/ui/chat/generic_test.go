@@ -185,7 +185,7 @@ func TestExtractMessageItems_RendersFailureBeforeNarration(t *testing.T) {
 		Role: message.Result,
 		Parts: []message.ContentPart{
 			message.CommandContent{
-				Command:  "false; narrate <<'EOF'\n# Failed\nEOF",
+				Command:  "false; cat <<'EOF' | narrate\n# Failed\nEOF",
 				Output:   "command failed",
 				ExitCode: &exitCode,
 				Pending:  false,
@@ -218,7 +218,7 @@ func TestResultMessageItem_RendersNarrationDeliveryFailure(t *testing.T) {
 		Role: message.Result,
 		Parts: []message.ContentPart{
 			message.CommandContent{
-				Command:  "narrate --to reviewer <<'EOF'\n# Sent\nEOF",
+				Command:  "cat <<'EOF' | narrate --to reviewer\n# Sent\nEOF",
 				ExitCode: &exitCode,
 				Pending:  false,
 				Narrations: []message.CommandNarration{

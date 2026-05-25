@@ -637,7 +637,7 @@
           </div>
         </article>
         <pre><code># lenos context compaction: handoff from prior history
-narrate <<'LENOS_CONTEXT_COMPACTION'
+cat <<'LENOS_CONTEXT_COMPACTION' | narrate
 ## Current State
 - User asked to inspect context pressure and compact behavior.
 - We found auto compact can fire before classify/exec.

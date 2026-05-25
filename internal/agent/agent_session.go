@@ -429,7 +429,7 @@ func summaryOutputProtocolPrompt() string {
 
 You must emit exactly one bash heredoc in this form:
 
-narrate <<'LENOS_CONTEXT_COMPACTION'
+cat <<'LENOS_CONTEXT_COMPACTION' | narrate
 Summary markdown goes here.
 LENOS_CONTEXT_COMPACTION
 

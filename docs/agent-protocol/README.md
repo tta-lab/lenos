@@ -30,7 +30,7 @@ heredoc body.
 - `internal/agent/classify.go`: emit classification and natural-language
   detection.
 - `internal/agent/narrate.go`: `narrate` shell prelude, IPC event reading,
-  delivery via `ttal send`, and heredoc rewrite helpers.
+  addressed delivery, and heredoc rewrite helpers.
 - `internal/agent/loop.go`: model loop, command execution, result persistence,
   and stop/continue rules.
 - `internal/agent/prompt_runtime.go`: corrective runtime observations.

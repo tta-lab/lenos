@@ -234,13 +234,16 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 			exitCode := res.ExitCode
 			stderr := string(res.Stderr)
+			if res.Err != nil && len(res.Stdout) == 0 && stderr == "" {
+				stderr = res.Err.Error()
+			}
 			envelope := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
 			body := strings.TrimPrefix(envelope, "<result>\n")
 			body = strings.TrimSuffix(body, "\n</result>")
 			body = appendNarrationObservation(body, narrations)
 			resultMsg.Parts = []message.ContentPart{message.CommandContent{
 				Command:     emit,
-				Output:      string(combine(res.Stdout, res.Stderr)),
+				Output:      string(combine(res.Stdout, []byte(stderr))),
 				ExitCode:    &exitCode,
 				Pending:     false,
 				Observation: body,

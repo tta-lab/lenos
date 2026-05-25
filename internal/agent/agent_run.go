@@ -34,6 +34,86 @@ func buildHistory(msgs []message.Message) []fantasy.Message {
 
 const queuedPromptSep = "\n\n"
 
+func (a *sessionAgent) persistRuntimeContextCommands(ctx context.Context, call SessionAgentCall, runner Runner) error {
+	for _, cmd := range call.ContextCommands {
+		if strings.TrimSpace(cmd.Command) == "" {
+			continue
+		}
+		if err := a.persistSyntheticCommandResult(ctx, call, runner, cmd); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call SessionAgentCall, runner Runner, cmd RuntimeContextCommand) error {
+	inv, err := newNarrateInvocation(cmd.Command, call.Env, call.AllowedPaths, call.DefaultNarrationTarget)
+	if err != nil {
+		return fmt.Errorf("create synthetic context invocation: %w", err)
+	}
+	res := runner.Run(ctx, inv.bash, inv.env, inv.paths)
+	narrations, narrateErr := readNarrationEvents(inv.dir)
+	inv.cleanup()
+	if narrateErr != nil {
+		return fmt.Errorf("read synthetic context narrations: %w", narrateErr)
+	}
+	if cmd.Optional && (res.Err != nil || res.ExitCode != 0 || strings.TrimSpace(string(res.Stdout)) == "") {
+		return nil
+	}
+
+	assistantMsg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
+		Role: message.Assistant,
+		Parts: []message.ContentPart{
+			message.TextContent{Text: cmd.Command},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create synthetic context command: %w", err)
+	}
+
+	resultMsg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
+		Role:  message.Result,
+		Parts: []message.ContentPart{message.CommandContent{Command: cmd.Command, Pending: true}},
+	})
+	if err != nil {
+		return fmt.Errorf("create synthetic context pending result: %w", err)
+	}
+
+	narrations, deliveryFailed := deliverNarrations(ctx, runner, call.Env, call.AllowedPaths, narrations)
+	if deliveryFailed {
+		slog.Warn("Synthetic context narration delivery failed", "command", cmd.Command)
+	}
+	exitCode := res.ExitCode
+	stderr := res.Stderr
+	if res.Err != nil && len(res.Stdout) == 0 && len(stderr) == 0 {
+		stderr = []byte(res.Err.Error())
+	}
+	envelope := formatResultForModel(cmd.Command, string(res.Stdout), string(stderr), res.ExitCode)
+	body := strings.TrimPrefix(envelope, "<result>\n")
+	body = strings.TrimSuffix(body, "\n</result>")
+	body = appendNarrationObservation(body, narrations)
+	resultMsg.Parts = []message.ContentPart{message.CommandContent{
+		Command:     cmd.Command,
+		Output:      string(combine(res.Stdout, stderr)),
+		ExitCode:    &exitCode,
+		Pending:     false,
+		Observation: body,
+		Narrations:  narrations,
+	}}
+	if err := a.messages.Update(ctx, resultMsg); err != nil {
+		return fmt.Errorf("update synthetic context result: %w", err)
+	}
+	markStepFinished(ctx, a.loopDepsForSynthetic(call.SessionID), &assistantMsg, message.FinishReasonToolUse)
+	return nil
+}
+
+func (a *sessionAgent) loopDepsForSynthetic(sessionID string) loopDeps {
+	return loopDeps{
+		messages:  a.messages,
+		sessionID: sessionID,
+	}
+}
+
 // hookTimeout is the per-invocation deadline for post_step hooks. Var (not
 // const) so tests can shrink it via export_test.go.
 var hookTimeout = 5 * time.Second
@@ -106,6 +186,7 @@ runLoopReentry:
 	if err != nil {
 		return fmt.Errorf("failed to get session: %w", err)
 	}
+	runner := resolveRunner(call)
 
 	primaryModel := a.primaryModel.Get()
 	compactedBeforeRun := false
@@ -126,6 +207,15 @@ runLoopReentry:
 	msgs, err := a.getSessionMessages(ctx, currentSession)
 	if err != nil {
 		return fmt.Errorf("failed to get session messages: %w", err)
+	}
+	if len(msgs) == 0 && len(call.ContextCommands) > 0 {
+		if err := a.persistRuntimeContextCommands(ctx, call, runner); err != nil {
+			return err
+		}
+		msgs, err = a.getSessionMessages(ctx, currentSession)
+		if err != nil {
+			return fmt.Errorf("failed to get session messages after context injection: %w", err)
+		}
 	}
 
 	if _, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
@@ -182,7 +272,7 @@ runLoopReentry:
 		model:                  primaryModel,
 		provOpts:               call.ProviderOptions,
 		messages:               a.messages,
-		runner:                 resolveRunner(call),
+		runner:                 runner,
 		sessionID:              call.SessionID,
 		sysPrompt:              a.systemPrompt.Get(),
 		env:                    call.Env,

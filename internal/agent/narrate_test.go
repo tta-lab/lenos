@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,7 +11,7 @@ import (
 
 func TestNarrateInvocationWritesEventsThroughBashFunction(t *testing.T) {
 	t.Parallel()
-	inv, err := newNarrateInvocation("narrate --to owner <<'EOF'\nFirst\nEOF\nnarrate --continue <<'EOF'\nSecond\nEOF", nil, nil, "")
+	inv, err := newNarrateInvocation("cat <<'EOF' | narrate --to owner\nFirst\nEOF\ncat <<'EOF' | narrate --continue\nSecond\nEOF", nil, nil, "")
 	require.NoError(t, err)
 	defer inv.cleanup()
 
@@ -21,6 +22,7 @@ func TestNarrateInvocationWritesEventsThroughBashFunction(t *testing.T) {
 	narrations, err := readNarrationEvents(inv.dir)
 	require.NoError(t, err)
 	require.Len(t, narrations, 2)
+	sort.Slice(narrations, func(i, j int) bool { return narrations[i].Body < narrations[j].Body })
 	assert.Equal(t, "First\n", narrations[0].Body)
 	assert.Equal(t, "owner", narrations[0].To)
 	assert.False(t, narrations[0].Continue)
@@ -31,7 +33,7 @@ func TestNarrateInvocationWritesEventsThroughBashFunction(t *testing.T) {
 
 func TestNarrateInvocationAcceptsToAndContinueInEitherOrder(t *testing.T) {
 	t.Parallel()
-	inv, err := newNarrateInvocation("narrate --continue --to owner <<'EOF'\nFirst\nEOF\nnarrate --to reviewer --continue <<'EOF'\nSecond\nEOF", nil, nil, "")
+	inv, err := newNarrateInvocation("cat <<'EOF' | narrate --continue --to owner\nFirst\nEOF\ncat <<'EOF' | narrate --to reviewer --continue\nSecond\nEOF", nil, nil, "")
 	require.NoError(t, err)
 	defer inv.cleanup()
 
@@ -42,6 +44,7 @@ func TestNarrateInvocationAcceptsToAndContinueInEitherOrder(t *testing.T) {
 	narrations, err := readNarrationEvents(inv.dir)
 	require.NoError(t, err)
 	require.Len(t, narrations, 2)
+	sort.Slice(narrations, func(i, j int) bool { return narrations[i].Body < narrations[j].Body })
 	assert.Equal(t, "First\n", narrations[0].Body)
 	assert.Equal(t, "owner", narrations[0].To)
 	assert.True(t, narrations[0].Continue)
@@ -52,7 +55,7 @@ func TestNarrateInvocationAcceptsToAndContinueInEitherOrder(t *testing.T) {
 
 func TestNarrateInvocationAppliesDefaultToWhenMissing(t *testing.T) {
 	t.Parallel()
-	inv, err := newNarrateInvocation("narrate <<'EOF'\nFirst\nEOF\nnarrate --to reviewer <<'EOF'\nSecond\nEOF", nil, nil, "pair")
+	inv, err := newNarrateInvocation("cat <<'EOF' | narrate\nFirst\nEOF\ncat <<'EOF' | narrate --to reviewer\nSecond\nEOF", nil, nil, "pair")
 	require.NoError(t, err)
 	defer inv.cleanup()
 
@@ -63,6 +66,7 @@ func TestNarrateInvocationAppliesDefaultToWhenMissing(t *testing.T) {
 	narrations, err := readNarrationEvents(inv.dir)
 	require.NoError(t, err)
 	require.Len(t, narrations, 2)
+	sort.Slice(narrations, func(i, j int) bool { return narrations[i].Body < narrations[j].Body })
 	assert.Equal(t, "First\n", narrations[0].Body)
 	assert.Equal(t, "pair", narrations[0].To)
 	assert.Equal(t, "Second\n", narrations[1].Body)
@@ -87,7 +91,7 @@ func TestNarrateInvocationRejectsPositionalBodyArgs(t *testing.T) {
 
 func TestNarrateInvocationRejectsEmptyBody(t *testing.T) {
 	t.Parallel()
-	inv, err := newNarrateInvocation("narrate <<'EOF'\nEOF", nil, nil, "")
+	inv, err := newNarrateInvocation("cat <<'EOF' | narrate\nEOF", nil, nil, "")
 	require.NoError(t, err)
 	defer inv.cleanup()
 

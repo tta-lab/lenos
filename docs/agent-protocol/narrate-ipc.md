@@ -46,22 +46,23 @@ out of the project tree.
 ## Heredoc Generation
 
 When natural-language detection rewrites prose into bash, the runtime creates
-a `narrate <<'DELIM'` heredoc. The delimiter has a fixed prefix plus random
-hex. If the body already contains that delimiter on its own line, generation
-retries.
+a `cat <<'DELIM' | narrate` heredoc pipeline. The delimiter has a fixed prefix
+plus random hex. If the body already contains that delimiter on its own line,
+generation retries.
 
 ## Delivery
 
 Addressed narration is delivered after bash exits:
 
 ```bash
-cat <<'EOF' | ttal send --to agent-name
+cat <<'EOF' | narrate --to agent-name
 message
 EOF
 ```
 
-This delivery call goes through the `Runner` abstraction. Unit tests use a
-fake runner, so `ttal send` has no side effects in tests.
+Lenos handles delivery through the `Runner` abstraction after the shell
+subprocess exits. Unit tests use a fake runner, so delivery has no side effects
+in tests.
 
 Delivery status is stored on `CommandNarration`, not as a separate message.
 

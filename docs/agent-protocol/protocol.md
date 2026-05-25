@@ -16,19 +16,19 @@ cat README.md && rg "needle" .
 ```
 
 ```bash
-narrate <<'EOF'
+cat <<'EOF' | narrate
 Done. Tests pass.
 EOF
 ```
 
 ```bash
-narrate --to reviewer <<'EOF'
+cat <<'EOF' | narrate --to reviewer
 Please review the auth change.
 EOF
 ```
 
 ```bash
-narrate --continue <<'EOF'
+cat <<'EOF' | narrate --continue
 I found the parser and will patch it next.
 EOF
 ```
@@ -44,8 +44,8 @@ by the runtime before the model's shell text is executed.
 
 The function reads stdin and writes one IPC event. Positional arguments are not
 message body text; `narrate "Done"` is invalid. Empty stdin is also invalid.
-`--to <agent>` records an addressee for delivery through `ttal send`.
-`--continue` records that this narration should not end the agent loop.
+`--to <agent>` records an addressee; Lenos handles delivery after the shell
+exits. `--continue` records that this narration should not end the agent loop.
 Options may be combined. Multiple `narrate` calls in one bash response are
 allowed and render in event order.
 

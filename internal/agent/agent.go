@@ -82,6 +82,15 @@ type SessionAgentCall struct {
 	// DefaultNarrationTarget is used when `narrate` is called without --to.
 	// Explicit `narrate --to` calls take precedence.
 	DefaultNarrationTarget string
+
+	// ContextCommands are runner-backed context reads persisted before the
+	// first user turn so they replay like normal assistant command/result pairs.
+	ContextCommands []RuntimeContextCommand
+}
+
+type RuntimeContextCommand struct {
+	Command  string
+	Optional bool
 }
 
 type SessionAgent interface {

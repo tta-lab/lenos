@@ -58,7 +58,7 @@ func TestExtractMessageItems_Result_KeepsSuccessfulCommandWithNarration(t *testi
 		Role: message.Result,
 		Parts: []message.ContentPart{
 			message.CommandContent{
-				Command:  "narrate <<'EOF'\nDone.\nEOF",
+				Command:  "cat <<'EOF' | narrate\nDone.\nEOF",
 				ExitCode: &exitCode,
 				Pending:  false,
 				Narrations: []message.CommandNarration{
@@ -89,7 +89,7 @@ func TestExtractMessageItems_Result_SplitsFailedCommandAndNarration(t *testing.T
 		Role: message.Result,
 		Parts: []message.ContentPart{
 			message.CommandContent{
-				Command:  "false; narrate <<'EOF'\n# Failed\nEOF",
+				Command:  "false; cat <<'EOF' | narrate\n# Failed\nEOF",
 				Output:   "command failed",
 				ExitCode: &exitCode,
 				Pending:  false,

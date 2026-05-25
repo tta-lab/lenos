@@ -538,7 +538,7 @@ func TestRunLoop_TrailingExit_NaturalLanguageRewritesToNarrate(t *testing.T) {
 	assert.Equal(t, stopExit, stop)
 
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
 	assert.Equal(t, message.FinishReasonToolUse, assistants[0].FinishReason())
@@ -1036,7 +1036,7 @@ func TestRunLoop_Exit127_LowercaseProseRePrompts(t *testing.T) {
 	require.Len(t, results, 1)
 	obs := results[0].CommandContent().Output
 	assert.Contains(t, obs, "`hello`")
-	assert.Contains(t, obs, "narrate <<")
+	assert.Contains(t, obs, "narrate")
 }
 
 // TestRunLoop_CmdNotFound_RePromptIncludesFenceGuidance tests that the
@@ -1363,7 +1363,7 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateCommandAndStops(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1435,7 +1435,7 @@ func TestRunLoop_MarkdownHeadingFirstLineRewritesToNarrate(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, stopExit, stop)
 			require.Len(t, runner.bash, 1)
-			assert.Contains(t, runner.bash[0], "narrate <<'")
+			assert.Contains(t, runner.bash[0], "cat <<'")
 
 			assistants := assistantsByOrder(ms)
 			require.Len(t, assistants, 1)
@@ -1514,7 +1514,7 @@ func TestRunLoop_NaturalLanguageFirstLineWithProseStartingWithExistingBinaryRewr
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1531,7 +1531,7 @@ func TestRunLoop_NaturalLanguageFirstLineWithNonExecutablePathRestRewritesToNarr
 			{ExitCode: 0}, // rewritten narration command
 		},
 		onRun: func(bash string, env map[string]string, _ []client.AllowedPath) {
-			if strings.Contains(bash, "narrate <<'") {
+			if strings.Contains(bash, "cat <<'") {
 				writeNarrationEvent(t, env, emit)
 			}
 		},
@@ -1543,7 +1543,7 @@ func TestRunLoop_NaturalLanguageFirstLineWithNonExecutablePathRestRewritesToNarr
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 2)
 	assert.Contains(t, runner.bash[0], "test -x")
-	assert.Contains(t, runner.bash[1], "narrate <<'")
+	assert.Contains(t, runner.bash[1], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1605,7 +1605,7 @@ func TestRunLoop_NaturalLanguageFirstLineWithInvalidBashRestRewritesToNarrate(t 
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1635,7 +1635,7 @@ func TestRunLoop_NaturalLanguageMultilineCJKRewritesToNarrate(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, stopExit, stop)
 			require.Len(t, runner.bash, 1)
-			assert.Contains(t, runner.bash[0], "narrate <<'")
+			assert.Contains(t, runner.bash[0], "cat <<'")
 
 			assistants := assistantsByOrder(ms)
 			require.Len(t, assistants, 1)
@@ -1661,7 +1661,7 @@ func TestRunLoop_ExplicitMdMixedWithBashHasNoSpecialProtocol(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
 	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "narrate <<'")
+	assert.Contains(t, runner.bash[0], "cat <<'")
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1728,8 +1728,30 @@ func TestObservationSSOT_EmptySuccess(t *testing.T) {
 	assert.Equal(t, 0, *cc.ExitCode)
 }
 
+func TestRunLoop_RunnerErrorIsPersistedForModel(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"pwd", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{
+		ExitCode: -1,
+		Err:      errors.New(`temenos: daemon returned HTTP 400: {"error":"validation error: path must be absolute: \".cursor/rules/\""}`),
+	}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+	require.NotNil(t, cc.ExitCode)
+	assert.Equal(t, -1, *cc.ExitCode)
+	assert.Contains(t, cc.Output, "temenos: daemon returned HTTP 400")
+	assert.Contains(t, cc.Observation, "path must be absolute")
+	assert.NotContains(t, cc.Observation, "Bash completed with no output")
+}
+
 func TestRunLoop_NarrateEventPersistsNarrationAndStops(t *testing.T) {
-	emit := "narrate <<'EOF'\nDone for the user.\nEOF"
+	emit := "cat <<'EOF' | narrate\nDone for the user.\nEOF"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{
 		results: []ExecResult{{ExitCode: 0, Duration: time.Millisecond}},
@@ -1760,7 +1782,7 @@ func TestRunLoop_NarrateEventPersistsNarrationAndStops(t *testing.T) {
 }
 
 func TestRunLoop_NarrateContinueFlagContinuesWithoutReplayingBody(t *testing.T) {
-	emit := "narrate --continue <<'EOF'\nDone for the user.\nEOF"
+	emit := "cat <<'EOF' | narrate --continue\nDone for the user.\nEOF"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{
 		results: []ExecResult{{ExitCode: 0, Duration: time.Millisecond}},
@@ -1794,7 +1816,7 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateAndStops(t *testing.T) {
 		results: []ExecResult{{ExitCode: 0, Duration: time.Millisecond}},
 		onRun: func(bash string, env map[string]string, _ []client.AllowedPath) {
 			require.Contains(t, bash, "narrate()")
-			require.Contains(t, bash, "narrate <<'")
+			require.Contains(t, bash, "cat <<'")
 			require.Contains(t, bash, "Done for the user.")
 			dir := env["LENOS_NARRATE_DIR"]
 			require.NotEmpty(t, dir)
@@ -1813,7 +1835,7 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateAndStops(t *testing.T) {
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
 	stored := assistants[0].Content().Text
-	assert.Contains(t, stored, "narrate <<'")
+	assert.Contains(t, stored, "cat <<'")
 	assert.NotContains(t, stored, ":md")
 
 	results := resultsByOrder(ms)
@@ -1825,7 +1847,7 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateAndStops(t *testing.T) {
 }
 
 func TestRunLoop_NarrateDeliveryFailureContinuesWithoutReplayingBody(t *testing.T) {
-	emit := "narrate --to owner <<'EOF'\nPrivate update.\nEOF"
+	emit := "cat <<'EOF' | narrate --to owner\nPrivate update.\nEOF"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{
 		results: []ExecResult{
@@ -1866,7 +1888,7 @@ func TestRunLoop_NarrateDeliveryFailureContinuesWithoutReplayingBody(t *testing.
 }
 
 func TestRunLoop_NarrateWithFailedBashContinuesWithoutReplayingBody(t *testing.T) {
-	emit := "false\nnarrate <<'EOF'\nPartial update.\nEOF"
+	emit := "false\ncat <<'EOF' | narrate\nPartial update.\nEOF"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{
 		results: []ExecResult{{ExitCode: 1, Duration: time.Millisecond}},

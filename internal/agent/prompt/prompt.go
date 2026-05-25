@@ -3,11 +3,9 @@ package prompt
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -42,12 +40,16 @@ type PromptDat struct {
 	IdentityBody string
 	ContextFiles []ContextFile
 	JobID        string
-	SkillList    string
 }
 
 type ContextFile struct {
 	Path    string
 	Content string
+}
+
+type RuntimeContext struct {
+	ContextFiles  []ContextFile
+	ReadOnlyPaths []string
 }
 
 type Option func(*Prompt)
@@ -114,23 +116,14 @@ func (p *Prompt) Build(ctx context.Context, provider, model string, store *confi
 }
 
 func processFile(filePath string) *ContextFile {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		slog.Warn("Failed to read context file", "path", filePath, "error", err)
-		return nil
-	}
 	return &ContextFile{
-		Path:    filePath,
-		Content: string(content),
+		Path: filePath,
 	}
 }
 
 func processContextPath(p string, store *config.ConfigStore) []ContextFile {
 	var contexts []ContextFile
-	fullPath := p
-	if !filepath.IsAbs(p) {
-		fullPath = filepath.Join(store.WorkingDir(), p)
-	}
+	fullPath := resolveContextPath(p, store)
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		slog.Warn("Failed to stat context path", "path", fullPath, "error", err)
@@ -174,64 +167,72 @@ func expandPath(path string, store *config.ConfigStore) string {
 	return path
 }
 
-// getSkillList shells out to organon skill CLI. Binary-not-found and exit-127
-// are treated as "no skills available" (silently). Other errors are logged as
-// warnings. organon's own test suite covers skill discovery parsing and priority.
-func getSkillList(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, "skill", "list").Output()
-	if err == nil {
-		return strings.TrimSpace(string(out)), nil
+func resolveContextPath(path string, store *config.ConfigStore) string {
+	path = expandPath(path, store)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(store.WorkingDir(), path)
 	}
-	if errors.Is(err, exec.ErrNotFound) {
-		return "", nil
-	}
-	if ee := new(exec.ExitError); errors.As(err, &ee) && ee.ExitCode() == 127 {
-		return "", nil
-	}
-	return "", err
+	return filepath.Clean(path)
 }
 
-func (p *Prompt) promptData(ctx context.Context, provider, model string, store *config.ConfigStore) (PromptDat, error) {
-	workingDir := cmp.Or(p.workingDir, store.WorkingDir())
-	platform := cmp.Or(p.platform, runtime.GOOS)
-
-	files := map[string][]ContextFile{}
-
+func LoadRuntimeContext(_ context.Context, store *config.ConfigStore, extraContextPaths []string) RuntimeContext {
 	cfg := store.Config()
 	contextPaths := cfg.Options.ContextPaths
-	if len(p.contextPaths) > 0 {
+	if len(extraContextPaths) > 0 {
 		// Merge global and per-prompter paths, deduplicating by lowercased
 		// expanded path so the same file doesn't render twice.
-		seen := make(map[string]struct{}, len(contextPaths)+len(p.contextPaths))
-		merged := make([]string, 0, len(contextPaths)+len(p.contextPaths))
-		for _, pth := range append(contextPaths, p.contextPaths...) {
-			expanded := expandPath(pth, store)
-			key := strings.ToLower(expanded)
+		seen := make(map[string]struct{}, len(contextPaths)+len(extraContextPaths))
+		merged := make([]string, 0, len(contextPaths)+len(extraContextPaths))
+		for _, pth := range append(contextPaths, extraContextPaths...) {
+			resolved := resolveContextPath(pth, store)
+			key := strings.ToLower(resolved)
 			if _, ok := seen[key]; ok {
 				continue
 			}
 			seen[key] = struct{}{}
-			merged = append(merged, pth)
+			merged = append(merged, resolved)
 		}
 		contextPaths = merged
 	}
+
+	var out RuntimeContext
+	seenFiles := map[string]struct{}{}
 	for _, pth := range contextPaths {
-		expanded := expandPath(pth, store)
-		pathKey := strings.ToLower(expanded)
-		if _, ok := files[pathKey]; ok {
+		resolved := resolveContextPath(pth, store)
+		info, err := os.Stat(resolved)
+		if err != nil {
+			slog.Warn("Failed to stat context path", "path", resolved, "error", err)
 			continue
 		}
-		content := processContextPath(expanded, store)
-		files[pathKey] = content
+		// Only the resolved path is added here — the sandbox's
+		// AddAncestorMounts automatically adds ancestor directories as
+		// MetadataOnly (stat-only, no content read) for path resolution.
+		// This keeps permissions minimal: the agent can read context
+		// files but parent directories are stat-only.
+		out.ReadOnlyPaths = append(out.ReadOnlyPaths, resolved)
+		pathKey := strings.ToLower(resolved)
+		if _, ok := seenFiles[pathKey]; ok {
+			continue
+		}
+		seenFiles[pathKey] = struct{}{}
+		if info.IsDir() {
+			out.ContextFiles = append(out.ContextFiles, processContextPath(resolved, store)...)
+			continue
+		}
+		if result := processFile(resolved); result != nil {
+			out.ContextFiles = append(out.ContextFiles, *result)
+		}
 	}
+	return out
+}
 
-	skillList, err := getSkillList(ctx)
-	if err != nil {
-		slog.Warn("skill list unavailable", "error", err)
-	}
+func (p *Prompt) promptData(_ context.Context, provider, model string, store *config.ConfigStore) (PromptDat, error) {
+	workingDir := cmp.Or(p.workingDir, store.WorkingDir())
+	platform := cmp.Or(p.platform, runtime.GOOS)
 
+	cfg := store.Config()
 	isGit := isGitRepo(store.WorkingDir())
-	data := PromptDat{
+	return PromptDat{
 		Provider:     provider,
 		Model:        model,
 		Config:       *cfg,
@@ -240,14 +241,8 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		Platform:     platform,
 		Date:         p.now().Format("1/2/2006"),
 		IdentityBody: p.identityBody,
-		SkillList:    skillList,
 		JobID:        taskwarrior.ResolveJobIDFromCwd(),
-	}
-
-	for _, contextFiles := range files {
-		data.ContextFiles = append(data.ContextFiles, contextFiles...)
-	}
-	return data, nil
+	}, nil
 }
 
 func isGitRepo(dir string) bool {

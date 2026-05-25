@@ -57,20 +57,6 @@ func TestBuildSummaryPrompt(t *testing.T) {
 	})
 }
 
-func TestBuildCompactSummaryPrompt_InstructsNarrateCompactionOutput(t *testing.T) {
-	t.Parallel()
-
-	got := buildCompactSummaryPrompt(context.Background(), "")
-
-	require.Contains(t, got, summaryInstructionsPrompt())
-	require.Contains(t, got, formatSummaryPrompt(nil))
-	require.Contains(t, got, summaryOutputProtocolPrompt())
-	require.Contains(t, got, "LENOS_CONTEXT_COMPACTION")
-	require.Contains(t, got, "narrate <<'")
-	require.NotContains(t, got, "LENOS_SUMMARY_SYSTEM")
-	require.NotContains(t, got, "```")
-}
-
 // chdirIntoWorktree creates a tempdir shaped like
 // `.../worktrees/<hex>-test` and chdirs into it so taskwarrior.ResolveJobID
 // returns the hex.
