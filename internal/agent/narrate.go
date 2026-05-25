@@ -8,7 +8,6 @@ import (
 	"html"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/tta-lab/temenos/client"
@@ -50,36 +49,7 @@ func newNarrateInvocation(emit string, env map[string]string, paths []client.All
 	}, nil
 }
 
-const narrateShellPrelude = `LENOS_NARRATE_SEQ_FILE="$LENOS_NARRATE_DIR/.seq"
-narrate_next_prefix() {
-  local lock_dir seq tries
-  lock_dir="$LENOS_NARRATE_DIR/.seq.lock"
-  tries=0
-  until mkdir "$lock_dir" 2>/dev/null; do
-    tries=$((tries + 1))
-    if [ "$tries" -ge 1000 ]; then
-      printf '%s\n' "narrate: failed to lock sequence file" >&2
-      return 1
-    fi
-    sleep 0.01
-  done
-
-  seq=0
-  if [ -r "$LENOS_NARRATE_SEQ_FILE" ]; then
-    seq="$(cat "$LENOS_NARRATE_SEQ_FILE")"
-    case "$seq" in
-      ''|*[!0-9]*) seq=0 ;;
-    esac
-  fi
-  seq=$((seq + 1))
-  if ! printf '%s' "$seq" > "$LENOS_NARRATE_SEQ_FILE"; then
-    rmdir "$lock_dir"
-    return 1
-  fi
-  rmdir "$lock_dir"
-  printf '%06d' "$seq"
-}
-
+const narrateShellPrelude = `LENOS_NARRATE_SEQ=0
 narrate() {
   local to=""
   local continue_loop=0
@@ -114,8 +84,9 @@ narrate() {
     to="${LENOS_NARRATE_DEFAULT_TO:-}"
   fi
 
+  LENOS_NARRATE_SEQ=$((LENOS_NARRATE_SEQ + 1))
   local prefix event_dir
-  prefix="$(narrate_next_prefix)" || return 1
+  prefix="$(printf '%06d' "$LENOS_NARRATE_SEQ")"
   event_dir="$(mktemp -d "$LENOS_NARRATE_DIR/${prefix}.XXXXXX")" || return 1
 
   if [ -n "$to" ]; then
@@ -140,9 +111,6 @@ func readNarrationEvents(dir string) ([]message.CommandNarration, error) {
 		}
 		return nil, err
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name() < entries[j].Name()
-	})
 
 	narrations := make([]message.CommandNarration, 0, len(entries))
 	for _, entry := range entries {
