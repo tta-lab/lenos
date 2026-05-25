@@ -88,10 +88,10 @@ func TestGenerateTitle(t *testing.T) {
 		fakeTask := filepath.Join(tmp, "task")
 		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf(`#!/bin/sh
 printf '[{"description":"%s","status":"pending"}]' "$@"
-`, "Fix the authentication bug")), 0o755))
+		`, "Fix the authentication bug")), 0o755))
 
 		a := &sessionAgent{sessions: env.sessions}
-		a.generateTitle(t.Context(), sess.ID, "fix auth bug")
+		a.generateTitle(t.Context(), sess.ID)
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
 		require.NoError(t, err)
@@ -113,27 +113,27 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		require.NoError(t, os.WriteFile(fakeTask, []byte("#!/bin/sh\nprintf '[]' \"$@\""), 0o755))
 
 		a := &sessionAgent{sessions: env.sessions}
-		a.generateTitle(t.Context(), sess.ID, "")
+		a.generateTitle(t.Context(), sess.ID)
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
 		require.NoError(t, err)
 		assert.Equal(t, DefaultSessionName, updated.Title)
 	})
 
-	t.Run("non-worktree cwd uses default", func(t *testing.T) {
+	t.Run("non-worktree cwd leaves title unchanged", func(t *testing.T) {
 		// Plain tempdir (no worktrees/<hex>-* parent) → ResolveJobIDFromCwd
-		// returns "" → default title.
+		// returns "" → no task title update.
 		t.Chdir(t.TempDir())
 		env := testEnv(t)
-		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
+		sess, err := env.sessions.Create(t.Context(), "Manual title")
 		require.NoError(t, err)
 
 		a := &sessionAgent{sessions: env.sessions}
-		a.generateTitle(t.Context(), sess.ID, "")
+		a.generateTitle(t.Context(), sess.ID)
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
 		require.NoError(t, err)
-		assert.Equal(t, DefaultSessionName, updated.Title)
+		assert.Equal(t, "Manual title", updated.Title)
 	})
 
 	t.Run("description over 100 chars is truncated", func(t *testing.T) {
@@ -152,7 +152,7 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf("#!/bin/sh\nprintf '[{\"description\":\"%s\",\"status\":\"pending\"}]' \"$@\"", longDesc)), 0o755))
 
 		a := &sessionAgent{sessions: env.sessions}
-		a.generateTitle(t.Context(), sess.ID, "")
+		a.generateTitle(t.Context(), sess.ID)
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
 		require.NoError(t, err)

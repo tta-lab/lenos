@@ -231,13 +231,12 @@ func recentUserMessages(msgs []message.Message, limit int) []message.Message {
 	return recent
 }
 
-// generateTitle generates a session titled based on the initial prompt.
-func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, userPrompt string) {
+// generateTitle refreshes the session title from the current task.
+func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string) {
 	jobID := taskwarrior.ResolveJobIDFromCwd()
 	var title string
 	if jobID == "" {
-		slog.Warn("Cwd is not a ttal worktree; using default session name")
-		title = DefaultSessionName
+		return
 	} else {
 		cmd := exec.CommandContext(ctx, "task",
 			"rc.verbose=nothing", "rc.hooks=off", "rc.confirmation=no", "rc.json.array=on",

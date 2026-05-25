@@ -268,6 +268,56 @@ printf '[{"description":"Fix synthetic context title","status":"pending"}]'
 	require.Equal(t, "Fix synthetic context title", updated.Title)
 }
 
+func TestRun_RefreshesTaskTitleOnExistingSession(t *testing.T) {
+	chdirIntoWorktree(t, "25620b89")
+	env := testEnv(t)
+
+	tmp := t.TempDir()
+	oldPath := os.Getenv("PATH")
+	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+	os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
+
+	fakeTask := filepath.Join(tmp, "task")
+	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/bin/sh
+printf '[{"description":"Updated task title","status":"pending"}]'
+`), 0o755))
+
+	primary := Model{
+		Model:      &scriptedModel{emits: []string{"exit"}},
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+		ModelCfg:   config.SelectedModel{Provider: "test-provider", Model: "test-model"},
+	}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           primary,
+		SmallModel:           primary,
+		PrimaryModel:         primary,
+		SystemPrompt:         "system prompt",
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		DisableAutoSummarize: true,
+	}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "Old title")
+	require.NoError(t, err)
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "previous prompt"}},
+	})
+	require.NoError(t, err)
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID: sess.ID,
+		Prompt:    "user prompt",
+		AllowedPaths: []client.AllowedPath{
+			{Path: env.workingDir},
+		},
+	})
+	require.NoError(t, err)
+
+	updated, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Updated task title", updated.Title)
+}
+
 func fantasyMessageText(msg fantasy.Message) string {
 	var sb strings.Builder
 	for _, part := range msg.Content {

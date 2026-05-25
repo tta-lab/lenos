@@ -227,12 +227,10 @@ runLoopReentry:
 	}
 
 	var wg sync.WaitGroup
-	if isNewSession {
-		titleCtx := ctx
-		wg.Go(func() {
-			a.generateTitle(titleCtx, call.SessionID, call.Prompt)
-		})
-	}
+	titleCtx := ctx
+	wg.Go(func() {
+		a.generateTitle(titleCtx, call.SessionID)
+	})
 	defer wg.Wait()
 
 	streamCtx, cancel := context.WithCancel(ctx)
