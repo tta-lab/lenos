@@ -468,6 +468,6 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 		assert.True(t, filepath.IsAbs(allowed.Path), "allowed path must be absolute: %q", allowed.Path)
 	}
 	assert.Contains(t, call.ContextCommands, RuntimeContextCommand{
-		Command: "# read context file\ncat " + shellQuote(contextFile),
+		Command: "# read project-scope instructions\ncat " + shellQuote(contextFile),
 	})
 }

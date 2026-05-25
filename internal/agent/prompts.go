@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -115,15 +116,35 @@ func buildLenosWrapper(
 
 func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
+		Command:  "# check registered projects\nttal project list",
+		Optional: true,
+	}, {
 		Command:  "# list available skills\nskill list",
 		Optional: true,
 	}}
 	for _, file := range runtimeContext.ContextFiles {
 		commands = append(commands, RuntimeContextCommand{
-			Command: "# read context file\ncat " + shellQuote(file.Path),
+			Command: runtimeContextReadComment(file.Path) + "\ncat " + shellQuote(file.Path),
 		})
 	}
 	return commands
+}
+
+func runtimeContextReadComment(path string) string {
+	if isUserScopeContextPath(path) {
+		return "# read user-scope instructions"
+	}
+	return "# read project-scope instructions"
+}
+
+func isUserScopeContextPath(path string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false
+	}
+	path = filepath.Clean(path)
+	home = filepath.Clean(home)
+	return path == home || strings.HasPrefix(path, home+string(os.PathSeparator))
 }
 
 func InitializePrompt(cfg *config.ConfigStore) (string, error) {
