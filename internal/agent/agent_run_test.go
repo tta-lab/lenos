@@ -191,7 +191,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 			{Path: env.workingDir},
 		},
 		ContextCommands: []RuntimeContextCommand{{
-			Command: "# read project-scope instructions\ncat " + shellQuote(contextFile),
+			Command: "# read project instructions\ncat " + shellQuote(contextFile),
 		}},
 	})
 	require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(msgs), 4)
 	require.Equal(t, message.Assistant, msgs[0].Role)
-	require.Equal(t, "# read project-scope instructions\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
+	require.Equal(t, "# read project instructions\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
 	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)

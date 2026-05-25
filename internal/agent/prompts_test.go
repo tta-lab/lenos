@@ -23,10 +23,10 @@ func TestBuildRuntimeContextCommandsLabelsInstructionScope(t *testing.T) {
 	})
 
 	require.Len(t, commands, 4)
-	require.Equal(t, "# check registered projects\nttal project list", commands[0].Command)
+	require.Equal(t, "# list registered projects\nttal project list", commands[0].Command)
 	require.True(t, commands[0].Optional)
 	require.Equal(t, "# list available skills\nskill list", commands[1].Command)
 	require.True(t, commands[1].Optional)
-	require.Equal(t, "# read user-scope instructions\ncat "+shellQuote(userFile), commands[2].Command)
-	require.Equal(t, "# read project-scope instructions\ncat "+shellQuote(projectFile), commands[3].Command)
+	require.Equal(t, "# read user instructions\ncat "+shellQuote(userFile), commands[2].Command)
+	require.Equal(t, "# read project instructions\ncat "+shellQuote(projectFile), commands[3].Command)
 }

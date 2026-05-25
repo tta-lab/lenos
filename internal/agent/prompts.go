@@ -116,7 +116,7 @@ func buildLenosWrapper(
 
 func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
-		Command:  "# check registered projects\nttal project list",
+		Command:  "# list registered projects\nttal project list",
 		Optional: true,
 	}, {
 		Command:  "# list available skills\nskill list",
@@ -132,9 +132,9 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []Runtime
 
 func runtimeContextReadComment(path string) string {
 	if isUserScopeContextPath(path) {
-		return "# read user-scope instructions"
+		return "# read user instructions"
 	}
-	return "# read project-scope instructions"
+	return "# read project instructions"
 }
 
 func isUserScopeContextPath(path string) bool {
