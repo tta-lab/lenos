@@ -114,7 +114,7 @@ func buildLenosWrapper(
 	return p.Build(ctx, provider, model, store)
 }
 
-func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, workingDir string) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
 		Command:  "# list registered projects\nttal project list",
 		Optional: true,
@@ -124,17 +124,29 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []Runtime
 	}}
 	for _, file := range runtimeContext.ContextFiles {
 		commands = append(commands, RuntimeContextCommand{
-			Command: runtimeContextReadComment(file.Path) + "\ncat " + shellQuote(file.Path),
+			Command: runtimeContextReadComment(file.Path, workingDir) + "\ncat " + shellQuote(file.Path),
 		})
 	}
 	return commands
 }
 
-func runtimeContextReadComment(path string) string {
+func runtimeContextReadComment(path, workingDir string) string {
+	if isProjectScopeContextPath(path, workingDir) {
+		return "# read project instructions"
+	}
 	if isUserScopeContextPath(path) {
 		return "# read user instructions"
 	}
 	return "# read project instructions"
+}
+
+func isProjectScopeContextPath(path, workingDir string) bool {
+	if workingDir == "" {
+		return false
+	}
+	path = filepath.Clean(path)
+	workingDir = filepath.Clean(workingDir)
+	return path == workingDir || strings.HasPrefix(path, workingDir+string(os.PathSeparator))
 }
 
 func isUserScopeContextPath(path string) bool {

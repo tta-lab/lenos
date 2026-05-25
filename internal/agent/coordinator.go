@@ -269,7 +269,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		Env:                    sandboxEnv,
 		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access, runtimeContext.ReadOnlyPaths...),
 		DefaultNarrationTarget: strings.TrimSpace(c.cfg.Overrides().PairWith),
-		ContextCommands:        buildRuntimeContextCommands(runtimeContext),
+		ContextCommands:        buildRuntimeContextCommands(runtimeContext, cwd),
 	}
 }
 

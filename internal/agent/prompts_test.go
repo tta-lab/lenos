@@ -14,13 +14,14 @@ func TestBuildRuntimeContextCommandsLabelsInstructionScope(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	userFile := filepath.Join(home, ".claude", "CLAUDE.md")
-	projectFile := filepath.Join(t.TempDir(), "AGENTS.md")
+	projectDir := filepath.Join(home, "code", "project")
+	projectFile := filepath.Join(projectDir, "AGENTS.md")
 	commands := buildRuntimeContextCommands(prompt.RuntimeContext{
 		ContextFiles: []prompt.ContextFile{
 			{Path: userFile},
 			{Path: projectFile},
 		},
-	})
+	}, projectDir)
 
 	require.Len(t, commands, 4)
 	require.Equal(t, "# list registered projects\nttal project list", commands[0].Command)
