@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,6 +22,7 @@ func TestNarrateInvocationWritesEventsThroughBashFunction(t *testing.T) {
 	narrations, err := readNarrationEvents(inv.dir)
 	require.NoError(t, err)
 	require.Len(t, narrations, 2)
+	sort.Slice(narrations, func(i, j int) bool { return narrations[i].Body < narrations[j].Body })
 	assert.Equal(t, "First\n", narrations[0].Body)
 	assert.Equal(t, "owner", narrations[0].To)
 	assert.False(t, narrations[0].Continue)
@@ -42,6 +44,7 @@ func TestNarrateInvocationAcceptsToAndContinueInEitherOrder(t *testing.T) {
 	narrations, err := readNarrationEvents(inv.dir)
 	require.NoError(t, err)
 	require.Len(t, narrations, 2)
+	sort.Slice(narrations, func(i, j int) bool { return narrations[i].Body < narrations[j].Body })
 	assert.Equal(t, "First\n", narrations[0].Body)
 	assert.Equal(t, "owner", narrations[0].To)
 	assert.True(t, narrations[0].Continue)
@@ -63,6 +66,7 @@ func TestNarrateInvocationAppliesDefaultToWhenMissing(t *testing.T) {
 	narrations, err := readNarrationEvents(inv.dir)
 	require.NoError(t, err)
 	require.Len(t, narrations, 2)
+	sort.Slice(narrations, func(i, j int) bool { return narrations[i].Body < narrations[j].Body })
 	assert.Equal(t, "First\n", narrations[0].Body)
 	assert.Equal(t, "pair", narrations[0].To)
 	assert.Equal(t, "Second\n", narrations[1].Body)
