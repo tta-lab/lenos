@@ -79,7 +79,10 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 		return fmt.Errorf("create synthetic context pending result: %w", err)
 	}
 
-	narrations, _ = deliverNarrations(ctx, runner, call.Env, call.AllowedPaths, narrations)
+	narrations, deliveryFailed := deliverNarrations(ctx, runner, call.Env, call.AllowedPaths, narrations)
+	if deliveryFailed {
+		slog.Warn("Synthetic context narration delivery failed", "command", cmd.Command)
+	}
 	exitCode := res.ExitCode
 	stderr := res.Stderr
 	if res.Err != nil && len(res.Stdout) == 0 && len(stderr) == 0 {

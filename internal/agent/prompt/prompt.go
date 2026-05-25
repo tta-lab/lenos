@@ -40,7 +40,6 @@ type PromptDat struct {
 	IdentityBody string
 	ContextFiles []ContextFile
 	JobID        string
-	SkillList    string
 }
 
 type ContextFile struct {
