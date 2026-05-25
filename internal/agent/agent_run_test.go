@@ -217,6 +217,57 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, "user prompt", fantasyMessageText(prompt[3]))
 }
 
+func TestRun_GeneratesTaskTitleWhenRuntimeContextInjected(t *testing.T) {
+	chdirIntoWorktree(t, "25620b89")
+	env := testEnv(t)
+
+	tmp := t.TempDir()
+	oldPath := os.Getenv("PATH")
+	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+	os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
+
+	fakeTask := filepath.Join(tmp, "task")
+	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/bin/sh
+printf '[{"description":"Fix synthetic context title","status":"pending"}]'
+`), 0o755))
+
+	contextFile := filepath.Join(env.workingDir, "context.md")
+	require.NoError(t, os.WriteFile(contextFile, []byte("project instructions"), 0o644))
+
+	primary := Model{
+		Model:      &scriptedModel{emits: []string{"exit"}},
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+		ModelCfg:   config.SelectedModel{Provider: "test-provider", Model: "test-model"},
+	}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           primary,
+		SmallModel:           primary,
+		PrimaryModel:         primary,
+		SystemPrompt:         "system prompt",
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		DisableAutoSummarize: true,
+	}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "runtime context")
+	require.NoError(t, err)
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID: sess.ID,
+		Prompt:    "user prompt",
+		AllowedPaths: []client.AllowedPath{
+			{Path: env.workingDir},
+		},
+		ContextCommands: []RuntimeContextCommand{{
+			Command: "# read project instructions\ncat " + shellQuote(contextFile),
+		}},
+	})
+	require.NoError(t, err)
+
+	updated, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Fix synthetic context title", updated.Title)
+}
+
 func fantasyMessageText(msg fantasy.Message) string {
 	var sb strings.Builder
 	for _, part := range msg.Content {
