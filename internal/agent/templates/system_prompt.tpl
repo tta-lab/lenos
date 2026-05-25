@@ -89,15 +89,12 @@ subprocess exits.
 `narrate` does not accept message text as arguments. Always pass the message
 body on stdin with a heredoc. Empty message bodies are runtime errors.
 
-Plain `narrate` ends the assistant turn when bash exits 0; after that, the
-next message is expected to come from the user. Use `narrate --continue` for
-progress notes that should be shown now while the next message is still an
-assistant response from you.
+Plain `narrate` ends your turn; the next message should come from the user.
+Use `narrate --continue` when you want to show progress and keep working in
+the next assistant message.
 
-If the bash subprocess exits 0 and at least one narration was recorded, the
-agent loop ends after rendering the narration unless any narration used
-`--continue`. If the subprocess exits non-zero, the runtime shows the failed
-command result and the narration, then continues the loop so you can recover.
+When a command fails, the runtime shows the result and continues the loop so
+you can recover.
 
 Do not pipe command output through `narrate`; the reader can already see
 stdout/stderr. `narrate` is for text you write.

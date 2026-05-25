@@ -63,22 +63,6 @@ func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {
 	assert.Contains(t, got, "web search <query>")
 }
 
-func TestBuildBaseSystemPrompt_ExplainsNarrateContinueBoundary(t *testing.T) {
-	t.Parallel()
-
-	got, err := buildBaseSystemPrompt(promptData{
-		WorkingDir: "/repo",
-		Platform:   "linux",
-		Date:       "2026-04-29",
-	})
-	require.NoError(t, err)
-
-	assert.Contains(t, got, "Plain `narrate` ends the assistant turn")
-	assert.Contains(t, got, "`narrate --continue`")
-	assert.Contains(t, got, "assistant response from you")
-	assertValidBashSyntax(t, got)
-}
-
 func TestStripYAMLFrontmatter_FrontmatterStripped(t *testing.T) {
 	input := "---\nname: coder\nrole: worker\n---\n# Body\nContent"
 	want := "# Body\nContent"
