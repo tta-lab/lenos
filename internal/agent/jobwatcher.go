@@ -98,6 +98,9 @@ func (w *JobWatcher) pollAll(ctx context.Context) {
 			slog.Warn("JobWatcher: poll failed", "job_id", id, "error", err)
 			continue
 		}
+		if info == nil {
+			continue
+		}
 
 		switch info.Status {
 		case "completed":
