@@ -111,11 +111,11 @@ type SandboxRunner struct {
 func (s SandboxRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []client.AllowedPath) ExecResult {
 	start := time.Now()
 	resp, err := s.Client.Run(ctx, client.RunRequest{
-		Command:            bash,
-		Env:                env,
-		AllowedPaths:       allowedPaths,
-		Timeout:            int(DefaultPerCmdTimeout / time.Second),
-		CallerID:           s.SessionID,
+		Command:             bash,
+		Env:                 env,
+		AllowedPaths:        allowedPaths,
+		Timeout:             int(DefaultPerCmdTimeout / time.Second),
+		CallerID:            s.SessionID,
 		AutoBackgroundAfter: defaultAutoBackgroundAfter,
 	})
 	dur := time.Since(start)

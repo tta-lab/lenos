@@ -17,11 +17,11 @@ const jobPollInterval = 10 * time.Second
 // It blocks on a channel when idle — zero temenos traffic until a job
 // enters background.
 type JobWatcher struct {
-	mu       sync.Mutex
-	active   map[string]string // job_id → original command
-	notify   chan struct{}
-	client   *temenos.Client
-	enqueue  func(msg string)
+	mu        sync.Mutex
+	active    map[string]string // job_id → original command
+	notify    chan struct{}
+	client    *temenos.Client
+	enqueue   func(msg string)
 	sessionID string
 }
 
