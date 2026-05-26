@@ -14,6 +14,8 @@ type mockTemenosClient struct {
 	jobs map[string]*temenos.JobInfo
 }
 
+var _ TemenosJobClient = (*mockTemenosClient)(nil)
+
 func newMockTemenosClient() *mockTemenosClient {
 	return &mockTemenosClient{jobs: make(map[string]*temenos.JobInfo)}
 }

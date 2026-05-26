@@ -12,6 +12,11 @@ import (
 
 const jobPollInterval = 10 * time.Second
 
+// TemenosJobClient is the subset of temenos client.Client used by JobWatcher.
+type TemenosJobClient interface {
+	GetJob(ctx context.Context, id string) (*temenos.JobInfo, error)
+}
+
 // JobWatcher polls the temenos job socket for completed background jobs
 // and enqueues <-Runtime notifications into the session messageQueue.
 // It blocks on a channel when idle — zero temenos traffic until a job
@@ -20,13 +25,13 @@ type JobWatcher struct {
 	mu        sync.Mutex
 	active    map[string]string // job_id → original command
 	notify    chan struct{}
-	client    *temenos.Client
+	client    TemenosJobClient
 	enqueue   func(msg string)
 	sessionID string
 }
 
 // NewJobWatcher creates a dormant watcher. Call Run in a goroutine to start.
-func NewJobWatcher(c *temenos.Client, sessionID string, enqueue func(msg string)) *JobWatcher {
+func NewJobWatcher(c TemenosJobClient, sessionID string, enqueue func(msg string)) *JobWatcher {
 	return &JobWatcher{
 		active:    make(map[string]string),
 		notify:    make(chan struct{}, 1),
