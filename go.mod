@@ -55,7 +55,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
-	github.com/tta-lab/temenos v0.7.0
+	github.com/tta-lab/temenos v0.9.1-0.20260525133407-6ce2d0c5ed04
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/sync v0.20.0
@@ -64,7 +64,7 @@ require (
 	modernc.org/sqlite v1.48.0
 )
 
-require github.com/fsnotify/fsnotify v1.9.0
+require github.com/fsnotify/fsnotify v1.9.0 // indirect
 
 require (
 	cloud.google.com/go v0.123.0 // indirect
