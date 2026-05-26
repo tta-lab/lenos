@@ -208,7 +208,8 @@ runLoopReentry:
 	if err != nil {
 		return fmt.Errorf("failed to get session messages: %w", err)
 	}
-	if len(msgs) == 0 && len(call.ContextCommands) > 0 {
+	isNewSession := len(msgs) == 0
+	if isNewSession && len(call.ContextCommands) > 0 {
 		if err := a.persistRuntimeContextCommands(ctx, call, runner); err != nil {
 			return err
 		}
@@ -226,12 +227,10 @@ runLoopReentry:
 	}
 
 	var wg sync.WaitGroup
-	if len(msgs) == 0 {
-		titleCtx := ctx
-		wg.Go(func() {
-			a.generateTitle(titleCtx, call.SessionID, call.Prompt)
-		})
-	}
+	titleCtx := ctx
+	wg.Go(func() {
+		a.generateTitle(titleCtx, call.SessionID, call.TaskID)
+	})
 	defer wg.Wait()
 
 	streamCtx, cancel := context.WithCancel(ctx)

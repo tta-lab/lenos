@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestResolveJobID(t *testing.T) {
+func TestResolveTaskID(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
@@ -23,7 +23,7 @@ func TestResolveJobID(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, ResolveJobID(tc.cwd))
+			require.Equal(t, tc.want, ResolveTaskID(tc.cwd))
 		})
 	}
 }

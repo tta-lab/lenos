@@ -57,24 +57,12 @@ func TestBuildSummaryPrompt(t *testing.T) {
 	})
 }
 
-// chdirIntoWorktree creates a tempdir shaped like
-// `.../worktrees/<hex>-test` and chdirs into it so taskwarrior.ResolveJobID
-// returns the hex.
-func chdirIntoWorktree(t *testing.T, hex string) {
-	t.Helper()
-	root := t.TempDir()
-	wt := filepath.Join(root, "worktrees", hex+"-test")
-	require.NoError(t, os.MkdirAll(wt, 0o755))
-	t.Chdir(wt)
-}
-
 func TestGenerateTitle(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("task CLI not available on windows")
 	}
 
 	t.Run("uses task description as session title", func(t *testing.T) {
-		chdirIntoWorktree(t, "25620b89")
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)
@@ -88,10 +76,10 @@ func TestGenerateTitle(t *testing.T) {
 		fakeTask := filepath.Join(tmp, "task")
 		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf(`#!/bin/sh
 printf '[{"description":"%s","status":"pending"}]' "$@"
-`, "Fix the authentication bug")), 0o755))
+		`, "Fix the authentication bug")), 0o755))
 
 		a := &sessionAgent{sessions: env.sessions}
-		a.generateTitle(t.Context(), sess.ID, "fix auth bug")
+		a.generateTitle(t.Context(), sess.ID, "25620b89")
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
 		require.NoError(t, err)
@@ -99,7 +87,6 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 	})
 
 	t.Run("empty array falls back to default", func(t *testing.T) {
-		chdirIntoWorktree(t, "25620b89")
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)
@@ -113,19 +100,16 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		require.NoError(t, os.WriteFile(fakeTask, []byte("#!/bin/sh\nprintf '[]' \"$@\""), 0o755))
 
 		a := &sessionAgent{sessions: env.sessions}
-		a.generateTitle(t.Context(), sess.ID, "")
+		a.generateTitle(t.Context(), sess.ID, "25620b89")
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
 		require.NoError(t, err)
 		assert.Equal(t, DefaultSessionName, updated.Title)
 	})
 
-	t.Run("non-worktree cwd uses default", func(t *testing.T) {
-		// Plain tempdir (no worktrees/<hex>-* parent) → ResolveJobIDFromCwd
-		// returns "" → default title.
-		t.Chdir(t.TempDir())
+	t.Run("non-worktree cwd leaves title unchanged", func(t *testing.T) {
 		env := testEnv(t)
-		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
+		sess, err := env.sessions.Create(t.Context(), "Manual title")
 		require.NoError(t, err)
 
 		a := &sessionAgent{sessions: env.sessions}
@@ -133,11 +117,10 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
 		require.NoError(t, err)
-		assert.Equal(t, DefaultSessionName, updated.Title)
+		assert.Equal(t, "Manual title", updated.Title)
 	})
 
 	t.Run("description over 100 chars is truncated", func(t *testing.T) {
-		chdirIntoWorktree(t, "25620b89")
 		env := testEnv(t)
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)
@@ -152,7 +135,7 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf("#!/bin/sh\nprintf '[{\"description\":\"%s\",\"status\":\"pending\"}]' \"$@\"", longDesc)), 0o755))
 
 		a := &sessionAgent{sessions: env.sessions}
-		a.generateTitle(t.Context(), sess.ID, "")
+		a.generateTitle(t.Context(), sess.ID, "25620b89")
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
 		require.NoError(t, err)

@@ -83,6 +83,10 @@ type SessionAgentCall struct {
 	// Explicit `narrate --to` calls take precedence.
 	DefaultNarrationTarget string
 
+	// TaskID is the resolved ttal task ID for task-backed sessions. Empty
+	// means the session is not task-backed and title refresh is skipped.
+	TaskID string
+
 	// ContextCommands are runner-backed context reads persisted before the
 	// first user turn so they replay like normal assistant command/result pairs.
 	ContextCommands []RuntimeContextCommand

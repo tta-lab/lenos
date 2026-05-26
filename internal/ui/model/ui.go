@@ -355,7 +355,7 @@ func (m *UI) Init() tea.Cmd {
 	// Start taskwarrior subtask polling when running inside a ttal worktree
 	// — the job hex is derived from the cwd basename
 	// (`*/worktrees/<hex8>-<alias>`); no env wiring needed.
-	if jobID := taskwarrior.ResolveJobIDFromCwd(); jobID != "" {
+	if jobID := taskwarrior.ResolveTaskIDFromCwd(); jobID != "" {
 		if cmd := m.startTWTickPoll(jobID); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
