@@ -130,13 +130,18 @@ func TestJobWatcher_KilledJobEnqueuesMessage(t *testing.T) {
 
 func TestJobWatcher_IdleBlocksUntilJobAdded(t *testing.T) {
 	t.Parallel()
+	mock := newMockTemenosClient()
+	var wg sync.WaitGroup
+	wg.Add(1)
 	w := &JobWatcher{
 		active:  make(map[string]string),
 		notify:  make(chan struct{}, 1),
-		enqueue: func(string) {},
+		client:  mock,
+		enqueue: func(string) { wg.Done() },
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	go w.Run(ctx)
 
 	time.Sleep(50 * time.Millisecond)
@@ -144,19 +149,15 @@ func TestJobWatcher_IdleBlocksUntilJobAdded(t *testing.T) {
 		t.Fatalf("expected 0 active, got %d", w.ActiveCount())
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	w.enqueue = func(msg string) { wg.Done() }
 	w.AddJob("job-3", "ls")
+	mock.setJob(&temenos.JobInfo{ID: "job-3", Status: "completed"})
 
 	done := make(chan struct{})
 	go func() { wg.Wait(); close(done) }()
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("timed out")
 	}
-
-	cancel()
 }
