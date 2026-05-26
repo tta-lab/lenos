@@ -127,6 +127,9 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, workingDi
 			Command: runtimeContextReadComment(file.Path, workingDir) + "\ncat " + shellQuote(file.Path),
 		})
 	}
+	commands = append(commands, RuntimeContextCommand{
+		Command: "cat <<'EOF' | narrate\nReady.\nEOF",
+	})
 	return commands
 }
 
