@@ -42,6 +42,9 @@ func NewJobWatcher(c TemenosJobClient, sessionID string, enqueue func(msg string
 }
 
 // AddJob registers a background job for polling and wakes the watcher.
+// The buffered notify channel (cap 1) coalesces multiple AddJob calls
+// while the inner poll loop is running — safe because the inner loop
+// re-checks len(active) before sleeping.
 func (w *JobWatcher) AddJob(jobID, command string) {
 	w.mu.Lock()
 	w.active[jobID] = command
