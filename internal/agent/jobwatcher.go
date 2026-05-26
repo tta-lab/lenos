@@ -70,6 +70,12 @@ func (w *JobWatcher) Run(ctx context.Context) {
 		select {
 		case <-w.notify:
 		case <-ctx.Done():
+			w.mu.Lock()
+			n := len(w.active)
+			w.mu.Unlock()
+			if n > 0 {
+				slog.Warn("JobWatcher: stopped with active background jobs", "count", n)
+			}
 			return
 		}
 
@@ -83,6 +89,12 @@ func (w *JobWatcher) Run(ctx context.Context) {
 
 			select {
 			case <-ctx.Done():
+				w.mu.Lock()
+				n := len(w.active)
+				w.mu.Unlock()
+				if n > 0 {
+					slog.Warn("JobWatcher: stopped with active background jobs", "count", n)
+				}
 				return
 			case <-time.After(jobPollInterval):
 			}
