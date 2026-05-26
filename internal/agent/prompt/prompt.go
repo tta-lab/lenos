@@ -241,7 +241,7 @@ func (p *Prompt) promptData(_ context.Context, provider, model string, store *co
 		Platform:     platform,
 		Date:         p.now().Format("1/2/2006"),
 		IdentityBody: p.identityBody,
-		JobID:        taskwarrior.ResolveJobIDFromCwd(),
+		JobID:        taskwarrior.ResolveTaskIDFromCwd(),
 	}, nil
 }
 

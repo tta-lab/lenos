@@ -229,7 +229,7 @@ runLoopReentry:
 	var wg sync.WaitGroup
 	titleCtx := ctx
 	wg.Go(func() {
-		a.generateTitle(titleCtx, call.SessionID)
+		a.generateTitle(titleCtx, call.SessionID, call.TaskID)
 	})
 	defer wg.Wait()
 

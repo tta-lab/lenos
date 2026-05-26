@@ -218,7 +218,6 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 }
 
 func TestRun_GeneratesTaskTitleWhenRuntimeContextInjected(t *testing.T) {
-	chdirIntoWorktree(t, "25620b89")
 	env := testEnv(t)
 
 	tmp := t.TempDir()
@@ -254,6 +253,7 @@ printf '[{"description":"Fix synthetic context title","status":"pending"}]'
 	err = agent.Run(t.Context(), SessionAgentCall{
 		SessionID: sess.ID,
 		Prompt:    "user prompt",
+		TaskID:    "25620b89",
 		AllowedPaths: []client.AllowedPath{
 			{Path: env.workingDir},
 		},
@@ -269,7 +269,6 @@ printf '[{"description":"Fix synthetic context title","status":"pending"}]'
 }
 
 func TestRun_RefreshesTaskTitleOnExistingSession(t *testing.T) {
-	chdirIntoWorktree(t, "25620b89")
 	env := testEnv(t)
 
 	tmp := t.TempDir()
@@ -307,6 +306,7 @@ printf '[{"description":"Updated task title","status":"pending"}]'
 	err = agent.Run(t.Context(), SessionAgentCall{
 		SessionID: sess.ID,
 		Prompt:    "user prompt",
+		TaskID:    "25620b89",
 		AllowedPaths: []client.AllowedPath{
 			{Path: env.workingDir},
 		},

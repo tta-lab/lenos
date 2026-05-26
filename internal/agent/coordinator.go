@@ -28,6 +28,7 @@ import (
 	"github.com/tta-lab/lenos/internal/oauth/copilot"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
+	"github.com/tta-lab/lenos/internal/taskwarrior"
 	"github.com/tta-lab/temenos/client"
 	"golang.org/x/sync/errgroup"
 
@@ -269,6 +270,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		Env:                    sandboxEnv,
 		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access, runtimeContext.ReadOnlyPaths...),
 		DefaultNarrationTarget: strings.TrimSpace(c.cfg.Overrides().PairWith),
+		TaskID:                 taskwarrior.ResolveTaskID(cwd),
 		ContextCommands:        buildRuntimeContextCommands(runtimeContext, cwd),
 	}
 }

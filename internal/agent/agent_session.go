@@ -71,7 +71,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	// Build prompt: normal system prompt + history + final compact request.
 	prompt := fantasy.Prompt{fantasy.NewSystemMessage(systemPrompt)}
 	prompt = append(prompt, history...)
-	prompt = append(prompt, fantasy.NewUserMessage(buildCompactSummaryPrompt(ctx, taskwarrior.ResolveJobIDFromCwd())))
+	prompt = append(prompt, fantasy.NewUserMessage(buildCompactSummaryPrompt(ctx, taskwarrior.ResolveTaskIDFromCwd())))
 
 	baseline := summaryMessage.Clone()
 	streamResult, err := retryModelStream(genCtx,
@@ -232,15 +232,14 @@ func recentUserMessages(msgs []message.Message, limit int) []message.Message {
 }
 
 // generateTitle refreshes the session title from the current task.
-func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string) {
-	jobID := taskwarrior.ResolveJobIDFromCwd()
+func (a *sessionAgent) generateTitle(ctx context.Context, sessionID, taskID string) {
 	var title string
-	if jobID == "" {
+	if taskID == "" {
 		return
 	} else {
 		cmd := exec.CommandContext(ctx, "task",
 			"rc.verbose=nothing", "rc.hooks=off", "rc.confirmation=no", "rc.json.array=on",
-			jobID, "export")
+			taskID, "export")
 		out, err := cmd.Output()
 		if err != nil {
 			slog.Warn("Failed to export task for title", "err", err)
@@ -253,7 +252,7 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string) {
 				slog.Warn("Failed to parse task export JSON", "err", err)
 				title = DefaultSessionName
 			} else if len(tasks) == 0 {
-				slog.Warn("Task export returned empty array", "jobID", jobID)
+				slog.Warn("Task export returned empty array", "taskID", taskID)
 				title = DefaultSessionName
 			} else {
 				title = strings.TrimSpace(tasks[0].Description)
