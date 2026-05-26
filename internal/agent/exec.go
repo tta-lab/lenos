@@ -15,6 +15,11 @@ import (
 // temenos sandbox default. Agents can override via bash-native `timeout 30m`.
 const DefaultPerCmdTimeout = 120 * time.Second
 
+// defaultAutoBackgroundAfter is the threshold in seconds before a temenos
+// command is detached into a background job. Commands completing faster
+// return synchronously.
+const defaultAutoBackgroundAfter = 15
+
 // ExecResult is the outcome of running one agent emit through a Runner.
 //
 //   - ExitCode is the subprocess exit code on normal exit, -1 on runner-level
@@ -22,11 +27,13 @@ const DefaultPerCmdTimeout = 120 * time.Second
 //   - Err is non-nil only on runner-level failures, NOT on non-zero exit. A
 //     timeout sets Err to context.DeadlineExceeded so the loop can branch on it.
 type ExecResult struct {
-	Stdout   []byte
-	Stderr   []byte
-	ExitCode int
-	Duration time.Duration
-	Err      error
+	Stdout     []byte
+	Stderr     []byte
+	ExitCode   int
+	Duration   time.Duration
+	Err        error
+	JobID      string
+	Background bool
 }
 
 // Runner abstracts the execution backend (local subprocess or temenos sandbox).
@@ -97,20 +104,30 @@ func (LocalRunner) Run(ctx context.Context, bash string, env map[string]string, 
 // as separate buffers; ExitCode is the subprocess exit; Err is a runner-level
 // failure (daemon unreachable, marshal error).
 type SandboxRunner struct {
-	Client *client.Client
+	Client    *client.Client
+	SessionID string
 }
 
 func (s SandboxRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []client.AllowedPath) ExecResult {
 	start := time.Now()
 	resp, err := s.Client.Run(ctx, client.RunRequest{
-		Command:      bash,
-		Env:          env,
-		AllowedPaths: allowedPaths,
-		Timeout:      int(DefaultPerCmdTimeout / time.Second),
+		Command:            bash,
+		Env:                env,
+		AllowedPaths:       allowedPaths,
+		Timeout:            int(DefaultPerCmdTimeout / time.Second),
+		CallerID:           s.SessionID,
+		AutoBackgroundAfter: defaultAutoBackgroundAfter,
 	})
 	dur := time.Since(start)
 	if err != nil {
 		return ExecResult{ExitCode: -1, Duration: dur, Err: err}
+	}
+	if resp.JobID != "" {
+		return ExecResult{
+			JobID:      resp.JobID,
+			Background: true,
+			Duration:   dur,
+		}
 	}
 	return ExecResult{
 		Stdout:   []byte(resp.Stdout),
