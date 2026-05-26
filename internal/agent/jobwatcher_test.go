@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -25,7 +26,7 @@ func (m *mockTemenosClient) GetJob(_ context.Context, id string) (*temenos.JobIn
 	defer m.mu.Unlock()
 	info, ok := m.jobs[id]
 	if !ok {
-		return nil, nil
+		return nil, fmt.Errorf("temenos: job %s not found", id)
 	}
 	return info, nil
 }
