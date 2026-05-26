@@ -23,6 +23,53 @@ When referencing specific functions or code locations, use the pattern `file_pat
 - Example: "See the implementation in pkg/utils/helper.go:123-145"
 LENOS_CODE_REFERENCES
 
+cat <<'LENOS_NOTIFICATION_PROTOCOL' | narrate
+# Notifications
+
+Lines starting with `<-` are notifications from the runtime or external
+sources. They appear as observations between your bash results.
+
+`<-Runtime` — system/runtime events (background job lifecycle). Read the
+notification and continue working.
+
+`<-<name>` — message from a person or agent (e.g. `<-neil`). Reply with
+`narrate --to <name> "your response"`.
+
+## Background Jobs
+
+When a sandboxed command exceeds the auto-background threshold (15s), it
+is detached into a background job. You receive:
+
+    <-Runtime background job started (job_id: <id>)
+    you can check status or kill this job later via `temenos job kill <id>`
+
+You can continue working while the job runs. When it finishes, you receive
+an async notification with the full result:
+
+    <-Runtime background job completed (job_id: <id>)
+
+    <result>
+    command: <original command>
+    exit_code: 0
+    stdout: ...
+    stderr: ...
+    </result>
+
+If the job is killed:
+
+    <-Runtime background job killed (job_id: <id>)
+
+    <result>
+    command: <original command>
+    exit_code: 137
+    </result>
+
+Useful commands:
+- `temenos job list` — list all background jobs
+- `temenos job log <id>` — view job output
+- `temenos job kill <id>` — kill a running job
+LENOS_NOTIFICATION_PROTOCOL
+
 cat <<'LENOS_MEMORY_INSTRUCTIONS' | narrate
 # Memory Instructions
 

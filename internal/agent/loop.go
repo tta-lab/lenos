@@ -60,6 +60,10 @@ type loopDeps struct {
 	// postStepHook is called after each step with the just-completed step's
 	// usage. Nil-safe: a nil value is a no-op.
 	postStepHook func(stepIdx int, u fantasy.Usage)
+
+	// jobWatcher tracks background temenos jobs and enqueues completion
+	// notifications. Nil when sandbox is not in use.
+	jobWatcher *JobWatcher
 }
 
 // stopReason explains why runLoop returned. The caller maps it to the right
@@ -222,6 +226,34 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			if narrateErr != nil {
 				abandonPending(ctx, deps.messages, &resultMsg)
 				return stopError, fmt.Errorf("read narrate IPC events: %w", narrateErr)
+			}
+
+			// Background job: command exceeded the auto-background threshold
+			// and was detached. Notify the model with <-Runtime format and
+			// continue without blocking on the result.
+			if res.Background {
+				if deps.jobWatcher != nil {
+					deps.jobWatcher.AddJob(res.JobID, emit)
+				}
+				obs := fmt.Sprintf(
+					"<-Runtime background job started (job_id: %s)\nyou can check status or kill this job later via `temenos job kill %s`",
+					res.JobID, res.JobID,
+				)
+				resultMsg.Parts = []message.ContentPart{message.CommandContent{
+					Command:     emit,
+					Pending:     false,
+					Observation: obs,
+				}}
+				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+					slog.Warn("loop: persist background job result row", "error", updateErr)
+				}
+				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+				msgs = append(msgs,
+					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+					fantasy.NewUserMessage(obs),
+				)
+				msgs = drainAndAppend(ctx, deps, msgs)
+				continue
 			}
 
 			// Honor mid-exec cancellation: a canceled context means the agent

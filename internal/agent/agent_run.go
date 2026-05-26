@@ -154,7 +154,7 @@ func errorFinishFor(runErr error, model string) (reason message.FinishReason, ti
 // security implication (subprocess inherits parent env including secrets).
 func resolveRunner(call SessionAgentCall) Runner {
 	if call.Sandbox && call.SandboxClient != nil {
-		return SandboxRunner{Client: call.SandboxClient}
+		return SandboxRunner{Client: call.SandboxClient, SessionID: call.SessionID}
 	}
 	if call.Sandbox && call.SandboxClient == nil {
 		slog.Warn("sandbox requested but client is nil; falling back to LocalRunner — bash subprocess inherits parent env including secrets",
@@ -187,6 +187,24 @@ runLoopReentry:
 		return fmt.Errorf("failed to get session: %w", err)
 	}
 	runner := resolveRunner(call)
+
+	// Start background job watcher for sandbox sessions.
+	var jobWatcher *JobWatcher
+	if call.Sandbox && call.SandboxClient != nil {
+		jw := NewJobWatcher(call.SandboxClient, call.SessionID, func(msg string) {
+			existing, ok := a.messageQueue.Get(call.SessionID)
+			if !ok {
+				existing = []SessionAgentCall{}
+			}
+			existing = append(existing, SessionAgentCall{
+				SessionID: call.SessionID,
+				Prompt:    msg,
+			})
+			a.messageQueue.Set(call.SessionID, existing)
+		})
+		jobWatcher = jw
+		go jw.Run(ctx)
+	}
 
 	primaryModel := a.primaryModel.Get()
 	compactedBeforeRun := false
@@ -306,6 +324,7 @@ runLoopReentry:
 			}
 			return prompts
 		},
+		jobWatcher: jobWatcher,
 	}
 
 	stop, runErr := runLoop(streamCtx, deps, history, call.Prompt)
