@@ -26,25 +26,18 @@ const sessionsDirSubpath = ".lenos/sessions"
 
 // BuildAllowedPaths returns the allowed paths for an agent running in cwd with given access.
 // access is AccessModeRW or AccessModeRO. CWD is always the first element (temenos uses first path as WorkingDir).
-// additionalReadOnlyPaths are added as read-only paths (useful for granting cross-project read access).
 //
 // Carve-out: cwd/.lenos/sessions is always appended as RW. Lenos's session writers
 // need to append to <cwd>/.lenos/sessions/<session-id>.md throughout the agent
 // loop; without this carve-out, --readonly would block the agent's own session log writes.
 // Runtime init is responsible for creating the directory before any agent run.
-func BuildAllowedPaths(ctx context.Context, cwd string, access AccessMode, additionalReadOnlyPaths ...string) []client.AllowedPath {
+func BuildAllowedPaths(ctx context.Context, cwd string, access AccessMode) []client.AllowedPath {
 	readOnly := access != AccessModeRW
 	paths := []client.AllowedPath{{Path: cwd, ReadOnly: readOnly}}
 
 	gitDir := resolveGitCommonDir(ctx, cwd)
 	if gitDir != "" && gitDir != cwd+"/.git" {
 		paths = append(paths, client.AllowedPath{Path: gitDir, ReadOnly: false})
-	}
-
-	for _, p := range additionalReadOnlyPaths {
-		if p != cwd {
-			paths = append(paths, client.AllowedPath{Path: p, ReadOnly: true})
-		}
 	}
 
 	// Always carve out cwd/.lenos/sessions as RW. Runtime init owns creation of
@@ -57,19 +50,20 @@ func BuildAllowedPaths(ctx context.Context, cwd string, access AccessMode, addit
 
 // resolveGitCommonDir returns the git common dir for the given cwd.
 func resolveGitCommonDir(ctx context.Context, cwd string) string {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+
 	cmd := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--git-common-dir")
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
-	dir := strings.TrimSpace(string(out))
-	if dir == "" || dir == ".git" {
-		return cwd + "/.git"
+	common := strings.TrimSpace(string(out))
+	if common == "" {
+		return ""
 	}
-	if !strings.HasPrefix(dir, "/") {
-		return cwd + "/" + dir
+	if !filepath.IsAbs(common) {
+		common = filepath.Join(cwd, common)
 	}
-	return dir
+	return filepath.Clean(common)
 }

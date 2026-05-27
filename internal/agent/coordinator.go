@@ -268,7 +268,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		Sandbox:                useSandbox,
 		SandboxClient:          sandboxClient,
 		Env:                    sandboxEnv,
-		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access, runtimeContext.ReadOnlyPaths...),
+		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access),
 		DefaultNarrationTarget: strings.TrimSpace(c.cfg.Overrides().PairWith),
 		TaskID:                 taskwarrior.ResolveTaskID(cwd),
 		ContextCommands:        buildRuntimeContextCommands(runtimeContext, cwd),

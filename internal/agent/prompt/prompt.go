@@ -48,8 +48,7 @@ type ContextFile struct {
 }
 
 type RuntimeContext struct {
-	ContextFiles  []ContextFile
-	ReadOnlyPaths []string
+	ContextFiles []ContextFile
 }
 
 type Option func(*Prompt)
