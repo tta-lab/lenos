@@ -80,6 +80,18 @@ func TestBuildAllowedPaths(t *testing.T) {
 		require.True(t, found, "additionalReadOnlyPaths should be in paths")
 	})
 
+	t.Run("cwd-internal paths inherit cwd access mode", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		ctx := context.Background()
+		agentsMD := filepath.Join(tmpDir, "AGENTS.md")
+		paths := BuildAllowedPaths(ctx, tmpDir, AccessModeRW, agentsMD)
+		for _, p := range paths {
+			if p.Path == agentsMD {
+				require.False(t, p.ReadOnly, "paths within cwd should inherit cwd's RW access")
+			}
+		}
+	})
+
 	t.Run("deduplicates cwd from additionalReadOnlyPaths", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		ctx := context.Background()

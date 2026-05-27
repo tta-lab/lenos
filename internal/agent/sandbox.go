@@ -42,9 +42,14 @@ func BuildAllowedPaths(ctx context.Context, cwd string, access AccessMode, addit
 	}
 
 	for _, p := range additionalReadOnlyPaths {
-		if p != cwd {
-			paths = append(paths, client.AllowedPath{Path: p, ReadOnly: true})
+		if p == cwd {
+			continue
 		}
+		// Paths within cwd inherit cwd's access mode — don't override as read-only.
+		if rel, err := filepath.Rel(cwd, p); err == nil && !strings.HasPrefix(rel, "..") {
+			continue
+		}
+		paths = append(paths, client.AllowedPath{Path: p, ReadOnly: true})
 	}
 
 	// Always carve out cwd/.lenos/sessions as RW. Runtime init owns creation of
