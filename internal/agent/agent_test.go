@@ -74,7 +74,7 @@ func TestGenerateTitle(t *testing.T) {
 		os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
 
 		fakeTask := filepath.Join(tmp, "task")
-		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf(`#!/bin/sh
+		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf(`#!/usr/bin/env sh
 printf '[{"description":"%s","status":"pending"}]' "$@"
 		`, "Fix the authentication bug")), 0o755))
 
@@ -97,7 +97,7 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
 
 		fakeTask := filepath.Join(tmp, "task")
-		require.NoError(t, os.WriteFile(fakeTask, []byte("#!/bin/sh\nprintf '[]' \"$@\""), 0o755))
+		require.NoError(t, os.WriteFile(fakeTask, []byte("#!/usr/bin/env sh\nprintf '[]' \"$@\""), 0o755))
 
 		a := &sessionAgent{sessions: env.sessions}
 		a.generateTitle(t.Context(), sess.ID, "25620b89")
@@ -132,7 +132,7 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 
 		longDesc := strings.Repeat("x", 150)
 		fakeTask := filepath.Join(tmp, "task")
-		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf("#!/bin/sh\nprintf '[{\"description\":\"%s\",\"status\":\"pending\"}]' \"$@\"", longDesc)), 0o755))
+		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf("#!/usr/bin/env sh\nprintf '[{\"description\":\"%s\",\"status\":\"pending\"}]' \"$@\"", longDesc)), 0o755))
 
 		a := &sessionAgent{sessions: env.sessions}
 		a.generateTitle(t.Context(), sess.ID, "25620b89")

@@ -226,7 +226,7 @@ func TestRun_GeneratesTaskTitleWhenRuntimeContextInjected(t *testing.T) {
 	os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
 
 	fakeTask := filepath.Join(tmp, "task")
-	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/bin/sh
+	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/usr/bin/env sh
 printf '[{"description":"Fix synthetic context title","status":"pending"}]'
 `), 0o755))
 
@@ -277,7 +277,7 @@ func TestRun_RefreshesTaskTitleOnExistingSession(t *testing.T) {
 	os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
 
 	fakeTask := filepath.Join(tmp, "task")
-	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/bin/sh
+	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/usr/bin/env sh
 printf '[{"description":"Updated task title","status":"pending"}]'
 `), 0o755))
 
