@@ -48,8 +48,7 @@ type ContextFile struct {
 }
 
 type RuntimeContext struct {
-	ContextFiles  []ContextFile
-	ReadOnlyPaths []string
+	ContextFiles []ContextFile
 }
 
 type Option func(*Prompt)
@@ -204,12 +203,6 @@ func LoadRuntimeContext(_ context.Context, store *config.ConfigStore, extraConte
 			slog.Warn("Failed to stat context path", "path", resolved, "error", err)
 			continue
 		}
-		// Only the resolved path is added here — the sandbox's
-		// AddAncestorMounts automatically adds ancestor directories as
-		// MetadataOnly (stat-only, no content read) for path resolution.
-		// This keeps permissions minimal: the agent can read context
-		// files but parent directories are stat-only.
-		out.ReadOnlyPaths = append(out.ReadOnlyPaths, resolved)
 		pathKey := strings.ToLower(resolved)
 		if _, ok := seenFiles[pathKey]; ok {
 			continue

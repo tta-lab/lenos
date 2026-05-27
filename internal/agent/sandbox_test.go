@@ -62,38 +62,6 @@ func TestBuildAllowedPaths(t *testing.T) {
 		require.True(t, paths[0].ReadOnly)
 	})
 
-	t.Run("additionalReadOnlyPaths appended as read-only", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		ctx := context.Background()
-		otherDir := t.TempDir()
-		paths := BuildAllowedPaths(ctx, tmpDir, AccessModeRW, otherDir)
-		// Should have cwd + otherDir
-		require.GreaterOrEqual(t, len(paths), 2)
-		// Find otherDir in paths
-		found := false
-		for _, p := range paths {
-			if p.Path == otherDir {
-				found = true
-				require.True(t, p.ReadOnly, "additional paths should be read-only")
-			}
-		}
-		require.True(t, found, "additionalReadOnlyPaths should be in paths")
-	})
-
-	t.Run("deduplicates cwd from additionalReadOnlyPaths", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		ctx := context.Background()
-		paths := BuildAllowedPaths(ctx, tmpDir, "rw", tmpDir)
-		// Should NOT have tmpDir twice
-		cwdCount := 0
-		for _, p := range paths {
-			if p.Path == tmpDir {
-				cwdCount++
-			}
-		}
-		require.Equal(t, 1, cwdCount, "cwd should not appear twice")
-	})
-
 	t.Run("sessions carve-out always RW under RO cwd", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		ctx := context.Background()
