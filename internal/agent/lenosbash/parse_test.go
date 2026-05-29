@@ -96,17 +96,16 @@ func TestParseSameLineMessageReturnsDiagnostic(t *testing.T) {
 	assert.Equal(t, 9, diag.Offset)
 }
 
-func TestParseNestedMessageReturnsDiagnostic(t *testing.T) {
+func TestParseNestedMessageLookingTextStaysBash(t *testing.T) {
 	t.Parallel()
 
-	_, diag := Parse("if true; then\n  m\"Done.\"\nfi\n")
+	source := "if true; then\n  m\"Done.\"\nfi\n"
+	parsed, diag := Parse(source)
 
-	require.NotNil(t, diag)
-	assert.Equal(t, "message_block_error", diag.Kind)
-	assert.Contains(t, diag.Message, "top level")
-	assert.Equal(t, 2, diag.Line)
-	assert.Equal(t, 3, diag.Column)
-	assert.Equal(t, 16, diag.Offset)
+	require.Nil(t, diag)
+	assert.True(t, parsed.HasBash)
+	assert.Equal(t, source, parsed.Bash)
+	assert.Empty(t, parsed.Messages)
 }
 
 func TestParseInvalidTargetReturnsDiagnostic(t *testing.T) {

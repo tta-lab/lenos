@@ -1656,7 +1656,6 @@ func TestRunLoop_MessageBlockSameLineRePromptsWithoutRunningBash(t *testing.T) {
 		{name: "semicolon", emit: "echo ok; m\"Done.\"\n"},
 		{name: "background", emit: "sleep 1 & m\"Done.\"\n"},
 		{name: "pipeline", emit: "printf ok | m\"Done.\"\n"},
-		{name: "heredoc setup", emit: "cat <<EOF m\"Done.\"\nEOF\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1682,23 +1681,38 @@ func TestRunLoop_MessageBlockSameLineRePromptsWithoutRunningBash(t *testing.T) {
 	}
 }
 
-func TestRunLoop_NestedMessageBlockRePromptsWithoutRunningBash(t *testing.T) {
+func TestRunLoop_HeredocSetupMessageLookingTextExecutesAsBash(t *testing.T) {
 	t.Parallel()
-	emit := "if true; then\n  m\"Done.\"\nfi\n"
+	emit := "cat <<EOF m\"Done.\"\nEOF\n"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
-	runner := &fakeRunner{}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
 	deps, ms := newDeps(t, model, runner, nil)
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Empty(t, runner.bash)
+	assert.Equal(t, []string{emit}, runner.bash)
 
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
-	obs := results[0].Content().Text
-	assert.Contains(t, obs, "invalid Lenos Bash")
-	assert.Contains(t, obs, "top level")
+	assert.Equal(t, emit, results[0].CommandContent().Command)
+}
+
+func TestRunLoop_NestedMessageBlockLookingTextExecutesAsBash(t *testing.T) {
+	t.Parallel()
+	emit := "if true; then\n  m\"Done.\"\nfi\n"
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 127}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{emit}, runner.bash)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	assert.Equal(t, emit, results[0].CommandContent().Command)
 }
 
 func TestRunLoop_HeredocMessageLookingTextStaysPlainBash(t *testing.T) {
