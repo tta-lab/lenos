@@ -110,7 +110,6 @@ func TestMessageBlockFixtureCorpus(t *testing.T) {
 		"invalid-unterminated-message",
 		"invalid-mismatched-hash-count",
 		"invalid-target-characters",
-		"invalid-mc-variant",
 	})
 }
 

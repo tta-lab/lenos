@@ -119,9 +119,6 @@ func diagnoseUnextractedLineStartMessage(source string, blocks []*syntax.Message
 		if diag := diagnoseUnextractedMessageInLine(source, line, lineNo, offset, extracted); diag != nil {
 			return diag
 		}
-		if diag := diagnoseUnknownMessageVariant(line, lineNo, offset); diag != nil {
-			return diag
-		}
 
 		if next := parseHeredocStart(line); next != nil {
 			heredoc = next
@@ -180,25 +177,6 @@ func diagnoseUnextractedMessageInLine(source, line string, lineNo, offset int, e
 				Column:  i + 1,
 				Offset:  msgOffset,
 			}
-		}
-	}
-	return nil
-}
-
-func diagnoseUnknownMessageVariant(line string, lineNo, offset int) *Diagnostic {
-	leading := countLeadingHorizontalSpace(line)
-	if leading >= len(line) {
-		return nil
-	}
-	if strings.HasPrefix(line[leading:], `mc"`) ||
-		strings.HasPrefix(line[leading:], `mc#"`) ||
-		strings.HasPrefix(line[leading:], `mc(`) {
-		return &Diagnostic{
-			Kind:    "message_block_error",
-			Message: "mc is not a Lenos Bash message form; use m",
-			Line:    lineNo,
-			Column:  leading + 1,
-			Offset:  offset + leading,
 		}
 	}
 	return nil
