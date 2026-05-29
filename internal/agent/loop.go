@@ -159,11 +159,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				continue
 			}
 			commandEmit = parsed.Bash
-			assistantReplay = parsed.Bash
-			replaceAssistantText(&assistantMsg, parsed.Bash)
-			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
-				slog.Warn("loop: persist cleaned message-block emit", "error", updateErr)
-			}
 		}
 
 		cls, aux := classify(ctx, commandEmit)
@@ -364,10 +359,10 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 			)
 			if res.ExitCode == 0 && len(extractedMessages) > 0 {
-				if err := publishMessageBlocks(ctx, deps, extractedMessages, nil); err != nil {
+				if err := publishMixedMessageBlocks(ctx, deps, extractedMessages); err != nil {
 					return stopError, err
 				}
-				msgs = append(msgs, messageBlockAIReplies(extractedMessages)...)
+				msgs = append(msgs, mixedMessageBlockAIReplies(extractedMessages)...)
 			}
 			msgs = append(msgs, fantasy.NewUserMessage(obs))
 			msgs = drainAndAppend(ctx, deps, msgs)
@@ -444,6 +439,33 @@ func publishMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash
 	return nil
 }
 
+func publishMixedMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash.MessageBlock) error {
+	for _, block := range blocks {
+		target := effectiveMessageBlockTarget(deps, block)
+		if target != "" {
+			if err := deliverMessageBlock(ctx, deps, target, block); err != nil {
+				return err
+			}
+		}
+		if !messageBlockNeedsSeparateRender(block) {
+			continue
+		}
+		body := strings.TrimSpace(block.Body)
+		if body == "" {
+			continue
+		}
+		if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
+			Role:     message.Assistant,
+			Parts:    []message.ContentPart{message.TextContent{Text: body}},
+			Model:    deps.model.messageModelID(),
+			Provider: deps.model.messageProviderID(),
+		}); err != nil {
+			return fmt.Errorf("create message-block assistant row: %w", err)
+		}
+	}
+	return nil
+}
+
 func messageBlockAIReplies(blocks []lenosbash.MessageBlock) []fantasy.Message {
 	replies := make([]fantasy.Message, 0, len(blocks))
 	for _, block := range blocks {
@@ -454,6 +476,24 @@ func messageBlockAIReplies(blocks []lenosbash.MessageBlock) []fantasy.Message {
 		replies = append(replies, assistantTextMessage(body, message.ReasoningContent{}))
 	}
 	return replies
+}
+
+func mixedMessageBlockAIReplies(blocks []lenosbash.MessageBlock) []fantasy.Message {
+	return messageBlockAIReplies(renderedMixedMessageBlocks(blocks))
+}
+
+func renderedMixedMessageBlocks(blocks []lenosbash.MessageBlock) []lenosbash.MessageBlock {
+	out := make([]lenosbash.MessageBlock, 0, len(blocks))
+	for _, block := range blocks {
+		if messageBlockNeedsSeparateRender(block) {
+			out = append(out, block)
+		}
+	}
+	return out
+}
+
+func messageBlockNeedsSeparateRender(block lenosbash.MessageBlock) bool {
+	return strings.Contains(strings.TrimSpace(block.Body), "\n")
 }
 
 func effectiveMessageBlockTarget(deps loopDeps, block lenosbash.MessageBlock) string {

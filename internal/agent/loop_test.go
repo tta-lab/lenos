@@ -1549,7 +1549,7 @@ func TestRunLoop_MessageBlockTargetOverridesPairWith(t *testing.T) {
 	assert.NotContains(t, runner.bash[0], "reviewer")
 }
 
-func TestRunLoop_MixedMessageBlockRunsCleanBashAndPublishesOnSuccess(t *testing.T) {
+func TestRunLoop_MixedSingleLineMessageBlockRunsCleanBashWithoutDuplicateRender(t *testing.T) {
 	t.Parallel()
 	emit := "m\"Testing now.\"\necho ok\n"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
@@ -1567,9 +1567,52 @@ func TestRunLoop_MixedMessageBlockRunsCleanBashAndPublishesOnSuccess(t *testing.
 	assert.Equal(t, "echo ok\n", cc.Command)
 
 	assistants := assistantsByOrder(ms)
+	require.GreaterOrEqual(t, len(assistants), 1)
+	assert.Equal(t, emit, assistants[0].Content().Text)
+	for _, assistant := range assistants[1:] {
+		assert.NotEqual(t, "Testing now.", assistant.Content().Text)
+	}
+}
+
+func TestRunLoop_MixedMultilineMessageBlockRendersBodyOnSuccess(t *testing.T) {
+	t.Parallel()
+	emit := "m\"First line.\nSecond line.\"\necho ok\n"
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{"echo ok\n"}, runner.bash)
+
+	assistants := assistantsByOrder(ms)
 	require.GreaterOrEqual(t, len(assistants), 2)
-	assert.Equal(t, "echo ok\n", assistants[0].Content().Text)
-	assert.Equal(t, "Testing now.", assistants[1].Content().Text)
+	assert.Equal(t, emit, assistants[0].Content().Text)
+	assert.Equal(t, "First line.\nSecond line.", assistants[1].Content().Text)
+}
+
+func TestRunLoop_MixedSingleLineMessageBlockStillDeliversPairWith(t *testing.T) {
+	t.Parallel()
+	emit := "m\"Please review.\"\necho ok\n"
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}, {ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+	deps.pairWith = "reviewer"
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	require.Len(t, runner.bash, 2)
+	assert.Equal(t, "echo ok\n", runner.bash[0])
+	assert.Contains(t, runner.bash[1], "ttal send --to 'reviewer'")
+
+	assistants := assistantsByOrder(ms)
+	require.GreaterOrEqual(t, len(assistants), 1)
+	assert.Equal(t, emit, assistants[0].Content().Text)
+	for _, assistant := range assistants[1:] {
+		assert.NotEqual(t, "Please review.", assistant.Content().Text)
+	}
 }
 
 func TestRunLoop_MixedMessageBlockSuppressesMessagesOnBashFailure(t *testing.T) {
@@ -1590,7 +1633,10 @@ func TestRunLoop_MixedMessageBlockSuppressesMessagesOnBashFailure(t *testing.T) 
 	assert.Equal(t, "false\n", cc.Command)
 	assistants := assistantsByOrder(ms)
 	require.NotEmpty(t, assistants)
-	assert.Equal(t, "false\n", assistants[0].Content().Text)
+	assert.Equal(t, emit, assistants[0].Content().Text)
+	for _, assistant := range assistants[1:] {
+		assert.NotEqual(t, "This should not publish.", assistant.Content().Text)
+	}
 }
 
 func TestRunLoop_MessageBlockSameLineRePromptsWithoutRunningBash(t *testing.T) {

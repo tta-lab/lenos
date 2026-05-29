@@ -28,8 +28,10 @@ m####"
 `m` must be the first non-whitespace token on its own physical line. Put bash
 commands before or after it on separate lines.
 
-Message blocks support single-line and multi-line natural language. Use them
-for progress, status, plans, questions, and final answers.
+Message blocks support single-line and multi-line natural language. Use
+`m"short note"` for one short line. Use the raw multi-line form `m####"..."
+####` for paragraphs, bullets, quoted text, or any answer where escaping would
+get in the way.
 
 A message-only `m` ends your turn. Mixed bash plus message blocks follows the
 normal bash loop: bash runs first, message blocks publish only after bash succeeds,
@@ -82,6 +84,14 @@ Multi-line message:
 m"First line.
 Second line."
 
+Raw multi-line message:
+m####"
+Ready.
+
+- First point.
+- Second point.
+"####
+
 Addressed message:
 m(neil)#"Please review "message block" parsing."#
 
@@ -128,7 +138,12 @@ ASSISTANT:
 # quick disk check
 df -h
 ASSISTANT:
-m"/home is at 87%; worth a cleanup pass soon."
+m####"
+/home is at 87%; worth a cleanup pass soon.
+
+- Largest likely cleanup target: build caches.
+- I did not delete anything.
+"####
 "####
 
 {{- if .Commands}}

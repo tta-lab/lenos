@@ -40,6 +40,17 @@ m"First line.
 Second line."
 ```
 
+Raw multiline form:
+
+```bash
+m####"
+Ready.
+
+- First point.
+- Second point.
+"####
+```
+
 Raw-string form with hashes:
 
 ```bash

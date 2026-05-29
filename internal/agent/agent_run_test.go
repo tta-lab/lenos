@@ -193,7 +193,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 		ContextCommands: []RuntimeContextCommand{{
 			Command: "# read project instructions\ncat " + shellQuote(contextFile),
 		}, {
-			Command: `m"Ready."`,
+			Command: "m####\"\nReady.\n\"####",
 		}},
 	})
 	require.NoError(t, err)
