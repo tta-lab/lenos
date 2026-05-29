@@ -1,14 +1,16 @@
 m####"
 # Lenos Bash Runtime
 
-Your response is Lenos Bash; everything outside message blocks is bash and is
-run with `bash -c` in a fresh subprocess. Shell state does not persist across
-responses.
+Your response is Lenos Bash. Lenos Bash is bash plus message blocks, so one
+response can both act and speak. Everything outside message blocks is bash and
+is run with `bash -c` in a fresh subprocess. Shell state does not persist
+across responses.
 
 To speak natural language, use an `m` message block. Raw prose, markdown
 fences, XML/tool wrappers, and JSON containers are invalid responses.
 
-Use bash comments for short private work notes:
+Use bash comments for short private work notes. Use `m` instead of `#` when
+the note should be visible to the user or another agent:
 
 # check the file first
 cat README.md
@@ -25,6 +27,9 @@ m####"
 
 `m` must be the first non-whitespace token on its own physical line. Put bash
 commands before or after it on separate lines.
+
+Message blocks support single-line and multi-line natural language. Use them
+for progress, status, plans, questions, and final answers.
 
 A message-only `m` ends your turn. Mixed bash plus message blocks follows the
 normal bash loop: bash runs first, message blocks publish only after bash succeeds,
@@ -68,6 +73,14 @@ Message plus bash:
 m"Inspecting files."
 
 rg "needle" .
+
+Visible progress note plus bash:
+m"Reading the parser before editing."
+rg "func Parse" internal/agent
+
+Multi-line message:
+m"First line.
+Second line."
 
 Addressed message:
 m(neil)#"Please review "message block" parsing."#

@@ -73,15 +73,22 @@ func TestBuildBaseSystemPrompt_MessageBlockContract(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "Your response is Lenos Bash")
-	assert.Contains(t, got, "speak natural language")
-	assert.Contains(t, got, "`m` must be the first non-whitespace token on its own physical line")
-	assert.Contains(t, got, "message-only `m` ends your turn")
-	assert.Contains(t, got, "message blocks publish only after bash succeeds")
-	assert.Contains(t, got, "everything outside message blocks is bash")
+	compactPrompt := strings.Join(strings.Fields(got), " ")
+	assert.Contains(t, compactPrompt, "Your response is Lenos Bash")
+	assert.Contains(t, compactPrompt, "Lenos Bash is bash plus message blocks")
+	assert.Contains(t, compactPrompt, "one response can both act and speak")
+	assert.Contains(t, compactPrompt, "speak natural language")
+	assert.Contains(t, compactPrompt, "`m` must be the first non-whitespace token on its own physical line")
+	assert.Contains(t, compactPrompt, "Message blocks support single-line and multi-line natural language")
+	assert.Contains(t, compactPrompt, "Use `m` instead of `#` when the note should be visible")
+	assert.Contains(t, compactPrompt, "message-only `m` ends your turn")
+	assert.Contains(t, compactPrompt, "message blocks publish only after bash succeeds")
+	assert.Contains(t, compactPrompt, "Everything outside message blocks is bash")
 
 	validExamples := []string{
 		`m"Done."`,
+		"m\"Reading the parser before editing.\"\nrg \"func Parse\" internal/agent",
+		"m\"First line.\nSecond line.\"",
 		"m\"Inspecting files.\"\n\nrg \"needle\" .",
 		`m(neil)#"Please review "message block" parsing."#`,
 		"go test ./...",
