@@ -1,6 +1,10 @@
 package agent
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
+)
 
 // Re-prompts feed back as the next user-role observation. Two prefix tiers:
 //
@@ -46,17 +50,8 @@ apostrophes inside single quotes close the quote prematurely. Use double
 quotes or a heredoc for any text containing apostrophes.`, bashErr)
 }
 
-func rePromptInvalidLenosBash(message string) string {
-	return fmt.Sprintf(`[runtime] invalid Lenos Bash
-
-error: %s
-
-Natural language must be inside a top-level message block:
-  m"Done."
-
-If you need to run bash, put the message block on its own physical line:
-  m"Testing now."
-  go test ./...`, message)
+func rePromptInvalidLenosBash(source string, diag lenosbash.Diagnostic) string {
+	return lenosbash.RenderDiagnostic(source, diag)
 }
 
 // rePromptBlockedPattern is the next-observation text after a sed -i / perl -i

@@ -133,7 +133,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		parsed, diag := lenosbash.Parse(emit)
 		if diag != nil {
 			if diag.Kind != "shell_parse_error" || len(parsed.Messages) > 0 {
-				obs := rePromptInvalidLenosBash(diag.Message)
+				obs := rePromptInvalidLenosBash(emit, *diag)
 				msgs = append(msgs,
 					assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 					fantasy.NewUserMessage(obs),
@@ -174,7 +174,13 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		}
 		if cls == classifyNaturalLanguage {
 			if len(extractedNarrations) > 0 {
-				obs := rePromptInvalidLenosBash("text outside message blocks must be bash")
+				obs := rePromptInvalidLenosBash(commandEmit, lenosbash.Diagnostic{
+					Kind:    "shell_parse_error",
+					Message: "text outside message blocks must be bash",
+					Line:    1,
+					Column:  1,
+					Offset:  0,
+				})
 				msgs = append(msgs,
 					assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 					fantasy.NewUserMessage(obs),
