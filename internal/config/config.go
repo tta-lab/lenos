@@ -238,6 +238,7 @@ type Options struct {
 	Sandbox                   *bool        `json:"sandbox,omitempty" jsonschema:"description=Enable sandbox isolation for command execution via temenos,default=true"`
 	SandboxEndpoint           string       `json:"sandbox_endpoint,omitempty" jsonschema:"description=temenos daemon address (unix socket path or http URL); empty resolves via TEMENOS_LISTEN_ADDR/TEMENOS_SOCKET_PATH/env then default socket,example=/tmp/temenos.sock,example=http://127.0.0.1:8081"`
 	DisableNotifications      bool         `json:"disable_notifications,omitempty" jsonschema:"description=Disable desktop notifications,default=false"`
+	AssistantPrefill          string       `json:"assistant_prefill,omitempty" jsonschema:"description=Optional native assistant response prefill for providers that support prefix completion,example=m"`
 }
 
 type Agent struct {

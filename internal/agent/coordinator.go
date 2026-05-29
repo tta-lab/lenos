@@ -265,6 +265,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		SessionID:              sessionID,
 		Prompt:                 userPrompt,
 		ProviderOptions:        getProviderOptions(model, providerCfg),
+		AssistantPrefill:       strings.TrimSpace(c.cfg.Config().Options.AssistantPrefill),
 		Sandbox:                useSandbox,
 		SandboxClient:          sandboxClient,
 		Env:                    sandboxEnv,
@@ -612,6 +613,11 @@ func (c *coordinator) buildVercelProvider(_, apiKey string, headers map[string]s
 }
 
 func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers map[string]string, extraBody map[string]any, providerID string, isSubAgent bool) (fantasy.Provider, error) {
+	prefillSupported := supportsDeepSeekPrefill(providerID, baseURL)
+	if prefillSupported && strings.TrimSpace(c.cfg.Config().Options.AssistantPrefill) != "" {
+		baseURL = deepSeekPrefillBaseURL(providerID, baseURL)
+	}
+
 	opts := []openaicompat.Option{
 		openaicompat.WithBaseURL(baseURL),
 		openaicompat.WithAPIKey(apiKey),
@@ -625,6 +631,19 @@ func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers 
 	} else if c.cfg.Config().Options.Debug {
 		httpClient = log.NewHTTPClient()
 	}
+	if prefillSupported {
+		baseTransport := http.DefaultTransport
+		if httpClient != nil && httpClient.Transport != nil {
+			baseTransport = httpClient.Transport
+		}
+		if httpClient == nil {
+			httpClient = &http.Client{}
+		} else {
+			clone := *httpClient
+			httpClient = &clone
+		}
+		httpClient.Transport = deepSeekPrefillTransport{base: baseTransport}
+	}
 	if httpClient != nil {
 		opts = append(opts, openaicompat.WithHTTPClient(httpClient))
 	}
@@ -637,7 +656,14 @@ func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers 
 		opts = append(opts, openaicompat.WithSDKOptions(openaisdk.WithJSONSet(extraKey, extraValue)))
 	}
 
-	return openaicompat.New(opts...)
+	provider, err := openaicompat.New(opts...)
+	if err != nil {
+		return nil, err
+	}
+	if prefillSupported {
+		return deepSeekPrefillProvider{inner: provider}, nil
+	}
+	return provider, nil
 }
 
 func (c *coordinator) buildAzureProvider(baseURL, apiKey string, headers map[string]string, options map[string]string) (fantasy.Provider, error) {

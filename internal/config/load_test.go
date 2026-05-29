@@ -74,6 +74,16 @@ func TestConfig_setDefaults(t *testing.T) {
 	}
 }
 
+func TestConfig_LoadAssistantPrefillOption(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := loadFromBytes([][]byte{[]byte(`{"options": {"assistant_prefill": "m"}}`)})
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Options)
+	require.Equal(t, "m", cfg.Options.AssistantPrefill)
+}
+
 func TestConfig_configureProviders(t *testing.T) {
 	knownProviders := []catwalk.Provider{
 		{

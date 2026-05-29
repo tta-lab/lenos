@@ -40,13 +40,16 @@ type loopDeps struct {
 	// treats nil as "no drain hook" and is a no-op.
 	drainQueue func() []string
 	provOpts   fantasy.ProviderOptions
-	messages   message.Service
-	runner     Runner
-	salvage    bashSalvageProbe
-	sessionID  string
-	sysPrompt  string
-	env        map[string]string
-	paths      []client.AllowedPath
+	// assistantPrefill is applied only when the model exposes native prefix
+	// completion support through assistantPrefillModel.
+	assistantPrefill string
+	messages         message.Service
+	runner           Runner
+	salvage          bashSalvageProbe
+	sessionID        string
+	sysPrompt        string
+	env              map[string]string
+	paths            []client.AllowedPath
 	// defaultNarrationTarget is applied to narrate calls without --to.
 	// Explicit --to values remain unchanged.
 	defaultNarrationTarget string
@@ -65,6 +68,10 @@ type loopDeps struct {
 	// jobWatcher tracks background temenos jobs and enqueues completion
 	// notifications. Nil when sandbox is not in use.
 	jobWatcher *JobWatcher
+}
+
+type assistantPrefillModel interface {
+	StreamAssistantPrefill(context.Context, fantasy.Call, string) (fantasy.StreamResponse, error)
 }
 
 // stopReason explains why runLoop returned. The caller maps it to the right
@@ -508,13 +515,36 @@ func streamOneAttempt(
 	msgs []fantasy.Message,
 	assistantMsg *message.Message,
 ) (streamOneResult, error) {
-	stream, err := deps.model.Model.Stream(ctx, fantasy.Call{
+	call := fantasy.Call{
 		Prompt:          msgs,
 		ProviderOptions: deps.provOpts,
 		UserAgent:       userAgent,
-	})
+	}
+
+	var (
+		stream      fantasy.StreamResponse
+		err         error
+		usedPrefill bool
+		prefill     string
+	)
+	if prefill = strings.TrimSpace(deps.assistantPrefill); prefill != "" {
+		if model, ok := deps.model.Model.(assistantPrefillModel); ok {
+			stream, err = model.StreamAssistantPrefill(ctx, call, prefill)
+			usedPrefill = true
+		} else {
+			stream, err = deps.model.Model.Stream(ctx, call)
+		}
+	} else {
+		stream, err = deps.model.Model.Stream(ctx, call)
+	}
 	if err != nil {
 		return streamOneResult{}, err
+	}
+	if usedPrefill {
+		assistantMsg.AppendContent(prefill)
+		if uerr := deps.messages.Update(ctx, *assistantMsg); uerr != nil {
+			slog.Warn("loop: persist assistant prefill", "error", uerr)
+		}
 	}
 
 	var (
