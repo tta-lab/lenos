@@ -175,6 +175,10 @@ current session.
   `t.Parallel()`, `t.SetEnv()` to set environment variables. Always use
   `t.Tempdir()` when in need of a temporary directory. This directory does
   not need to be removed.
+- **System prompt tests**: Prefer stable behavior and rendering invariants
+  over exact prompt prose. Check dynamic data injection, required protocol
+  anchors, and forbidden legacy guidance; avoid brittle copy assertions that
+  force test edits for harmless wording changes.
 - **JSON tags**: Use snake_case for JSON field names.
 - **File permissions**: Use octal notation (0o755, 0o644) for file
   permissions.

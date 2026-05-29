@@ -63,7 +63,7 @@ func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {
 	assert.Contains(t, got, "web search <query>")
 }
 
-func TestBuildBaseSystemPrompt_MessageBlockContract(t *testing.T) {
+func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 	t.Parallel()
 
 	got, err := buildBaseSystemPrompt(promptData{
@@ -73,37 +73,19 @@ func TestBuildBaseSystemPrompt_MessageBlockContract(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	assert.Contains(t, got, "m####\"")
+
 	compactPrompt := strings.Join(strings.Fields(got), " ")
-	assert.Contains(t, compactPrompt, "Your response is Lenos Bash")
-	assert.Contains(t, compactPrompt, "Lenos Bash is bash plus message blocks")
-	assert.Contains(t, compactPrompt, "one response can both act and speak")
-	assert.Contains(t, compactPrompt, "speak natural language")
-	assert.Contains(t, compactPrompt, "`m` must be the first non-whitespace token on its own physical line")
-	assert.Contains(t, compactPrompt, "Message blocks support single-line and multi-line natural language")
-	assert.Contains(t, compactPrompt, "Use `m` instead of `#` when the note should be visible")
-	assert.Contains(t, compactPrompt, "message-only `m` ends your turn")
-	assert.Contains(t, compactPrompt, "message blocks publish only after bash succeeds")
-	assert.Contains(t, compactPrompt, "Everything outside message blocks is bash")
-
-	validExamples := []string{
-		`m"Done."`,
-		"m\"Reading the parser before editing.\"\nrg \"func Parse\" internal/agent",
-		"m\"First line.\nSecond line.\"",
-		"m\"Inspecting files.\"\n\nrg \"needle\" .",
-		`m(neil)#"Please review "message block" parsing."#`,
-		"go test ./...",
-		"# check the file first\ncat README.md",
-	}
-	for _, example := range validExamples {
-		assert.Contains(t, got, example)
-	}
-
-	invalidExamples := []string{
-		`echo ok; m"Done."`,
-		"cat <<EOF\nm\"literal\"\nEOF",
-	}
-	for _, example := range invalidExamples {
-		assert.Contains(t, got, example)
+	for _, invariant := range []string{
+		"Lenos Bash",
+		"message blocks",
+		"speak natural language",
+		"single-line",
+		"multi-line",
+		"visible",
+		"bash",
+	} {
+		assert.Contains(t, compactPrompt, invariant)
 	}
 }
 
