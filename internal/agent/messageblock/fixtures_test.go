@@ -46,10 +46,13 @@ func TestMessageBlockFixtureCorpus(t *testing.T) {
 
 	seen := make(map[string]bool, len(fixtures))
 	for _, fixture := range fixtures {
+		require.NotEmpty(t, fixture.Name)
+		require.False(t, seen[fixture.Name], "duplicate fixture name")
+		seen[fixture.Name] = true
+
 		t.Run(fixture.Name, func(t *testing.T) {
-			require.NotEmpty(t, fixture.Name)
-			require.False(t, seen[fixture.Name], "duplicate fixture name")
-			seen[fixture.Name] = true
+			t.Parallel()
+
 			require.NotEmpty(t, fixture.Source)
 			require.Contains(t, map[string]bool{
 				"continue":     true,
