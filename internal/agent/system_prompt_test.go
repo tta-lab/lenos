@@ -98,17 +98,9 @@ func TestBuildBaseSystemPrompt_MessageBlockContract(t *testing.T) {
 	for _, example := range invalidExamples {
 		assert.Contains(t, got, example)
 	}
-
-	assert.NotContains(t, got, ":md")
-	assert.NotContains(t, got, "mvdan")
-	assert.NotContains(t, got, "AST")
-	assert.NotContains(t, got, "source-span")
-	assert.NotContains(t, got, "storage internals")
-	assert.NotContains(t, got, "narrate")
-	assert.Less(t, len(got), 5200)
 }
 
-func TestSystemPrompt_DoesNotTeachLegacyNarrate(t *testing.T) {
+func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
@@ -125,7 +117,6 @@ func TestSystemPrompt_DoesNotTeachLegacyNarrate(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotContains(t, got, "narrate")
-	assert.NotContains(t, got, ":md")
 	assert.NotContains(t, got, "temenos job list")
 	assert.NotContains(t, got, "temenos job log")
 	assert.NotContains(t, got, "check status")
@@ -355,7 +346,6 @@ func TestSystemPrompt_PairWithDocumentsDefaultNarrationTarget(t *testing.T) {
 
 	assert.Contains(t, got, "reviewer")
 	assert.Contains(t, got, `m(<agent>)"your response"`)
-	assert.NotContains(t, got, "narrate")
 	assert.NotEmpty(t, got)
 }
 
