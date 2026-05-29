@@ -127,7 +127,7 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, workingDi
 		})
 	}
 	commands = append(commands, RuntimeContextCommand{
-		Command: "m####\"\nReady.\n\"####",
+		Command: "m\"Ready.\"",
 	})
 	return commands
 }

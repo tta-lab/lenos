@@ -144,7 +144,8 @@ The TUI renders conversation messages with distinct visual treatments based on r
 - Exit 0: skipped
 - Non-zero exit: `$ command` + output body + exit code badge (red)
 - Result row copy-to-clipboard includes command output and non-zero exit code;
-  message block bodies render as assistant-style markdown items
+  narration content renders as assistant-style markdown items. Message block
+  bodies should come from result narration, not rewritten assistant rows.
 
 #### Runtime Responses (stored as Result rows)
 - Exit code 1: command-not-found re-prompt

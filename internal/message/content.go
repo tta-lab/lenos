@@ -82,10 +82,14 @@ type CommandContent struct {
 	ExitCode    *int   `json:"exit_code,omitempty"`
 	Pending     bool   `json:"pending"`
 	Observation string `json:"observation,omitempty"`
+	Narration   string `json:"narration,omitempty"`
 }
 
 func (CommandContent) isPart() {}
 func (cc CommandContent) String() string {
+	if cc.Command == "" {
+		return cc.Narration
+	}
 	if cc.Pending {
 		return "$ " + cc.Command + " (running...)"
 	}

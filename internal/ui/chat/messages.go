@@ -315,6 +315,9 @@ func extractResultMessageItems(sty *styles.Styles, msg *message.Message) []Messa
 }
 
 func shouldRenderResultMessageItem(cmd message.CommandContent) bool {
+	if strings.TrimSpace(cmd.Narration) != "" {
+		return true
+	}
 	if cmd.Command == "" || cmd.Pending {
 		return true
 	}

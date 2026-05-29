@@ -178,6 +178,25 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 		cls, aux := classify(ctx, commandEmit)
 		if cls == classifyNaturalLanguage {
+			if rewritten, ok := rewriteNaturalLanguageMessage(commandEmit); ok {
+				parsed, diag = lenosbash.Parse(rewritten)
+				if diag == nil && len(parsed.Messages) > 0 && !parsed.HasBash {
+					assistantReplay = rewritten
+					replaceAssistantText(&assistantMsg, rewritten)
+					if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+						slog.Warn("loop: persist message rewrite", "error", updateErr)
+					}
+					stop, nextMsgs, handleErr := handleMessageOnlyBlocks(ctx, deps, &assistantMsg, parsed.Messages, msgs)
+					if handleErr != nil {
+						return stopError, handleErr
+					}
+					if stop {
+						return stopExit, nil
+					}
+					msgs = drainAndAppend(ctx, deps, nextMsgs)
+					continue
+				}
+			}
 			obs := rePromptInvalidLenosBash(commandEmit, lenosbash.Diagnostic{
 				Kind:    "shell_parse_error",
 				Message: "text outside message blocks must be bash",
@@ -374,10 +393,9 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 			)
 			if res.ExitCode == 0 && len(extractedMessages) > 0 {
-				if err := publishMixedMessageBlocks(ctx, deps, extractedMessages); err != nil {
+				if err := publishMixedMessageBlocks(ctx, deps, extractedMessages, &resultMsg); err != nil {
 					return stopError, err
 				}
-				msgs = append(msgs, mixedMessageBlockAIReplies(extractedMessages)...)
 			}
 			msgs = append(msgs, fantasy.NewUserMessage(obs))
 			msgs = drainAndAppend(ctx, deps, msgs)
@@ -434,6 +452,20 @@ func rewriteNaturalLanguageFirstLineMessage(ctx context.Context, emit string) (s
 	return rawMessageBlock(strings.TrimSpace(firstLine)) + "\n" + rest, true
 }
 
+func rewriteNaturalLanguageMessage(emit string) (string, bool) {
+	body := strings.TrimSpace(emit)
+	if body == "" || strings.Contains(body, "\n") {
+		return "", false
+	}
+	if strings.ContainsAny(body, "|&;<>") {
+		return "", false
+	}
+	if !isNaturalLanguageEmit(body) {
+		return "", false
+	}
+	return rawMessageBlock(body), true
+}
+
 func hasShellActionEvidence(script string) bool {
 	for _, line := range strings.Split(script, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -467,8 +499,8 @@ func handleMessageOnlyBlocks(
 	return true, msgs, nil
 }
 
-func publishMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash.MessageBlock, first *message.Message) error {
-	for i, block := range blocks {
+func publishMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash.MessageBlock, _ *message.Message) error {
+	for _, block := range blocks {
 		body := strings.TrimSpace(block.Body)
 		if body == "" {
 			continue
@@ -479,26 +511,18 @@ func publishMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash
 				return err
 			}
 		}
-		if first != nil && i == 0 {
-			replaceAssistantTextKind(first, body, message.TextContentKindMessageBlock)
-			if err := deps.messages.Update(ctx, *first); err != nil {
-				return fmt.Errorf("update message-block assistant row: %w", err)
-			}
-			continue
-		}
 		if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-			Role:     message.Assistant,
-			Parts:    []message.ContentPart{message.TextContent{Text: body, Kind: message.TextContentKindMessageBlock}},
-			Model:    deps.model.messageModelID(),
-			Provider: deps.model.messageProviderID(),
+			Role:  message.Result,
+			Parts: []message.ContentPart{message.CommandContent{Narration: body}},
 		}); err != nil {
-			return fmt.Errorf("create message-block assistant row: %w", err)
+			return fmt.Errorf("create message-block narration row: %w", err)
 		}
 	}
 	return nil
 }
 
-func publishMixedMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash.MessageBlock) error {
+func publishMixedMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash.MessageBlock, resultMsg *message.Message) error {
+	var narrations []string
 	for _, block := range blocks {
 		target := effectiveMessageBlockTarget(deps, block)
 		if target != "" {
@@ -506,53 +530,22 @@ func publishMixedMessageBlocks(ctx context.Context, deps loopDeps, blocks []leno
 				return err
 			}
 		}
-		if !messageBlockNeedsSeparateRender(block) {
-			continue
-		}
 		body := strings.TrimSpace(block.Body)
 		if body == "" {
 			continue
 		}
-		if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-			Role:     message.Assistant,
-			Parts:    []message.ContentPart{message.TextContent{Text: body, Kind: message.TextContentKindMessageBlock}},
-			Model:    deps.model.messageModelID(),
-			Provider: deps.model.messageProviderID(),
-		}); err != nil {
-			return fmt.Errorf("create message-block assistant row: %w", err)
-		}
+		narrations = append(narrations, body)
+	}
+	if resultMsg == nil || len(narrations) == 0 {
+		return nil
+	}
+	cmd := resultMsg.CommandContent()
+	cmd.Narration = strings.Join(narrations, "\n\n")
+	resultMsg.Parts = []message.ContentPart{cmd}
+	if err := deps.messages.Update(ctx, *resultMsg); err != nil {
+		return fmt.Errorf("update message-block narration row: %w", err)
 	}
 	return nil
-}
-
-func messageBlockAIReplies(blocks []lenosbash.MessageBlock) []fantasy.Message {
-	replies := make([]fantasy.Message, 0, len(blocks))
-	for _, block := range blocks {
-		body := strings.TrimSpace(block.Body)
-		if body == "" {
-			continue
-		}
-		replies = append(replies, assistantTextMessage(body, message.ReasoningContent{}))
-	}
-	return replies
-}
-
-func mixedMessageBlockAIReplies(blocks []lenosbash.MessageBlock) []fantasy.Message {
-	return messageBlockAIReplies(renderedMixedMessageBlocks(blocks))
-}
-
-func renderedMixedMessageBlocks(blocks []lenosbash.MessageBlock) []lenosbash.MessageBlock {
-	out := make([]lenosbash.MessageBlock, 0, len(blocks))
-	for _, block := range blocks {
-		if messageBlockNeedsSeparateRender(block) {
-			out = append(out, block)
-		}
-	}
-	return out
-}
-
-func messageBlockNeedsSeparateRender(block lenosbash.MessageBlock) bool {
-	return strings.Contains(strings.TrimSpace(block.Body), "\n")
 }
 
 func effectiveMessageBlockTarget(deps loopDeps, block lenosbash.MessageBlock) string {

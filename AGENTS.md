@@ -134,6 +134,20 @@ current session.
 - **CGO disabled**: builds with `CGO_ENABLED=0` and
   `GOEXPERIMENT=greenteagc`.
 
+### Lenos Bash Storage Invariant
+
+Assistant messages in the database should preserve the Lenos Bash text the
+agent emitted, after any runtime auto-repair. For example, if the model emits
+plain reader-facing prose and the runtime repairs it to `m#"..."#`, store the
+repaired `m` block as the assistant message. This keeps future model history
+full of valid Lenos Bash examples and teaches the protocol through its own
+prior turns.
+
+Published message bodies are display data. Store them on the related result
+message as narration content so the TUI renders user-visible prose from the
+result row, not by rewriting the assistant emit. Do the same for synthetic
+runtime messages such as `m"Ready."`.
+
 ## Build/Test/Lint Commands
 
 - **Build**: `go build .` or `go run .`

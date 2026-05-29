@@ -6,9 +6,12 @@ delivery diagnostics.
 
 ## Assistant Messages
 
-Assistant text stores either bash previews or published message block bodies.
-Bash emits render as shell previews. Published message block bodies render as
-normal assistant text.
+Assistant text stores the Lenos Bash emit, after any runtime auto-repair. Bash
+emits and `m` message-block emits both remain protocol-shaped in history so
+future model calls see valid examples of what they emitted.
+
+Published message block bodies are display data, not assistant emits. Store
+them on result rows as narration.
 
 ## Command Results
 
@@ -21,6 +24,7 @@ type CommandContent struct {
     ExitCode    *int
     Pending     bool
     Observation string
+    Narration   string
 }
 ```
 
@@ -28,9 +32,13 @@ type CommandContent struct {
 iteration. If it is present, `FormatResults` uses it instead of rebuilding from
 stdout/stderr.
 
+`Narration` is the published message-block body for TUI rendering. Narration
+does not replay to the model by itself; the assistant emit already contains the
+Lenos Bash `m` block.
+
 ## TUI Rendering
 
 - Successful commands are hidden.
 - Failed commands render as command output plus the failure badge.
-- Message block bodies render as assistant markdown.
+- Narration renders as assistant markdown.
 - Message delivery failures render as result rows.

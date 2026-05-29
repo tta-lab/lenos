@@ -111,6 +111,19 @@ func TestToAIMessage_ResultTextContent(t *testing.T) {
 	require.Equal(t, "[runtime] your last response was empty", text.Text)
 }
 
+func TestToAIMessage_ResultNarrationIsDisplayOnly(t *testing.T) {
+	t.Parallel()
+
+	msg := Message{
+		Role: Result,
+		Parts: []ContentPart{
+			CommandContent{Narration: "Ready."},
+		},
+	}
+
+	assert.Empty(t, msg.ToAIMessage())
+}
+
 func TestToAIMessage_ResultMultiCommand(t *testing.T) {
 	t.Parallel()
 

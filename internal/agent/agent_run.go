@@ -105,19 +105,25 @@ func (a *sessionAgent) persistSyntheticMessageBlocks(ctx context.Context, call S
 	if len(parsed.Messages) == 0 || parsed.HasBash {
 		return false, nil
 	}
+	model := a.primaryModel.Get()
+	if _, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
+		Role:     message.Assistant,
+		Parts:    []message.ContentPart{message.TextContent{Text: command}},
+		Model:    model.messageModelID(),
+		Provider: model.messageProviderID(),
+	}); err != nil {
+		return true, fmt.Errorf("create synthetic message block: %w", err)
+	}
 	for _, block := range parsed.Messages {
 		body := strings.TrimSpace(block.Body)
 		if body == "" {
 			continue
 		}
-		model := a.primaryModel.Get()
 		if _, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
-			Role:     message.Assistant,
-			Parts:    []message.ContentPart{message.TextContent{Text: body, Kind: message.TextContentKindMessageBlock}},
-			Model:    model.messageModelID(),
-			Provider: model.messageProviderID(),
+			Role:  message.Result,
+			Parts: []message.ContentPart{message.CommandContent{Narration: body}},
 		}); err != nil {
-			return true, fmt.Errorf("create synthetic message block: %w", err)
+			return true, fmt.Errorf("create synthetic message block narration: %w", err)
 		}
 	}
 	return true, nil

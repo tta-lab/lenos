@@ -193,7 +193,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 		ContextCommands: []RuntimeContextCommand{{
 			Command: "# read project instructions\ncat " + shellQuote(contextFile),
 		}, {
-			Command: "m####\"\nReady.\n\"####",
+			Command: "m\"Ready.\"",
 		}},
 	})
 	require.NoError(t, err)
@@ -207,13 +207,14 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, message.Result, msgs[1].Role)
 	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)
 	require.Equal(t, message.Assistant, msgs[2].Role)
-	require.Equal(t, "Ready.", msgs[2].Content().Text)
-	require.Equal(t, message.TextContentKindMessageBlock, msgs[2].Content().Kind)
+	require.Equal(t, "m\"Ready.\"", msgs[2].Content().Text)
 	require.Nil(t, msgs[2].FinishPart())
 	require.Equal(t, "test-model", msgs[2].Model)
 	require.Equal(t, "test-provider", msgs[2].Provider)
-	require.Equal(t, message.User, msgs[3].Role)
-	require.Equal(t, "user prompt", msgs[3].Content().Text)
+	require.Equal(t, message.Result, msgs[3].Role)
+	require.Equal(t, "Ready.", msgs[3].CommandContent().Narration)
+	require.Equal(t, message.User, msgs[4].Role)
+	require.Equal(t, "user prompt", msgs[4].Content().Text)
 
 	require.Len(t, model.captured, 1)
 	prompt := model.captured[0]
@@ -223,7 +224,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, fantasy.MessageRoleUser, prompt[2].Role)
 	require.Contains(t, fantasyMessageText(prompt[2]), "project instructions")
 	require.Equal(t, fantasy.MessageRoleAssistant, prompt[3].Role)
-	require.Equal(t, "Ready.", fantasyMessageText(prompt[3]))
+	require.Equal(t, "m\"Ready.\"", fantasyMessageText(prompt[3]))
 	require.Equal(t, "user prompt", fantasyMessageText(prompt[4]))
 }
 

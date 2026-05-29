@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/message"
@@ -104,6 +105,24 @@ func TestResultMessageItem_Highlightable(t *testing.T) {
 	assert.Equal(t, 0, startCol) // max(0, 0-2)
 	assert.Equal(t, 1, endLine)
 	assert.Equal(t, 10, endCol) // max(0, 12-2)
+}
+
+func TestResultMessageItem_RenderNarrationAsMarkdown(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.DefaultStyles()
+	item := NewResultMessageItem(&sty, &message.Message{
+		ID:   "result-1",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{Narration: "Ready."},
+		},
+	})
+
+	rendered := ansi.Strip(item.RawRender(80))
+
+	assert.Contains(t, rendered, "Ready.")
+	assert.NotContains(t, rendered, "$")
 }
 
 func TestResultMessageItem_formatCommandForCopy(t *testing.T) {

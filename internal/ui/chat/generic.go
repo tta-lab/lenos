@@ -54,7 +54,9 @@ func (m *ResultMessageItem) RawRender(width int) string {
 
 	var content string
 	cmd := m.message.CommandContent()
-	if cmd.Command != "" {
+	if strings.TrimSpace(cmd.Narration) != "" {
+		content = m.renderNarration(cappedWidth, cmd.Narration)
+	} else if cmd.Command != "" {
 		content = m.renderCommandResult(cappedWidth, cmd)
 	} else {
 		content = m.sty.Chat.Message.ResultBlock.Render(m.message.Content().Text)
@@ -63,6 +65,15 @@ func (m *ResultMessageItem) RawRender(width int) string {
 	height = lipgloss.Height(content)
 	m.setCachedRender(content, cappedWidth, height)
 	return m.renderHighlighted(content, cappedWidth, height)
+}
+
+func (m *ResultMessageItem) renderNarration(width int, body string) string {
+	renderer := common.PlainMarkdownRenderer(m.sty, width)
+	rendered, err := renderer.Render(body)
+	if err != nil {
+		return body
+	}
+	return strings.TrimSpace(rendered)
 }
 
 // renderCommandResult renders a command result with header and output.
