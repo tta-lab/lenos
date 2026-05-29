@@ -72,13 +72,12 @@ func SystemPrompt(
 	var b strings.Builder
 	b.WriteString(base)
 	b.WriteString("\n")
-	b.WriteString(protocol.MessageSection(gitSection))
-	b.WriteString("\n")
 	if pairWith := strings.TrimSpace(store.Overrides().PairWith); pairWith != "" {
-		b.WriteString(protocol.MessageSection(
-			"# Addressed Messages\n\nMessages without an explicit addressee are delivered to " + pairWith + ". Use `m(<agent>)\"your response\"` only when another target is needed. Lenos handles delivery."))
+		b.WriteString(protocol.MessageSection("Untargeted message blocks are delivered to " + pairWith + ". Explicit `m(target)\"...\"` message blocks override this default."))
 		b.WriteString("\n")
 	}
+	b.WriteString(protocol.MessageSection(gitSection))
+	b.WriteString("\n")
 	b.WriteString(lenosWrapper)
 	return b.String(), nil
 }
@@ -171,7 +170,7 @@ func InitializePrompt(cfg *config.ConfigStore) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return protocol.NarrateSection("LENOS_INITIALIZE_PROMPT", body), nil
+	return protocol.MessageSection(body), nil
 }
 
 // stripYAMLFrontmatter removes a single leading YAML frontmatter block

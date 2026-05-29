@@ -13,7 +13,8 @@ func TestRePromptEmpty(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got, "[runtime] "), "must start with [runtime] tag")
 	assert.Contains(t, got, "your last response was empty")
 	assert.Contains(t, got, `"exit"`)
-	assert.Contains(t, got, "narrate")
+	assert.Contains(t, got, `m"`)
+	assert.NotContains(t, got, "narrate")
 	assert.Contains(t, got, "# ...")
 }
 
@@ -25,8 +26,8 @@ func TestRePromptInvalidBash(t *testing.T) {
 	assert.Contains(t, got, "bash -n said:")
 	assert.Contains(t, got, "syntax error near token `then'")
 	assert.Contains(t, got, "neither bash nor a valid")
-	assert.Contains(t, got, "narrate")
-	assertHeredocTerminatorsStartAtColumnZero(t, got)
+	assert.Contains(t, got, `m"`)
+	assert.NotContains(t, got, "narrate")
 	assert.Contains(t, got, "exit")
 }
 
@@ -44,7 +45,8 @@ func TestRePromptToolCall_NoLiteralPatterns(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got, alertPrefix+" "))
 	assert.Contains(t, got, "There is NO tool/function calling API")
 	assert.Contains(t, got, "emit plain bash")
-	assertHeredocTerminatorsStartAtColumnZero(t, got)
+	assert.Contains(t, got, `m"`)
+	assert.NotContains(t, got, "narrate")
 	forbidden := []string{"<tool_call>", "</tool_call>", "<function_call>", "[tool_call]", "<invoke"}
 	for _, s := range forbidden {
 		assert.NotContains(t, got, s, "literal wrong-shape pattern leaked into rePromptToolCall body")
@@ -68,7 +70,8 @@ func TestRePromptCmdNotFound_Format(t *testing.T) {
 	assert.Contains(t, got, "command -v lorem")
 	assert.Contains(t, got, "# ", "must offer bash comment for one-line inline annotation")
 	assert.Contains(t, got, "comment")
-	assert.Contains(t, got, "narrate")
+	assert.Contains(t, got, `m"`)
+	assert.NotContains(t, got, "narrate")
 	assert.Contains(t, got, "exit")
 	assert.NotContains(t, got, "```")
 	assert.Contains(t, got, "real binary you expected")
@@ -81,7 +84,8 @@ func TestRePromptCmdNotFound_EmptyInput(t *testing.T) {
 	got := rePromptCmdNotFound("")
 	assert.True(t, strings.HasPrefix(got, alertPrefix+" "))
 	assert.Contains(t, got, "command not found")
-	assert.Contains(t, got, "narrate")
+	assert.Contains(t, got, `m"`)
+	assert.NotContains(t, got, "narrate")
 	assert.Contains(t, got, "exit")
 }
 

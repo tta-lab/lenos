@@ -1123,7 +1123,7 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.NoError(t, err)
 
 	inner := &scriptedModel{
-		emits: []string{"cat <<'LENOS_CONTEXT_COMPACTION' | narrate\nSummary\nLENOS_CONTEXT_COMPACTION"},
+		emits: []string{"m####\"Summary\"####"},
 	}
 	model := &streamCapturingModel{inner: inner}
 	primary := Model{
@@ -1149,6 +1149,12 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	err = agent.Summarize(t.Context(), sess.ID, fantasy.ProviderOptions{})
 	require.NoError(t, err)
 
+	updated, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	summaryMsg, err := env.messages.Get(t.Context(), updated.SummaryMessageID)
+	require.NoError(t, err)
+	require.Equal(t, "Summary", summaryMsg.Content().Text)
+
 	require.Len(t, model.captured, 1)
 	prompt := model.captured[0]
 	require.GreaterOrEqual(t, len(prompt), 3)
@@ -1163,6 +1169,8 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.Equal(t, fantasy.MessageRoleUser, last.Role)
 	lastText := fantasyMessageText(last)
 	require.NotEmpty(t, lastText)
+	require.Contains(t, lastText, `m####"`)
+	require.NotContains(t, lastText, "narrate")
 
 	systemMessages := 0
 	for _, msg := range prompt[:len(prompt)-1] {

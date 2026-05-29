@@ -977,11 +977,6 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 			items := chat.ExtractMessageItems(m.com.Styles, &msg, showThinking)
 			m.chat.AppendMessages(items...)
 		}
-		if _, ok := existingItem.(*chat.NarrationMessageItem); ok {
-			m.chat.RemoveMessageGroup(msg.ID)
-			items := chat.ExtractMessageItems(m.com.Styles, &msg, showThinking)
-			m.chat.AppendMessages(items...)
-		}
 	}
 
 	if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn {

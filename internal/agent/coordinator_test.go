@@ -233,7 +233,7 @@ func TestCoordinator_SystemPromptGetterReturnsStored(t *testing.T) {
 }
 
 // TestBuildCall_NoLongerInjectsLenosEnvVars verifies buildCall does NOT
-// inject LENOS_SESSION_ID (removed with narrate CLI) or LENOS_DATA_DIR.
+// inject LENOS_SESSION_ID or LENOS_DATA_DIR.
 func TestBuildCall_NoLongerInjectsLenosEnvVars(t *testing.T) {
 	tmp := t.TempDir()
 	configDir := t.TempDir()
@@ -421,27 +421,6 @@ func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 		require.NotEmpty(t, call.AllowedPaths)
 		assert.True(t, call.AllowedPaths[0].ReadOnly, "RO override should set cwd ReadOnly=true")
 	})
-}
-
-func TestBuildCall_DefaultNarrationTargetFromOverrides(t *testing.T) {
-	tmp := t.TempDir()
-	configDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
-	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
-	t.Setenv("LENOS_GLOBAL_DATA", configDir)
-	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
-	cfg, err := config.Init(tmp, "", false)
-	require.NoError(t, err)
-	cfg.Overrides().PairWith = "reviewer"
-
-	c := &coordinator{
-		cfg:          cfg,
-		dataDir:      cfg.WorkingDir(),
-		currentAgent: &stubAgent{modelName: "test-model"},
-	}
-	call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
-
-	assert.Equal(t, "reviewer", call.DefaultNarrationTarget)
 }
 
 func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {

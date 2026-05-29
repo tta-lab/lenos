@@ -26,7 +26,7 @@ LENOS_BASH_PROMPT = (
 )
 SHORT_LENOS_SYSTEM_PROMPT = """You are running inside a bash-first runtime.
 Every response is executed as bash. There is no chat channel and no markdown renderer.
-Valid shapes are raw bash commands, bash comments starting with #, narrate heredocs for prose, and exit.
+Valid shapes are raw bash commands, bash comments starting with #, m message blocks for prose, and exit.
 Do not emit markdown fences, XML/JSON tool calls, or plain English at top level.
 If you want to leave a note before a command, write it as a bash comment:
 # short note

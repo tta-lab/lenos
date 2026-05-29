@@ -47,16 +47,7 @@ func (a *sessionAgent) persistRuntimeContextCommands(ctx context.Context, call S
 }
 
 func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call SessionAgentCall, runner Runner, cmd RuntimeContextCommand) error {
-	inv, err := newNarrateInvocation(cmd.Command, call.Env, call.AllowedPaths, call.DefaultNarrationTarget)
-	if err != nil {
-		return fmt.Errorf("create synthetic context invocation: %w", err)
-	}
-	res := runner.Run(ctx, inv.bash, inv.env, inv.paths)
-	narrations, narrateErr := readNarrationEvents(inv.dir)
-	inv.cleanup()
-	if narrateErr != nil {
-		return fmt.Errorf("read synthetic context narrations: %w", narrateErr)
-	}
+	res := runner.Run(ctx, cmd.Command, call.Env, call.AllowedPaths)
 	if cmd.Optional && (res.Err != nil || res.ExitCode != 0 || strings.TrimSpace(string(res.Stdout)) == "") {
 		return nil
 	}
@@ -79,10 +70,6 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 		return fmt.Errorf("create synthetic context pending result: %w", err)
 	}
 
-	narrations, deliveryFailed := deliverNarrations(ctx, runner, call.Env, call.AllowedPaths, narrations)
-	if deliveryFailed {
-		slog.Warn("Synthetic context narration delivery failed", "command", cmd.Command)
-	}
 	exitCode := res.ExitCode
 	stderr := res.Stderr
 	if res.Err != nil && len(res.Stdout) == 0 && len(stderr) == 0 {
@@ -91,14 +78,12 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 	envelope := formatResultForModel(cmd.Command, string(res.Stdout), string(stderr), res.ExitCode)
 	body := strings.TrimPrefix(envelope, "<result>\n")
 	body = strings.TrimSuffix(body, "\n</result>")
-	body = appendNarrationObservation(body, narrations)
 	resultMsg.Parts = []message.ContentPart{message.CommandContent{
 		Command:     cmd.Command,
 		Output:      string(combine(res.Stdout, stderr)),
 		ExitCode:    &exitCode,
 		Pending:     false,
 		Observation: body,
-		Narrations:  narrations,
 	}}
 	if err := a.messages.Update(ctx, resultMsg); err != nil {
 		return fmt.Errorf("update synthetic context result: %w", err)
@@ -286,17 +271,17 @@ runLoopReentry:
 		}
 	}
 	deps := loopDeps{
-		model:                  primaryModel,
-		provOpts:               call.ProviderOptions,
-		messageBlockPrefill:    call.MessageBlockPrefill,
-		messages:               a.messages,
-		runner:                 runner,
-		sessionID:              call.SessionID,
-		sysPrompt:              a.systemPrompt.Get(),
-		env:                    call.Env,
-		paths:                  call.AllowedPaths,
-		defaultNarrationTarget: call.DefaultNarrationTarget,
-		postStepHook:           postStepHook,
+		model:               primaryModel,
+		provOpts:            call.ProviderOptions,
+		messageBlockPrefill: call.MessageBlockPrefill,
+		pairWith:            call.PairWith,
+		messages:            a.messages,
+		runner:              runner,
+		sessionID:           call.SessionID,
+		sysPrompt:           a.systemPrompt.Get(),
+		env:                 call.Env,
+		paths:               call.AllowedPaths,
+		postStepHook:        postStepHook,
 		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
 			s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
 			if !ok {

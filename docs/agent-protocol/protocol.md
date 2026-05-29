@@ -1,8 +1,9 @@
 # Protocol
 
-The protocol is bash-only. Every assistant response is interpreted as shell
-input and executed with one `bash -c` call, except for bare `exit`, which ends
-the loop without execution.
+The protocol is Lenos Bash: bash plus top-level `m` message blocks. Every
+assistant response is parsed once. Message blocks are removed, the remaining
+bash is executed with one `bash -c` call, and bare `exit` ends the loop without
+execution.
 
 ## Valid Shapes
 
@@ -16,61 +17,48 @@ cat README.md && rg "needle" .
 ```
 
 ```bash
-cat <<'EOF' | narrate
-Done. Tests pass.
-EOF
+m"Done. Tests pass."
 ```
 
 ```bash
-cat <<'EOF' | narrate --to reviewer
-Please review the auth change.
-EOF
+m(reviewer)"Please review the auth change."
 ```
 
 ```bash
-cat <<'EOF' | narrate --continue
-I found the parser and will patch it next.
-EOF
+m"Reading the parser before editing."
+rg "func Parse" internal/agent
 ```
 
 ```bash
 exit
 ```
 
-## Narration
+## Message Blocks
 
-`narrate` is not an external protocol marker. It is a bash function injected
-by the runtime before the model's shell text is executed.
+`m"..."` is natural language. It can be single-line or multi-line. Use
+`m(target)"..."` to deliver the message to another agent. If `--pair-with` is
+set, untargeted message blocks are also delivered to that default target;
+explicit targets take precedence.
 
-The function reads stdin and writes one IPC event. Positional arguments are not
-message body text; `narrate "Done"` is invalid. Empty stdin is also invalid.
-`--to <agent>` records an addressee; Lenos handles delivery after the shell
-exits. `--continue` records that this narration should not end the agent loop.
-Options may be combined. Multiple `narrate` calls in one bash response are
-allowed and render in event order.
-
-The runtime does not inspect narration until the whole bash subprocess exits.
-Commands after `narrate` still run.
+Message blocks must be top-level and begin at the start of their own physical
+line, ignoring indentation. Text inside heredocs, shell strings, command words,
+or comments is normal bash text, not speech.
 
 ## Loop Lifecycle
 
-After bash exits:
+After parsing and optional bash execution:
 
-- If exit code is 0 and at least one narration exists, render the narration
-  and stop the loop unless any narration used `--continue`.
-- If exit code is 0 and there is no narration, send the command result back to
-  the model and continue.
-- If exit code is non-zero, persist the failed result. If narration exists,
-  render it after the failed command result, but continue the loop.
-- If addressed narration delivery fails, persist delivery status and continue
-  the loop with an observation that omits the narration body.
+- If only message blocks remain, publish them and stop the loop.
+- If bash plus message blocks are present, run bash first. On exit code 0,
+  publish the messages and continue or stop according to the normal result
+  flow. On non-zero exit, persist the failed result and suppress the extracted
+  messages.
+- If exit code is 0 and there are no message blocks, send the command result
+  back to the model and continue.
+- If addressed message delivery fails, persist delivery status as a result row.
 - If the model emits bare `exit`, stop the loop without executing bash.
 
 ## Natural-Language Safety Net
 
-If an assistant response clearly looks like reader-facing prose, the runtime
-rewrites it to a `narrate` heredoc, stores that rewritten assistant message,
-executes it, and applies the same lifecycle rules above.
-
-This safety net is for model mistakes. Prompts still instruct the model to
-emit explicit bash.
+Raw prose is invalid. The runtime sends a diagnostic that points at the text
+and asks for bash or a message block.

@@ -141,11 +141,10 @@ The TUI renders conversation messages with distinct visual treatments based on r
 - Stored assistant text is always rendered as a bash preview
 
 #### Bash Results (Result role messages)
-- Exit 0 with no narration: skipped
+- Exit 0: skipped
 - Non-zero exit: `$ command` + output body + exit code badge (red)
-- Narration bodies render as assistant-style markdown items
 - Result row copy-to-clipboard includes command output and non-zero exit code;
-  narration item copy-to-clipboard copies the narration body
+  message block bodies render as assistant-style markdown items
 
 #### Runtime Responses (stored as Result rows)
 - Exit code 1: command-not-found re-prompt

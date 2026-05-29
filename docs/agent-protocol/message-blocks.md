@@ -1,7 +1,7 @@
 # Message Blocks
 
-Message blocks are the planned natural-language form for Lenos Bash. They let
-an assistant response mix prose and shell while preserving the rule that one
+Message blocks are the natural-language form for Lenos Bash. They let an
+assistant response mix prose and shell while preserving the rule that one
 assistant emit maps to one bash subprocess.
 
 This document is an executable-facing spec for parser and runtime work. The
@@ -57,6 +57,9 @@ Addressed form:
 ```bash
 m(neil)"Please review this."
 ```
+
+When `--pair-with` is set, untargeted message blocks are also delivered to that
+default target. Explicit `m(target)"..."` blocks override the default.
 
 Mixed bash and message blocks:
 

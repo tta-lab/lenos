@@ -14,8 +14,6 @@ The module path is `github.com/tta-lab/lenos`.
 
 ```
 main.go                            CLI entry point (cobra via internal/cmd)
-cmd/
-  narrate/                         narrate CLI binary — bash subprocesses use this to append prose to the session podcast (Phase 3, bash-first agent loop)
 internal/
   app/app.go                       Top-level wiring: DB, config, agents, events
   cmd/                             CLI commands (root, run, login, models, stats, sessions)
@@ -91,8 +89,8 @@ The coder turn dispatches on `RuntimeOverrides.ActiveTier`:
 active tier/provider/model as the current session.
 Compact summarization keeps the normal bash-first system prompt as the first
 message and appends the compact instruction as the final user message. This
-keeps the shared prompt prefix cacheable while still instructing the model to
-emit one `cat <<'LENOS_CONTEXT_COMPACTION' | narrate` heredoc pipeline.
+keeps the shared prompt prefix cacheable while instructing the model to emit
+one `m####"..."####` message block.
 
 ### CLI behavior matrix
 

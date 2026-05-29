@@ -14,8 +14,6 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
-
-	"github.com/tta-lab/lenos/internal/protocol"
 )
 
 type MessageRole string
@@ -70,22 +68,13 @@ func (tc TextContent) String() string {
 
 func (TextContent) isPart() {}
 
-type CommandNarration struct {
-	Body             string `json:"body,omitempty"`
-	To               string `json:"to,omitempty"`
-	Continue         bool   `json:"continue,omitempty"`
-	DeliveryExitCode *int   `json:"delivery_exit_code,omitempty"`
-	DeliveryOutput   string `json:"delivery_output,omitempty"`
-}
-
 // CommandContent represents a command execution result in a message.
 type CommandContent struct {
-	Command     string             `json:"command"`
-	Output      string             `json:"output"`
-	ExitCode    *int               `json:"exit_code,omitempty"`
-	Pending     bool               `json:"pending"`
-	Observation string             `json:"observation,omitempty"`
-	Narrations  []CommandNarration `json:"narrations,omitempty"`
+	Command     string `json:"command"`
+	Output      string `json:"output"`
+	ExitCode    *int   `json:"exit_code,omitempty"`
+	Pending     bool   `json:"pending"`
+	Observation string `json:"observation,omitempty"`
 }
 
 func (CommandContent) isPart() {}
@@ -380,7 +369,7 @@ func PromptWithTextAttachments(prompt string, attachments []Attachment) string {
 			body.WriteString("# File\n\n")
 		}
 		body.Write(content.Content)
-		sb.WriteString(protocol.NarrateSection(fmt.Sprintf("LENOS_ATTACHMENT_%d", textIndex), body.String()))
+		fmt.Fprintf(&sb, "<attachment id=\"%d\">\n%s\n</attachment>\n", textIndex, body.String())
 		textIndex++
 	}
 	return sb.String()
@@ -516,24 +505,8 @@ func formatOneResult(r CommandContent) string {
 	if output == "" {
 		output = "(no output)"
 	}
-	if len(r.Narrations) > 0 {
-		line := "narration rendered to user"
-		if narrationsRequestContinue(r.Narrations) {
-			line += "; continue requested"
-		}
-		output += "\n" + line + "; body omitted from result replay"
-	}
 	if r.ExitCode != nil && *r.ExitCode != 0 && *r.ExitCode != -1 {
 		output += fmt.Sprintf("\n(exit code: %d)", *r.ExitCode)
 	}
 	return output
-}
-
-func narrationsRequestContinue(narrations []CommandNarration) bool {
-	for _, narration := range narrations {
-		if narration.Continue {
-			return true
-		}
-	}
-	return false
 }

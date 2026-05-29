@@ -1,7 +1,7 @@
 # Classifier
 
-`internal/agent/classify.go` decides what the runtime does with one model
-emit before execution.
+`internal/agent/classify.go` decides what the runtime does with one model emit
+before execution.
 
 ## Order
 
@@ -9,9 +9,9 @@ emit before execution.
 2. Bare `exit` or `exit N`: end the loop.
 3. Blocked edit patterns such as `sed -i` and `perl -i`: re-prompt.
 4. Tool-call-shaped wrappers: delete the bad assistant row and re-prompt.
-5. Prose-first-line salvage: rewrite to commented bash when the rest is
-   strongly bash-shaped.
-6. Natural-language emit: rewrite to `narrate` heredoc.
+5. Lenos Bash parse: extract message blocks or re-prompt on invalid message
+   block syntax.
+6. Natural-language emit: re-prompt with a message block rewrite.
 7. `bash -n` syntax check: re-prompt on syntax failure.
 8. Everything else: execute as bash.
 
@@ -37,9 +37,3 @@ The classifier is not trying to fully understand English or shell. It only
 separates high-confidence prose from normal bash-shaped output. Ambiguous
 lowercase strings still run as bash and recover through command-not-found
 guidance when needed.
-
-## Old Markers
-
-Strings like `:md`, `:continue`, and `:exit` no longer have protocol meaning.
-If they appear in model output, they are just text inside the bash-only
-classification flow.

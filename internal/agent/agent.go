@@ -68,6 +68,10 @@ type SessionAgentCall struct {
 	// prefill support.
 	MessageBlockPrefill bool
 
+	// PairWith is the default delivery target for untargeted message blocks.
+	// Explicit m(target)"..." blocks take precedence.
+	PairWith string
+
 	// Sandbox controls runner selection. When true and SandboxClient is set
 	// the loop runs each emit through temenos; otherwise it falls back to
 	// LocalRunner with a clear warning.
@@ -83,10 +87,6 @@ type SessionAgentCall struct {
 	// AllowedPaths is the read/write bound for the runner. The first entry
 	// also becomes the subprocess working directory.
 	AllowedPaths []client.AllowedPath
-
-	// DefaultNarrationTarget is used when `narrate` is called without --to.
-	// Explicit `narrate --to` calls take precedence.
-	DefaultNarrationTarget string
 
 	// TaskID is the resolved ttal task ID for task-backed sessions. Empty
 	// means the session is not task-backed and title refresh is skipped.

@@ -447,51 +447,6 @@ func TestUpdateSessionMessage_Result(t *testing.T) {
 		item := ui.chat.MessageItem("result-update-1")
 		require.Nil(t, item, "successful result item should be removed after completion")
 	})
-
-	t.Run("result update replaces derived narration items", func(t *testing.T) {
-		t.Parallel()
-		ui := newTestUIWithChat(t)
-		exitCode := 1
-
-		firstMsg := message.Message{
-			ID:   "result-update-narration",
-			Role: message.Result,
-			Parts: []message.ContentPart{
-				message.CommandContent{
-					Command:  "false\ncat <<'EOF' | narrate\nFirst\nEOF",
-					Output:   "first failure",
-					ExitCode: &exitCode,
-					Narrations: []message.CommandNarration{
-						{Body: "First"},
-					},
-				},
-			},
-		}
-		ui.appendSessionMessage(firstMsg)
-		require.Equal(t, 2, ui.chat.Len())
-		require.NotNil(t, ui.chat.MessageItem("result-update-narration"))
-		require.NotNil(t, ui.chat.MessageItem("result-update-narration:narration:0"))
-
-		secondMsg := message.Message{
-			ID:   "result-update-narration",
-			Role: message.Result,
-			Parts: []message.ContentPart{
-				message.CommandContent{
-					Command:  "false\ncat <<'EOF' | narrate\nSecond\nEOF",
-					Output:   "second failure",
-					ExitCode: &exitCode,
-					Narrations: []message.CommandNarration{
-						{Body: "Second"},
-					},
-				},
-			},
-		}
-		ui.updateSessionMessage(secondMsg)
-
-		require.Equal(t, 2, ui.chat.Len(), "update should replace the old result group, not append duplicate narrations")
-		require.NotNil(t, ui.chat.MessageItem("result-update-narration"))
-		require.NotNil(t, ui.chat.MessageItem("result-update-narration:narration:0"))
-	})
 }
 
 // callTracker records method invocations on testWorkspace for assertions.

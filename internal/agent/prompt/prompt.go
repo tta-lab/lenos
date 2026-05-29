@@ -98,7 +98,6 @@ func NewPrompt(name, promptTemplate string, opts ...Option) (*Prompt, error) {
 func (p *Prompt) Build(ctx context.Context, provider, model string, store *config.ConfigStore) (string, error) {
 	t, err := template.New(p.name).Funcs(template.FuncMap{
 		"messageSection": protocol.MessageSection,
-		"narrateSection": protocol.NarrateSection,
 	}).Parse(p.template)
 	if err != nil {
 		return "", fmt.Errorf("parsing template: %w", err)
