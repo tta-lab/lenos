@@ -303,7 +303,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 					deps.jobWatcher.AddJob(res.JobID, commandEmit)
 				}
 				obs := fmt.Sprintf(
-					"<-Runtime background job started (job_id: %s)\nyou can check status or kill this job later via `temenos job kill %s`",
+					"<-Runtime background job started (job_id: %s)\nyou can kill this job later via `temenos job kill %s`",
 					res.JobID, res.JobID,
 				)
 				resultMsg.Parts = []message.ContentPart{message.CommandContent{

@@ -41,7 +41,7 @@ When a sandboxed command exceeds the auto-background threshold (15s), it
 is detached into a background job. You receive:
 
     <-Runtime background job started (job_id: <id>)
-    you can check status or kill this job later via `temenos job kill <id>`
+    you can kill this job later via `temenos job kill <id>`
 
 You can continue working while the job runs. When it finishes, you receive
 an async notification with the full result:
@@ -64,10 +64,8 @@ If the job is killed:
     exit_code: 137
     </result>
 
-Useful commands:
-- `temenos job list` — list all background jobs
-- `temenos job log <id>` — view job output
-- `temenos job kill <id>` — kill a running job
+The runtime watches background jobs and sends completion or killed
+notifications automatically.
 "####
 
 m####"

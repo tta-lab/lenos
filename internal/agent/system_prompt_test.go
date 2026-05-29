@@ -126,6 +126,9 @@ func TestSystemPrompt_DoesNotTeachLegacyNarrate(t *testing.T) {
 
 	assert.NotContains(t, got, "narrate")
 	assert.NotContains(t, got, ":md")
+	assert.NotContains(t, got, "temenos job list")
+	assert.NotContains(t, got, "temenos job log")
+	assert.NotContains(t, got, "check status")
 }
 
 func TestStripYAMLFrontmatter_FrontmatterStripped(t *testing.T) {
