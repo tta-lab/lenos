@@ -340,20 +340,5 @@
       "column": 6,
       "offset": 5
     }
-  },
-  {
-    "name": "invalid-mc-variant",
-    "source": "mc\"Done.\"\n",
-    "messages": [],
-    "bash": "",
-    "has_bash": false,
-    "lifecycle": "parse-error",
-    "error": {
-      "code": "unknown_message_variant",
-      "message": "mc is not a Lenos Bash message form; use m",
-      "line": 1,
-      "column": 1,
-      "offset": 0
-    }
   }
 ]

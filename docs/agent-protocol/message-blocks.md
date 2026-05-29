@@ -171,11 +171,11 @@ invalid:
 m(bad target)"Done."
 ```
 
-There is no `mc` variant:
-
-```bash
-mc"Done."
-```
+Do not define convenience variants for old control-flow concepts. Message
+blocks do not have a continue form; mixed bash plus `m` already continues
+through normal bash result flow, and message-only `m` ends. Unknown words should
+be handled by normal bash/runtime repair paths, not by adding named protocol
+diagnostics.
 
 ## Fixture Shape
 
