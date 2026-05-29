@@ -281,7 +281,7 @@ func TestRun_PassesAssistantPrefillToLoop(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
 
-	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"\n"}}}
+	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"#\n"}}}
 	primary := Model{
 		Model:      model,
 		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
@@ -306,7 +306,7 @@ func TestRun_PassesAssistantPrefillToLoop(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{"m"}, model.prefills)
+	assert.Equal(t, []string{messageBlockPrefillToken}, model.prefills)
 	assert.Equal(t, 1, model.prefillCalls)
 	assert.Equal(t, 0, model.normalCalls)
 }
