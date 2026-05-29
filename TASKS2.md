@@ -11,10 +11,10 @@ Do not start until TASKS1 and TASKS1.1 are complete.
 
 Current parser status:
 
-- `sh` PR #2 is capped and pushed at `0fd5444c`.
-- Consume fork tag `v3.13.1-lensh.1`, which points at `0fd5444c`.
+- `sh` PR #2 is capped and pushed at `3e635741`.
+- Consume fork tag `v3.13.1-lensh.2`, which points at `3e635741`.
 - Expected durable dependency shape, if Go accepts it:
-  `replace mvdan.cc/sh/v3 => github.com/tta-lab/sh v3.13.1-lensh.1`.
+  `replace mvdan.cc/sh/v3 => github.com/tta-lab/sh v3.13.1-lensh.2`.
 - Do not commit an absolute local `replace` to `/home/neil/code/projects/tta-lab/sh`.
 - If module resolution for the fork is unclear, make that the first worker
   deliverable and stop before runtime wiring.

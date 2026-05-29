@@ -74,6 +74,16 @@ func TestConfig_setDefaults(t *testing.T) {
 	}
 }
 
+func TestConfig_LoadMessageBlockPrefillOption(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := loadFromBytes([][]byte{[]byte(`{"options": {"message_block_prefill": true}}`)})
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Options)
+	require.True(t, cfg.Options.MessageBlockPrefill)
+}
+
 func TestConfig_configureProviders(t *testing.T) {
 	knownProviders := []catwalk.Provider{
 		{

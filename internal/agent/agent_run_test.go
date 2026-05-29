@@ -217,6 +217,40 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, "user prompt", fantasyMessageText(prompt[3]))
 }
 
+func TestRun_PassesAssistantPrefillToLoop(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"\n"}}}
+	primary := Model{
+		Model:      model,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+		ModelCfg:   config.SelectedModel{Provider: "test-provider", Model: "test-model"},
+	}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           primary,
+		SmallModel:           primary,
+		PrimaryModel:         primary,
+		SystemPrompt:         "system prompt",
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		DisableAutoSummarize: true,
+	}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "assistant prefill")
+	require.NoError(t, err)
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID:           sess.ID,
+		Prompt:              "user prompt",
+		MessageBlockPrefill: true,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"m"}, model.prefills)
+	assert.Equal(t, 1, model.prefillCalls)
+	assert.Equal(t, 0, model.normalCalls)
+}
+
 func TestRun_GeneratesTaskTitleWhenRuntimeContextInjected(t *testing.T) {
 	env := testEnv(t)
 

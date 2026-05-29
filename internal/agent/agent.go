@@ -63,6 +63,11 @@ type SessionAgentCall struct {
 	// reasoning_effort, etc).
 	ProviderOptions fantasy.ProviderOptions
 
+	// MessageBlockPrefill enables the hardcoded native assistant response
+	// prefill (`m`). It is ignored unless the model implements native
+	// prefill support.
+	MessageBlockPrefill bool
+
 	// Sandbox controls runner selection. When true and SandboxClient is set
 	// the loop runs each emit through temenos; otherwise it falls back to
 	// LocalRunner with a clear warning.

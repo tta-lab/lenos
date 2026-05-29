@@ -288,6 +288,7 @@ runLoopReentry:
 	deps := loopDeps{
 		model:                  primaryModel,
 		provOpts:               call.ProviderOptions,
+		messageBlockPrefill:    call.MessageBlockPrefill,
 		messages:               a.messages,
 		runner:                 runner,
 		sessionID:              call.SessionID,

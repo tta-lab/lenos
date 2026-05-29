@@ -192,6 +192,46 @@ func (m *retryableErrorThenSuccessModel) StreamObject(context.Context, fantasy.O
 
 var _ fantasy.LanguageModel = (*retryableErrorThenSuccessModel)(nil)
 
+type prefillCapturingModel struct {
+	inner        fantasy.LanguageModel
+	prefills     []string
+	normalCalls  int
+	prefillCalls int
+	mu           sync.Mutex
+}
+
+func (m *prefillCapturingModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+	m.mu.Lock()
+	m.normalCalls++
+	m.mu.Unlock()
+	return m.inner.Stream(ctx, call)
+}
+
+func (m *prefillCapturingModel) StreamAssistantPrefill(ctx context.Context, call fantasy.Call, prefill string) (fantasy.StreamResponse, error) {
+	m.mu.Lock()
+	m.prefillCalls++
+	m.prefills = append(m.prefills, prefill)
+	m.mu.Unlock()
+	return m.inner.Stream(ctx, call)
+}
+
+func (m *prefillCapturingModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
+	return m.inner.Generate(ctx, call)
+}
+
+func (m *prefillCapturingModel) GenerateObject(ctx context.Context, call fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
+	return m.inner.GenerateObject(ctx, call)
+}
+
+func (m *prefillCapturingModel) StreamObject(ctx context.Context, call fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
+	return m.inner.StreamObject(ctx, call)
+}
+
+func (m *prefillCapturingModel) Provider() string { return m.inner.Provider() }
+func (m *prefillCapturingModel) Model() string    { return m.inner.Model() }
+
+var _ fantasy.LanguageModel = (*prefillCapturingModel)(nil)
+
 // fakeRunner returns canned ExecResults in order. Tests use it to drive
 // classify=exec branches without touching /bin/bash.
 type fakeRunner struct {
@@ -1396,6 +1436,52 @@ func TestRunLoop_MessageBlockOnlyPublishesAndStops(t *testing.T) {
 	assert.Equal(t, 0, *cc.ExitCode)
 	require.Len(t, cc.Narrations, 1)
 	assert.Equal(t, "Done for the user.", cc.Narrations[0].Body)
+}
+
+func TestRunLoop_AssistantPrefillUsesNativeModelSupport(t *testing.T) {
+	t.Parallel()
+	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"\n"}}}
+	runner := &fakeRunner{}
+	deps, _ := newDeps(t, model, runner, nil)
+	deps.messageBlockPrefill = true
+
+	stop, err := runLoop(context.Background(), deps, nil, "prompt")
+
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, 1, model.prefillCalls)
+	assert.Equal(t, 0, model.normalCalls)
+	assert.Equal(t, []string{"m"}, model.prefills)
+	assert.Empty(t, runner.bash)
+}
+
+func TestRunLoop_AssistantPrefillIgnoredWithoutNativeModelSupport(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"exit"}}
+	runner := &fakeRunner{}
+	deps, _ := newDeps(t, model, runner, nil)
+	deps.messageBlockPrefill = true
+
+	stop, err := runLoop(context.Background(), deps, nil, "prompt")
+
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, 1, model.calls)
+}
+
+func TestRunLoop_AssistantPrefillDisabledUsesNormalStream(t *testing.T) {
+	t.Parallel()
+	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"echo ok", "exit"}}}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
+	deps, _ := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "prompt")
+
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, 0, model.prefillCalls)
+	assert.Equal(t, 2, model.normalCalls)
+	assert.Equal(t, []string{"echo ok"}, runner.bash)
 }
 
 func TestRunLoop_MessageBlockOnlyMultipleBlocksPreserveOrder(t *testing.T) {

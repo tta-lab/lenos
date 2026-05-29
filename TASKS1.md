@@ -12,9 +12,9 @@ heredocs, substitutions, and control flow.
 Complete in the `sh` fork on branch `feat/message-blocks`.
 
 - PR: https://github.com/tta-lab/sh/pull/2
-- Final pushed commit reviewed here: `0fd5444c fix(syntax): enforce line-start
+- Final pushed commit reviewed here: `3e635741 fix(syntax): enforce line-start
   message blocks`
-- Fork tag for Lenos consumption: `v3.13.1-lensh.1`, pointing at `0fd5444c`.
+- Fork tag for Lenos consumption: `v3.13.1-lensh.2`, pointing at `3e635741`.
   Workers should reference this tag from Lenos rather than a floating branch or
   unlabelled hash.
 - API exposed by the fork:
@@ -112,12 +112,12 @@ integration step rather than hiding it in runtime work.
 
 Preferred dependency reference for workers:
 
-1. Use `github.com/tta-lab/sh` tag `v3.13.1-lensh.1`, which points at the
-   reviewed parser commit `0fd5444c`.
+1. Use `github.com/tta-lab/sh` tag `v3.13.1-lensh.2`, which points at the
+   reviewed parser commit `3e635741`.
 2. Add the Lenos dependency in a way that imports remain
    `mvdan.cc/sh/v3/syntax`.
 3. Expected durable shape is a non-local module replacement such as
-   `replace mvdan.cc/sh/v3 => github.com/tta-lab/sh v3.13.1-lensh.1` if Go
+   `replace mvdan.cc/sh/v3 => github.com/tta-lab/sh v3.13.1-lensh.2` if Go
    accepts it with this fork/module-path layout.
 4. If Go module resolution cannot fetch the fork tag directly because of the
    upstream module path, use a temporary local `replace mvdan.cc/sh/v3 =>
