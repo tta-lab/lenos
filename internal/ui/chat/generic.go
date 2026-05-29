@@ -68,7 +68,7 @@ func (m *ResultMessageItem) RawRender(width int) string {
 }
 
 func (m *ResultMessageItem) renderNarration(width int, body string) string {
-	renderer := common.PlainMarkdownRenderer(m.sty, width)
+	renderer := common.MarkdownRenderer(m.sty, width)
 	rendered, err := renderer.Render(body)
 	if err != nil {
 		return body

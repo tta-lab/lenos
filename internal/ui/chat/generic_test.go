@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/list"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
@@ -119,10 +120,11 @@ func TestResultMessageItem_RenderNarrationAsMarkdown(t *testing.T) {
 		},
 	})
 
-	rendered := ansi.Strip(item.RawRender(80))
+	want, err := common.MarkdownRenderer(&sty, cappedMessageWidth(80)).Render("Ready.")
+	require.NoError(t, err)
 
-	assert.Contains(t, rendered, "Ready.")
-	assert.NotContains(t, rendered, "$")
+	assert.Equal(t, ansi.Strip(want), ansi.Strip(item.RawRender(80))+"\n")
+	assert.NotContains(t, ansi.Strip(item.RawRender(80)), "$")
 }
 
 func TestResultMessageItem_RenderAddsMessagePrefix(t *testing.T) {
