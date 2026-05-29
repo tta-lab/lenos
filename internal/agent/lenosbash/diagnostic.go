@@ -95,7 +95,9 @@ func writeSourceExcerpt(b *strings.Builder, source string, diag renderedDiagnost
 func writeHelpRewrite(b *strings.Builder, diag renderedDiagnosticView) {
 	switch {
 	case diag.Incomplete || strings.Contains(diag.Message, "closing message block"):
-		b.WriteString("\n  m\"I started.\"\n")
+		b.WriteString("\n  m#####\"\n")
+		b.WriteString("  Text can mention m####\"...\"#### safely.\n")
+		b.WriteString("  \"#####\n")
 	case strings.Contains(diag.Message, "message block"):
 		b.WriteString("\n  m\"Testing now.\"\n  go test ./...\n")
 	default:
@@ -123,7 +125,7 @@ func diagnosticLabel(diag Diagnostic) string {
 func diagnosticHelp(diag Diagnostic) string {
 	switch {
 	case diag.Incomplete || strings.Contains(diag.Message, "closing message block"):
-		return "close the message block"
+		return "use a matching closing delimiter. If the body contains `\"####`, wrap the outer message with more `#`"
 	case strings.Contains(diag.Message, "beginning of a physical line"):
 		return "put the message block on its own line"
 	case strings.Contains(diag.Message, "top level"):

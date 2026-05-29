@@ -103,8 +103,26 @@ func TestRenderDiagnosticUnterminatedMessageBlock(t *testing.T) {
 
 	assert.Contains(t, rendered, "error: reached EOF without closing message block")
 	assert.Contains(t, rendered, "    | ^ message block starts here")
-	assert.Contains(t, rendered, "help: close the message block")
-	assert.Contains(t, rendered, "  m\"I started.\"")
+	assert.Contains(t, rendered, "help: use a matching closing delimiter")
+	assert.Contains(t, rendered, "more `#`")
+	assert.Contains(t, rendered, "  m#####\"")
+	assert.Contains(t, rendered, "m####\"...\"####")
+	assert.Contains(t, rendered, "  \"#####")
+}
+
+func TestRenderDiagnosticUnterminatedMessageBlockTeachesLongerOuterDelimiter(t *testing.T) {
+	t.Parallel()
+
+	source := "m####\"\nIt worked. The body mentions `m####\"...\"####` inside prose.\n\"####\n"
+	_, diag := Parse(source)
+	if assert.NotNil(t, diag) {
+		rendered := RenderDiagnostic(source, *diag)
+		assert.Contains(t, rendered, "help: use a matching closing delimiter")
+		assert.Contains(t, rendered, "If the body contains `\"####`, wrap the outer message with more `#`")
+		assert.Contains(t, rendered, "  m#####\"")
+		assert.Contains(t, rendered, "  Text can mention m####\"...\"#### safely.")
+		assert.Contains(t, rendered, "  \"#####")
+	}
 }
 
 func TestRenderDiagnosticDoesNotRenderHeredocLiteralAsError(t *testing.T) {
