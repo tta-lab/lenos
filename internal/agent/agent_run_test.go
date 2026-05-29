@@ -192,29 +192,36 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 		},
 		ContextCommands: []RuntimeContextCommand{{
 			Command: "# read project instructions\ncat " + shellQuote(contextFile),
+		}, {
+			Command: `m"Ready."`,
 		}},
 	})
 	require.NoError(t, err)
 
 	msgs, err := env.messages.List(t.Context(), sess.ID)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(msgs), 4)
+	require.GreaterOrEqual(t, len(msgs), 5)
 	require.Equal(t, message.Assistant, msgs[0].Role)
 	require.Equal(t, "# read project instructions\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
 	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)
-	require.Equal(t, message.User, msgs[2].Role)
-	require.Equal(t, "user prompt", msgs[2].Content().Text)
+	require.Equal(t, message.Assistant, msgs[2].Role)
+	require.Equal(t, "Ready.", msgs[2].Content().Text)
+	require.Equal(t, message.FinishReasonEndTurn, msgs[2].FinishReason())
+	require.Equal(t, message.User, msgs[3].Role)
+	require.Equal(t, "user prompt", msgs[3].Content().Text)
 
 	require.Len(t, model.captured, 1)
 	prompt := model.captured[0]
-	require.Len(t, prompt, 4)
+	require.Len(t, prompt, 5)
 	require.Equal(t, fantasy.MessageRoleSystem, prompt[0].Role)
 	require.Equal(t, fantasy.MessageRoleAssistant, prompt[1].Role)
 	require.Equal(t, fantasy.MessageRoleUser, prompt[2].Role)
 	require.Contains(t, fantasyMessageText(prompt[2]), "project instructions")
-	require.Equal(t, "user prompt", fantasyMessageText(prompt[3]))
+	require.Equal(t, fantasy.MessageRoleAssistant, prompt[3].Role)
+	require.Equal(t, "Ready.", fantasyMessageText(prompt[3]))
+	require.Equal(t, "user prompt", fantasyMessageText(prompt[4]))
 }
 
 func TestRun_PassesAssistantPrefillToLoop(t *testing.T) {

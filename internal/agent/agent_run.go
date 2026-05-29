@@ -14,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/tta-lab/lenos/internal/agent/hyper"
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/hooks"
 	"github.com/tta-lab/lenos/internal/message"
@@ -47,6 +48,10 @@ func (a *sessionAgent) persistRuntimeContextCommands(ctx context.Context, call S
 }
 
 func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call SessionAgentCall, runner Runner, cmd RuntimeContextCommand) error {
+	if handled, err := a.persistSyntheticMessageBlocks(ctx, call, cmd.Command); handled || err != nil {
+		return err
+	}
+
 	res := runner.Run(ctx, cmd.Command, call.Env, call.AllowedPaths)
 	if cmd.Optional && (res.Err != nil || res.ExitCode != 0 || strings.TrimSpace(string(res.Stdout)) == "") {
 		return nil
@@ -90,6 +95,34 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 	}
 	markStepFinished(ctx, a.loopDepsForSynthetic(call.SessionID), &assistantMsg, message.FinishReasonToolUse)
 	return nil
+}
+
+func (a *sessionAgent) persistSyntheticMessageBlocks(ctx context.Context, call SessionAgentCall, command string) (bool, error) {
+	parsed, diag := lenosbash.Parse(command)
+	if diag != nil {
+		return false, nil
+	}
+	if len(parsed.Messages) == 0 || parsed.HasBash {
+		return false, nil
+	}
+	for _, block := range parsed.Messages {
+		body := strings.TrimSpace(block.Body)
+		if body == "" {
+			continue
+		}
+		assistantMsg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
+			Role:  message.Assistant,
+			Parts: []message.ContentPart{message.TextContent{Text: body}},
+		})
+		if err != nil {
+			return true, fmt.Errorf("create synthetic message block: %w", err)
+		}
+		assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
+		if err := a.messages.Update(ctx, assistantMsg); err != nil {
+			return true, fmt.Errorf("finish synthetic message block: %w", err)
+		}
+	}
+	return true, nil
 }
 
 func (a *sessionAgent) loopDepsForSynthetic(sessionID string) loopDeps {
