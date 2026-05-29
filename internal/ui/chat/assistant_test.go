@@ -84,3 +84,21 @@ func TestAssistantMessageItem_RenderColonWordAsBashPreview(t *testing.T) {
 	assert.Contains(t, rendered, "$ :data")
 	assert.NotContains(t, rendered, "second line")
 }
+
+func TestAssistantMessageItem_RenderMessageBlockAsMarkdown(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.DefaultStyles()
+	item := NewAssistantMessageItem(&sty, &message.Message{
+		ID:   "assistant-1",
+		Role: message.Assistant,
+		Parts: []message.ContentPart{
+			message.TextContent{Text: "Ready.", Kind: message.TextContentKindMessageBlock},
+		},
+	}, true)
+
+	rendered := ansi.Strip(item.RawRender(80))
+
+	assert.Contains(t, rendered, "Ready.")
+	assert.NotContains(t, rendered, "$ Ready.")
+}

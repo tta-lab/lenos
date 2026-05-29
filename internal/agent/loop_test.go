@@ -1423,6 +1423,7 @@ func TestRunLoop_MessageBlockOnlyPublishesAndStops(t *testing.T) {
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
 	assert.Equal(t, "Done for the user.", assistants[0].Content().Text)
+	assert.Equal(t, message.TextContentKindMessageBlock, assistants[0].Content().Kind)
 	assert.Empty(t, resultsByOrder(ms))
 }
 
@@ -1486,7 +1487,9 @@ func TestRunLoop_MessageBlockOnlyMultipleBlocksPreserveOrder(t *testing.T) {
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 2)
 	assert.Equal(t, "First.", assistants[0].Content().Text)
+	assert.Equal(t, message.TextContentKindMessageBlock, assistants[0].Content().Kind)
 	assert.Equal(t, "Second.", assistants[1].Content().Text)
+	assert.Equal(t, message.TextContentKindMessageBlock, assistants[1].Content().Kind)
 }
 
 func TestRunLoop_AddressedMessageBlockDeliveryFailureStillStops(t *testing.T) {

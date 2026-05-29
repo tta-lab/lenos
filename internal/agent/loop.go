@@ -388,13 +388,20 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 }
 
 func replaceAssistantText(msg *message.Message, text string) {
+	replaceAssistantTextKind(msg, text, "")
+}
+
+func replaceAssistantTextKind(msg *message.Message, text string, kind message.TextContentKind) {
 	parts := make([]message.ContentPart, 0, len(msg.Parts)+1)
 	replaced := false
 	for _, part := range msg.Parts {
-		switch part.(type) {
+		switch c := part.(type) {
 		case message.TextContent:
 			if !replaced {
-				parts = append(parts, message.TextContent{Text: text})
+				if kind == "" {
+					kind = c.Kind
+				}
+				parts = append(parts, message.TextContent{Text: text, Kind: kind})
 				replaced = true
 			}
 		case message.Finish:
@@ -404,7 +411,7 @@ func replaceAssistantText(msg *message.Message, text string) {
 		}
 	}
 	if !replaced {
-		parts = append(parts, message.TextContent{Text: text})
+		parts = append(parts, message.TextContent{Text: text, Kind: kind})
 	}
 	msg.Parts = parts
 }
@@ -473,7 +480,7 @@ func publishMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash
 			}
 		}
 		if first != nil && i == 0 {
-			replaceAssistantText(first, body)
+			replaceAssistantTextKind(first, body, message.TextContentKindMessageBlock)
 			if err := deps.messages.Update(ctx, *first); err != nil {
 				return fmt.Errorf("update message-block assistant row: %w", err)
 			}
@@ -481,7 +488,7 @@ func publishMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash
 		}
 		if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 			Role:     message.Assistant,
-			Parts:    []message.ContentPart{message.TextContent{Text: body}},
+			Parts:    []message.ContentPart{message.TextContent{Text: body, Kind: message.TextContentKindMessageBlock}},
 			Model:    deps.model.messageModelID(),
 			Provider: deps.model.messageProviderID(),
 		}); err != nil {
@@ -508,7 +515,7 @@ func publishMixedMessageBlocks(ctx context.Context, deps loopDeps, blocks []leno
 		}
 		if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 			Role:     message.Assistant,
-			Parts:    []message.ContentPart{message.TextContent{Text: body}},
+			Parts:    []message.ContentPart{message.TextContent{Text: body, Kind: message.TextContentKindMessageBlock}},
 			Model:    deps.model.messageModelID(),
 			Provider: deps.model.messageProviderID(),
 		}); err != nil {

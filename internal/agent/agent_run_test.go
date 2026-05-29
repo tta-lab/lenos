@@ -208,7 +208,10 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)
 	require.Equal(t, message.Assistant, msgs[2].Role)
 	require.Equal(t, "Ready.", msgs[2].Content().Text)
-	require.Equal(t, message.FinishReasonEndTurn, msgs[2].FinishReason())
+	require.Equal(t, message.TextContentKindMessageBlock, msgs[2].Content().Kind)
+	require.Nil(t, msgs[2].FinishPart())
+	require.Equal(t, "test-model", msgs[2].Model)
+	require.Equal(t, "test-provider", msgs[2].Provider)
 	require.Equal(t, message.User, msgs[3].Role)
 	require.Equal(t, "user prompt", msgs[3].Content().Text)
 

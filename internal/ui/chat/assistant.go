@@ -125,7 +125,11 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 		if thinking != "" && a.showThinking {
 			messageParts = append(messageParts, "")
 		}
-		messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render(bashEmitPreview(content, width)))
+		if IsMessageBlockAssistant(a.message) {
+			messageParts = append(messageParts, a.renderTextMessage(content, width))
+		} else {
+			messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render(bashEmitPreview(content, width)))
+		}
 	}
 	if a.message.IsFinished() {
 		switch a.message.FinishReason() {
@@ -137,6 +141,19 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 	}
 
 	return strings.Join(messageParts, "\n")
+}
+
+func (a *AssistantMessageItem) renderTextMessage(content string, width int) string {
+	renderer := common.PlainMarkdownRenderer(a.sty, width)
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		return content
+	}
+	return strings.TrimSpace(rendered)
+}
+
+func IsMessageBlockAssistant(msg *message.Message) bool {
+	return msg != nil && msg.Content().Kind == message.TextContentKindMessageBlock
 }
 
 // renderThinking renders the thinking/reasoning content with footer.

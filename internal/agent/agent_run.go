@@ -110,16 +110,14 @@ func (a *sessionAgent) persistSyntheticMessageBlocks(ctx context.Context, call S
 		if body == "" {
 			continue
 		}
-		assistantMsg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
-			Role:  message.Assistant,
-			Parts: []message.ContentPart{message.TextContent{Text: body}},
-		})
-		if err != nil {
+		model := a.primaryModel.Get()
+		if _, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
+			Role:     message.Assistant,
+			Parts:    []message.ContentPart{message.TextContent{Text: body, Kind: message.TextContentKindMessageBlock}},
+			Model:    model.messageModelID(),
+			Provider: model.messageProviderID(),
+		}); err != nil {
 			return true, fmt.Errorf("create synthetic message block: %w", err)
-		}
-		assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
-		if err := a.messages.Update(ctx, assistantMsg); err != nil {
-			return true, fmt.Errorf("finish synthetic message block: %w", err)
 		}
 	}
 	return true, nil
