@@ -147,6 +147,18 @@ The TUI renders conversation messages with distinct visual treatments based on r
   narration content renders as assistant-style markdown items. Message block
   bodies should come from result narration, not rewritten assistant rows.
 
+#### Message Block Narration
+- Treat published `m` block bodies as assistant prose, even when they are
+  stored on Result rows for history/persistence reasons.
+- Reuse the same visual component or renderer semantics as assistant markdown
+  prose. Do not swap to `PlainMarkdownRenderer` or a raw result renderer just
+  because the data moved to a Result row.
+- Keep storage and rendering separate: assistant rows preserve the Lenos Bash
+  emit; result narration rows provide the user-visible markdown body.
+- When moving message content between roles or fields, add render tests for
+  both the raw render style and the wrapped `Render` alignment so the TUI does
+  not regress into raw/flush-left output.
+
 #### Runtime Responses (stored as Result rows)
 - Exit code 1: command-not-found re-prompt
 - Exit code 124: timeout re-prompt  
