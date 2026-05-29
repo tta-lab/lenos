@@ -63,10 +63,10 @@ type SessionAgentCall struct {
 	// reasoning_effort, etc).
 	ProviderOptions fantasy.ProviderOptions
 
-	// AssistantPrefill is an optional native provider prefix for the next
-	// assistant response. It is ignored unless the model implements native
+	// MessageBlockPrefill enables the hardcoded native assistant response
+	// prefill (`m`). It is ignored unless the model implements native
 	// prefill support.
-	AssistantPrefill string
+	MessageBlockPrefill bool
 
 	// Sandbox controls runner selection. When true and SandboxClient is set
 	// the loop runs each emit through temenos; otherwise it falls back to

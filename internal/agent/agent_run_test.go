@@ -240,9 +240,9 @@ func TestRun_PassesAssistantPrefillToLoop(t *testing.T) {
 	require.NoError(t, err)
 
 	err = agent.Run(t.Context(), SessionAgentCall{
-		SessionID:        sess.ID,
-		Prompt:           "user prompt",
-		AssistantPrefill: "m",
+		SessionID:           sess.ID,
+		Prompt:              "user prompt",
+		MessageBlockPrefill: true,
 	})
 
 	require.NoError(t, err)

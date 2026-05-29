@@ -265,7 +265,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		SessionID:              sessionID,
 		Prompt:                 userPrompt,
 		ProviderOptions:        getProviderOptions(model, providerCfg),
-		AssistantPrefill:       strings.TrimSpace(c.cfg.Config().Options.AssistantPrefill),
+		MessageBlockPrefill:    c.cfg.Config().Options.MessageBlockPrefill,
 		Sandbox:                useSandbox,
 		SandboxClient:          sandboxClient,
 		Env:                    sandboxEnv,
@@ -614,7 +614,7 @@ func (c *coordinator) buildVercelProvider(_, apiKey string, headers map[string]s
 
 func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers map[string]string, extraBody map[string]any, providerID string, isSubAgent bool) (fantasy.Provider, error) {
 	prefillSupported := supportsDeepSeekPrefill(providerID, baseURL)
-	if prefillSupported && strings.TrimSpace(c.cfg.Config().Options.AssistantPrefill) != "" {
+	if prefillSupported && c.cfg.Config().Options.MessageBlockPrefill {
 		baseURL = deepSeekPrefillBaseURL(providerID, baseURL)
 	}
 

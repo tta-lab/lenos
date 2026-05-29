@@ -1443,7 +1443,7 @@ func TestRunLoop_AssistantPrefillUsesNativeModelSupport(t *testing.T) {
 	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"\n"}}}
 	runner := &fakeRunner{}
 	deps, _ := newDeps(t, model, runner, nil)
-	deps.assistantPrefill = "m"
+	deps.messageBlockPrefill = true
 
 	stop, err := runLoop(context.Background(), deps, nil, "prompt")
 
@@ -1460,7 +1460,7 @@ func TestRunLoop_AssistantPrefillIgnoredWithoutNativeModelSupport(t *testing.T) 
 	model := &scriptedModel{emits: []string{"exit"}}
 	runner := &fakeRunner{}
 	deps, _ := newDeps(t, model, runner, nil)
-	deps.assistantPrefill = "m"
+	deps.messageBlockPrefill = true
 
 	stop, err := runLoop(context.Background(), deps, nil, "prompt")
 

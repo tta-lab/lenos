@@ -40,9 +40,10 @@ type loopDeps struct {
 	// treats nil as "no drain hook" and is a no-op.
 	drainQueue func() []string
 	provOpts   fantasy.ProviderOptions
-	// assistantPrefill is applied only when the model exposes native prefix
-	// completion support through assistantPrefillModel.
-	assistantPrefill string
+	// messageBlockPrefill enables the hardcoded `m` prefix only when the
+	// model exposes native prefix completion support through
+	// assistantPrefillModel.
+	messageBlockPrefill bool
 	messages         message.Service
 	runner           Runner
 	salvage          bashSalvageProbe
@@ -525,11 +526,10 @@ func streamOneAttempt(
 		stream      fantasy.StreamResponse
 		err         error
 		usedPrefill bool
-		prefill     string
 	)
-	if prefill = strings.TrimSpace(deps.assistantPrefill); prefill != "" {
+	if deps.messageBlockPrefill {
 		if model, ok := deps.model.Model.(assistantPrefillModel); ok {
-			stream, err = model.StreamAssistantPrefill(ctx, call, prefill)
+			stream, err = model.StreamAssistantPrefill(ctx, call, "m")
 			usedPrefill = true
 		} else {
 			stream, err = deps.model.Model.Stream(ctx, call)
@@ -541,7 +541,7 @@ func streamOneAttempt(
 		return streamOneResult{}, err
 	}
 	if usedPrefill {
-		assistantMsg.AppendContent(prefill)
+		assistantMsg.AppendContent("m")
 		if uerr := deps.messages.Update(ctx, *assistantMsg); uerr != nil {
 			slog.Warn("loop: persist assistant prefill", "error", uerr)
 		}

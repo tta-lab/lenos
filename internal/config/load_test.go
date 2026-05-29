@@ -74,14 +74,14 @@ func TestConfig_setDefaults(t *testing.T) {
 	}
 }
 
-func TestConfig_LoadAssistantPrefillOption(t *testing.T) {
+func TestConfig_LoadMessageBlockPrefillOption(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := loadFromBytes([][]byte{[]byte(`{"options": {"assistant_prefill": "m"}}`)})
+	cfg, err := loadFromBytes([][]byte{[]byte(`{"options": {"message_block_prefill": true}}`)})
 
 	require.NoError(t, err)
 	require.NotNil(t, cfg.Options)
-	require.Equal(t, "m", cfg.Options.AssistantPrefill)
+	require.True(t, cfg.Options.MessageBlockPrefill)
 }
 
 func TestConfig_configureProviders(t *testing.T) {
