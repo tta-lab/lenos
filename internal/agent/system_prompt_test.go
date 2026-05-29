@@ -82,6 +82,8 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 		"speak natural language",
 		"single-line",
 		"multi-line",
+		"more `#`",
+		"m#####\"",
 		"visible",
 		"bash",
 	} {
@@ -316,7 +318,7 @@ func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
 	assert.NotEmpty(t, got)
 }
 
-func TestSystemPrompt_PairWithDocumentsDefaultNarrationTarget(t *testing.T) {
+func TestSystemPrompt_PairWithDocumentsDefaultMessageBlockTarget(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
@@ -334,7 +336,8 @@ func TestSystemPrompt_PairWithDocumentsDefaultNarrationTarget(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "reviewer")
-	assert.Contains(t, got, `m(<agent>)"your response"`)
+	assert.Contains(t, got, "Untargeted message blocks")
+	assert.Contains(t, got, `m(target)"..."`)
 	assert.NotEmpty(t, got)
 }
 

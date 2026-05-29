@@ -35,6 +35,31 @@ func TestParseMixedMessageAndBash(t *testing.T) {
 	assert.Equal(t, "Inspecting.", parsed.Messages[0].Body)
 }
 
+func TestParseMessageBodyMayContainMessageBlockText(t *testing.T) {
+	t.Parallel()
+
+	source := "m####\"\nText before.\nm\"Done.\"\nText after.\n\"####\n"
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.False(t, parsed.HasBash)
+	require.Len(t, parsed.Messages, 1)
+	assert.Contains(t, parsed.Messages[0].Body, "m\"Done.\"")
+}
+
+func TestParseMixedMessageBodyMayContainIndentedHashDelimitedExample(t *testing.T) {
+	t.Parallel()
+
+	source := "echo \"Let me demonstrate nesting.\"\nm####\"\nExample:\n\n    m###\"\n    Inner message body.\n    \"###\n\"####\n"
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.True(t, parsed.HasBash)
+	assert.Equal(t, "echo \"Let me demonstrate nesting.\"\n", parsed.Bash)
+	require.Len(t, parsed.Messages, 1)
+	assert.Contains(t, parsed.Messages[0].Body, "    m###\"")
+}
+
 func TestParseAddressedMessage(t *testing.T) {
 	t.Parallel()
 
@@ -71,17 +96,16 @@ func TestParseSameLineMessageReturnsDiagnostic(t *testing.T) {
 	assert.Equal(t, 9, diag.Offset)
 }
 
-func TestParseNestedMessageReturnsDiagnostic(t *testing.T) {
+func TestParseNestedMessageLookingTextStaysBash(t *testing.T) {
 	t.Parallel()
 
-	_, diag := Parse("if true; then\n  m\"Done.\"\nfi\n")
+	source := "if true; then\n  m\"Done.\"\nfi\n"
+	parsed, diag := Parse(source)
 
-	require.NotNil(t, diag)
-	assert.Equal(t, "message_block_error", diag.Kind)
-	assert.Contains(t, diag.Message, "top level")
-	assert.Equal(t, 2, diag.Line)
-	assert.Equal(t, 3, diag.Column)
-	assert.Equal(t, 16, diag.Offset)
+	require.Nil(t, diag)
+	assert.True(t, parsed.HasBash)
+	assert.Equal(t, source, parsed.Bash)
+	assert.Empty(t, parsed.Messages)
 }
 
 func TestParseInvalidTargetReturnsDiagnostic(t *testing.T) {

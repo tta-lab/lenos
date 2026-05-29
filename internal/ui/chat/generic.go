@@ -54,7 +54,9 @@ func (m *ResultMessageItem) RawRender(width int) string {
 
 	var content string
 	cmd := m.message.CommandContent()
-	if cmd.Command != "" {
+	if strings.TrimSpace(cmd.Narration) != "" {
+		content = m.renderNarration(cappedWidth, cmd.Narration)
+	} else if cmd.Command != "" {
 		content = m.renderCommandResult(cappedWidth, cmd)
 	} else {
 		content = m.sty.Chat.Message.ResultBlock.Render(m.message.Content().Text)
@@ -63,6 +65,15 @@ func (m *ResultMessageItem) RawRender(width int) string {
 	height = lipgloss.Height(content)
 	m.setCachedRender(content, cappedWidth, height)
 	return m.renderHighlighted(content, cappedWidth, height)
+}
+
+func (m *ResultMessageItem) renderNarration(width int, body string) string {
+	renderer := common.MarkdownRenderer(m.sty, width)
+	rendered, err := renderer.Render(body)
+	if err != nil {
+		return body
+	}
+	return strings.TrimSpace(rendered)
 }
 
 // renderCommandResult renders a command result with header and output.
@@ -83,39 +94,16 @@ func (m *ResultMessageItem) renderCommandResult(width int, cmd message.CommandCo
 		sb.WriteString(m.sty.Tool.IconError.Render(fmt.Sprintf("%d", *cmd.ExitCode)))
 		parts = append(parts, sb.String())
 	}
-	for _, narration := range cmd.Narrations {
-		if delivery := m.renderNarrationDelivery(width, narration); delivery != "" {
-			parts = append(parts, delivery)
-		}
-	}
 	if len(parts) == 0 {
-		// Exit 0 without narration: assistant already shows the command.
+		// Exit 0: assistant already shows the command.
 		return ""
 	}
 	return strings.Join(parts, "\n\n")
 }
 
-func (m *ResultMessageItem) renderNarrationDelivery(width int, narration message.CommandNarration) string {
-	if narration.DeliveryExitCode == nil || *narration.DeliveryExitCode == 0 {
-		return ""
-	}
-	target := strings.TrimSpace(narration.To)
-	if target == "" {
-		target = "recipient"
-	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "narration delivery failed for %s", target)
-	if narration.DeliveryOutput != "" {
-		sb.WriteString("\n")
-		sb.WriteString(strings.TrimSpace(narration.DeliveryOutput))
-	}
-	bodyStyle := m.sty.Tool.Body.Width(width)
-	return bodyStyle.Render(sb.String()) + " " + m.sty.Tool.IconError.Render(fmt.Sprintf("%d", *narration.DeliveryExitCode))
-}
-
 // Render implements MessageItem.
 func (m *ResultMessageItem) Render(width int) string {
-	return m.RawRender(width)
+	return renderAssistantMessageLines(m.sty, m.focused, m.RawRender(width))
 }
 
 // ID implements MessageItem.
@@ -141,6 +129,9 @@ func (m *ResultMessageItem) formatCommandForCopy() string {
 
 	// TextContent (runtime responses): return text directly.
 	if cmd.Command == "" {
+		if cmd.Narration != "" {
+			return cmd.Narration
+		}
 		return m.message.Content().Text
 	}
 

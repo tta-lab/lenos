@@ -262,17 +262,17 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 	}
 
 	return SessionAgentCall{
-		SessionID:              sessionID,
-		Prompt:                 userPrompt,
-		ProviderOptions:        getProviderOptions(model, providerCfg),
-		MessageBlockPrefill:    c.cfg.Config().Options.MessageBlockPrefill,
-		Sandbox:                useSandbox,
-		SandboxClient:          sandboxClient,
-		Env:                    sandboxEnv,
-		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access),
-		DefaultNarrationTarget: strings.TrimSpace(c.cfg.Overrides().PairWith),
-		TaskID:                 taskwarrior.ResolveTaskID(cwd),
-		ContextCommands:        buildRuntimeContextCommands(runtimeContext, cwd),
+		SessionID:           sessionID,
+		Prompt:              userPrompt,
+		ProviderOptions:     getProviderOptions(model, providerCfg),
+		MessageBlockPrefill: c.cfg.Config().Options.MessageBlockPrefill,
+		PairWith:            c.cfg.Overrides().PairWith,
+		Sandbox:             useSandbox,
+		SandboxClient:       sandboxClient,
+		Env:                 sandboxEnv,
+		AllowedPaths:        BuildAllowedPaths(ctx, cwd, access),
+		TaskID:              taskwarrior.ResolveTaskID(cwd),
+		ContextCommands:     buildRuntimeContextCommands(runtimeContext),
 	}
 }
 

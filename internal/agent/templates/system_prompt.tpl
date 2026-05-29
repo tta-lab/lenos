@@ -22,14 +22,37 @@ m####"
 You complete tasks by running commands and reporting findings.
 "####
 
-m####"
+m######"
 # Message Blocks
 
 `m` must be the first non-whitespace token on its own physical line. Put bash
 commands before or after it on separate lines.
 
-Message blocks support single-line and multi-line natural language. Use them
-for progress, status, plans, questions, and final answers.
+Message blocks support single-line and multi-line natural language. Use
+`m"short note"` for one short line. Use the raw multi-line form for
+paragraphs, bullets, quoted text, or any answer where escaping would get in the
+way:
+
+m####"
+Long note.
+"####
+
+The `#` characters are raw-string delimiters, like Rust raw strings. They are
+not bash comments. Add enough `#` characters so the exact closing delimiter
+does not appear inside the message body. If your message body contains a raw
+message block example such as `m####"..."####`, use more `#` characters for
+the outer message block. The body is literal: no shell expansion and no
+backslash escaping.
+
+Example: the inner text mentions a four-hash block, so the outer message uses
+five hashes:
+
+m#####"
+Use this shape for long notes:
+m####"
+body
+"####
+"#####
 
 A message-only `m` ends your turn. Mixed bash plus message blocks follows the
 normal bash loop: bash runs first, message blocks publish only after bash succeeds,
@@ -38,7 +61,7 @@ and the runtime may continue the loop with command output.
 Do not write `echo ok; m"Done."`, `cmd & m"Done."`, `cmd | m"Done."`, or put
 `m` after heredoc setup. `m"..."` inside heredoc content is just file/stdin
 content, not speech.
-"####
+"######
 
 m####"
 # Environment
@@ -63,7 +86,7 @@ Do not pipe command output into a message block. The reader can already see
 stdout and stderr. Message blocks are for text you write.
 "####
 
-m####"
+m#####"
 # Valid Raw Responses
 
 Message-only:
@@ -82,6 +105,14 @@ Multi-line message:
 m"First line.
 Second line."
 
+Raw multi-line message:
+m####"
+Ready.
+
+- First point.
+- Second point.
+"####
+
 Addressed message:
 m(neil)#"Please review "message block" parsing."#
 
@@ -91,7 +122,7 @@ go test ./...
 Private comment plus bash:
 # check the file first
 cat README.md
-"####
+"#####
 
 m####"
 # Do Not
@@ -105,7 +136,7 @@ m"literal"
 EOF
 "####
 
-m####"
+m#####"
 # Turn Examples
 
 USER: hi
@@ -128,8 +159,13 @@ ASSISTANT:
 # quick disk check
 df -h
 ASSISTANT:
-m"/home is at 87%; worth a cleanup pass soon."
+m####"
+/home is at 87%; worth a cleanup pass soon.
+
+- Largest likely cleanup target: build caches.
+- I did not delete anything.
 "####
+"#####
 
 {{- if .Commands}}
 

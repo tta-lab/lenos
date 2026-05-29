@@ -189,82 +189,47 @@
     }
   },
   {
-    "name": "invalid-same-line-heredoc-setup",
+    "name": "bash-same-line-message-looking-text-heredoc-setup",
     "source": "cat <<EOF m\"Done.\"\nEOF\n",
     "messages": [],
-    "bash": "",
-    "has_bash": false,
-    "lifecycle": "parse-error",
-    "error": {
-      "code": "message_not_line_start",
-      "message": "message block must start at the beginning of a physical line",
-      "line": 1,
-      "column": 11,
-      "offset": 10
-    }
+    "bash": "cat <<EOF m\"Done.\"\nEOF\n",
+    "has_bash": true,
+    "lifecycle": "continue"
   },
   {
-    "name": "invalid-message-inside-if",
+    "name": "bash-message-looking-text-inside-if",
     "source": "if true; then\n  m\"Done.\"\nfi\n",
     "messages": [],
-    "bash": "",
-    "has_bash": false,
-    "lifecycle": "parse-error",
-    "error": {
-      "code": "message_not_top_level",
-      "message": "message block is only valid at top level",
-      "line": 2,
-      "column": 3,
-      "offset": 16
-    }
+    "bash": "if true; then\n  m\"Done.\"\nfi\n",
+    "has_bash": true,
+    "lifecycle": "continue"
   },
   {
-    "name": "invalid-message-inside-loop",
+    "name": "bash-message-looking-text-inside-loop",
     "source": "for file in *; do\n  m\"Checking.\"\ndone\n",
     "messages": [],
-    "bash": "",
-    "has_bash": false,
-    "lifecycle": "parse-error",
-    "error": {
-      "code": "message_not_top_level",
-      "message": "message block is only valid at top level",
-      "line": 2,
-      "column": 3,
-      "offset": 20
-    }
+    "bash": "for file in *; do\n  m\"Checking.\"\ndone\n",
+    "has_bash": true,
+    "lifecycle": "continue"
   },
   {
-    "name": "invalid-message-inside-function",
+    "name": "bash-message-looking-text-inside-function",
     "source": "say_done() {\n  m\"Done.\"\n}\n",
     "messages": [],
-    "bash": "",
-    "has_bash": false,
-    "lifecycle": "parse-error",
-    "error": {
-      "code": "message_not_top_level",
-      "message": "message block is only valid at top level",
-      "line": 2,
-      "column": 3,
-      "offset": 15
-    }
+    "bash": "say_done() {\n  m\"Done.\"\n}\n",
+    "has_bash": true,
+    "lifecycle": "continue"
   },
   {
-    "name": "invalid-message-inside-command-substitution",
+    "name": "bash-message-looking-text-inside-command-substitution",
     "source": "value=$(m\"Done.\")\n",
     "messages": [],
-    "bash": "",
-    "has_bash": false,
-    "lifecycle": "parse-error",
-    "error": {
-      "code": "message_not_top_level",
-      "message": "message block must start at the beginning of a physical line",
-      "line": 1,
-      "column": 9,
-      "offset": 8
-    }
+    "bash": "value=$(m\"Done.\")\n",
+    "has_bash": true,
+    "lifecycle": "continue"
   },
   {
-    "name": "invalid-message-inside-string",
+    "name": "bash-message-looking-text-inside-string",
     "source": "printf '%s\\n' 'm\"literal\"'\n",
     "messages": [],
     "bash": "printf '%s\\n' 'm\"literal\"'\n",
@@ -272,7 +237,7 @@
     "lifecycle": "continue"
   },
   {
-    "name": "invalid-message-inside-comment",
+    "name": "bash-message-looking-text-inside-comment",
     "source": "# m\"not speech\"\necho ok\n",
     "messages": [],
     "bash": "# m\"not speech\"\necho ok\n",
@@ -280,19 +245,12 @@
     "lifecycle": "continue"
   },
   {
-    "name": "invalid-message-as-command-word",
+    "name": "bash-message-looking-text-as-command-word",
     "source": "command m\"Done.\"\n",
     "messages": [],
-    "bash": "",
-    "has_bash": false,
-    "lifecycle": "parse-error",
-    "error": {
-      "code": "message_not_line_start",
-      "message": "message block must start at the beginning of a physical line",
-      "line": 1,
-      "column": 9,
-      "offset": 8
-    }
+    "bash": "command m\"Done.\"\n",
+    "has_bash": true,
+    "lifecycle": "continue"
   },
   {
     "name": "invalid-unterminated-message",

@@ -20,6 +20,7 @@ import (
 	"charm.land/fantasy/providers/openrouter"
 	"charm.land/fantasy/providers/vercel"
 
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
@@ -93,6 +94,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	totalUsage := streamResult.usage
 	providerMeta := streamResult.meta
 	summaryMessage = streamResult.message
+	normalizeSummaryMessageBlock(&summaryMessage)
 
 	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
 	if err := a.messages.Update(genCtx, summaryMessage); err != nil {
@@ -425,15 +427,23 @@ func summaryInstructionsPrompt() string {
 func summaryOutputProtocolPrompt() string {
 	return `Output protocol:
 
-You must emit exactly one bash heredoc in this form:
+You must emit exactly one Lenos Bash message block in this form:
 
-cat <<'LENOS_CONTEXT_COMPACTION' | narrate
+m####"
 Summary markdown goes here.
-LENOS_CONTEXT_COMPACTION
+"####
 
 Do not emit Markdown fences, JSON, XML, comments, or any text before or after
-the heredoc.
+the message block.
 `
+}
+
+func normalizeSummaryMessageBlock(summaryMessage *message.Message) {
+	parsed, diag := lenosbash.Parse(summaryMessage.Content().Text)
+	if diag != nil || parsed.HasBash || len(parsed.Messages) != 1 {
+		return
+	}
+	replaceAssistantText(summaryMessage, parsed.Messages[0].Body)
 }
 
 func buildCompactSummaryPrompt(ctx context.Context, jobID string) string {

@@ -1,7 +1,7 @@
 # Message Blocks
 
-Message blocks are the planned natural-language form for Lenos Bash. They let
-an assistant response mix prose and shell while preserving the rule that one
+Message blocks are the natural-language form for Lenos Bash. They let an
+assistant response mix prose and shell while preserving the rule that one
 assistant emit maps to one bash subprocess.
 
 This document is an executable-facing spec for parser and runtime work. The
@@ -40,11 +40,27 @@ m"First line.
 Second line."
 ```
 
+Raw multiline form:
+
+```bash
+m####"
+Ready.
+
+- First point.
+- Second point.
+"####
+```
+
 Raw-string form with hashes:
 
 ```bash
 m#"Body with "quotes"."#
 ```
+
+The `#` characters are raw-string delimiters, not bash comments. They follow
+Rust raw string rules: the opener and closer must use the same number of
+hashes, and the body is literal. Add enough hashes so the exact closing
+delimiter does not appear inside the body.
 
 Use more hashes when the body contains a delimiter candidate:
 
@@ -52,11 +68,27 @@ Use more hashes when the body contains a delimiter candidate:
 m##"Body with "# delimiter candidate."##
 ```
 
+Use more hashes for the outer message when the body itself mentions a raw
+message block. Here the body contains a four-hash example, so the outer block
+uses five hashes:
+
+```bash
+m#####"
+Use this shape for long notes:
+m####"
+body
+"####
+"#####
+```
+
 Addressed form:
 
 ```bash
 m(neil)"Please review this."
 ```
+
+When `--pair-with` is set, untargeted message blocks are also delivered to that
+default target. Explicit `m(target)"..."` blocks override the default.
 
 Mixed bash and message blocks:
 

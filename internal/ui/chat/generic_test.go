@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -9,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/list"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
@@ -108,6 +108,61 @@ func TestResultMessageItem_Highlightable(t *testing.T) {
 	assert.Equal(t, 10, endCol) // max(0, 12-2)
 }
 
+func TestResultMessageItem_RenderNarrationAsMarkdown(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.DefaultStyles()
+	item := NewResultMessageItem(&sty, &message.Message{
+		ID:   "result-1",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{Narration: "Ready."},
+		},
+	})
+
+	want, err := common.MarkdownRenderer(&sty, cappedMessageWidth(80)).Render("Ready.")
+	require.NoError(t, err)
+
+	assert.Equal(t, ansi.Strip(want), ansi.Strip(item.RawRender(80))+"\n")
+	assert.NotContains(t, ansi.Strip(item.RawRender(80)), "$")
+}
+
+func TestResultMessageItem_RenderAddsMessagePrefix(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.DefaultStyles()
+	for _, tc := range []struct {
+		name string
+		part message.CommandContent
+		want string
+	}{
+		{
+			name: "narration",
+			part: message.CommandContent{Narration: "Ready."},
+			want: "Ready.",
+		},
+		{
+			name: "pending",
+			part: message.CommandContent{Command: "go test ./...", Pending: true},
+			want: "running...",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			item := NewResultMessageItem(&sty, &message.Message{
+				ID:    "result-1",
+				Role:  message.Result,
+				Parts: []message.ContentPart{tc.part},
+			})
+
+			rendered := ansi.Strip(item.Render(80))
+
+			assert.Contains(t, rendered, tc.want)
+			assert.NotEqual(t, ansi.Strip(item.RawRender(80)), rendered)
+		})
+	}
+}
+
 func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 	sty := styles.DefaultStyles()
 
@@ -151,6 +206,20 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 		assert.Equal(t, "$ sleep 100", got)
 	})
 
+	t.Run("narration copies body", func(t *testing.T) {
+		item := &ResultMessageItem{
+			highlightableMessageItem: defaultHighlighter(&sty),
+			cachedMessageItem:        &cachedMessageItem{},
+			focusableMessageItem:     &focusableMessageItem{},
+			message: &message.Message{
+				ID:    "narration",
+				Parts: []message.ContentPart{message.CommandContent{Narration: "Ready."}},
+			},
+			sty: &sty,
+		}
+		assert.Equal(t, "Ready.", item.formatCommandForCopy())
+	})
+
 	t.Run("empty output is command-only", func(t *testing.T) {
 		item := makeItem("f4", "echo", "", nil, false)
 		got := item.formatCommandForCopy()
@@ -162,86 +231,6 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 		got := item.formatCommandForCopy()
 		assert.Equal(t, "$ ls -la /tmp\ndrwxr-xr-x  4 neil staff  128 Apr 11 tmp\n-rw-r--r--  1 neil staff   64 Apr 11 log", got)
 	})
-}
-
-func TestNarrationMessageItem_RendersNarrationBody(t *testing.T) {
-	t.Parallel()
-	sty := styles.DefaultStyles()
-	item := NewNarrationMessageItem(&sty, "result-narration-render", "# Done\nsecond line")
-
-	rendered := ansi.Strip(item.Render(80))
-
-	assert.Contains(t, rendered, "Done")
-	assert.Contains(t, rendered, "second line")
-	assert.NotContains(t, rendered, "$ narrate", "narration result should render as prose, not as a command")
-}
-
-func TestExtractMessageItems_RendersFailureBeforeNarration(t *testing.T) {
-	t.Parallel()
-	sty := styles.DefaultStyles()
-	exitCode := 1
-	msg := &message.Message{
-		ID:   "result-failure-narration-render",
-		Role: message.Result,
-		Parts: []message.ContentPart{
-			message.CommandContent{
-				Command:  "false; cat <<'EOF' | narrate\n# Failed\nEOF",
-				Output:   "command failed",
-				ExitCode: &exitCode,
-				Pending:  false,
-				Narrations: []message.CommandNarration{
-					{Body: "# Failed\nshown to human"},
-				},
-			},
-		},
-	}
-	items := ExtractMessageItems(&sty, msg, false)
-
-	require.Len(t, items, 2)
-
-	rendered := ansi.Strip(items[0].Render(80) + "\n" + items[1].Render(80))
-	failureIdx := strings.Index(rendered, "command failed")
-	narrationIdx := strings.Index(rendered, "Failed")
-	require.NotEqual(t, -1, failureIdx)
-	require.NotEqual(t, -1, narrationIdx)
-	assert.Less(t, failureIdx, narrationIdx)
-	assert.Contains(t, rendered, "shown to human")
-}
-
-func TestResultMessageItem_RendersNarrationDeliveryFailure(t *testing.T) {
-	t.Parallel()
-	sty := styles.DefaultStyles()
-	exitCode := 0
-	deliveryExitCode := 9
-	msg := &message.Message{
-		ID:   "result-delivery-failure-render",
-		Role: message.Result,
-		Parts: []message.ContentPart{
-			message.CommandContent{
-				Command:  "cat <<'EOF' | narrate --to reviewer\n# Sent\nEOF",
-				ExitCode: &exitCode,
-				Pending:  false,
-				Narrations: []message.CommandNarration{
-					{
-						Body:             "# Sent\nshown locally",
-						To:               "reviewer",
-						DeliveryExitCode: &deliveryExitCode,
-						DeliveryOutput:   "send failed",
-					},
-				},
-			},
-		},
-	}
-	items := ExtractMessageItems(&sty, msg, false)
-
-	require.Len(t, items, 2)
-	deliveryRendered := ansi.Strip(items[0].Render(80))
-	narrationRendered := ansi.Strip(items[1].Render(80))
-
-	assert.Contains(t, deliveryRendered, "delivery failed")
-	assert.Contains(t, deliveryRendered, "reviewer")
-	assert.Contains(t, deliveryRendered, "send failed")
-	assert.Contains(t, narrationRendered, "shown locally")
 }
 
 func intPtr(v int) *int {

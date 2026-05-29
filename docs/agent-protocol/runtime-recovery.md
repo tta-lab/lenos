@@ -5,14 +5,18 @@ correct model shape errors without adding a second output protocol.
 
 ## Empty Emit
 
-An empty response gets a short runtime prompt asking for bash, a comment,
-`narrate`, or bare `exit`.
+An empty response gets a short runtime prompt asking for bash, a message block,
+or bare `exit`.
+
+## Invalid Lenos Bash
+
+If the message-block parser rejects the emit, the runtime shows the offending
+line, a caret, help text, and a suggested rewrite.
 
 ## Invalid Bash
 
 If `bash -n` rejects the emit, the runtime sends the syntax error back and
-suggests an explicit `cat <<'EOF' | narrate` heredoc pipeline when the likely
-mistake is reader-facing prose.
+suggests a message block when the likely mistake is reader-facing prose.
 
 ## Tool-Call Wrappers
 
@@ -31,14 +35,8 @@ chat-shaped lowercase prose that was ambiguous enough to execute.
 A timeout is stored as a command result with exit code 124 and a re-prompt
 suggesting bash-native `timeout`.
 
-## Narration Delivery Failure
+## Message Delivery Failure
 
-If addressed narration delivery fails, the result stores the delivery exit code
-and output in `CommandNarration`. The next model observation mentions delivery
-failure but omits the narration body.
-
-## Narration Continue
-
-If `narrate --continue` is used, successful bash does not stop the loop. The
-next model observation mentions that continue was requested and still omits
-the narration body.
+If addressed message delivery fails, the runtime stores a result row with the
+delivery command, exit code, and output. The visible message body still renders
+as an assistant message.

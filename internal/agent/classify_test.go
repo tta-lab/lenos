@@ -9,19 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testBashSalvageProbe struct {
-	commands map[string]bool
-	paths    map[string]bool
-}
-
-func (p testBashSalvageProbe) commandExists(_ context.Context, name string) bool {
-	return p.commands[name]
-}
-
-func (p testBashSalvageProbe) pathExecutable(_ context.Context, path string) bool {
-	return p.paths[path]
-}
-
 func TestClassify_Exit(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -170,7 +157,7 @@ func TestClassify_NaturalLanguage(t *testing.T) {
 	}
 }
 
-func TestClassify_NaturalLanguageFirstLineWithValidBashRestRewritesToExec(t *testing.T) {
+func TestClassify_NaturalLanguageFirstLineWithValidBashRestStaysNaturalLanguage(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/bash"); err != nil {
 		t.Skip("/bin/bash not available")
@@ -178,12 +165,10 @@ func TestClassify_NaturalLanguageFirstLineWithValidBashRestRewritesToExec(t *tes
 	ctx := context.Background()
 	emit := "I'll inspect the repo.\ncat README.md && ls"
 
-	cls, aux := classifyWithSalvageProbe(ctx, emit, testBashSalvageProbe{
-		commands: map[string]bool{"cat": true},
-	})
+	cls, aux := classify(ctx, emit)
 
-	require.Equal(t, classifyExec, cls)
-	assert.Equal(t, "# I'll inspect the repo.\ncat README.md && ls", aux)
+	require.Equal(t, classifyNaturalLanguage, cls)
+	assert.Empty(t, aux)
 }
 
 func TestClassify_NaturalLanguageMultilineCJKStaysNaturalLanguage(t *testing.T) {
@@ -252,14 +237,14 @@ func TestClassify_TrailingExitIsExec(t *testing.T) {
 		name string
 		emit string
 	}{
-		{"narrate && exit", `narrate "Hi" && exit`},
-		{"narrate && exit 0", `narrate "Hi" && exit 0`},
+		{"printf && exit", `printf '%s\n' "Hi" && exit`},
+		{"printf && exit 0", `printf '%s\n' "Hi" && exit 0`},
 		{"semicolon exit", `echo done ; exit`},
 		{"semicolon exit no space", `echo done;exit`},
 		{"or exit", `echo go || exit 1`},
 		{"chained && exit", `cd /tmp && ls && exit`},
 		{"trailing whitespace", "echo hi && exit   "},
-		{"heredoc with exit on newline", "cat <<'EOF' | narrate\nHi\nEOF\nexit"},
+		{"heredoc with exit on newline", "cat <<'EOF'\nHi\nEOF\nexit"},
 		{"multi-line cmds with trailing exit", "echo one\necho two\nexit"},
 		{"heredoc with exit N on newline", "cat <<EOF\nfoo\nEOF\nexit 2"},
 	}
@@ -284,34 +269,6 @@ func TestClassify_BareExitStillBareExit(t *testing.T) {
 	require.Equal(t, classifyExit, cls)
 	cls, _ = classify(ctx, "exit 0")
 	require.Equal(t, classifyExit, cls)
-}
-
-func TestClassify_MdPrefixHasNoProtocolMeaning(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	cases := []struct {
-		emit string
-		want classifyResult
-	}{
-		{":md", classifyNaturalLanguage},
-		{":md\nhello world", classifyNaturalLanguage},
-		{":md ->mira", classifyNaturalLanguage},
-		{":md ->mira\nhello world", classifyNaturalLanguage},
-		{":md ->mira\nmulti\nline", classifyNaturalLanguage},
-		{"  :md\nhello", classifyNaturalLanguage},
-		{":md\nhello\nexit", classifyNaturalLanguage},
-		{":md\nhello\n:exit", classifyNaturalLanguage},
-		{":md ->mira\nhello\n:exit", classifyNaturalLanguage},
-		{":md\nhello\n:continue", classifyNaturalLanguage},
-		{":md ->mira\nhello\n:continue", classifyNaturalLanguage},
-	}
-	for _, tc := range cases {
-		t.Run(tc.emit, func(t *testing.T) {
-			t.Parallel()
-			cls, _ := classify(ctx, tc.emit)
-			assert.Equal(t, tc.want, cls, ":md must not be a dedicated protocol class")
-		})
-	}
 }
 
 func TestClassify_NaturalLanguageReplacesTitleCaseProseHeuristic(t *testing.T) {

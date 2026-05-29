@@ -42,19 +42,12 @@ var blockedCmdPatterns = []*regexp.Regexp{
 }
 
 var (
-	envAssignmentTokenRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=.*$`)
-	flagTokenRe          = regexp.MustCompile(`(?:^|\s)--?[A-Za-z0-9]`)
-	pathLikeTokenRe      = regexp.MustCompile(`(?:^|\s)(?:\.{1,2}/|~/|/|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+|[A-Za-z0-9_.-]+\.[A-Za-z0-9]{1,8})(?:\s|$|[;&|<>])`)
+	flagTokenRe     = regexp.MustCompile(`(?:^|\s)--?[A-Za-z0-9]`)
+	pathLikeTokenRe = regexp.MustCompile(`(?:^|\s)(?:\.{1,2}/|~/|/|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+|[A-Za-z0-9_.-]+\.[A-Za-z0-9]{1,8})(?:\s|$|[;&|<>])`)
 )
 
-type bashSalvageProbe interface {
-	commandExists(context.Context, string) bool
-	pathExecutable(context.Context, string) bool
-}
-
 // classify inspects an agent emit and returns the action class plus an
-// auxiliary string (bash stderr for classifyInvalidBash; rewritten bash for
-// classifyExec when natural-language first-line rewrite applies; "" otherwise).
+// auxiliary string (bash stderr for classifyInvalidBash; "" otherwise).
 //
 // Classification order: empty → exit → banned → tool-call →
 // natural-language → bash-syntax → exec.
@@ -64,10 +57,6 @@ type bashSalvageProbe interface {
 // bash-syntax so obviously wrong non-bash shapes get dedicated corrections
 // instead of generic shell errors.
 func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {
-	return classifyWithSalvageProbe(ctx, emit, nil)
-}
-
-func classifyWithSalvageProbe(ctx context.Context, emit string, probe bashSalvageProbe) (cls classifyResult, aux string) {
 	trimmed := strings.TrimSpace(emit)
 	if trimmed == "" {
 		return classifyEmpty, ""
@@ -80,9 +69,6 @@ func classifyWithSalvageProbe(ctx context.Context, emit string, probe bashSalvag
 	}
 	if containsToolCallPattern(emit) {
 		return classifyToolCall, ""
-	}
-	if rewritten, ok := rewriteNaturalLanguageFirstLineBash(ctx, emit, probe); ok {
-		return classifyExec, rewritten
 	}
 	if isNaturalLanguageEmit(emit) {
 		return classifyNaturalLanguage, ""
@@ -134,100 +120,9 @@ func isNaturalLanguageEmit(emit string) bool {
 	return true
 }
 
-func rewriteNaturalLanguageFirstLineBash(ctx context.Context, emit string, probe bashSalvageProbe) (string, bool) {
-	if probe == nil {
-		return "", false
-	}
-	trimmed := strings.TrimLeft(emit, " \t\r\n")
-	firstLine, rest, found := strings.Cut(trimmed, "\n")
-	if !found || strings.TrimSpace(rest) == "" {
-		return "", false
-	}
-	if isMarkdownHeadingFirstLine(firstLine) {
-		return "", false
-	}
-	if !isNaturalLanguageEmit(firstLine) {
-		return "", false
-	}
-
-	rest = strings.TrimLeft(rest, "\n")
-	restTrimmed := strings.TrimSpace(rest)
-	if restTrimmed == "" || exitRe.MatchString(restTrimmed) {
-		return "", false
-	}
-	if containsBlockedPattern(rest) || containsToolCallPattern(rest) {
-		return "", false
-	}
-	if err := bashSyntaxCheck(ctx, rest); err != "" {
-		return "", false
-	}
-	if !shouldSalvageBashRest(ctx, rest, probe) {
-		return "", false
-	}
-
-	return "# " + strings.TrimSpace(firstLine) + "\n" + rest, true
-}
-
 func isMarkdownHeadingFirstLine(emit string) bool {
 	trimmed := strings.TrimLeft(emit, " \t")
 	return strings.HasPrefix(trimmed, "##")
-}
-
-func shouldSalvageBashRest(ctx context.Context, emit string, probe bashSalvageProbe) bool {
-	lines := effectiveShellLines(emit)
-	if len(lines) == 0 {
-		return false
-	}
-
-	line := lines[0]
-	word, hadAssignment := firstCommandWord(line)
-	if word == "" {
-		return false
-	}
-	if isPathCommandWord(word) {
-		return probe.pathExecutable(ctx, word)
-	}
-	if !startsLowerASCII(word) || !hasCommandEvidence(line, hadAssignment) {
-		return false
-	}
-	return probe.commandExists(ctx, word)
-}
-
-func effectiveShellLines(emit string) []string {
-	var lines []string
-	for _, line := range strings.Split(emit, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		lines = append(lines, trimmed)
-	}
-	return lines
-}
-
-func firstCommandWord(line string) (string, bool) {
-	hadAssignment := false
-	for _, token := range strings.Fields(line) {
-		token = cleanProbeToken(token)
-		if token == "" {
-			continue
-		}
-		if envAssignmentTokenRe.MatchString(token) {
-			hadAssignment = true
-			continue
-		}
-		return token, hadAssignment
-	}
-	return "", hadAssignment
-}
-
-func cleanProbeToken(token string) string {
-	token = strings.Trim(token, `"'`)
-	token = strings.TrimRight(token, ";|&<>")
-	if strings.ContainsAny(token, "$`\\") {
-		return ""
-	}
-	return token
 }
 
 func isPathCommandWord(word string) bool {

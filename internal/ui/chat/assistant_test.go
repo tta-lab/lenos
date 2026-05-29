@@ -46,11 +46,11 @@ func TestAssistantMessageItem_RenderBashEmitPreviewIsOneLine(t *testing.T) {
 	assert.Equal(t, "echo one\necho two", item.CopyText())
 }
 
-func TestAssistantMessageItem_RenderMdPrefixAsBashPreview(t *testing.T) {
+func TestAssistantMessageItem_RenderColonPrefixAsBashPreview(t *testing.T) {
 	t.Parallel()
 
 	sty := styles.DefaultStyles()
-	content := ":md\n# Done\nsecond line"
+	content := ":status\n# Done\nsecond line"
 	item := NewAssistantMessageItem(&sty, &message.Message{
 		ID:   "assistant-1",
 		Role: message.Assistant,
@@ -61,13 +61,13 @@ func TestAssistantMessageItem_RenderMdPrefixAsBashPreview(t *testing.T) {
 
 	rendered := ansi.Strip(item.RawRender(80))
 
-	assert.Contains(t, rendered, "$ :md")
-	assert.Contains(t, rendered, ":md")
+	assert.Contains(t, rendered, "$ :status")
+	assert.Contains(t, rendered, ":status")
 	assert.NotContains(t, rendered, "second line")
 	assert.Equal(t, content, item.CopyText())
 }
 
-func TestAssistantMessageItem_RenderColonNonMdAsBashPreview(t *testing.T) {
+func TestAssistantMessageItem_RenderColonWordAsBashPreview(t *testing.T) {
 	t.Parallel()
 
 	sty := styles.DefaultStyles()
@@ -75,12 +75,30 @@ func TestAssistantMessageItem_RenderColonNonMdAsBashPreview(t *testing.T) {
 		ID:   "assistant-1",
 		Role: message.Assistant,
 		Parts: []message.ContentPart{
-			message.TextContent{Text: ":mdata\nsecond line"},
+			message.TextContent{Text: ":data\nsecond line"},
 		},
 	}, true)
 
 	rendered := ansi.Strip(item.RawRender(80))
 
-	assert.Contains(t, rendered, "$ :mdata")
+	assert.Contains(t, rendered, "$ :data")
 	assert.NotContains(t, rendered, "second line")
+}
+
+func TestAssistantMessageItem_RenderMessageBlockAsMarkdown(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.DefaultStyles()
+	item := NewAssistantMessageItem(&sty, &message.Message{
+		ID:   "assistant-1",
+		Role: message.Assistant,
+		Parts: []message.ContentPart{
+			message.TextContent{Text: "Ready.", Kind: message.TextContentKindMessageBlock},
+		},
+	}, true)
+
+	rendered := ansi.Strip(item.RawRender(80))
+
+	assert.Contains(t, rendered, "Ready.")
+	assert.NotContains(t, rendered, "$ Ready.")
 }

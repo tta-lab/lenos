@@ -842,7 +842,7 @@ func (m *UI) setSessionMessages(msgs []message.Message) tea.Cmd {
 			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, showThinking)...)
 		case message.Assistant:
 			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, showThinking)...)
-			if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn {
+			if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn && !chat.IsMessageBlockAssistant(msg) {
 				infoItem := chat.NewAssistantInfoItem(m.com.Styles, msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
 				items = append(items, infoItem)
 			}
@@ -912,7 +912,7 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 				cmds = append(cmds, cmd)
 			}
 		}
-		if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn {
+		if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn && !chat.IsMessageBlockAssistant(&msg) {
 			infoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
 			m.chat.AppendMessages(infoItem)
 			if m.chat.Follow() {
@@ -977,14 +977,9 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 			items := chat.ExtractMessageItems(m.com.Styles, &msg, showThinking)
 			m.chat.AppendMessages(items...)
 		}
-		if _, ok := existingItem.(*chat.NarrationMessageItem); ok {
-			m.chat.RemoveMessageGroup(msg.ID)
-			items := chat.ExtractMessageItems(m.com.Styles, &msg, showThinking)
-			m.chat.AppendMessages(items...)
-		}
 	}
 
-	if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn {
+	if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn && !chat.IsMessageBlockAssistant(&msg) {
 		if infoItem := m.chat.MessageItem(chat.AssistantInfoID(msg.ID)); infoItem == nil {
 			newInfoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
 			m.chat.AppendMessages(newInfoItem)

@@ -14,8 +14,6 @@ The module path is `github.com/tta-lab/lenos`.
 
 ```
 main.go                            CLI entry point (cobra via internal/cmd)
-cmd/
-  narrate/                         narrate CLI binary — bash subprocesses use this to append prose to the session podcast (Phase 3, bash-first agent loop)
 internal/
   app/app.go                       Top-level wiring: DB, config, agents, events
   cmd/                             CLI commands (root, run, login, models, stats, sessions)
@@ -91,8 +89,8 @@ The coder turn dispatches on `RuntimeOverrides.ActiveTier`:
 active tier/provider/model as the current session.
 Compact summarization keeps the normal bash-first system prompt as the first
 message and appends the compact instruction as the final user message. This
-keeps the shared prompt prefix cacheable while still instructing the model to
-emit one `cat <<'LENOS_CONTEXT_COMPACTION' | narrate` heredoc pipeline.
+keeps the shared prompt prefix cacheable while instructing the model to emit
+one `m####"..."####` message block.
 
 ### CLI behavior matrix
 
@@ -135,6 +133,25 @@ current session.
   UI, and services.
 - **CGO disabled**: builds with `CGO_ENABLED=0` and
   `GOEXPERIMENT=greenteagc`.
+
+### Lenos Bash Storage Invariant
+
+Assistant messages in the database should preserve the Lenos Bash text the
+agent emitted, after any runtime auto-repair. For example, if the model emits
+plain reader-facing prose and the runtime repairs it to `m#"..."#`, store the
+repaired `m` block as the assistant message. This keeps future model history
+full of valid Lenos Bash examples and teaches the protocol through its own
+prior turns.
+
+Published message bodies are display data. Store them on the related result
+message as narration content so the TUI renders user-visible prose from the
+result row, not by rewriting the assistant emit. Do the same for synthetic
+runtime messages such as the multiline Ready block. Synthetic mixed emits must
+store the raw `m` blocks as assistant history while executing only the cleaned
+bash. When changing where message-block bodies are stored, preserve the
+existing TUI prose renderer semantics; storage role changes should not make
+markdown look raw or change row alignment. See `internal/ui/AGENTS.md` for chat
+render rules.
 
 ## Build/Test/Lint Commands
 

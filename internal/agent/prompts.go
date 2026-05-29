@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -72,13 +71,12 @@ func SystemPrompt(
 	var b strings.Builder
 	b.WriteString(base)
 	b.WriteString("\n")
-	b.WriteString(protocol.MessageSection(gitSection))
-	b.WriteString("\n")
 	if pairWith := strings.TrimSpace(store.Overrides().PairWith); pairWith != "" {
-		b.WriteString(protocol.MessageSection(
-			"# Addressed Messages\n\nMessages without an explicit addressee are delivered to " + pairWith + ". Use `m(<agent>)\"your response\"` only when another target is needed. Lenos handles delivery."))
+		b.WriteString(protocol.MessageSection("Untargeted message blocks are delivered to " + pairWith + ". Explicit `m(target)\"...\"` message blocks override this default."))
 		b.WriteString("\n")
 	}
+	b.WriteString(protocol.MessageSection(gitSection))
+	b.WriteString("\n")
 	b.WriteString(lenosWrapper)
 	return b.String(), nil
 }
@@ -114,52 +112,26 @@ func buildLenosWrapper(
 	return p.Build(ctx, provider, model, store)
 }
 
-func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, workingDir string) []RuntimeContextCommand {
+func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
-		Command:  "# list registered projects\nttal project list",
-		Optional: true,
-	}, {
-		Command:  "# list available skills\nskill list",
+		Command:  "m\"Let me list registered projects and available skills.\"\nttal project list\nskill list",
 		Optional: true,
 	}}
-	for _, file := range runtimeContext.ContextFiles {
+	if len(runtimeContext.ContextFiles) > 0 {
+		var readCmd strings.Builder
+		readCmd.WriteString("m\"Let me read key instructions.\"")
+		for _, file := range runtimeContext.ContextFiles {
+			readCmd.WriteString("\ncat ")
+			readCmd.WriteString(shellQuote(file.Path))
+		}
 		commands = append(commands, RuntimeContextCommand{
-			Command: runtimeContextReadComment(file.Path, workingDir) + "\ncat " + shellQuote(file.Path),
+			Command: readCmd.String(),
 		})
 	}
 	commands = append(commands, RuntimeContextCommand{
-		Command: "m\"Ready.\"",
+		Command: "m\"\nReady.\n\nLets rock and roll.\n\"",
 	})
 	return commands
-}
-
-func runtimeContextReadComment(path, workingDir string) string {
-	if isProjectScopeContextPath(path, workingDir) {
-		return "# read project instructions"
-	}
-	if isUserScopeContextPath(path) {
-		return "# read user instructions"
-	}
-	return "# read project instructions"
-}
-
-func isProjectScopeContextPath(path, workingDir string) bool {
-	if workingDir == "" {
-		return false
-	}
-	path = filepath.Clean(path)
-	workingDir = filepath.Clean(workingDir)
-	return path == workingDir || strings.HasPrefix(path, workingDir+string(os.PathSeparator))
-}
-
-func isUserScopeContextPath(path string) bool {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return false
-	}
-	path = filepath.Clean(path)
-	home = filepath.Clean(home)
-	return path == home || strings.HasPrefix(path, home+string(os.PathSeparator))
 }
 
 func InitializePrompt(cfg *config.ConfigStore) (string, error) {
@@ -171,7 +143,7 @@ func InitializePrompt(cfg *config.ConfigStore) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return protocol.NarrateSection("LENOS_INITIALIZE_PROMPT", body), nil
+	return protocol.MessageSection(body), nil
 }
 
 // stripYAMLFrontmatter removes a single leading YAML frontmatter block

@@ -191,30 +191,90 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 			{Path: env.workingDir},
 		},
 		ContextCommands: []RuntimeContextCommand{{
-			Command: "# read project instructions\ncat " + shellQuote(contextFile),
+			Command: "m\"Let me read key instructions.\"\ncat " + shellQuote(contextFile),
+		}, {
+			Command: "m\"\nReady.\n\nLets rock and roll.\n\"",
 		}},
 	})
 	require.NoError(t, err)
 
 	msgs, err := env.messages.List(t.Context(), sess.ID)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(msgs), 4)
+	require.GreaterOrEqual(t, len(msgs), 5)
 	require.Equal(t, message.Assistant, msgs[0].Role)
-	require.Equal(t, "# read project instructions\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
+	require.Equal(t, "m\"Let me read key instructions.\"\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
+	require.Equal(t, "cat "+shellQuote(contextFile), msgs[1].CommandContent().Command)
+	require.Equal(t, "Let me read key instructions.", msgs[1].CommandContent().Narration)
 	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)
-	require.Equal(t, message.User, msgs[2].Role)
-	require.Equal(t, "user prompt", msgs[2].Content().Text)
+	require.Equal(t, message.Assistant, msgs[2].Role)
+	require.Equal(t, "m\"\nReady.\n\nLets rock and roll.\n\"", msgs[2].Content().Text)
+	require.Nil(t, msgs[2].FinishPart())
+	require.Equal(t, "test-model", msgs[2].Model)
+	require.Equal(t, "test-provider", msgs[2].Provider)
+	require.Equal(t, message.Result, msgs[3].Role)
+	require.Equal(t, "Ready.\n\nLets rock and roll.", msgs[3].CommandContent().Narration)
+	require.Equal(t, message.User, msgs[4].Role)
+	require.Equal(t, "user prompt", msgs[4].Content().Text)
 
 	require.Len(t, model.captured, 1)
 	prompt := model.captured[0]
-	require.Len(t, prompt, 4)
+	require.Len(t, prompt, 5)
 	require.Equal(t, fantasy.MessageRoleSystem, prompt[0].Role)
 	require.Equal(t, fantasy.MessageRoleAssistant, prompt[1].Role)
 	require.Equal(t, fantasy.MessageRoleUser, prompt[2].Role)
 	require.Contains(t, fantasyMessageText(prompt[2]), "project instructions")
-	require.Equal(t, "user prompt", fantasyMessageText(prompt[3]))
+	require.Equal(t, fantasy.MessageRoleAssistant, prompt[3].Role)
+	require.Equal(t, "m\"\nReady.\n\nLets rock and roll.\n\"", fantasyMessageText(prompt[3]))
+	require.Equal(t, "user prompt", fantasyMessageText(prompt[4]))
+}
+
+func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	primary := Model{
+		Model:      &mockLanguageModel{},
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
+		ModelCfg:   config.SelectedModel{Provider: "test-provider", Model: "test-model"},
+	}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           primary,
+		SmallModel:           primary,
+		PrimaryModel:         primary,
+		SystemPrompt:         "system prompt",
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		DisableAutoSummarize: true,
+	}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "runtime context")
+	require.NoError(t, err)
+
+	raw := "m\"Let me list registered projects and available skills.\"\nttal project list\nskill list"
+	runner := &fakeRunner{results: []ExecResult{{
+		Stdout:   []byte("project-a\nskill-a\n"),
+		ExitCode: 0,
+	}}}
+	err = agent.persistRuntimeContextCommands(t.Context(), SessionAgentCall{
+		SessionID: sess.ID,
+		ContextCommands: []RuntimeContextCommand{{
+			Command: raw,
+		}},
+	}, runner)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"ttal project list\nskill list"}, runner.bash)
+
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	require.Equal(t, message.Assistant, msgs[0].Role)
+	require.Equal(t, raw, msgs[0].Content().Text)
+	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
+	require.Equal(t, message.Result, msgs[1].Role)
+	require.Equal(t, "ttal project list\nskill list", msgs[1].CommandContent().Command)
+	require.Equal(t, "Let me list registered projects and available skills.", msgs[1].CommandContent().Narration)
+	require.Equal(t, "project-a\nskill-a\n", msgs[1].CommandContent().Output)
 }
 
 func TestRun_PassesAssistantPrefillToLoop(t *testing.T) {
@@ -1123,7 +1183,7 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.NoError(t, err)
 
 	inner := &scriptedModel{
-		emits: []string{"cat <<'LENOS_CONTEXT_COMPACTION' | narrate\nSummary\nLENOS_CONTEXT_COMPACTION"},
+		emits: []string{"m####\"Summary\"####"},
 	}
 	model := &streamCapturingModel{inner: inner}
 	primary := Model{
@@ -1149,6 +1209,12 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	err = agent.Summarize(t.Context(), sess.ID, fantasy.ProviderOptions{})
 	require.NoError(t, err)
 
+	updated, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	summaryMsg, err := env.messages.Get(t.Context(), updated.SummaryMessageID)
+	require.NoError(t, err)
+	require.Equal(t, "Summary", summaryMsg.Content().Text)
+
 	require.Len(t, model.captured, 1)
 	prompt := model.captured[0]
 	require.GreaterOrEqual(t, len(prompt), 3)
@@ -1163,6 +1229,8 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.Equal(t, fantasy.MessageRoleUser, last.Role)
 	lastText := fantasyMessageText(last)
 	require.NotEmpty(t, lastText)
+	require.Contains(t, lastText, `m####"`)
+	require.NotContains(t, lastText, "narrate")
 
 	systemMessages := 0
 	for _, msg := range prompt[:len(prompt)-1] {

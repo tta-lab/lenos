@@ -1,16 +1,17 @@
 # Storage And Rendering
 
 SQLite remains the source of truth for session history. The runtime stores
-what the model emitted after any runtime rewrite, plus command results and
-runtime-owned narration metadata.
+assistant emits, published message blocks, command results, and runtime-owned
+delivery diagnostics.
 
 ## Assistant Messages
 
-Assistant text stores bash. If natural-language detection rewrites prose, the
-stored assistant message is generated narration bash, not the raw prose.
+Assistant text stores the Lenos Bash emit, after any runtime auto-repair. Bash
+emits and `m` message-block emits both remain protocol-shaped in history so
+future model calls see valid examples of what they emitted.
 
-Assistant messages render in the TUI as bash previews. The first line is shown
-with a `$` prefix; multi-line bash is collapsed to one preview line.
+Published message block bodies are display data, not assistant emits. Store
+them on result rows as narration.
 
 ## Command Results
 
@@ -23,7 +24,7 @@ type CommandContent struct {
     ExitCode    *int
     Pending     bool
     Observation string
-    Narrations  []CommandNarration
+    Narration   string
 }
 ```
 
@@ -31,32 +32,13 @@ type CommandContent struct {
 iteration. If it is present, `FormatResults` uses it instead of rebuilding from
 stdout/stderr.
 
-## Command Narration
-
-Narration is result metadata:
-
-```go
-type CommandNarration struct {
-    Body             string
-    To               string
-    Continue         bool
-    DeliveryExitCode *int
-    DeliveryOutput   string
-}
-```
-
-The body renders to the human as markdown, but it is not duplicated into the
-next model observation. The model already sees its own assistant command,
-including the heredoc body, through the assistant message.
-
-`FormatResults` may include status text such as "narration rendered to user"
-or "narration delivery failed", plus "continue requested" for
-`narrate --continue`, but it omits the narration body.
+`Narration` is the published message-block body for TUI rendering. Narration
+does not replay to the model by itself; the assistant emit already contains the
+Lenos Bash `m` block.
 
 ## TUI Rendering
 
-- Successful commands with no narration are hidden.
+- Successful commands are hidden.
 - Failed commands render as command output plus the failure badge.
-- Commands with narration render narration bodies as assistant markdown.
-- If both failure and narration exist, the failed result appears first and the
-  narration body appears after it as assistant markdown.
+- Narration renders as assistant markdown.
+- Message delivery failures render as result rows.

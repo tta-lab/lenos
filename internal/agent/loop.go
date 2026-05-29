@@ -44,16 +44,14 @@ type loopDeps struct {
 	// model exposes native prefix completion support through
 	// assistantPrefillModel.
 	messageBlockPrefill bool
-	messages            message.Service
-	runner              Runner
-	salvage             bashSalvageProbe
-	sessionID           string
-	sysPrompt           string
-	env                 map[string]string
-	paths               []client.AllowedPath
-	// defaultNarrationTarget is applied to narrate calls without --to.
-	// Explicit --to values remain unchanged.
-	defaultNarrationTarget string
+	// pairWith is the default delivery target for untargeted m blocks.
+	pairWith  string
+	messages  message.Service
+	runner    Runner
+	sessionID string
+	sysPrompt string
+	env       map[string]string
+	paths     []client.AllowedPath
 	// onUsage is called after each step with usage metrics.
 	onUsage func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 
@@ -126,17 +124,9 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			deps.onUsage(step, usage, meta)
 		}
 
-		probe := deps.salvage
-		if probe == nil {
-			probe = runnerBashSalvageProbe{
-				runner: deps.runner,
-				env:    deps.env,
-				paths:  deps.paths,
-			}
-		}
 		assistantReplay := emit
 		commandEmit := emit
-		var extractedNarrations []message.CommandNarration
+		var extractedMessages []lenosbash.MessageBlock
 
 		parsed, diag := lenosbash.Parse(emit)
 		if diag != nil {
@@ -156,9 +146,9 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		}
 
 		if len(parsed.Messages) > 0 {
-			extractedNarrations = messageBlockNarrations(parsed.Messages)
+			extractedMessages = parsed.Messages
 			if !parsed.HasBash {
-				stop, nextMsgs, handleErr := handleMessageOnlyBlocks(ctx, deps, &assistantMsg, extractedNarrations, msgs)
+				stop, nextMsgs, handleErr := handleMessageOnlyBlocks(ctx, deps, &assistantMsg, extractedMessages, msgs)
 				if handleErr != nil {
 					return stopError, handleErr
 				}
@@ -171,42 +161,59 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			commandEmit = parsed.Bash
 		}
 
-		cls, aux := classifyWithSalvageProbe(ctx, commandEmit, probe)
-		if cls == classifyExec && aux != "" {
-			commandEmit = aux
-			assistantReplay = aux
-			replaceAssistantText(&assistantMsg, commandEmit)
-			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
-				slog.Warn("loop: persist rewritten bash emit", "error", updateErr)
+		if len(extractedMessages) == 0 {
+			if rewritten, ok := rewriteNaturalLanguageFirstLineMessage(ctx, commandEmit); ok {
+				parsed, diag = lenosbash.Parse(rewritten)
+				if diag == nil && len(parsed.Messages) > 0 && parsed.HasBash {
+					extractedMessages = parsed.Messages
+					assistantReplay = rewritten
+					commandEmit = parsed.Bash
+					replaceAssistantText(&assistantMsg, rewritten)
+					if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+						slog.Warn("loop: persist first-line message rewrite", "error", updateErr)
+					}
+				}
 			}
 		}
+
+		cls, aux := classify(ctx, commandEmit)
 		if cls == classifyNaturalLanguage {
-			if len(extractedNarrations) > 0 {
-				obs := rePromptInvalidLenosBash(commandEmit, lenosbash.Diagnostic{
-					Kind:    "shell_parse_error",
-					Message: "text outside message blocks must be bash",
-					Line:    1,
-					Column:  1,
-					Offset:  0,
-				})
-				msgs = append(msgs,
-					assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
-					fantasy.NewUserMessage(obs),
-				)
-				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-					slog.Warn("loop: persist invalid-lenos-bash re-prompt", "error", obsErr)
+			if rewritten, ok := rewriteNaturalLanguageMessage(commandEmit); ok {
+				parsed, diag = lenosbash.Parse(rewritten)
+				if diag == nil && len(parsed.Messages) > 0 && !parsed.HasBash {
+					assistantReplay = rewritten
+					replaceAssistantText(&assistantMsg, rewritten)
+					if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+						slog.Warn("loop: persist message rewrite", "error", updateErr)
+					}
+					stop, nextMsgs, handleErr := handleMessageOnlyBlocks(ctx, deps, &assistantMsg, parsed.Messages, msgs)
+					if handleErr != nil {
+						return stopError, handleErr
+					}
+					if stop {
+						return stopExit, nil
+					}
+					msgs = drainAndAppend(ctx, deps, nextMsgs)
+					continue
 				}
-				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-				msgs = drainAndAppend(ctx, deps, msgs)
-				continue
 			}
-			commandEmit = narrateCommandForBody(commandEmit)
-			assistantReplay = commandEmit
-			replaceAssistantText(&assistantMsg, commandEmit)
-			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
-				slog.Warn("loop: persist natural-language narrate rewrite", "error", updateErr)
+			obs := rePromptInvalidLenosBash(commandEmit, lenosbash.Diagnostic{
+				Kind:    "shell_parse_error",
+				Message: "text outside message blocks must be bash",
+				Line:    1,
+				Column:  1,
+				Offset:  0,
+			})
+			msgs = append(msgs,
+				assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
+				fantasy.NewUserMessage(obs),
+			)
+			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+				slog.Warn("loop: persist invalid-lenos-bash re-prompt", "error", obsErr)
 			}
-			cls = classifyExec
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
+			continue
 		}
 
 		switch cls {
@@ -282,18 +289,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				return stopError, fmt.Errorf("create result row: %w", createErr)
 			}
 
-			inv, invErr := newNarrateInvocation(commandEmit, deps.env, deps.paths, deps.defaultNarrationTarget)
-			if invErr != nil {
-				abandonPending(ctx, deps.messages, &resultMsg)
-				return stopError, fmt.Errorf("create narrate IPC directory: %w", invErr)
-			}
-			res := deps.runner.Run(ctx, inv.bash, inv.env, inv.paths)
-			narrations, narrateErr := readNarrationEvents(inv.dir)
-			inv.cleanup()
-			if narrateErr != nil {
-				abandonPending(ctx, deps.messages, &resultMsg)
-				return stopError, fmt.Errorf("read narrate IPC events: %w", narrateErr)
-			}
+			res := deps.runner.Run(ctx, commandEmit, deps.env, deps.paths)
 
 			// Background job: command exceeded the auto-background threshold
 			// and was detached. Notify the model with <-Runtime format and
@@ -329,12 +325,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				abandonPending(ctx, deps.messages, &resultMsg)
 				return stopCanceled, ctx.Err()
 			}
-			ipcNarrations := narrations
-			if res.ExitCode == 0 && len(extractedNarrations) > 0 {
-				narrations = append(narrations, extractedNarrations...)
-			}
-			narrations, deliveryFailed := deliverNarrations(ctx, deps.runner, deps.env, deps.paths, narrations)
-
 			exitCode := res.ExitCode
 			stderr := string(res.Stderr)
 			if res.Err != nil && len(res.Stdout) == 0 && stderr == "" {
@@ -343,14 +333,12 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			envelope := formatResultForModel(commandEmit, string(res.Stdout), stderr, res.ExitCode)
 			body := strings.TrimPrefix(envelope, "<result>\n")
 			body = strings.TrimSuffix(body, "\n</result>")
-			body = appendNarrationObservation(body, narrations)
 			resultMsg.Parts = []message.ContentPart{message.CommandContent{
 				Command:     commandEmit,
 				Output:      string(combine(res.Stdout, []byte(stderr))),
 				ExitCode:    &exitCode,
 				Pending:     false,
 				Observation: body,
-				Narrations:  narrations,
 			}}
 			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 				slog.Warn("loop: persist result row", "error", updateErr)
@@ -367,7 +355,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 					ExitCode:    &exitCode,
 					Pending:     false,
 					Observation: obs,
-					Narrations:  narrations,
 				}}
 				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 					slog.Warn("loop: persist timeout result row", "error", updateErr)
@@ -397,19 +384,20 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 					ExitCode:    &exitCode,
 					Pending:     false,
 					Observation: obs,
-					Narrations:  narrations,
 				}}
 				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 					slog.Warn("loop: persist cmd-not-found result row", "error", updateErr)
 				}
 			}
-			if shouldStopAfterNarration(ipcNarrations, res.ExitCode, deliveryFailed) {
-				return stopExit, nil
-			}
 			msgs = append(msgs,
 				assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
-				fantasy.NewUserMessage(obs),
 			)
+			if res.ExitCode == 0 && len(extractedMessages) > 0 {
+				if err := publishMixedMessageBlocks(ctx, deps, extractedMessages, &resultMsg); err != nil {
+					return stopError, err
+				}
+			}
+			msgs = append(msgs, fantasy.NewUserMessage(obs))
 			msgs = drainAndAppend(ctx, deps, msgs)
 		}
 	}
@@ -418,13 +406,20 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 }
 
 func replaceAssistantText(msg *message.Message, text string) {
+	replaceAssistantTextKind(msg, text, "")
+}
+
+func replaceAssistantTextKind(msg *message.Message, text string, kind message.TextContentKind) {
 	parts := make([]message.ContentPart, 0, len(msg.Parts)+1)
 	replaced := false
 	for _, part := range msg.Parts {
-		switch part.(type) {
+		switch c := part.(type) {
 		case message.TextContent:
 			if !replaced {
-				parts = append(parts, message.TextContent{Text: text})
+				if kind == "" {
+					kind = c.Kind
+				}
+				parts = append(parts, message.TextContent{Text: text, Kind: kind})
 				replaced = true
 			}
 		case message.Finish:
@@ -434,49 +429,160 @@ func replaceAssistantText(msg *message.Message, text string) {
 		}
 	}
 	if !replaced {
-		parts = append(parts, message.TextContent{Text: text})
+		parts = append(parts, message.TextContent{Text: text, Kind: kind})
 	}
 	msg.Parts = parts
 }
 
-func messageBlockNarrations(blocks []lenosbash.MessageBlock) []message.CommandNarration {
-	narrations := make([]message.CommandNarration, 0, len(blocks))
-	for _, block := range blocks {
-		narrations = append(narrations, message.CommandNarration{
-			Body: block.Body,
-			To:   block.Target,
-		})
+func rewriteNaturalLanguageFirstLineMessage(ctx context.Context, emit string) (string, bool) {
+	firstLine, rest, ok := strings.Cut(emit, "\n")
+	if !ok || strings.TrimSpace(rest) == "" {
+		return "", false
 	}
-	return narrations
+	if !isNaturalLanguageEmit(firstLine) {
+		return "", false
+	}
+	if !hasShellActionEvidence(rest) {
+		return "", false
+	}
+	cls, _ := classify(ctx, rest)
+	if cls != classifyExec {
+		return "", false
+	}
+	return rawMessageBlock(strings.TrimSpace(firstLine)) + "\n" + rest, true
+}
+
+func rewriteNaturalLanguageMessage(emit string) (string, bool) {
+	body := strings.TrimSpace(emit)
+	if body == "" || strings.Contains(body, "\n") {
+		return "", false
+	}
+	if strings.ContainsAny(body, "|&;<>") {
+		return "", false
+	}
+	if !isNaturalLanguageEmit(body) {
+		return "", false
+	}
+	return rawMessageBlock(body), true
+}
+
+func hasShellActionEvidence(script string) bool {
+	for _, line := range strings.Split(script, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		return hasCommandEvidence(trimmed, false)
+	}
+	return false
+}
+
+func rawMessageBlock(body string) string {
+	hashes := "#"
+	for strings.Contains(body, `"`+hashes) {
+		hashes += "#"
+	}
+	return "m" + hashes + `"` + body + `"` + hashes
 }
 
 func handleMessageOnlyBlocks(
 	ctx context.Context,
 	deps loopDeps,
 	assistantMsg *message.Message,
-	narrations []message.CommandNarration,
+	blocks []lenosbash.MessageBlock,
 	msgs []fantasy.Message,
 ) (bool, []fantasy.Message, error) {
-	narrations, _ = deliverNarrations(ctx, deps.runner, deps.env, deps.paths, narrations)
-	exitCode := 0
-	obs := appendNarrationObservation("message block rendered to user", narrations)
-	if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-		Role: message.Result,
-		Parts: []message.ContentPart{
-			message.TextContent{Text: obs},
-			message.CommandContent{
-				ExitCode:    &exitCode,
-				Pending:     false,
-				Observation: obs,
-				Narrations:  narrations,
-			},
-		},
-	}); err != nil {
-		return false, msgs, fmt.Errorf("create message-block result row: %w", err)
+	if err := publishMessageBlocks(ctx, deps, blocks, assistantMsg); err != nil {
+		return false, msgs, err
 	}
-
 	markStepFinished(ctx, deps, assistantMsg, message.FinishReasonToolUse)
 	return true, msgs, nil
+}
+
+func publishMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash.MessageBlock, _ *message.Message) error {
+	for _, block := range blocks {
+		body := strings.TrimSpace(block.Body)
+		if body == "" {
+			continue
+		}
+		target := effectiveMessageBlockTarget(deps, block)
+		if target != "" {
+			if err := deliverMessageBlock(ctx, deps, target, block); err != nil {
+				return err
+			}
+		}
+		if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
+			Role:  message.Result,
+			Parts: []message.ContentPart{message.CommandContent{Narration: body}},
+		}); err != nil {
+			return fmt.Errorf("create message-block narration row: %w", err)
+		}
+	}
+	return nil
+}
+
+func publishMixedMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash.MessageBlock, resultMsg *message.Message) error {
+	var narrations []string
+	for _, block := range blocks {
+		target := effectiveMessageBlockTarget(deps, block)
+		if target != "" {
+			if err := deliverMessageBlock(ctx, deps, target, block); err != nil {
+				return err
+			}
+		}
+		body := strings.TrimSpace(block.Body)
+		if body == "" {
+			continue
+		}
+		narrations = append(narrations, body)
+	}
+	if resultMsg == nil || len(narrations) == 0 {
+		return nil
+	}
+	cmd := resultMsg.CommandContent()
+	cmd.Narration = strings.Join(narrations, "\n\n")
+	resultMsg.Parts = []message.ContentPart{cmd}
+	if err := deps.messages.Update(ctx, *resultMsg); err != nil {
+		return fmt.Errorf("update message-block narration row: %w", err)
+	}
+	return nil
+}
+
+func effectiveMessageBlockTarget(deps loopDeps, block lenosbash.MessageBlock) string {
+	if strings.TrimSpace(block.Target) != "" {
+		return strings.TrimSpace(block.Target)
+	}
+	return strings.TrimSpace(deps.pairWith)
+}
+
+func deliverMessageBlock(ctx context.Context, deps loopDeps, target string, block lenosbash.MessageBlock) error {
+	command := ttalSendCommand(target, block.Body)
+	res := deps.runner.Run(ctx, command, deps.env, deps.paths)
+	if res.Err == nil && res.ExitCode == 0 {
+		return nil
+	}
+	exitCode := res.ExitCode
+	output := string(combine(res.Stdout, res.Stderr))
+	if output == "" && res.Err != nil {
+		output = res.Err.Error()
+	}
+	obs := fmt.Sprintf("message delivery failed for %s", html.EscapeString(target))
+	if output != "" {
+		obs += "\n" + html.EscapeString(output)
+	}
+	if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
+		Role: message.Result,
+		Parts: []message.ContentPart{message.CommandContent{
+			Command:     command,
+			Output:      output,
+			ExitCode:    &exitCode,
+			Pending:     false,
+			Observation: obs,
+		}},
+	}); err != nil {
+		return fmt.Errorf("create message delivery result row: %w", err)
+	}
+	return nil
 }
 
 // streamOne pumps a single model stream into assistantMsg, returning the
