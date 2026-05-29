@@ -125,6 +125,42 @@ func TestResultMessageItem_RenderNarrationAsMarkdown(t *testing.T) {
 	assert.NotContains(t, rendered, "$")
 }
 
+func TestResultMessageItem_RenderAddsMessagePrefix(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.DefaultStyles()
+	for _, tc := range []struct {
+		name string
+		part message.CommandContent
+		want string
+	}{
+		{
+			name: "narration",
+			part: message.CommandContent{Narration: "Ready."},
+			want: "Ready.",
+		},
+		{
+			name: "pending",
+			part: message.CommandContent{Command: "go test ./...", Pending: true},
+			want: "running...",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			item := NewResultMessageItem(&sty, &message.Message{
+				ID:    "result-1",
+				Role:  message.Result,
+				Parts: []message.ContentPart{tc.part},
+			})
+
+			rendered := ansi.Strip(item.Render(80))
+
+			assert.Contains(t, rendered, tc.want)
+			assert.NotEqual(t, ansi.Strip(item.RawRender(80)), rendered)
+		})
+	}
+}
+
 func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 	sty := styles.DefaultStyles()
 
@@ -166,6 +202,20 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 		item := makeItem("f3", "sleep 100", "", nil, true)
 		got := item.formatCommandForCopy()
 		assert.Equal(t, "$ sleep 100", got)
+	})
+
+	t.Run("narration copies body", func(t *testing.T) {
+		item := &ResultMessageItem{
+			highlightableMessageItem: defaultHighlighter(&sty),
+			cachedMessageItem:        &cachedMessageItem{},
+			focusableMessageItem:     &focusableMessageItem{},
+			message: &message.Message{
+				ID:    "narration",
+				Parts: []message.ContentPart{message.CommandContent{Narration: "Ready."}},
+			},
+			sty: &sty,
+		}
+		assert.Equal(t, "Ready.", item.formatCommandForCopy())
 	})
 
 	t.Run("empty output is command-only", func(t *testing.T) {

@@ -103,7 +103,7 @@ func (m *ResultMessageItem) renderCommandResult(width int, cmd message.CommandCo
 
 // Render implements MessageItem.
 func (m *ResultMessageItem) Render(width int) string {
-	return m.RawRender(width)
+	return renderAssistantMessageLines(m.sty, m.focused, m.RawRender(width))
 }
 
 // ID implements MessageItem.
@@ -129,6 +129,9 @@ func (m *ResultMessageItem) formatCommandForCopy() string {
 
 	// TextContent (runtime responses): return text directly.
 	if cmd.Command == "" {
+		if cmd.Narration != "" {
+			return cmd.Narration
+		}
 		return m.message.Content().Text
 	}
 
