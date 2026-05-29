@@ -1376,6 +1376,179 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateCommandAndStops(t *testing.T) {
 	assert.Equal(t, "Done. Tests pass.", results[0].CommandContent().Narrations[0].Body)
 }
 
+func TestRunLoop_MessageBlockOnlyPublishesAndStops(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"m\"Done for the user.\"\n", "exit"}}
+	runner := &fakeRunner{}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, 1, model.calls)
+	assert.Empty(t, runner.bash)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+	assert.Empty(t, cc.Command)
+	require.NotNil(t, cc.ExitCode)
+	assert.Equal(t, 0, *cc.ExitCode)
+	require.Len(t, cc.Narrations, 1)
+	assert.Equal(t, "Done for the user.", cc.Narrations[0].Body)
+}
+
+func TestRunLoop_MessageBlockOnlyMultipleBlocksPreserveOrder(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"m\"First.\"\nm\"Second.\"\n", "exit"}}
+	runner := &fakeRunner{}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Empty(t, runner.bash)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	narrations := results[0].CommandContent().Narrations
+	require.Len(t, narrations, 2)
+	assert.Equal(t, "First.", narrations[0].Body)
+	assert.Equal(t, "Second.", narrations[1].Body)
+}
+
+func TestRunLoop_AddressedMessageBlockDeliveryFailureStillStops(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{"m(owner)\"Please review.\"\n", "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{Stderr: []byte("send failed\n"), ExitCode: 9}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, 1, model.calls)
+	require.Len(t, runner.bash, 1)
+	assert.Contains(t, runner.bash[0], "ttal send --to 'owner'")
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+	require.Len(t, cc.Narrations, 1)
+	narration := cc.Narrations[0]
+	assert.Equal(t, "owner", narration.To)
+	require.NotNil(t, narration.DeliveryExitCode)
+	assert.Equal(t, 9, *narration.DeliveryExitCode)
+	assert.Contains(t, narration.DeliveryOutput, "send failed")
+	assert.Contains(t, cc.Observation, "narration delivery failed")
+}
+
+func TestRunLoop_MixedMessageBlockRunsCleanBashAndPublishesOnSuccess(t *testing.T) {
+	t.Parallel()
+	emit := "m\"Testing now.\"\necho ok\n"
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{"echo ok\n"}, runner.bash)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+	assert.Equal(t, "echo ok\n", cc.Command)
+	require.Len(t, cc.Narrations, 1)
+	assert.Equal(t, "Testing now.", cc.Narrations[0].Body)
+}
+
+func TestRunLoop_MixedMessageBlockSuppressesMessagesOnBashFailure(t *testing.T) {
+	t.Parallel()
+	emit := "m\"This should not publish.\"\nfalse\n"
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{ExitCode: 1}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{"false\n"}, runner.bash)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	cc := results[0].CommandContent()
+	assert.Equal(t, "false\n", cc.Command)
+	assert.Empty(t, cc.Narrations)
+}
+
+func TestRunLoop_MessageBlockSameLineRePromptsWithoutRunningBash(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		emit string
+	}{
+		{name: "semicolon", emit: "echo ok; m\"Done.\"\n"},
+		{name: "background", emit: "sleep 1 & m\"Done.\"\n"},
+		{name: "pipeline", emit: "printf ok | m\"Done.\"\n"},
+		{name: "heredoc setup", emit: "cat <<EOF m\"Done.\"\nEOF\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			model := &scriptedModel{emits: []string{tc.emit, "exit"}}
+			runner := &fakeRunner{}
+			deps, ms := newDeps(t, model, runner, nil)
+
+			stop, err := runLoop(context.Background(), deps, nil, "")
+			require.NoError(t, err)
+			assert.Equal(t, stopExit, stop)
+			assert.Empty(t, runner.bash)
+
+			results := resultsByOrder(ms)
+			require.Len(t, results, 1)
+			obs := results[0].Content().Text
+			assert.Contains(t, obs, "invalid Lenos Bash")
+			assert.Contains(t, obs, "message block must start")
+		})
+	}
+}
+
+func TestRunLoop_NestedMessageBlockRePromptsWithoutRunningBash(t *testing.T) {
+	t.Parallel()
+	emit := "if true; then\n  m\"Done.\"\nfi\n"
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Empty(t, runner.bash)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	obs := results[0].Content().Text
+	assert.Contains(t, obs, "invalid Lenos Bash")
+	assert.Contains(t, obs, "top level")
+}
+
+func TestRunLoop_HeredocMessageLookingTextStaysPlainBash(t *testing.T) {
+	t.Parallel()
+	emit := "cat <<EOF\nm\"literal\"\nEOF\n"
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("m\"literal\"\n"), ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{emit}, runner.bash)
+
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1)
+	assert.Empty(t, results[0].CommandContent().Narrations)
+}
+
 func TestRunLoop_NaturalLanguageTreatsContinueMarkerAsNarrationBody(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"Done.\n:continue"}}

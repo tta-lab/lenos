@@ -62,6 +62,7 @@ require (
 	golang.org/x/text v0.36.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	modernc.org/sqlite v1.48.0
+	mvdan.cc/sh/v3 v3.13.1-lensh.1
 )
 
 require github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -189,3 +190,5 @@ require (
 )
 
 replace charm.land/fantasy => github.com/tta-lab/fantasy v0.0.0-20260510134819-7b55c6a5ee87
+
+replace mvdan.cc/sh/v3 => github.com/tta-lab/sh/v3 v3.13.1-lensh.1

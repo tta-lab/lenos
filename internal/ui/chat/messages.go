@@ -330,6 +330,9 @@ func extractResultMessageItems(sty *styles.Styles, msg *message.Message) []Messa
 }
 
 func shouldRenderResultMessageItem(cmd message.CommandContent) bool {
+	if cmd.Command == "" && len(cmd.Narrations) > 0 && !cmd.Pending {
+		return hasNarrationDeliveryFailure(cmd.Narrations)
+	}
 	if cmd.Command == "" || cmd.Pending {
 		return true
 	}
