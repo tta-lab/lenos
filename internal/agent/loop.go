@@ -44,13 +44,13 @@ type loopDeps struct {
 	// model exposes native prefix completion support through
 	// assistantPrefillModel.
 	messageBlockPrefill bool
-	messages         message.Service
-	runner           Runner
-	salvage          bashSalvageProbe
-	sessionID        string
-	sysPrompt        string
-	env              map[string]string
-	paths            []client.AllowedPath
+	messages            message.Service
+	runner              Runner
+	salvage             bashSalvageProbe
+	sessionID           string
+	sysPrompt           string
+	env                 map[string]string
+	paths               []client.AllowedPath
 	// defaultNarrationTarget is applied to narrate calls without --to.
 	// Explicit --to values remain unchanged.
 	defaultNarrationTarget string
