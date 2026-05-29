@@ -1509,6 +1509,9 @@ func TestRunLoop_MessageBlockSameLineRePromptsWithoutRunningBash(t *testing.T) {
 			obs := results[0].Content().Text
 			assert.Contains(t, obs, "invalid Lenos Bash")
 			assert.Contains(t, obs, "message block must start")
+			firstLine := strings.SplitN(strings.TrimRight(tc.emit, "\n"), "\n", 2)[0]
+			assert.Contains(t, obs, "  1 | "+firstLine)
+			assert.Contains(t, obs, "move `m` to its own physical line")
 		})
 	}
 }
