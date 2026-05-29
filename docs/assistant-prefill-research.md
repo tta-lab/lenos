@@ -137,16 +137,25 @@ python3 scripts/check_prefill.py \
 
 ## Design Implication for Lenos
 
-For providers that support real assistant prefill, use a minimal `# ` assistant
-prefix before each bash-first generation. This is a soft shape guard:
+For providers that support real assistant prefill, Lenos should expose one
+product-facing boolean:
 
-```bash
-# 
+```json
+{
+  "options": {
+    "message_block_prefill": true
+  }
+}
 ```
 
-It mainly fixes the common "note before action" failure mode. If the model
-starts with prose, that prose lands on a bash comment line. It does not fully
-solve markdown fences or tool-call wrappers, so the runtime gates must remain:
+When enabled, the runtime hardcodes the native assistant prefix to `m`. The
+prefix is not configurable because it exists only for the Lenos message-block
+protocol. The model can then continue with `m"..."`, `m#"..."#`, or
+`m(target)"..."`.
+
+This mainly fixes the common "note before action" failure mode by biasing the
+response toward message-block syntax. It does not fully solve markdown fences or
+tool-call wrappers, so the runtime gates must remain:
 
 - Reject XML/JSON/bracket tool-call wrapper emits.
 - Reject markdown fence emits.
@@ -159,12 +168,14 @@ worse.
 
 ## Recommended Integration Rule
 
-Add provider capability metadata, not a global behavior:
+Keep provider-specific prefix mechanics internal. The public config is the
+single boolean above; provider capability metadata decides how, or whether, it
+can be applied.
 
 ```text
-assistant_prefill:
-  mode: none | final_assistant | assistant_prefix_flag
-  prefix_text: "# "
+message_block_prefill:
+  enabled: bool
+  hardcoded_prefix: "m"
 ```
 
 Suggested initial mapping:

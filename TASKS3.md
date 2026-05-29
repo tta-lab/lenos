@@ -21,18 +21,19 @@ earlier only behind a disabled flag with no behavior change.
 
 ## Behavior
 
-Config should support enabling a prefill string. Suggested shape if it matches
-the existing config style:
+Config should support enabling message-block prefill. This is a boolean Lenos
+protocol knob, not a user-configurable provider prefix:
 
 ```json
 {
   "options": {
-    "assistant_prefill": "m"
+    "message_block_prefill": true
   }
 }
 ```
 
-The prefill text is `m`, not `m"`, so the model can choose delimiter length:
+When enabled, the runtime hardcodes the prefill text to `m`, not `m"`, so the
+model can choose delimiter length:
 
 - `m"..."`;
 - `m#"..."#`;
@@ -48,6 +49,10 @@ Only send prefill through provider-native prefix APIs. Do not simulate prefill
 by adding fake prior assistant text unless that provider explicitly treats it
 as the next-token prefix.
 
+Do not expose a custom prefill string in config. The prefill exists only for
+the Lenos message-block protocol; arbitrary text would create a second protocol
+surface.
+
 ## Provider Notes
 
 - DeepSeek has a prefix-completion style API and is the first likely target.
@@ -62,6 +67,7 @@ as the next-token prefix.
 - Provider request construction includes prefix only for supported providers.
 - Unsupported providers do not change behavior.
 - Prefill can be disabled.
+- Users cannot configure a custom prefill string.
 - Runtime still accepts pure bash when prefill is disabled.
 
 ## Acceptance
