@@ -149,8 +149,8 @@ func sourceLines(source string) []string {
 	}
 	raw := strings.SplitAfter(source, "\n")
 	lines := make([]string, 0, len(raw))
-	for _, line := range raw {
-		if line == "" {
+	for i, line := range raw {
+		if line == "" && i == len(raw)-1 {
 			continue
 		}
 		lines = append(lines, strings.TrimRight(line, "\r\n"))

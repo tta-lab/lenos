@@ -43,6 +43,24 @@ func TestRenderDiagnosticMultilineWithContext(t *testing.T) {
 	assert.Contains(t, rendered, "  3 | fi")
 }
 
+func TestRenderDiagnosticPreservesBlankSourceLines(t *testing.T) {
+	t.Parallel()
+
+	source := "if true; then\n\n  m\"Done.\"\nfi\n"
+	rendered := RenderDiagnostic(source, Diagnostic{
+		Kind:    "message_block_error",
+		Message: "message block is only valid at top level",
+		Line:    3,
+		Column:  3,
+		Offset:  16,
+	})
+
+	assert.Contains(t, rendered, "  2 | ")
+	assert.Contains(t, rendered, "  3 |   m\"Done.\"")
+	assert.Contains(t, rendered, "    |   ^ message blocks must be top-level")
+	assert.Contains(t, rendered, "  4 | fi")
+}
+
 func TestRenderDiagnosticNonASCIIColumnUsesByteColumn(t *testing.T) {
 	t.Parallel()
 
