@@ -17,6 +17,7 @@ import (
 	"charm.land/fantasy/providers/openai"
 	"github.com/tta-lab/temenos/client"
 
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
 )
 
@@ -125,17 +126,69 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				paths:  deps.paths,
 			}
 		}
-		cls, aux := classifyWithSalvageProbe(ctx, emit, probe)
+		assistantReplay := emit
+		commandEmit := emit
+		var extractedNarrations []message.CommandNarration
+
+		parsed, diag := lenosbash.Parse(emit)
+		if diag != nil {
+			if diag.Kind != "shell_parse_error" || len(parsed.Messages) > 0 {
+				obs := rePromptInvalidLenosBash(diag.Message)
+				msgs = append(msgs,
+					assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
+					fantasy.NewUserMessage(obs),
+				)
+				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+					slog.Warn("loop: persist invalid-lenos-bash re-prompt", "error", obsErr)
+				}
+				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+				msgs = drainAndAppend(ctx, deps, msgs)
+				continue
+			}
+		}
+
+		if len(parsed.Messages) > 0 {
+			extractedNarrations = messageBlockNarrations(parsed.Messages)
+			if !parsed.HasBash {
+				stop, nextMsgs, handleErr := handleMessageOnlyBlocks(ctx, deps, &assistantMsg, assistantReplay, extractedNarrations, msgs)
+				if handleErr != nil {
+					return stopError, handleErr
+				}
+				if stop {
+					return stopExit, nil
+				}
+				msgs = drainAndAppend(ctx, deps, nextMsgs)
+				continue
+			}
+			commandEmit = parsed.Bash
+		}
+
+		cls, aux := classifyWithSalvageProbe(ctx, commandEmit, probe)
 		if cls == classifyExec && aux != "" {
-			emit = aux
-			replaceAssistantText(&assistantMsg, emit)
+			commandEmit = aux
+			assistantReplay = aux
+			replaceAssistantText(&assistantMsg, commandEmit)
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 				slog.Warn("loop: persist rewritten bash emit", "error", updateErr)
 			}
 		}
 		if cls == classifyNaturalLanguage {
-			emit = narrateCommandForBody(emit)
-			replaceAssistantText(&assistantMsg, emit)
+			if len(extractedNarrations) > 0 {
+				obs := rePromptInvalidLenosBash("text outside message blocks must be bash")
+				msgs = append(msgs,
+					assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
+					fantasy.NewUserMessage(obs),
+				)
+				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+					slog.Warn("loop: persist invalid-lenos-bash re-prompt", "error", obsErr)
+				}
+				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+				msgs = drainAndAppend(ctx, deps, msgs)
+				continue
+			}
+			commandEmit = narrateCommandForBody(commandEmit)
+			assistantReplay = commandEmit
+			replaceAssistantText(&assistantMsg, commandEmit)
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 				slog.Warn("loop: persist natural-language narrate rewrite", "error", updateErr)
 			}
@@ -153,7 +206,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		case classifyEmpty:
 			obs := rePromptEmpty()
 			msgs = append(msgs,
-				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
@@ -185,7 +238,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		case classifyInvalidBash:
 			obs := rePromptInvalidBash(aux)
 			msgs = append(msgs,
-				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
@@ -197,7 +250,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		case classifyBanned:
 			obs := rePromptBlockedPattern()
 			msgs = append(msgs,
-				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
 			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
@@ -209,13 +262,13 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		case classifyExec:
 			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 				Role:  message.Result,
-				Parts: []message.ContentPart{message.CommandContent{Command: emit, Pending: true}},
+				Parts: []message.ContentPart{message.CommandContent{Command: commandEmit, Pending: true}},
 			})
 			if createErr != nil {
 				return stopError, fmt.Errorf("create result row: %w", createErr)
 			}
 
-			inv, invErr := newNarrateInvocation(emit, deps.env, deps.paths, deps.defaultNarrationTarget)
+			inv, invErr := newNarrateInvocation(commandEmit, deps.env, deps.paths, deps.defaultNarrationTarget)
 			if invErr != nil {
 				abandonPending(ctx, deps.messages, &resultMsg)
 				return stopError, fmt.Errorf("create narrate IPC directory: %w", invErr)
@@ -233,14 +286,14 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			// continue without blocking on the result.
 			if res.Background {
 				if deps.jobWatcher != nil {
-					deps.jobWatcher.AddJob(res.JobID, emit)
+					deps.jobWatcher.AddJob(res.JobID, commandEmit)
 				}
 				obs := fmt.Sprintf(
 					"<-Runtime background job started (job_id: %s)\nyou can check status or kill this job later via `temenos job kill %s`",
 					res.JobID, res.JobID,
 				)
 				resultMsg.Parts = []message.ContentPart{message.CommandContent{
-					Command:     emit,
+					Command:     commandEmit,
 					Pending:     false,
 					Observation: obs,
 				}}
@@ -249,7 +302,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				}
 				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 				msgs = append(msgs,
-					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+					assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 					fantasy.NewUserMessage(obs),
 				)
 				msgs = drainAndAppend(ctx, deps, msgs)
@@ -262,6 +315,10 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				abandonPending(ctx, deps.messages, &resultMsg)
 				return stopCanceled, ctx.Err()
 			}
+			ipcNarrations := narrations
+			if res.ExitCode == 0 && len(extractedNarrations) > 0 {
+				narrations = append(narrations, extractedNarrations...)
+			}
 			narrations, deliveryFailed := deliverNarrations(ctx, deps.runner, deps.env, deps.paths, narrations)
 
 			exitCode := res.ExitCode
@@ -269,12 +326,12 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			if res.Err != nil && len(res.Stdout) == 0 && stderr == "" {
 				stderr = res.Err.Error()
 			}
-			envelope := formatResultForModel(emit, string(res.Stdout), stderr, res.ExitCode)
+			envelope := formatResultForModel(commandEmit, string(res.Stdout), stderr, res.ExitCode)
 			body := strings.TrimPrefix(envelope, "<result>\n")
 			body = strings.TrimSuffix(body, "\n</result>")
 			body = appendNarrationObservation(body, narrations)
 			resultMsg.Parts = []message.ContentPart{message.CommandContent{
-				Command:     emit,
+				Command:     commandEmit,
 				Output:      string(combine(res.Stdout, []byte(stderr))),
 				ExitCode:    &exitCode,
 				Pending:     false,
@@ -291,7 +348,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				exitCode := 124
 				obs := rePromptTimeout(int(DefaultPerCmdTimeout / time.Second))
 				resultMsg.Parts = []message.ContentPart{message.CommandContent{
-					Command:     emit,
+					Command:     commandEmit,
 					Output:      obs,
 					ExitCode:    &exitCode,
 					Pending:     false,
@@ -302,7 +359,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 					slog.Warn("loop: persist timeout result row", "error", updateErr)
 				}
 				msgs = append(msgs,
-					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+					assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 					fantasy.NewUserMessage(obs),
 				)
 				msgs = drainAndAppend(ctx, deps, msgs)
@@ -321,7 +378,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 
 				// Keep the result row with non-zero exit code instead of abandoning it.
 				resultMsg.Parts = []message.ContentPart{message.CommandContent{
-					Command:     emit,
+					Command:     commandEmit,
 					Output:      obs,
 					ExitCode:    &exitCode,
 					Pending:     false,
@@ -332,11 +389,11 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 					slog.Warn("loop: persist cmd-not-found result row", "error", updateErr)
 				}
 			}
-			if shouldStopAfterNarration(narrations, res.ExitCode, deliveryFailed) {
+			if shouldStopAfterNarration(ipcNarrations, res.ExitCode, deliveryFailed) {
 				return stopExit, nil
 			}
 			msgs = append(msgs,
-				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
 			msgs = drainAndAppend(ctx, deps, msgs)
@@ -366,6 +423,54 @@ func replaceAssistantText(msg *message.Message, text string) {
 		parts = append(parts, message.TextContent{Text: text})
 	}
 	msg.Parts = parts
+}
+
+func messageBlockNarrations(blocks []lenosbash.MessageBlock) []message.CommandNarration {
+	narrations := make([]message.CommandNarration, 0, len(blocks))
+	for _, block := range blocks {
+		narrations = append(narrations, message.CommandNarration{
+			Body: block.Body,
+			To:   block.Target,
+		})
+	}
+	return narrations
+}
+
+func handleMessageOnlyBlocks(
+	ctx context.Context,
+	deps loopDeps,
+	assistantMsg *message.Message,
+	assistantReplay string,
+	narrations []message.CommandNarration,
+	msgs []fantasy.Message,
+) (bool, []fantasy.Message, error) {
+	narrations, deliveryFailed := deliverNarrations(ctx, deps.runner, deps.env, deps.paths, narrations)
+	exitCode := 0
+	obs := appendNarrationObservation("message block rendered to user", narrations)
+	if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.TextContent{Text: obs},
+			message.CommandContent{
+				ExitCode:    &exitCode,
+				Pending:     false,
+				Observation: obs,
+				Narrations:  narrations,
+			},
+		},
+	}); err != nil {
+		return false, msgs, fmt.Errorf("create message-block result row: %w", err)
+	}
+
+	markStepFinished(ctx, deps, assistantMsg, message.FinishReasonToolUse)
+	if shouldStopAfterNarration(narrations, exitCode, deliveryFailed) {
+		return true, msgs, nil
+	}
+	msgs = append(msgs,
+		assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
+		fantasy.NewUserMessage("<result>\n"+obs+"\n</result>"),
+	)
+	return false, msgs, nil
 }
 
 // streamOne pumps a single model stream into assistantMsg, returning the

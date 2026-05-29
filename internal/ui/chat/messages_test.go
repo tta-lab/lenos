@@ -80,6 +80,32 @@ func TestExtractMessageItems_Result_KeepsSuccessfulCommandWithNarration(t *testi
 	assert.NotContains(t, ansi.Strip(rendered), "$ narrate")
 }
 
+func TestExtractMessageItems_Result_MessageOnlyNarrationSkipsResultRow(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	exitCode := 0
+	msg := &message.Message{
+		ID:   "message-block-only",
+		Role: message.Result,
+		Parts: []message.ContentPart{
+			message.CommandContent{
+				ExitCode: &exitCode,
+				Pending:  false,
+				Narrations: []message.CommandNarration{
+					{Body: "Done."},
+				},
+			},
+		},
+	}
+
+	items := ExtractMessageItems(&sty, msg, false)
+
+	require.Len(t, items, 1)
+	_, ok := items[0].(*ResultMessageItem)
+	assert.False(t, ok, "message-only narration should render as prose only")
+	assert.Contains(t, ansi.Strip(items[0].Render(80)), "Done.")
+}
+
 func TestExtractMessageItems_Result_SplitsFailedCommandAndNarration(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()

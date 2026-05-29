@@ -1,0 +1,359 @@
+[
+  {
+    "name": "valid-basic-message",
+    "source": "m\"Done.\"\n",
+    "messages": [
+      {
+        "body": "Done.",
+        "line": 1,
+        "column": 1,
+        "offset": 0
+      }
+    ],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "message-only"
+  },
+  {
+    "name": "valid-multiline-message",
+    "source": "m\"First line.\nSecond line.\"\n",
+    "messages": [
+      {
+        "body": "First line.\nSecond line.",
+        "line": 1,
+        "column": 1,
+        "offset": 0
+      }
+    ],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "message-only"
+  },
+  {
+    "name": "valid-raw-quotes",
+    "source": "m#\"Body with \"quotes\".\"#\n",
+    "messages": [
+      {
+        "body": "Body with \"quotes\".",
+        "line": 1,
+        "column": 1,
+        "offset": 0
+      }
+    ],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "message-only"
+  },
+  {
+    "name": "valid-raw-delimiter-candidate",
+    "source": "m##\"Body with \"# delimiter candidate.\"##\n",
+    "messages": [
+      {
+        "body": "Body with \"# delimiter candidate.",
+        "line": 1,
+        "column": 1,
+        "offset": 0
+      }
+    ],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "message-only"
+  },
+  {
+    "name": "valid-addressed-message",
+    "source": "m(neil)\"Please review this.\"\n",
+    "messages": [
+      {
+        "target": "neil",
+        "body": "Please review this.",
+        "line": 1,
+        "column": 1,
+        "offset": 0
+      }
+    ],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "message-only"
+  },
+  {
+    "name": "valid-mixed-bash-and-message",
+    "source": "m\"Inspecting files.\"\nrg \"needle\" .\n",
+    "messages": [
+      {
+        "body": "Inspecting files.",
+        "line": 1,
+        "column": 1,
+        "offset": 0
+      }
+    ],
+    "bash": "rg \"needle\" .\n",
+    "has_bash": true,
+    "lifecycle": "continue"
+  },
+  {
+    "name": "valid-indented-top-level-message",
+    "source": "  m\"Indented but top-level.\"\n",
+    "messages": [
+      {
+        "body": "Indented but top-level.",
+        "line": 1,
+        "column": 3,
+        "offset": 2
+      }
+    ],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "message-only"
+  },
+  {
+    "name": "valid-heredoc-literal-message-looking-text",
+    "source": "cat <<EOF\nm\"literal\"\nEOF\n",
+    "messages": [],
+    "bash": "cat <<EOF\nm\"literal\"\nEOF\n",
+    "has_bash": true,
+    "lifecycle": "continue"
+  },
+  {
+    "name": "invalid-raw-prose-before-bash",
+    "source": "I will inspect files.\nrg \"needle\" .\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "raw_prose",
+      "message": "raw prose is not valid Lenos Bash; use a message block",
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    }
+  },
+  {
+    "name": "invalid-fenced-bash",
+    "source": "```bash\nls\n```\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "fenced_bash",
+      "message": "fenced code blocks are not valid Lenos Bash",
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    }
+  },
+  {
+    "name": "invalid-same-line-semicolon",
+    "source": "echo ok; m\"Done.\"\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "message_not_line_start",
+      "message": "message block must start on its own physical line",
+      "line": 1,
+      "column": 10,
+      "offset": 9
+    }
+  },
+  {
+    "name": "invalid-same-line-background",
+    "source": "sleep 1 & m\"Done.\"\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "message_not_line_start",
+      "message": "message block must start on its own physical line",
+      "line": 1,
+      "column": 11,
+      "offset": 10
+    }
+  },
+  {
+    "name": "invalid-same-line-pipeline",
+    "source": "printf ok | m\"Done.\"\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "message_not_line_start",
+      "message": "message block must start on its own physical line",
+      "line": 1,
+      "column": 13,
+      "offset": 12
+    }
+  },
+  {
+    "name": "invalid-same-line-heredoc-setup",
+    "source": "cat <<EOF m\"Done.\"\nEOF\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "message_not_line_start",
+      "message": "message block must start on its own physical line",
+      "line": 1,
+      "column": 11,
+      "offset": 10
+    }
+  },
+  {
+    "name": "invalid-message-inside-if",
+    "source": "if true; then\n  m\"Done.\"\nfi\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "message_not_top_level",
+      "message": "message block is only valid at top level",
+      "line": 2,
+      "column": 3,
+      "offset": 16
+    }
+  },
+  {
+    "name": "invalid-message-inside-loop",
+    "source": "for file in *; do\n  m\"Checking.\"\ndone\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "message_not_top_level",
+      "message": "message block is only valid at top level",
+      "line": 2,
+      "column": 3,
+      "offset": 20
+    }
+  },
+  {
+    "name": "invalid-message-inside-function",
+    "source": "say_done() {\n  m\"Done.\"\n}\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "message_not_top_level",
+      "message": "message block is only valid at top level",
+      "line": 2,
+      "column": 3,
+      "offset": 15
+    }
+  },
+  {
+    "name": "invalid-message-inside-command-substitution",
+    "source": "value=$(m\"Done.\")\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "message_not_top_level",
+      "message": "message block is only valid at top level",
+      "line": 1,
+      "column": 8,
+      "offset": 7
+    }
+  },
+  {
+    "name": "invalid-message-inside-string",
+    "source": "printf '%s\\n' 'm\"literal\"'\n",
+    "messages": [],
+    "bash": "printf '%s\\n' 'm\"literal\"'\n",
+    "has_bash": true,
+    "lifecycle": "continue"
+  },
+  {
+    "name": "invalid-message-inside-comment",
+    "source": "# m\"not speech\"\necho ok\n",
+    "messages": [],
+    "bash": "# m\"not speech\"\necho ok\n",
+    "has_bash": true,
+    "lifecycle": "continue"
+  },
+  {
+    "name": "invalid-message-as-command-word",
+    "source": "command m\"Done.\"\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "message_not_line_start",
+      "message": "message block must start on its own physical line",
+      "line": 1,
+      "column": 9,
+      "offset": 8
+    }
+  },
+  {
+    "name": "invalid-unterminated-message",
+    "source": "m\"Started.\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "unterminated_message",
+      "message": "reached EOF without closing message block",
+      "line": 1,
+      "column": 1,
+      "offset": 0,
+      "incomplete": true
+    }
+  },
+  {
+    "name": "invalid-mismatched-hash-count",
+    "source": "m##\"body\"#\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "unterminated_message",
+      "message": "raw message block opened with two hashes must close with two hashes",
+      "line": 1,
+      "column": 1,
+      "offset": 0,
+      "incomplete": true
+    }
+  },
+  {
+    "name": "invalid-target-characters",
+    "source": "m(bad target)\"Done.\"\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "invalid_target",
+      "message": "message target contains invalid characters",
+      "line": 1,
+      "column": 3,
+      "offset": 2
+    }
+  },
+  {
+    "name": "invalid-mc-variant",
+    "source": "mc\"Done.\"\n",
+    "messages": [],
+    "bash": "",
+    "has_bash": false,
+    "lifecycle": "parse-error",
+    "error": {
+      "code": "unknown_message_variant",
+      "message": "mc is not a Lenos Bash message form; use m",
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    }
+  }
+]

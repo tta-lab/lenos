@@ -14,6 +14,8 @@ heredoc body.
 - [Context Compaction](context-compaction.html): pre-step auto compact,
   bash-first boundaries, and manual compact design.
 - [Protocol](protocol.md): the bash-only contract and loop lifecycle.
+- [Message Blocks](message-blocks.md): planned `m` block syntax for speaking
+  natural language from Lenos Bash.
 - [Classifier](classifier.md): how an emit becomes exit, bash, prose rewrite,
   or a runtime correction.
 - [Salvage](salvage.md): the narrow rewrite for "prose first line, valid bash
