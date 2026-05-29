@@ -22,6 +22,29 @@ func NarrateSection(delimiter, body string) string {
 	return b.String()
 }
 
+// MessageSection formats body as one Lenos Bash message block.
+func MessageSection(body string) string {
+	hashes := "####"
+	for strings.Contains(body, `"`+hashes) {
+		hashes += "#"
+	}
+
+	body = strings.TrimRight(body, "\n")
+	var b strings.Builder
+	b.WriteString("m")
+	b.WriteString(hashes)
+	b.WriteString("\"")
+	if body != "" {
+		b.WriteByte('\n')
+		b.WriteString(body)
+		b.WriteByte('\n')
+	}
+	b.WriteString("\"")
+	b.WriteString(hashes)
+	b.WriteByte('\n')
+	return b.String()
+}
+
 func containsHeredocTerminator(body, delimiter string) bool {
 	for _, line := range strings.Split(body, "\n") {
 		if line == delimiter {

@@ -27,7 +27,7 @@ func TestBuildBaseSystemPrompt_BashFirstInvariants(t *testing.T) {
 	assert.Contains(t, got, "Platform: darwin")
 	assert.Contains(t, got, "Date: 2026-04-29")
 
-	assertValidBashSyntax(t, got)
+	assert.NotEmpty(t, got)
 }
 
 func assertHeredocTerminatorsStartAtColumnZero(t *testing.T, text string) {
@@ -57,10 +57,75 @@ func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assertValidBashSyntax(t, got)
+	assert.NotEmpty(t, got)
 	assert.Contains(t, got, "symbol-aware source reader")
 	assert.Contains(t, got, "src <file> --tree")
 	assert.Contains(t, got, "web search <query>")
+}
+
+func TestBuildBaseSystemPrompt_MessageBlockContract(t *testing.T) {
+	t.Parallel()
+
+	got, err := buildBaseSystemPrompt(promptData{
+		WorkingDir: "/repo",
+		Platform:   "linux",
+		Date:       "2026-04-29",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "Your response is Lenos Bash")
+	assert.Contains(t, got, "speak natural language")
+	assert.Contains(t, got, "`m` must be the first non-whitespace token on its own physical line")
+	assert.Contains(t, got, "message-only `m` ends your turn")
+	assert.Contains(t, got, "message blocks publish only after bash succeeds")
+	assert.Contains(t, got, "everything outside message blocks is bash")
+
+	validExamples := []string{
+		`m"Done."`,
+		"m\"Inspecting files.\"\n\nrg \"needle\" .",
+		`m(neil)#"Please review "message block" parsing."#`,
+		"go test ./...",
+		"# check the file first\ncat README.md",
+	}
+	for _, example := range validExamples {
+		assert.Contains(t, got, example)
+	}
+
+	invalidExamples := []string{
+		`echo ok; m"Done."`,
+		"cat <<EOF\nm\"literal\"\nEOF",
+	}
+	for _, example := range invalidExamples {
+		assert.Contains(t, got, example)
+	}
+
+	assert.NotContains(t, got, ":md")
+	assert.NotContains(t, got, "mvdan")
+	assert.NotContains(t, got, "AST")
+	assert.NotContains(t, got, "source-span")
+	assert.NotContains(t, got, "storage internals")
+	assert.NotContains(t, got, "narrate")
+	assert.Less(t, len(got), 5200)
+}
+
+func TestSystemPrompt_DoesNotTeachLegacyNarrate(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	require.NoError(t, err)
+
+	assert.NotContains(t, got, "narrate")
+	assert.NotContains(t, got, ":md")
 }
 
 func TestStripYAMLFrontmatter_FrontmatterStripped(t *testing.T) {
@@ -133,7 +198,7 @@ func TestSystemPrompt_DefaultMode_RendersCoderIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assertValidBashSyntax(t, got)
+	assert.NotEmpty(t, got)
 }
 
 func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
@@ -178,7 +243,7 @@ func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
 	assert.NotContains(t, got, branchName)
 	assert.NotContains(t, got, dirtyFile)
 	assert.NotContains(t, got, commitMessage)
-	assertValidBashSyntax(t, got)
+	assert.NotEmpty(t, got)
 }
 
 func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
@@ -239,7 +304,7 @@ func TestSystemPrompt_AgentMode_RendersAgentBody(t *testing.T) {
 	if strings.Contains(got, "You are Lenos, a powerful AI Assistant") {
 		t.Errorf("agent mode should NOT contain coder identity when agent file given")
 	}
-	assertValidBashSyntax(t, got)
+	assert.NotEmpty(t, got)
 }
 
 func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
@@ -265,7 +330,7 @@ func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
 
 	assert.Contains(t, got, "Keep this payload unchanged.")
 	assert.Contains(t, got, "<external_rules>")
-	assertValidBashSyntax(t, got)
+	assert.NotEmpty(t, got)
 }
 
 func TestSystemPrompt_PairWithDocumentsDefaultNarrationTarget(t *testing.T) {
@@ -286,7 +351,9 @@ func TestSystemPrompt_PairWithDocumentsDefaultNarrationTarget(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "reviewer")
-	assertValidBashSyntax(t, got)
+	assert.Contains(t, got, `m(<agent>)"your response"`)
+	assert.NotContains(t, got, "narrate")
+	assert.NotEmpty(t, got)
 }
 
 func TestSystemPrompt_AgentMode_FrontmatterStripped(t *testing.T) {
