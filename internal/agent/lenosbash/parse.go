@@ -98,9 +98,12 @@ func diagnoseNonBashShape(source string) *Diagnostic {
 }
 
 func diagnoseUnextractedLineStartMessage(source string, blocks []*syntax.MessageBlock) *Diagnostic {
-	extracted := make(map[int]bool, len(blocks))
+	extracted := make([]sourceRange, 0, len(blocks))
 	for _, block := range blocks {
-		extracted[int(block.Pos().Offset())] = true
+		extracted = append(extracted, sourceRange{
+			start: int(block.Pos().Offset()),
+			end:   int(block.End().Offset()),
+		})
 	}
 
 	var heredoc *heredocState
@@ -129,7 +132,12 @@ func diagnoseUnextractedLineStartMessage(source string, blocks []*syntax.Message
 	return nil
 }
 
-func diagnoseUnextractedMessageInLine(source, line string, lineNo, offset int, extracted map[int]bool) *Diagnostic {
+type sourceRange struct {
+	start int
+	end   int
+}
+
+func diagnoseUnextractedMessageInLine(source, line string, lineNo, offset int, extracted []sourceRange) *Diagnostic {
 	inSingle := false
 	inDouble := false
 	for i := 0; i < len(line); i++ {
@@ -151,7 +159,7 @@ func diagnoseUnextractedMessageInLine(source, line string, lineNo, offset int, e
 				continue
 			}
 			msgOffset := offset + i
-			if extracted[msgOffset] {
+			if inSourceRanges(msgOffset, extracted) {
 				continue
 			}
 			block, _, err := syntax.TryParseMsgBlock([]byte(source[msgOffset:]), uint(msgOffset), uint(lineNo), uint(i+1))
@@ -180,6 +188,15 @@ func diagnoseUnextractedMessageInLine(source, line string, lineNo, offset int, e
 		}
 	}
 	return nil
+}
+
+func inSourceRanges(offset int, ranges []sourceRange) bool {
+	for _, r := range ranges {
+		if offset >= r.start && offset < r.end {
+			return true
+		}
+	}
+	return false
 }
 
 type heredocState struct {

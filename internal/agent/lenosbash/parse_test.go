@@ -35,6 +35,31 @@ func TestParseMixedMessageAndBash(t *testing.T) {
 	assert.Equal(t, "Inspecting.", parsed.Messages[0].Body)
 }
 
+func TestParseMessageBodyMayContainMessageBlockText(t *testing.T) {
+	t.Parallel()
+
+	source := "m####\"\nText before.\nm\"Done.\"\nText after.\n\"####\n"
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.False(t, parsed.HasBash)
+	require.Len(t, parsed.Messages, 1)
+	assert.Contains(t, parsed.Messages[0].Body, "m\"Done.\"")
+}
+
+func TestParseMixedMessageBodyMayContainIndentedHashDelimitedExample(t *testing.T) {
+	t.Parallel()
+
+	source := "echo \"Let me demonstrate nesting.\"\nm####\"\nExample:\n\n    m###\"\n    Inner message body.\n    \"###\n\"####\n"
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.True(t, parsed.HasBash)
+	assert.Equal(t, "echo \"Let me demonstrate nesting.\"\n", parsed.Bash)
+	require.Len(t, parsed.Messages, 1)
+	assert.Contains(t, parsed.Messages[0].Body, "    m###\"")
+}
+
 func TestParseAddressedMessage(t *testing.T) {
 	t.Parallel()
 
