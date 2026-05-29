@@ -272,7 +272,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		Env:                 sandboxEnv,
 		AllowedPaths:        BuildAllowedPaths(ctx, cwd, access),
 		TaskID:              taskwarrior.ResolveTaskID(cwd),
-		ContextCommands:     buildRuntimeContextCommands(runtimeContext, cwd),
+		ContextCommands:     buildRuntimeContextCommands(runtimeContext),
 	}
 }
 

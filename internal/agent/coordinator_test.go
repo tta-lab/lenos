@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"charm.land/fantasy"
@@ -446,7 +447,16 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 	for _, allowed := range call.AllowedPaths {
 		assert.True(t, filepath.IsAbs(allowed.Path), "allowed path must be absolute: %q", allowed.Path)
 	}
-	assert.Contains(t, call.ContextCommands, RuntimeContextCommand{
-		Command: "# read project instructions\ncat " + shellQuote(contextFile),
-	})
+	require.Len(t, call.ContextCommands, 3)
+	assert.Equal(t, RuntimeContextCommand{
+		Command:  "m\"Let me list registered projects.\"\nttal project list\n\nm\"Let me list available skills.\"\nskill list",
+		Optional: true,
+	}, call.ContextCommands[0])
+	assert.Equal(t, "m\"Let me read key instructions.\"\ncat "+shellQuote(contextFile), call.ContextCommands[1].Command)
+	assert.Equal(t, "m\"\nReady.\n\nLets rock and roll.\n\"", call.ContextCommands[2].Command)
+	assert.NotContains(t, strings.Join([]string{
+		call.ContextCommands[0].Command,
+		call.ContextCommands[1].Command,
+		call.ContextCommands[2].Command,
+	}, "\n"), "# read")
 }

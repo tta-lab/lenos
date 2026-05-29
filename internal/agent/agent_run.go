@@ -52,7 +52,14 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 		return err
 	}
 
-	res := runner.Run(ctx, cmd.Command, call.Env, call.AllowedPaths)
+	commandForBash := cmd.Command
+	var narration string
+	if parsed, diag := lenosbash.Parse(cmd.Command); diag == nil && parsed.HasBash && len(parsed.Messages) > 0 {
+		commandForBash = parsed.Bash
+		narration = messageBlockNarration(parsed.Messages)
+	}
+
+	res := runner.Run(ctx, commandForBash, call.Env, call.AllowedPaths)
 	if cmd.Optional && (res.Err != nil || res.ExitCode != 0 || strings.TrimSpace(string(res.Stdout)) == "") {
 		return nil
 	}
@@ -69,7 +76,7 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 
 	resultMsg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
 		Role:  message.Result,
-		Parts: []message.ContentPart{message.CommandContent{Command: cmd.Command, Pending: true}},
+		Parts: []message.ContentPart{message.CommandContent{Command: commandForBash, Pending: true}},
 	})
 	if err != nil {
 		return fmt.Errorf("create synthetic context pending result: %w", err)
@@ -80,21 +87,33 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 	if res.Err != nil && len(res.Stdout) == 0 && len(stderr) == 0 {
 		stderr = []byte(res.Err.Error())
 	}
-	envelope := formatResultForModel(cmd.Command, string(res.Stdout), string(stderr), res.ExitCode)
+	envelope := formatResultForModel(commandForBash, string(res.Stdout), string(stderr), res.ExitCode)
 	body := strings.TrimPrefix(envelope, "<result>\n")
 	body = strings.TrimSuffix(body, "\n</result>")
 	resultMsg.Parts = []message.ContentPart{message.CommandContent{
-		Command:     cmd.Command,
+		Command:     commandForBash,
 		Output:      string(combine(res.Stdout, stderr)),
 		ExitCode:    &exitCode,
 		Pending:     false,
 		Observation: body,
+		Narration:   narration,
 	}}
 	if err := a.messages.Update(ctx, resultMsg); err != nil {
 		return fmt.Errorf("update synthetic context result: %w", err)
 	}
 	markStepFinished(ctx, a.loopDepsForSynthetic(call.SessionID), &assistantMsg, message.FinishReasonToolUse)
 	return nil
+}
+
+func messageBlockNarration(blocks []lenosbash.MessageBlock) string {
+	narrations := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		body := strings.TrimSpace(block.Body)
+		if body != "" {
+			narrations = append(narrations, body)
+		}
+	}
+	return strings.Join(narrations, "\n\n")
 }
 
 func (a *sessionAgent) persistSyntheticMessageBlocks(ctx context.Context, call SessionAgentCall, command string) (bool, error) {
