@@ -449,7 +449,7 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 	}
 	require.Len(t, call.ContextCommands, 3)
 	assert.Equal(t, RuntimeContextCommand{
-		Command:  "m\"Let me list registered projects.\"\nttal project list\n\nm\"Let me list available skills.\"\nskill list",
+		Command:  "m\"Let me list registered projects and available skills.\"\nttal project list\nskill list",
 		Optional: true,
 	}, call.ContextCommands[0])
 	assert.Equal(t, "m\"Let me read key instructions.\"\ncat "+shellQuote(contextFile), call.ContextCommands[1].Command)

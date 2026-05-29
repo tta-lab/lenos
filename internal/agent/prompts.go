@@ -114,7 +114,7 @@ func buildLenosWrapper(
 
 func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
-		Command:  "m\"Let me list registered projects.\"\nttal project list\n\nm\"Let me list available skills.\"\nskill list",
+		Command:  "m\"Let me list registered projects and available skills.\"\nttal project list\nskill list",
 		Optional: true,
 	}}
 	if len(runtimeContext.ContextFiles) > 0 {

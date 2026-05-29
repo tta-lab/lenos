@@ -250,7 +250,7 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	sess, err := env.sessions.Create(t.Context(), "runtime context")
 	require.NoError(t, err)
 
-	raw := "m\"Let me list registered projects.\"\nttal project list\n\nm\"Let me list available skills.\"\nskill list"
+	raw := "m\"Let me list registered projects and available skills.\"\nttal project list\nskill list"
 	runner := &fakeRunner{results: []ExecResult{{
 		Stdout:   []byte("project-a\nskill-a\n"),
 		ExitCode: 0,
@@ -273,7 +273,7 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
 	require.Equal(t, "ttal project list\nskill list", msgs[1].CommandContent().Command)
-	require.Equal(t, "Let me list registered projects.\n\nLet me list available skills.", msgs[1].CommandContent().Narration)
+	require.Equal(t, "Let me list registered projects and available skills.", msgs[1].CommandContent().Narration)
 	require.Equal(t, "project-a\nskill-a\n", msgs[1].CommandContent().Output)
 }
 
