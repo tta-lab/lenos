@@ -150,7 +150,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 		if len(parsed.Messages) > 0 {
 			extractedNarrations = messageBlockNarrations(parsed.Messages)
 			if !parsed.HasBash {
-				stop, nextMsgs, handleErr := handleMessageOnlyBlocks(ctx, deps, &assistantMsg, assistantReplay, extractedNarrations, msgs)
+				stop, nextMsgs, handleErr := handleMessageOnlyBlocks(ctx, deps, &assistantMsg, extractedNarrations, msgs)
 				if handleErr != nil {
 					return stopError, handleErr
 				}
@@ -440,11 +440,10 @@ func handleMessageOnlyBlocks(
 	ctx context.Context,
 	deps loopDeps,
 	assistantMsg *message.Message,
-	assistantReplay string,
 	narrations []message.CommandNarration,
 	msgs []fantasy.Message,
 ) (bool, []fantasy.Message, error) {
-	narrations, deliveryFailed := deliverNarrations(ctx, deps.runner, deps.env, deps.paths, narrations)
+	narrations, _ = deliverNarrations(ctx, deps.runner, deps.env, deps.paths, narrations)
 	exitCode := 0
 	obs := appendNarrationObservation("message block rendered to user", narrations)
 	if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
@@ -463,14 +462,7 @@ func handleMessageOnlyBlocks(
 	}
 
 	markStepFinished(ctx, deps, assistantMsg, message.FinishReasonToolUse)
-	if shouldStopAfterNarration(narrations, exitCode, deliveryFailed) {
-		return true, msgs, nil
-	}
-	msgs = append(msgs,
-		assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
-		fantasy.NewUserMessage("<result>\n"+obs+"\n</result>"),
-	)
-	return false, msgs, nil
+	return true, msgs, nil
 }
 
 // streamOne pumps a single model stream into assistantMsg, returning the

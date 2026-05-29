@@ -1417,7 +1417,7 @@ func TestRunLoop_MessageBlockOnlyMultipleBlocksPreserveOrder(t *testing.T) {
 	assert.Equal(t, "Second.", narrations[1].Body)
 }
 
-func TestRunLoop_AddressedMessageBlockDeliveryFailureContinues(t *testing.T) {
+func TestRunLoop_AddressedMessageBlockDeliveryFailureStillStops(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"m(owner)\"Please review.\"\n", "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{Stderr: []byte("send failed\n"), ExitCode: 9}}}
@@ -1426,7 +1426,7 @@ func TestRunLoop_AddressedMessageBlockDeliveryFailureContinues(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, 2, model.calls)
+	assert.Equal(t, 1, model.calls)
 	require.Len(t, runner.bash, 1)
 	assert.Contains(t, runner.bash[0], "ttal send --to 'owner'")
 
@@ -1483,21 +1483,34 @@ func TestRunLoop_MixedMessageBlockSuppressesMessagesOnBashFailure(t *testing.T) 
 
 func TestRunLoop_MessageBlockSameLineRePromptsWithoutRunningBash(t *testing.T) {
 	t.Parallel()
-	emit := "echo ok; m\"Done.\"\n"
-	model := &scriptedModel{emits: []string{emit, "exit"}}
-	runner := &fakeRunner{}
-	deps, ms := newDeps(t, model, runner, nil)
+	cases := []struct {
+		name string
+		emit string
+	}{
+		{name: "semicolon", emit: "echo ok; m\"Done.\"\n"},
+		{name: "background", emit: "sleep 1 & m\"Done.\"\n"},
+		{name: "pipeline", emit: "printf ok | m\"Done.\"\n"},
+		{name: "heredoc setup", emit: "cat <<EOF m\"Done.\"\nEOF\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			model := &scriptedModel{emits: []string{tc.emit, "exit"}}
+			runner := &fakeRunner{}
+			deps, ms := newDeps(t, model, runner, nil)
 
-	stop, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	assert.Empty(t, runner.bash)
+			stop, err := runLoop(context.Background(), deps, nil, "")
+			require.NoError(t, err)
+			assert.Equal(t, stopExit, stop)
+			assert.Empty(t, runner.bash)
 
-	results := resultsByOrder(ms)
-	require.Len(t, results, 1)
-	obs := results[0].Content().Text
-	assert.Contains(t, obs, "invalid Lenos Bash")
-	assert.Contains(t, obs, "message block must start")
+			results := resultsByOrder(ms)
+			require.Len(t, results, 1)
+			obs := results[0].Content().Text
+			assert.Contains(t, obs, "invalid Lenos Bash")
+			assert.Contains(t, obs, "message block must start")
+		})
+	}
 }
 
 func TestRunLoop_NestedMessageBlockRePromptsWithoutRunningBash(t *testing.T) {

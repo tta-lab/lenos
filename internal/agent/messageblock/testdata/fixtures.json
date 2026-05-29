@@ -152,7 +152,7 @@
     "lifecycle": "parse-error",
     "error": {
       "code": "message_not_line_start",
-      "message": "message block must start on its own physical line",
+      "message": "message block must start at the beginning of a physical line",
       "line": 1,
       "column": 10,
       "offset": 9
@@ -167,7 +167,7 @@
     "lifecycle": "parse-error",
     "error": {
       "code": "message_not_line_start",
-      "message": "message block must start on its own physical line",
+      "message": "message block must start at the beginning of a physical line",
       "line": 1,
       "column": 11,
       "offset": 10
@@ -182,7 +182,7 @@
     "lifecycle": "parse-error",
     "error": {
       "code": "message_not_line_start",
-      "message": "message block must start on its own physical line",
+      "message": "message block must start at the beginning of a physical line",
       "line": 1,
       "column": 13,
       "offset": 12
@@ -197,7 +197,7 @@
     "lifecycle": "parse-error",
     "error": {
       "code": "message_not_line_start",
-      "message": "message block must start on its own physical line",
+      "message": "message block must start at the beginning of a physical line",
       "line": 1,
       "column": 11,
       "offset": 10
@@ -257,10 +257,10 @@
     "lifecycle": "parse-error",
     "error": {
       "code": "message_not_top_level",
-      "message": "message block is only valid at top level",
+      "message": "message block must start at the beginning of a physical line",
       "line": 1,
-      "column": 8,
-      "offset": 7
+      "column": 9,
+      "offset": 8
     }
   },
   {
@@ -288,7 +288,7 @@
     "lifecycle": "parse-error",
     "error": {
       "code": "message_not_line_start",
-      "message": "message block must start on its own physical line",
+      "message": "message block must start at the beginning of a physical line",
       "line": 1,
       "column": 9,
       "offset": 8
@@ -303,10 +303,10 @@
     "lifecycle": "parse-error",
     "error": {
       "code": "unterminated_message",
-      "message": "reached EOF without closing message block",
-      "line": 1,
+      "message": "unterminated message block",
+      "line": 2,
       "column": 1,
-      "offset": 0,
+      "offset": 11,
       "incomplete": true
     }
   },
@@ -319,10 +319,10 @@
     "lifecycle": "parse-error",
     "error": {
       "code": "unterminated_message",
-      "message": "raw message block opened with two hashes must close with two hashes",
-      "line": 1,
+      "message": "unterminated message block",
+      "line": 2,
       "column": 1,
-      "offset": 0,
+      "offset": 11,
       "incomplete": true
     }
   },
@@ -335,10 +335,10 @@
     "lifecycle": "parse-error",
     "error": {
       "code": "invalid_target",
-      "message": "message target contains invalid characters",
+      "message": "invalid target character",
       "line": 1,
-      "column": 3,
-      "offset": 2
+      "column": 6,
+      "offset": 5
     }
   },
   {

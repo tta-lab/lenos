@@ -33,6 +33,10 @@ type Parsed struct {
 }
 
 func Parse(source string) (Parsed, *Diagnostic) {
+	if diag := diagnoseNonBashShape(source); diag != nil {
+		return Parsed{Original: source}, diag
+	}
+
 	blocks, clean, err := syntax.ScanMsgBlocks([]byte(source), 0)
 	if err != nil {
 		return Parsed{Original: source}, diagnosticFromError("message_block_error", err)
@@ -67,6 +71,32 @@ func Parse(source string) (Parsed, *Diagnostic) {
 	return parsed, nil
 }
 
+func diagnoseNonBashShape(source string) *Diagnostic {
+	trimmed := strings.TrimLeft(source, " \t\r\n")
+	if trimmed == "" {
+		return nil
+	}
+	if strings.HasPrefix(trimmed, "```") {
+		return &Diagnostic{
+			Kind:    "shell_parse_error",
+			Message: "fenced code blocks are not valid Lenos Bash",
+			Line:    1,
+			Column:  1,
+			Offset:  0,
+		}
+	}
+	if first := trimmed[0]; first >= 'A' && first <= 'Z' {
+		return &Diagnostic{
+			Kind:    "shell_parse_error",
+			Message: "raw prose is not valid Lenos Bash; use a message block",
+			Line:    1,
+			Column:  1,
+			Offset:  0,
+		}
+	}
+	return nil
+}
+
 func diagnoseUnextractedLineStartMessage(source string, blocks []*syntax.MessageBlock) *Diagnostic {
 	extracted := make(map[int]bool, len(blocks))
 	for _, block := range blocks {
@@ -86,35 +116,11 @@ func diagnoseUnextractedLineStartMessage(source string, blocks []*syntax.Message
 			continue
 		}
 
-		leading := countLeadingHorizontalSpace(line)
-		if leading < len(line) && line[leading] == 'm' {
-			msgOffset := offset + leading
-			if !extracted[msgOffset] {
-				block, _, err := syntax.TryParseMsgBlock([]byte(source[msgOffset:]), uint(msgOffset), uint(lineNo), uint(leading+1))
-				if err != nil {
-					return diagnosticFromError("message_block_error", err)
-				}
-				if block != nil {
-					return &Diagnostic{
-						Kind:    "message_block_error",
-						Message: "message block is only valid at top level",
-						Line:    lineNo,
-						Column:  leading + 1,
-						Offset:  msgOffset,
-					}
-				}
-				if strings.HasPrefix(line[leading:], `mc"`) ||
-					strings.HasPrefix(line[leading:], `mc#"`) ||
-					strings.HasPrefix(line[leading:], `mc(`) {
-					return &Diagnostic{
-						Kind:    "message_block_error",
-						Message: "mc is not a Lenos Bash message form; use m",
-						Line:    lineNo,
-						Column:  leading + 1,
-						Offset:  msgOffset,
-					}
-				}
-			}
+		if diag := diagnoseUnextractedMessageInLine(source, line, lineNo, offset, extracted); diag != nil {
+			return diag
+		}
+		if diag := diagnoseUnknownMessageVariant(line, lineNo, offset); diag != nil {
+			return diag
 		}
 
 		if next := parseHeredocStart(line); next != nil {
@@ -122,6 +128,78 @@ func diagnoseUnextractedLineStartMessage(source string, blocks []*syntax.Message
 		}
 		offset += len(line)
 		lineNo++
+	}
+	return nil
+}
+
+func diagnoseUnextractedMessageInLine(source, line string, lineNo, offset int, extracted map[int]bool) *Diagnostic {
+	inSingle := false
+	inDouble := false
+	for i := 0; i < len(line); i++ {
+		switch line[i] {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '#':
+			if !inSingle && !inDouble {
+				return nil
+			}
+		case 'm':
+			if inSingle || inDouble {
+				continue
+			}
+			msgOffset := offset + i
+			if extracted[msgOffset] {
+				continue
+			}
+			block, _, err := syntax.TryParseMsgBlock([]byte(source[msgOffset:]), uint(msgOffset), uint(lineNo), uint(i+1))
+			if err != nil {
+				return diagnosticFromError("message_block_error", err)
+			}
+			if block == nil {
+				continue
+			}
+			if countLeadingHorizontalSpace(line) == i {
+				return &Diagnostic{
+					Kind:    "message_block_error",
+					Message: "message block is only valid at top level",
+					Line:    lineNo,
+					Column:  i + 1,
+					Offset:  msgOffset,
+				}
+			}
+			return &Diagnostic{
+				Kind:    "message_block_error",
+				Message: "message block must start at the beginning of a physical line",
+				Line:    lineNo,
+				Column:  i + 1,
+				Offset:  msgOffset,
+			}
+		}
+	}
+	return nil
+}
+
+func diagnoseUnknownMessageVariant(line string, lineNo, offset int) *Diagnostic {
+	leading := countLeadingHorizontalSpace(line)
+	if leading >= len(line) {
+		return nil
+	}
+	if strings.HasPrefix(line[leading:], `mc"`) ||
+		strings.HasPrefix(line[leading:], `mc#"`) ||
+		strings.HasPrefix(line[leading:], `mc(`) {
+		return &Diagnostic{
+			Kind:    "message_block_error",
+			Message: "mc is not a Lenos Bash message form; use m",
+			Line:    lineNo,
+			Column:  leading + 1,
+			Offset:  offset + leading,
+		}
 	}
 	return nil
 }

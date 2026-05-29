@@ -6,7 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 )
 
 type fixture struct {
@@ -39,13 +42,7 @@ type fixtureError struct {
 func TestMessageBlockFixtureCorpus(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join("testdata", "fixtures.json")
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-
-	var fixtures []fixture
-	require.NoError(t, json.Unmarshal(data, &fixtures))
-	require.NotEmpty(t, fixtures)
+	fixtures := loadFixtures(t)
 
 	seen := make(map[string]bool, len(fixtures))
 	for _, fixture := range fixtures {
@@ -114,10 +111,58 @@ func TestMessageBlockFixtureCorpus(t *testing.T) {
 	})
 }
 
+func TestMessageBlockFixturesMatchParser(t *testing.T) {
+	t.Parallel()
+
+	fixtures := loadFixtures(t)
+	for _, fixture := range fixtures {
+		t.Run(fixture.Name, func(t *testing.T) {
+			t.Parallel()
+
+			parsed, diag := lenosbash.Parse(fixture.Source)
+			if fixture.Error != nil {
+				require.NotNil(t, diag)
+				assert.Contains(t, diag.Message, fixture.Error.Message)
+				assert.Equal(t, fixture.Error.Line, diag.Line)
+				assert.Equal(t, fixture.Error.Column, diag.Column)
+				assert.Equal(t, fixture.Error.Offset, diag.Offset)
+				assert.Equal(t, fixture.Error.Incomplete, diag.Incomplete)
+				return
+			}
+
+			require.Nil(t, diag)
+			assert.Equal(t, fixture.Bash, parsed.Bash)
+			assert.Equal(t, fixture.HasBash, parsed.HasBash)
+			require.Len(t, parsed.Messages, len(fixture.Messages))
+			for i, want := range fixture.Messages {
+				got := parsed.Messages[i]
+				assert.Equal(t, want.Target, got.Target)
+				assert.Equal(t, want.Body, got.Body)
+				assert.Equal(t, want.Line, got.Line)
+				assert.Equal(t, want.Column, got.Column)
+				assert.Equal(t, want.Offset, got.Offset)
+			}
+		})
+	}
+}
+
 func requireFixtureNames(t *testing.T, seen map[string]bool, names []string) {
 	t.Helper()
 
 	for _, name := range names {
 		require.True(t, seen[name], "missing fixture %q", name)
 	}
+}
+
+func loadFixtures(t *testing.T) []fixture {
+	t.Helper()
+
+	path := filepath.Join("testdata", "fixtures.json")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var fixtures []fixture
+	require.NoError(t, json.Unmarshal(data, &fixtures))
+	require.NotEmpty(t, fixtures)
+	return fixtures
 }
