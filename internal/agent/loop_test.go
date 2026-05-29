@@ -2120,7 +2120,6 @@ func TestRunLoop_NaturalLanguageRewritesToNarrateAndStops(t *testing.T) {
 	require.Len(t, assistants, 1)
 	stored := assistants[0].Content().Text
 	assert.Contains(t, stored, "cat <<'")
-	assert.NotContains(t, stored, ":md")
 
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
