@@ -57,6 +57,11 @@ Raw-string form with hashes:
 m#"Body with "quotes"."#
 ```
 
+The `#` characters are raw-string delimiters, not bash comments. They follow
+Rust raw string rules: the opener and closer must use the same number of
+hashes, and the body is literal. Add enough hashes so the exact closing
+delimiter does not appear inside the body.
+
 Use more hashes when the body contains a delimiter candidate:
 
 ```bash

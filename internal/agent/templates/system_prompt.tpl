@@ -33,6 +33,11 @@ Message blocks support single-line and multi-line natural language. Use
 ####` for paragraphs, bullets, quoted text, or any answer where escaping would
 get in the way.
 
+The `#` characters are raw-string delimiters, like Rust raw strings. They are
+not bash comments. Add enough `#` characters so the exact closing delimiter
+does not appear inside the message body. The body is literal: no shell
+expansion and no backslash escaping.
+
 A message-only `m` ends your turn. Mixed bash plus message blocks follows the
 normal bash loop: bash runs first, message blocks publish only after bash succeeds,
 and the runtime may continue the loop with command output.

@@ -1722,16 +1722,34 @@ func TestRunLoop_NaturalLanguageWithEqualsStaysBash(t *testing.T) {
 	assert.Equal(t, []string{"Output=$(pwd)"}, runner.bash)
 }
 
+func TestRunLoop_NaturalLanguageFirstLineWithBashRestRewritesToMessageBlock(t *testing.T) {
+	t.Parallel()
+	bash := "sed -n '90,130p' internal/agent/agent_run.go\n" +
+		"echo \"===SEPARATOR===\"\n" +
+		"grep -n \"func publishMessageBlocks\\|func publishMixedMessageBlocks\\|func handleMessageOnlyBlocks\\|func deliverMessageBlock\" internal/agent/loop.go\n"
+	emit := "Let me read the remaining key functions.\n\n" + bash
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{bash}, runner.bash)
+
+	assistants := assistantsByOrder(ms)
+	require.GreaterOrEqual(t, len(assistants), 1)
+	assert.Equal(t, "m#\"Let me read the remaining key functions.\"#\n\n"+bash, assistants[0].Content().Text)
+	for _, assistant := range assistants[1:] {
+		assert.NotEqual(t, "Let me read the remaining key functions.", assistant.Content().Text)
+	}
+}
+
 func TestRunLoop_NaturalLanguageShapesRePromptWithoutRunning(t *testing.T) {
 	t.Parallel()
 	for _, emit := range []string{
-		"## Done\ncat README.md && ls",
-		"### Done\ncat README.md && ls",
 		"Done.\n:continue",
-		"I'll inspect the repo.\ncat README.md && ls",
-		"I'll inspect.\nmytool --check",
 		"Done.\ngo ahead",
-		"I'll run it.\n./scripts/test.sh",
 		"I'll inspect the repo.\nif true then",
 		"我已经完成了。\n不需要继续操作。",
 		"確認しました。\n次の操作は不要です。",

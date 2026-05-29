@@ -161,6 +161,21 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			commandEmit = parsed.Bash
 		}
 
+		if len(extractedMessages) == 0 {
+			if rewritten, ok := rewriteNaturalLanguageFirstLineMessage(ctx, commandEmit); ok {
+				parsed, diag = lenosbash.Parse(rewritten)
+				if diag == nil && len(parsed.Messages) > 0 && parsed.HasBash {
+					extractedMessages = parsed.Messages
+					assistantReplay = rewritten
+					commandEmit = parsed.Bash
+					replaceAssistantText(&assistantMsg, rewritten)
+					if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+						slog.Warn("loop: persist first-line message rewrite", "error", updateErr)
+					}
+				}
+			}
+		}
+
 		cls, aux := classify(ctx, commandEmit)
 		if cls == classifyNaturalLanguage {
 			obs := rePromptInvalidLenosBash(commandEmit, lenosbash.Diagnostic{
@@ -392,6 +407,43 @@ func replaceAssistantText(msg *message.Message, text string) {
 		parts = append(parts, message.TextContent{Text: text})
 	}
 	msg.Parts = parts
+}
+
+func rewriteNaturalLanguageFirstLineMessage(ctx context.Context, emit string) (string, bool) {
+	firstLine, rest, ok := strings.Cut(emit, "\n")
+	if !ok || strings.TrimSpace(rest) == "" {
+		return "", false
+	}
+	if !isNaturalLanguageEmit(firstLine) {
+		return "", false
+	}
+	if !hasShellActionEvidence(rest) {
+		return "", false
+	}
+	cls, _ := classify(ctx, rest)
+	if cls != classifyExec {
+		return "", false
+	}
+	return rawMessageBlock(strings.TrimSpace(firstLine)) + "\n" + rest, true
+}
+
+func hasShellActionEvidence(script string) bool {
+	for _, line := range strings.Split(script, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		return hasCommandEvidence(trimmed, false)
+	}
+	return false
+}
+
+func rawMessageBlock(body string) string {
+	hashes := "#"
+	for strings.Contains(body, `"`+hashes) {
+		hashes += "#"
+	}
+	return "m" + hashes + `"` + body + `"` + hashes
 }
 
 func handleMessageOnlyBlocks(
