@@ -72,11 +72,11 @@ func SystemPrompt(
 	var b strings.Builder
 	b.WriteString(base)
 	b.WriteString("\n")
-	b.WriteString(protocol.NarrateSection("LENOS_GIT_CONTEXT", gitSection))
+	b.WriteString(protocol.MessageSection(gitSection))
 	b.WriteString("\n")
 	if pairWith := strings.TrimSpace(store.Overrides().PairWith); pairWith != "" {
-		b.WriteString(protocol.NarrateSection("LENOS_NARRATION_PAIR",
-			"# Narration Pair\n\nNarration without an explicit addressee is delivered to "+pairWith+". Use `cat <<'EOF' | narrate --to <agent>` only when another target is needed. Lenos handles delivery."))
+		b.WriteString(protocol.MessageSection(
+			"# Addressed Messages\n\nMessages without an explicit addressee are delivered to " + pairWith + ". Use `m(<agent>)\"your response\"` only when another target is needed. Lenos handles delivery."))
 		b.WriteString("\n")
 	}
 	b.WriteString(lenosWrapper)
@@ -128,7 +128,7 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, workingDi
 		})
 	}
 	commands = append(commands, RuntimeContextCommand{
-		Command: "cat <<'EOF' | narrate\nReady.\nEOF",
+		Command: "m\"Ready.\"",
 	})
 	return commands
 }
