@@ -1,4 +1,12 @@
-# Lenos protocol decision
+# Original Mixed Prose/Bash Problem Statement
+
+This is historical context for the message-block epic. It records the original
+failure mode that made us question the bash-first protocol and start the `m`
+message-block design.
+
+This is not the current protocol spec. For the active plan, use `TASKS0.md`
+through `TASKS5.md`. For the current syntax contract, use
+`docs/agent-protocol/message-blocks.md`.
 
 ## Current protocol
 
@@ -48,4 +56,3 @@ and at this time, we cannot know how to handle it
 since it merge the natural language and the action.
 
 which is also the main failure and the reason to doubt of current bash-first protocol.
-
