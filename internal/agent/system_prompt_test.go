@@ -82,6 +82,8 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 		"speak natural language",
 		"single-line",
 		"multi-line",
+		"more `#`",
+		"m#####\"",
 		"visible",
 		"bash",
 	} {

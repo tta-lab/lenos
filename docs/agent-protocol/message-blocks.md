@@ -68,6 +68,19 @@ Use more hashes when the body contains a delimiter candidate:
 m##"Body with "# delimiter candidate."##
 ```
 
+Use more hashes for the outer message when the body itself mentions a raw
+message block. Here the body contains a four-hash example, so the outer block
+uses five hashes:
+
+```bash
+m#####"
+Use this shape for long notes:
+m####"
+body
+"####
+"#####
+```
+
 Addressed form:
 
 ```bash
