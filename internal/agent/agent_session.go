@@ -427,23 +427,17 @@ func summaryInstructionsPrompt() string {
 func summaryOutputProtocolPrompt() string {
 	return `Output protocol:
 
-You must emit exactly one Lenos Bash message block in this form:
-
-m####"
-Summary markdown goes here.
-"####
-
-Do not emit Markdown fences, JSON, XML, comments, or any text before or after
-the message block.
+Emit only the summary Markdown. Do not emit Markdown fences, JSON, XML,
+comments, or any text before or after the summary.
 `
 }
 
 func normalizeSummaryMessageBlock(summaryMessage *message.Message) {
 	parsed, diag := lenosbash.Parse(summaryMessage.Content().Text)
-	if diag != nil || parsed.HasBash || len(parsed.Messages) != 1 {
+	if diag != nil || len(parsed.Bash) > 0 || strings.TrimSpace(parsed.Prose) == "" {
 		return
 	}
-	replaceAssistantText(summaryMessage, parsed.Messages[0].Body)
+	replaceAssistantText(summaryMessage, parsed.Prose)
 }
 
 func buildCompactSummaryPrompt(ctx context.Context, jobID string) string {

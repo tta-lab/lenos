@@ -63,13 +63,7 @@ type SessionAgentCall struct {
 	// reasoning_effort, etc).
 	ProviderOptions fantasy.ProviderOptions
 
-	// MessageBlockPrefill enables the native assistant response prefill
-	// token. It is ignored unless the model implements native
-	// prefill support.
-	MessageBlockPrefill bool
-
-	// PairWith is the default delivery target for untargeted message blocks.
-	// Explicit m(target)"..." blocks take precedence.
+	// PairWith is retained for callers that need a default external recipient.
 	PairWith string
 
 	// Sandbox controls runner selection. When true and SandboxClient is set

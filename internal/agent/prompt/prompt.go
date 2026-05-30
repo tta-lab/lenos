@@ -12,9 +12,9 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/home"
-	"github.com/tta-lab/lenos/internal/protocol"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
 )
 
@@ -30,16 +30,20 @@ type Prompt struct {
 }
 
 type PromptDat struct {
-	Provider     string
-	Model        string
-	Config       config.Config
-	WorkingDir   string
-	IsGitRepo    bool
-	Platform     string
-	Date         string
-	IdentityBody string
-	ContextFiles []ContextFile
-	JobID        string
+	Provider       string
+	Model          string
+	Config         config.Config
+	WorkingDir     string
+	IsGitRepo      bool
+	Platform       string
+	Date           string
+	IdentityBody   string
+	ContextFiles   []ContextFile
+	JobID          string
+	BashStartTag   string
+	BashEndTag     string
+	ResultExample  string
+	RuntimeExample string
 }
 
 type ContextFile struct {
@@ -96,9 +100,7 @@ func NewPrompt(name, promptTemplate string, opts ...Option) (*Prompt, error) {
 }
 
 func (p *Prompt) Build(ctx context.Context, provider, model string, store *config.ConfigStore) (string, error) {
-	t, err := template.New(p.name).Funcs(template.FuncMap{
-		"messageSection": protocol.MessageSection,
-	}).Parse(p.template)
+	t, err := template.New(p.name).Parse(p.template)
 	if err != nil {
 		return "", fmt.Errorf("parsing template: %w", err)
 	}
@@ -226,15 +228,19 @@ func (p *Prompt) promptData(_ context.Context, provider, model string, store *co
 	cfg := store.Config()
 	isGit := isGitRepo(store.WorkingDir())
 	return PromptDat{
-		Provider:     provider,
-		Model:        model,
-		Config:       *cfg,
-		WorkingDir:   filepath.ToSlash(workingDir),
-		IsGitRepo:    isGit,
-		Platform:     platform,
-		Date:         p.now().Format("1/2/2006"),
-		IdentityBody: p.identityBody,
-		JobID:        taskwarrior.ResolveTaskIDFromCwd(),
+		Provider:       provider,
+		Model:          model,
+		Config:         *cfg,
+		WorkingDir:     filepath.ToSlash(workingDir),
+		IsGitRepo:      isGit,
+		Platform:       platform,
+		Date:           p.now().Format("1/2/2006"),
+		IdentityBody:   p.identityBody,
+		JobID:          taskwarrior.ResolveTaskIDFromCwd(),
+		BashStartTag:   lenosbash.BashStartTag,
+		BashEndTag:     lenosbash.BashEndTag,
+		ResultExample:  lenosbash.ResultBlock("command: <original command>\nexit_code: 0\nstdout: ...\nstderr: ..."),
+		RuntimeExample: lenosbash.RuntimeBlock("background job completed (job_id: <id>)"),
 	}, nil
 }
 

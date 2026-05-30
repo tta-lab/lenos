@@ -146,11 +146,9 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 }
 
 // parseContent extracts display parts from Lenos Bash content.
-// For valid Lenos Bash it returns markdown from message blocks and a
-// command preview from the parsed bash. Falls back to the bash-emit
-// preview for non-Lenos-Bash content.
-// When the message has TextContentKindMessageBlock, the content itself
-// is a cleaned message block body — render as markdown directly.
+// For valid Lenos Bash it returns markdown prose and a command preview from the
+// first parsed bash block. When the message has TextContentKindMessageBlock,
+// the content itself is already cleaned prose, so render it as markdown.
 func (a *AssistantMessageItem) parseContent(content string) assistantContent {
 	if IsMessageBlockAssistant(a.message) {
 		return assistantContent{markdown: content}
@@ -163,15 +161,9 @@ func (a *AssistantMessageItem) parseContent(content string) assistantContent {
 		}
 	}
 	var result assistantContent
-	if len(parsed.Messages) > 0 {
-		bodies := make([]string, len(parsed.Messages))
-		for i, m := range parsed.Messages {
-			bodies[i] = m.Body
-		}
-		result.markdown = strings.Join(bodies, "\n\n")
-	}
-	if parsed.HasBash {
-		result.commandPreview = "$ " + bashEmitPreviewLine(parsed.Bash)
+	result.markdown = parsed.Prose
+	if len(parsed.Bash) > 0 {
+		result.commandPreview = "$ " + bashEmitPreviewLine(parsed.Bash[0])
 	}
 	return result
 }

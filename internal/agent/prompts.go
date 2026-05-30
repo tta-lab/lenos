@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
-	"github.com/tta-lab/lenos/internal/protocol"
 )
 
 //go:embed templates/lenos.md.tpl
@@ -72,11 +72,10 @@ func SystemPrompt(
 	b.WriteString(base)
 	b.WriteString("\n")
 	if pairWith := strings.TrimSpace(store.Overrides().PairWith); pairWith != "" {
-		b.WriteString(protocol.MessageSection("Untargeted message blocks are delivered to " + pairWith + ". Explicit `m(target)\"...\"` message blocks override this default."))
-		b.WriteString("\n")
+		b.WriteString("When you need to message " + pairWith + ", use the available shell command for messaging from inside a bash block.\n\n")
 	}
-	b.WriteString(protocol.MessageSection(gitSection))
-	b.WriteString("\n")
+	b.WriteString(gitSection)
+	b.WriteString("\n\n")
 	b.WriteString(lenosWrapper)
 	return b.String(), nil
 }
@@ -114,22 +113,26 @@ func buildLenosWrapper(
 
 func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
-		Command:  rawMessageBlock("Let me list registered projects and available skills.") + "\nttal project list\nskill list",
+		Command:  lenosbash.WrapBash("Let me list registered projects and available skills.", "ttal project list\nskill list"),
 		Optional: true,
 	}}
 	if len(runtimeContext.ContextFiles) > 0 {
 		var readCmd strings.Builder
-		readCmd.WriteString(rawMessageBlock("Let me read key instructions."))
+		readCmd.WriteString("Let me read key instructions.")
+		readCmd.WriteString("\n")
+		readCmd.WriteString(lenosbash.BashStartTag)
 		for _, file := range runtimeContext.ContextFiles {
 			readCmd.WriteString("\ncat ")
 			readCmd.WriteString(shellQuote(file.Path))
 		}
+		readCmd.WriteString("\n")
+		readCmd.WriteString(lenosbash.BashEndTag)
 		commands = append(commands, RuntimeContextCommand{
 			Command: readCmd.String(),
 		})
 	}
 	commands = append(commands, RuntimeContextCommand{
-		Command: rawMessageBlock("\nReady.\n\nLets rock and roll.\n"),
+		Command: "\nReady.\n\nLets rock and roll.\n",
 	})
 	return commands
 }
@@ -143,7 +146,7 @@ func InitializePrompt(cfg *config.ConfigStore) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return protocol.MessageSection(body), nil
+	return body, nil
 }
 
 // stripYAMLFrontmatter removes a single leading YAML frontmatter block

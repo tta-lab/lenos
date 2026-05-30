@@ -1,18 +1,21 @@
 package lenosbash
 
-import (
-	"errors"
-	"strings"
+import "strings"
 
-	"mvdan.cc/sh/v3/syntax"
+const (
+	BashStartTag = "<bash>"
+	BashEndTag   = "</bash>"
+
+	ResultStartTag = "<result>"
+	ResultEndTag   = "</result>"
+	RuntimeTag     = "<runtime>"
+	RuntimeEndTag  = "</runtime>"
 )
 
-type MessageBlock struct {
-	Target string
-	Body   string
-	Line   int
-	Column int
-	Offset int
+type Parsed struct {
+	Original string
+	Prose    string
+	Bash     []string
 }
 
 type Diagnostic struct {
@@ -25,127 +28,150 @@ type Diagnostic struct {
 	Filename   string
 }
 
-type Parsed struct {
-	Original string
-	Bash     string
-	Messages []MessageBlock
-	HasBash  bool
+func BashBlock(command string) string {
+	return BashStartTag + "\n" + strings.TrimRight(command, "\n") + "\n" + BashEndTag
 }
 
+func WrapBash(prose, command string) string {
+	prose = strings.TrimRight(prose, "\n")
+	if prose == "" {
+		return BashBlock(command)
+	}
+	return prose + "\n" + BashBlock(command)
+}
+
+func ResultBlock(body string) string {
+	return ResultStartTag + "\n" + strings.TrimRight(body, "\n") + "\n" + ResultEndTag
+}
+
+func ResultBody(block string) string {
+	body := strings.TrimPrefix(block, ResultStartTag+"\n")
+	return strings.TrimSuffix(body, "\n"+ResultEndTag)
+}
+
+func RuntimeBlock(body string) string {
+	return RuntimeTag + "\n" + strings.TrimRight(body, "\n") + "\n" + RuntimeEndTag
+}
+
+func RuntimeLine(body string) string {
+	return RuntimeTag + " " + strings.TrimSpace(body)
+}
+
+func AlertLine(body string) string {
+	return RuntimeTag + " ALERT: " + strings.TrimSpace(body)
+}
+
+// Parse scans source for bash tags. Text outside bash tags is Markdown prose.
+// Nested bash tags are treated as literal bash content so heredocs can contain
+// patch text with bash tags.
 func Parse(source string) (Parsed, *Diagnostic) {
-	if diag := diagnoseNonBashShape(source); diag != nil {
-		return Parsed{Original: source}, diag
+	if strings.TrimSpace(source) == "" {
+		return Parsed{Original: source}, nil
 	}
-
-	blocks, clean, err := syntax.ScanMsgBlocks([]byte(source), 0)
-	if err != nil {
-		return Parsed{Original: source}, diagnosticFromError("message_block_error", err)
-	}
-
-	parsed := Parsed{
-		Original: source,
-		Bash:     compactCleanBash(string(clean)),
-		Messages: make([]MessageBlock, 0, len(blocks)),
-	}
-	parsed.HasBash = strings.TrimSpace(parsed.Bash) != ""
-	for _, block := range blocks {
-		parsed.Messages = append(parsed.Messages, MessageBlock{
-			Target: block.Target,
-			Body:   block.Body,
-			Line:   int(block.Pos().Line()),
-			Column: int(block.Pos().Col()),
-			Offset: int(block.Pos().Offset()),
-		})
-	}
-
-	if parsed.HasBash {
-		parser := syntax.NewParser()
-		if _, err := parser.Parse(strings.NewReader(string(clean)), ""); err != nil {
-			return parsed, diagnosticFromError("shell_parse_error", err)
-		}
-	}
-
-	return parsed, nil
+	p := &parser{src: source, line: 1, col: 1}
+	return p.scan()
 }
 
-func diagnoseNonBashShape(source string) *Diagnostic {
-	trimmed := strings.TrimLeft(source, " \t\r\n")
-	if trimmed == "" {
-		return nil
-	}
-	if strings.HasPrefix(trimmed, "```") {
-		return &Diagnostic{
-			Kind:    "shell_parse_error",
-			Message: "fenced code blocks are not valid Lenos Bash",
-			Line:    1,
-			Column:  1,
-			Offset:  0,
-		}
-	}
-	if first := trimmed[0]; first >= 'A' && first <= 'Z' {
-		return &Diagnostic{
-			Kind:    "shell_parse_error",
-			Message: "raw prose is not valid Lenos Bash; use a message block",
-			Line:    1,
-			Column:  1,
-			Offset:  0,
-		}
-	}
-	return nil
+type parser struct {
+	src string
+	pos int
+
+	line int
+	col  int
+
+	depth     int
+	proseFrom int
+
+	prose []string
+	bash  []string
+
+	block strings.Builder
 }
 
-func compactCleanBash(clean string) string {
-	var b strings.Builder
-	for _, line := range strings.SplitAfter(clean, "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
+func (p *parser) scan() (Parsed, *Diagnostic) {
+	p.proseFrom = 0
+	for p.pos < len(p.src) {
+		switch {
+		case strings.HasPrefix(p.src[p.pos:], BashStartTag):
+			p.openBash()
+			p.advance(len(BashStartTag))
+		case strings.HasPrefix(p.src[p.pos:], BashEndTag):
+			p.closeBash()
+			p.advance(len(BashEndTag))
+		default:
+			if p.depth > 0 {
+				p.block.WriteByte(p.src[p.pos])
+			}
+			p.advance(1)
 		}
-		b.WriteString(line)
 	}
-	return b.String()
+	if p.depth > 0 {
+		return Parsed{Original: p.src}, &Diagnostic{
+			Kind:       "tag_unclosed",
+			Message:    "unclosed " + BashStartTag + " tag at end of response",
+			Line:       p.line,
+			Column:     p.col,
+			Offset:     p.pos,
+			Incomplete: true,
+		}
+	}
+	p.flushProse()
+	return Parsed{
+		Original: p.src,
+		Prose:    strings.Join(p.prose, "\n"),
+		Bash:     p.bash,
+	}, nil
 }
 
-func diagnosticFromError(kind string, err error) *Diagnostic {
-	var msgErr syntax.MessageBlockError
-	if errors.As(err, &msgErr) {
-		return &Diagnostic{
-			Kind:       kind,
-			Message:    msgErr.Message,
-			Line:       int(msgErr.Pos.Line()),
-			Column:     int(msgErr.Pos.Col()),
-			Offset:     int(msgErr.Pos.Offset()),
-			Incomplete: msgErr.Incomplete(),
-		}
+func (p *parser) openBash() {
+	if p.depth > 0 {
+		p.depth++
+		p.block.WriteString(BashStartTag)
+		return
 	}
+	p.flushProse()
+	p.depth = 1
+	p.block.Reset()
+}
 
-	var parseErr syntax.ParseError
-	if errors.As(err, &parseErr) {
-		return &Diagnostic{
-			Kind:       kind,
-			Message:    parseErr.Text,
-			Line:       int(parseErr.Pos.Line()),
-			Column:     int(parseErr.Pos.Col()),
-			Offset:     int(parseErr.Pos.Offset()),
-			Incomplete: parseErr.Incomplete,
-			Filename:   parseErr.Filename,
-		}
+func (p *parser) closeBash() {
+	switch {
+	case p.depth > 1:
+		p.depth--
+		p.block.WriteString(BashEndTag)
+	case p.depth == 1:
+		p.depth = 0
+		body := strings.TrimPrefix(p.block.String(), "\n")
+		p.bash = append(p.bash, body)
+		p.proseFrom = p.pos + len(BashEndTag)
+	default:
+		p.proseFrom = p.pos + len(BashEndTag)
 	}
+}
 
-	var langErr syntax.LangError
-	if errors.As(err, &langErr) {
-		return &Diagnostic{
-			Kind:     kind,
-			Message:  langErr.Error(),
-			Line:     int(langErr.Pos.Line()),
-			Column:   int(langErr.Pos.Col()),
-			Offset:   int(langErr.Pos.Offset()),
-			Filename: langErr.Filename,
-		}
+func (p *parser) flushProse() {
+	if p.proseFrom < 0 || p.proseFrom > len(p.src) {
+		return
 	}
+	text := p.src[p.proseFrom:p.pos]
+	text = strings.TrimLeft(text, "\n")
+	if strings.TrimSpace(text) != "" {
+		p.prose = append(p.prose, text)
+	}
+	p.proseFrom = -1
+}
 
-	return &Diagnostic{
-		Kind:       kind,
-		Message:    err.Error(),
-		Incomplete: syntax.IsIncomplete(err),
+func (p *parser) advance(n int) {
+	for i := 0; i < n; i++ {
+		if p.pos >= len(p.src) {
+			return
+		}
+		if p.src[p.pos] == '\n' {
+			p.line++
+			p.col = 1
+		} else {
+			p.col++
+		}
+		p.pos++
 	}
 }

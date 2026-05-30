@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
@@ -145,7 +146,7 @@ func TestExtractMessageItems_Result_KeepsVisibleResultRows(t *testing.T) {
 			msg: &message.Message{
 				ID:    "runtime",
 				Role:  message.Result,
-				Parts: []message.ContentPart{message.TextContent{Text: "[runtime] retry"}},
+				Parts: []message.ContentPart{message.TextContent{Text: lenosbash.RuntimeLine("retry")}},
 			},
 		},
 	}

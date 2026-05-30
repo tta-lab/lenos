@@ -262,17 +262,16 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 	}
 
 	return SessionAgentCall{
-		SessionID:           sessionID,
-		Prompt:              userPrompt,
-		ProviderOptions:     getProviderOptions(model, providerCfg),
-		MessageBlockPrefill: c.cfg.Config().Options.MessageBlockPrefill,
-		PairWith:            c.cfg.Overrides().PairWith,
-		Sandbox:             useSandbox,
-		SandboxClient:       sandboxClient,
-		Env:                 sandboxEnv,
-		AllowedPaths:        BuildAllowedPaths(ctx, cwd, access),
-		TaskID:              taskwarrior.ResolveTaskID(cwd),
-		ContextCommands:     buildRuntimeContextCommands(runtimeContext),
+		SessionID:       sessionID,
+		Prompt:          userPrompt,
+		ProviderOptions: getProviderOptions(model, providerCfg),
+		PairWith:        c.cfg.Overrides().PairWith,
+		Sandbox:         useSandbox,
+		SandboxClient:   sandboxClient,
+		Env:             sandboxEnv,
+		AllowedPaths:    BuildAllowedPaths(ctx, cwd, access),
+		TaskID:          taskwarrior.ResolveTaskID(cwd),
+		ContextCommands: buildRuntimeContextCommands(runtimeContext),
 	}
 }
 
@@ -613,11 +612,6 @@ func (c *coordinator) buildVercelProvider(_, apiKey string, headers map[string]s
 }
 
 func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers map[string]string, extraBody map[string]any, providerID string, isSubAgent bool) (fantasy.Provider, error) {
-	prefillSupported := supportsDeepSeekPrefill(providerID, baseURL)
-	if prefillSupported && c.cfg.Config().Options.MessageBlockPrefill {
-		baseURL = deepSeekPrefillBaseURL(providerID, baseURL)
-	}
-
 	opts := []openaicompat.Option{
 		openaicompat.WithBaseURL(baseURL),
 		openaicompat.WithAPIKey(apiKey),
@@ -631,19 +625,6 @@ func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers 
 	} else if c.cfg.Config().Options.Debug {
 		httpClient = log.NewHTTPClient()
 	}
-	if prefillSupported {
-		baseTransport := http.DefaultTransport
-		if httpClient != nil && httpClient.Transport != nil {
-			baseTransport = httpClient.Transport
-		}
-		if httpClient == nil {
-			httpClient = &http.Client{}
-		} else {
-			clone := *httpClient
-			httpClient = &clone
-		}
-		httpClient.Transport = deepSeekPrefillTransport{base: baseTransport}
-	}
 	if httpClient != nil {
 		opts = append(opts, openaicompat.WithHTTPClient(httpClient))
 	}
@@ -656,14 +637,7 @@ func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers 
 		opts = append(opts, openaicompat.WithSDKOptions(openaisdk.WithJSONSet(extraKey, extraValue)))
 	}
 
-	provider, err := openaicompat.New(opts...)
-	if err != nil {
-		return nil, err
-	}
-	if prefillSupported {
-		return deepSeekPrefillProvider{inner: provider}, nil
-	}
-	return provider, nil
+	return openaicompat.New(opts...)
 }
 
 func (c *coordinator) buildAzureProvider(baseURL, apiKey string, headers map[string]string, options map[string]string) (fantasy.Provider, error) {

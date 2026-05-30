@@ -12,6 +12,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
@@ -449,11 +450,11 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 	}
 	require.Len(t, call.ContextCommands, 3)
 	assert.Equal(t, RuntimeContextCommand{
-		Command:  rawMessageBlock("Let me list registered projects and available skills.") + "\nttal project list\nskill list",
+		Command:  lenosbash.WrapBash("Let me list registered projects and available skills.", "ttal project list\nskill list"),
 		Optional: true,
 	}, call.ContextCommands[0])
-	assert.Equal(t, rawMessageBlock("Let me read key instructions.")+"\ncat "+shellQuote(contextFile), call.ContextCommands[1].Command)
-	assert.Equal(t, rawMessageBlock("\nReady.\n\nLets rock and roll.\n"), call.ContextCommands[2].Command)
+	assert.Equal(t, lenosbash.WrapBash("Let me read key instructions.", "cat "+shellQuote(contextFile)), call.ContextCommands[1].Command)
+	assert.Equal(t, "\nReady.\n\nLets rock and roll.\n", call.ContextCommands[2].Command)
 	assert.NotContains(t, strings.Join([]string{
 		call.ContextCommands[0].Command,
 		call.ContextCommands[1].Command,

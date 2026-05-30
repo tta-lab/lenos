@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/temenos/client"
 
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
@@ -191,9 +192,9 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 			{Path: env.workingDir},
 		},
 		ContextCommands: []RuntimeContextCommand{{
-			Command: rawMessageBlock("Let me read key instructions.") + "\ncat " + shellQuote(contextFile),
+			Command: "Let me read key instructions.\n" + lenosbash.BashBlock("cat "+shellQuote(contextFile)),
 		}, {
-			Command: rawMessageBlock("\nReady.\n\nLets rock and roll.\n"),
+			Command: "\nReady.\n\nLets rock and roll.\n",
 		}},
 	})
 	require.NoError(t, err)
@@ -202,13 +203,13 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(msgs), 4)
 	require.Equal(t, message.Assistant, msgs[0].Role)
-	require.Equal(t, rawMessageBlock("Let me read key instructions.")+"\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
+	require.Equal(t, "Let me read key instructions.\n"+lenosbash.BashBlock("cat "+shellQuote(contextFile)), msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
-	require.Equal(t, "cat "+shellQuote(contextFile), msgs[1].CommandContent().Command)
+	require.Equal(t, "cat "+shellQuote(contextFile)+"\n", msgs[1].CommandContent().Command)
 	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)
 	require.Equal(t, message.Assistant, msgs[2].Role)
-	require.Equal(t, rawMessageBlock("\nReady.\n\nLets rock and roll.\n"), msgs[2].Content().Text)
+	require.Equal(t, "\nReady.\n\nLets rock and roll.\n", msgs[2].Content().Text)
 	require.Nil(t, msgs[2].FinishPart())
 	require.Equal(t, "test-model", msgs[2].Model)
 	require.Equal(t, "test-provider", msgs[2].Provider)
@@ -223,7 +224,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, fantasy.MessageRoleUser, prompt[2].Role)
 	require.Contains(t, fantasyMessageText(prompt[2]), "project instructions")
 	require.Equal(t, fantasy.MessageRoleAssistant, prompt[3].Role)
-	require.Equal(t, rawMessageBlock("\nReady.\n\nLets rock and roll.\n"), fantasyMessageText(prompt[3]))
+	require.Equal(t, "Ready.\n\nLets rock and roll.", fantasyMessageText(prompt[3]))
 	require.Equal(t, "user prompt", fantasyMessageText(prompt[4]))
 }
 
@@ -247,7 +248,7 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	sess, err := env.sessions.Create(t.Context(), "runtime context")
 	require.NoError(t, err)
 
-	raw := rawMessageBlock("Let me list registered projects and available skills.") + "\nttal project list\nskill list"
+	raw := "Let me list registered projects and available skills.\n" + lenosbash.BashBlock("ttal project list\nskill list")
 	runner := &fakeRunner{results: []ExecResult{{
 		Stdout:   []byte("project-a\nskill-a\n"),
 		ExitCode: 0,
@@ -260,7 +261,7 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	}, runner)
 	require.NoError(t, err)
 
-	require.Equal(t, []string{"ttal project list\nskill list"}, runner.bash)
+	require.Equal(t, []string{"ttal project list\nskill list\n"}, runner.bash)
 
 	msgs, err := env.messages.List(t.Context(), sess.ID)
 	require.NoError(t, err)
@@ -269,42 +270,8 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	require.Equal(t, raw, msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
-	require.Equal(t, "ttal project list\nskill list", msgs[1].CommandContent().Command)
+	require.Equal(t, "ttal project list\nskill list\n", msgs[1].CommandContent().Command)
 	require.Equal(t, "project-a\nskill-a\n", msgs[1].CommandContent().Output)
-}
-
-func TestRun_PassesAssistantPrefillToLoop(t *testing.T) {
-	t.Parallel()
-	env := testEnv(t)
-
-	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"#\n"}}}
-	primary := Model{
-		Model:      model,
-		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
-		ModelCfg:   config.SelectedModel{Provider: "test-provider", Model: "test-model"},
-	}
-	agent := NewSessionAgent(SessionAgentOptions{
-		LargeModel:           primary,
-		SmallModel:           primary,
-		PrimaryModel:         primary,
-		SystemPrompt:         "system prompt",
-		Sessions:             env.sessions,
-		Messages:             env.messages,
-		DisableAutoSummarize: true,
-	}).(*sessionAgent)
-	sess, err := env.sessions.Create(t.Context(), "assistant prefill")
-	require.NoError(t, err)
-
-	err = agent.Run(t.Context(), SessionAgentCall{
-		SessionID:           sess.ID,
-		Prompt:              "user prompt",
-		MessageBlockPrefill: true,
-	})
-
-	require.NoError(t, err)
-	assert.Equal(t, []string{messageBlockPrefillToken}, model.prefills)
-	assert.Equal(t, 1, model.prefillCalls)
-	assert.Equal(t, 0, model.normalCalls)
 }
 
 func TestRun_GeneratesTaskTitleWhenRuntimeContextInjected(t *testing.T) {
@@ -1179,7 +1146,7 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.NoError(t, err)
 
 	inner := &scriptedModel{
-		emits: []string{"m####\"Summary\"####"},
+		emits: []string{"Summary"},
 	}
 	model := &streamCapturingModel{inner: inner}
 	primary := Model{
@@ -1225,7 +1192,7 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.Equal(t, fantasy.MessageRoleUser, last.Role)
 	lastText := fantasyMessageText(last)
 	require.NotEmpty(t, lastText)
-	require.Contains(t, lastText, `m####"`)
+	require.Contains(t, lastText, "Emit only the summary Markdown")
 	require.NotContains(t, lastText, "narrate")
 
 	systemMessages := 0

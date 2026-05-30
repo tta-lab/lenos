@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/config"
 )
 
@@ -73,19 +74,16 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "m####\"")
+	assert.Contains(t, got, lenosbash.BashBlock("go test ./..."))
 
 	compactPrompt := strings.Join(strings.Fields(got), " ")
 	for _, invariant := range []string{
-		"Lenos Bash",
-		"message blocks",
-		"speak natural language",
-		"single-line",
-		"multi-line",
-		"more `#`",
-		"m#####\"",
-		"visible",
-		"bash",
+		"Lenos Runtime",
+		"Markdown prose",
+		"bash blocks",
+		"visible Markdown",
+		"turn ends",
+		"old `m` message-block protocol",
 	} {
 		assert.Contains(t, compactPrompt, invariant)
 	}
@@ -336,8 +334,8 @@ func TestSystemPrompt_PairWithDocumentsDefaultMessageBlockTarget(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "reviewer")
-	assert.Contains(t, got, "Untargeted message blocks")
-	assert.Contains(t, got, `m(target)"..."`)
+	assert.Contains(t, got, "available shell command for messaging")
+	assert.Contains(t, got, "bash block")
 	assert.NotEmpty(t, got)
 }
 

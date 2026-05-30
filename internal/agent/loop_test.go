@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/temenos/client"
 
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
 )
 
@@ -355,7 +356,7 @@ func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {
 	// Observation persisted as Result row.
 	results := messagesByRole(ms, message.Result)
 	require.Len(t, results, 1)
-	assert.True(t, strings.HasPrefix(results[0].Content().Text, "[runtime] your last response was empty"))
+	assert.True(t, strings.HasPrefix(results[0].Content().Text, lenosbash.RuntimeLine("your last response was empty")))
 
 	// Assistant has FinishReasonToolUse for re-prompt branch.
 	assistants := assistantsByOrder(ms)
@@ -367,7 +368,7 @@ func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {
 
 func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{"if true then", "exit"}}
+	model := &scriptedModel{emits: []string{lenosbash.BashBlock("if true then"), "exit"}}
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, &fakeRunner{}, rec)
 
@@ -377,7 +378,7 @@ func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 
 	results := messagesByRole(ms, message.Result)
 	require.Len(t, results, 1)
-	assert.Contains(t, results[0].Content().Text, "[runtime] your last response was not valid bash")
+	assert.Contains(t, results[0].Content().Text, lenosbash.RuntimeTag+"\nyour last bash block was not valid bash")
 
 	// Assistant has FinishReasonToolUse for invalid-bash branch.
 	assistants := assistantsByOrder(ms)
@@ -811,7 +812,7 @@ func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 	// Re-prompt is a Result, drained prompt is a User message.
 	results := messagesByRole(ms, message.Result)
 	require.Len(t, results, 1)
-	assert.True(t, strings.HasPrefix(results[0].Content().Text, "[runtime]"))
+	assert.True(t, strings.HasPrefix(results[0].Content().Text, lenosbash.RuntimeTag))
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
 	assert.Equal(t, "q1", users[0].Content().Text)
@@ -819,7 +820,7 @@ func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 
 func TestRunLoop_DrainOnBanned(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{`sed -i "s/a/b/" f.txt`, "exit"}}
+	model := &scriptedModel{emits: []string{lenosbash.BashBlock(`sed -i "s/a/b/" f.txt`), "exit"}}
 	rec := &recordingRecorder{}
 	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
 
@@ -829,7 +830,7 @@ func TestRunLoop_DrainOnBanned(t *testing.T) {
 	// Re-prompt is a Result, drained prompt is a User message.
 	results := messagesByRole(ms, message.Result)
 	require.Len(t, results, 1)
-	assert.Contains(t, results[0].Content().Text, "[runtime]")
+	assert.Contains(t, results[0].Content().Text, lenosbash.RuntimeTag)
 	users := messagesByRole(ms, message.User)
 	require.Len(t, users, 1)
 	assert.Equal(t, "q1", users[0].Content().Text)
@@ -1139,7 +1140,7 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	// not-found token internally. bash runs, reports "command not found" for
 	// "nonexistentcmd" in stderr while the trailing real command succeeds (exit 0).
 	inner := &scriptedModel{emits: []string{
-		"nonexistentcmd --flag\ntask abc123 done",
+		lenosbash.BashBlock("nonexistentcmd --flag\ntask abc123 done"),
 		"exit",
 	}}
 	cm := &streamCapturingModel{inner: inner}
@@ -1179,7 +1180,7 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 		}
 	}
 	alertIdx := strings.Index(obs, alertPrefix)
-	envelopeIdx := strings.Index(obs, "<result>")
+	envelopeIdx := strings.Index(obs, lenosbash.ResultStartTag)
 	require.GreaterOrEqual(t, alertIdx, 0, "alert prefix must be present")
 	require.GreaterOrEqual(t, envelopeIdx, 0, "result envelope must be present")
 	assert.Less(t, alertIdx, envelopeIdx, "alert MUST appear before envelope (salience flip)")
@@ -1200,13 +1201,13 @@ func TestRunLoop_GrepNoMatch_NoRePrompt(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, u := range messagesByRole(ms, message.User) {
-		assert.NotContains(t, u.Content().Text, "[runtime]",
+		assert.NotContains(t, u.Content().Text, lenosbash.RuntimeTag,
 			"exit 1 with no command-not-found pattern in stderr must NOT fire re-prompt")
 	}
 }
 
 // TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt asserts that the
-// model's Stream() receives both the full <result> envelope and the [ALERT from runtime]
+// model's Stream() receives both the full result envelope and the runtime alert
 // re-prompt when stderr contains "command not found". Guards against a regression
 // where the result envelope is silently dropped from the model's context.
 //
@@ -1216,7 +1217,7 @@ func TestRunLoop_GrepNoMatch_NoRePrompt(t *testing.T) {
 func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	t.Parallel()
 	inner := &scriptedModel{emits: []string{
-		"nonexistentcmd --flag\ntask abc123 done",
+		lenosbash.BashBlock("nonexistentcmd --flag\ntask abc123 done"),
 		"exit",
 	}}
 	cm := &streamCapturingModel{inner: inner}
@@ -1256,9 +1257,9 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	}
 	require.NotEmpty(t, rePrompt, "second Stream() must contain a non-empty User-role message (the re-prompt)")
 
-	// Salience flip: alert FIRST, then <result> envelope.
+	// Salience flip: alert FIRST, then result envelope.
 	alertIdx := strings.Index(rePrompt, alertPrefix)
-	envelopeIdx := strings.Index(rePrompt, "<result>")
+	envelopeIdx := strings.Index(rePrompt, lenosbash.ResultStartTag)
 	require.GreaterOrEqual(t, alertIdx, 0, "model must see the alert prefix")
 	require.GreaterOrEqual(t, envelopeIdx, 0, "model must see the result envelope")
 	assert.Less(t, alertIdx, envelopeIdx, "alert MUST appear before envelope (salience flip)")
@@ -1328,7 +1329,7 @@ func TestScanFirstCmdNotFound_BothBashErrorFormats(t *testing.T) {
 // (legit bash command) does NOT trigger natural-language coercion.
 func TestRunLoop_NaturalLanguage_LowercaseAccepted(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{"ls -la", "exit"}}
+	model := &scriptedModel{emits: []string{lenosbash.BashBlock("ls -la"), "exit"}}
 	runner := &fakeRunner{results: []ExecResult{
 		{Stdout: []byte("file1\nfile2\n"), ExitCode: 0, Duration: time.Millisecond},
 	}}
@@ -1339,7 +1340,7 @@ func TestRunLoop_NaturalLanguage_LowercaseAccepted(t *testing.T) {
 	require.NoError(t, err)
 
 	// Exec ran — lowercase first word is fine.
-	assert.Equal(t, []string{"ls -la"}, runner.bash, "lowercase first word must reach exec")
+	assert.Equal(t, []string{"ls -la\n"}, runner.bash, "bash block must reach exec")
 }
 
 // TestRunLoop_ToolCall_FiresPreExec verifies tool-call shaped emits are
@@ -1366,7 +1367,7 @@ func TestRunLoop_ToolCall_FiresPreExec(t *testing.T) {
 	assert.Equal(t, "exit", strings.TrimSpace(assistants[0].Content().Text))
 	assert.Contains(t, obs, alertPrefix)
 	assert.Contains(t, obs, "There is NO tool/function calling API")
-	assert.Contains(t, obs, "emit plain bash")
+	assert.Contains(t, obs, "emit a bash block")
 
 	require.Len(t, model.captured, 2, "expected initial prompt and one re-prompt turn")
 	prompt := model.captured[1]
@@ -1399,7 +1400,8 @@ func TestRunLoop_NaturalLanguageAutoWrapsMessageBlock(t *testing.T) {
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
-	assert.Equal(t, `m#"Done. Tests pass."#`, assistants[0].Content().Text)
+	assert.Equal(t, emit, assistants[0].Content().Text)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
 
 	results := resultsByOrder(ms)
 	require.Empty(t, results)
@@ -1407,7 +1409,7 @@ func TestRunLoop_NaturalLanguageAutoWrapsMessageBlock(t *testing.T) {
 
 func TestRunLoop_MessageBlockOnlyPublishesAndStops(t *testing.T) {
 	t.Parallel()
-	emit := "m\"Done for the user.\"\n"
+	emit := "Done for the user.\n"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1426,40 +1428,9 @@ func TestRunLoop_MessageBlockOnlyPublishesAndStops(t *testing.T) {
 	require.Empty(t, results)
 }
 
-func TestRunLoop_AssistantPrefillUsesNativeModelSupport(t *testing.T) {
+func TestRunLoop_UsesNormalStreamWithoutAssistantPrefill(t *testing.T) {
 	t.Parallel()
-	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"#\n"}}}
-	runner := &fakeRunner{}
-	deps, _ := newDeps(t, model, runner, nil)
-	deps.messageBlockPrefill = true
-
-	stop, err := runLoop(context.Background(), deps, nil, "prompt")
-
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, 1, model.prefillCalls)
-	assert.Equal(t, 0, model.normalCalls)
-	assert.Equal(t, []string{messageBlockPrefillToken}, model.prefills)
-	assert.Empty(t, runner.bash)
-}
-
-func TestRunLoop_AssistantPrefillIgnoredWithoutNativeModelSupport(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"exit"}}
-	runner := &fakeRunner{}
-	deps, _ := newDeps(t, model, runner, nil)
-	deps.messageBlockPrefill = true
-
-	stop, err := runLoop(context.Background(), deps, nil, "prompt")
-
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, 1, model.calls)
-}
-
-func TestRunLoop_AssistantPrefillDisabledUsesNormalStream(t *testing.T) {
-	t.Parallel()
-	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"echo ok", "exit"}}}
+	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{lenosbash.BashBlock("echo ok"), "exit"}}}
 	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
 	deps, _ := newDeps(t, model, runner, nil)
 
@@ -1469,12 +1440,12 @@ func TestRunLoop_AssistantPrefillDisabledUsesNormalStream(t *testing.T) {
 	assert.Equal(t, stopExit, stop)
 	assert.Equal(t, 0, model.prefillCalls)
 	assert.Equal(t, 2, model.normalCalls)
-	assert.Equal(t, []string{"echo ok"}, runner.bash)
+	assert.Equal(t, []string{"echo ok\n"}, runner.bash)
 }
 
 func TestRunLoop_MessageBlockOnlyMultipleBlocksPreserveOrder(t *testing.T) {
 	t.Parallel()
-	emit := "m\"First.\"\nm\"Second.\"\n"
+	emit := "First.\n\nSecond.\n"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1492,69 +1463,9 @@ func TestRunLoop_MessageBlockOnlyMultipleBlocksPreserveOrder(t *testing.T) {
 	require.Empty(t, results)
 }
 
-func TestRunLoop_AddressedMessageBlockDeliveryFailureStillStops(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"m(owner)\"Please review.\"\n", "exit"}}
-	runner := &fakeRunner{results: []ExecResult{{Stderr: []byte("send failed\n"), ExitCode: 9}}}
-	deps, ms := newDeps(t, model, runner, nil)
-
-	stop, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, 1, model.calls)
-	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "ttal send --to 'owner'")
-
-	results := resultsByOrder(ms)
-	require.Len(t, results, 1)
-	cc := results[0].CommandContent()
-	require.NotNil(t, cc.ExitCode)
-	assert.Equal(t, 9, *cc.ExitCode)
-	assert.Contains(t, cc.Output, "send failed")
-	assert.Contains(t, cc.Observation, "message delivery failed")
-
-	assistants := assistantsByOrder(ms)
-	require.Len(t, assistants, 1)
-	assert.Equal(t, "m(owner)\"Please review.\"\n", assistants[0].Content().Text)
-}
-
-func TestRunLoop_PairWithDeliversUntargetedMessageBlock(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"m\"Please review.\"\n", "exit"}}
-	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
-	deps, ms := newDeps(t, model, runner, nil)
-	deps.pairWith = "reviewer"
-
-	stop, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, 1, model.calls)
-	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "ttal send --to 'reviewer'")
-
-	assistants := assistantsByOrder(ms)
-	require.Len(t, assistants, 1)
-	assert.Equal(t, "m\"Please review.\"\n", assistants[0].Content().Text)
-}
-
-func TestRunLoop_MessageBlockTargetOverridesPairWith(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"m(owner)\"Please review.\"\n", "exit"}}
-	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
-	deps, _ := newDeps(t, model, runner, nil)
-	deps.pairWith = "reviewer"
-
-	stop, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	require.Len(t, runner.bash, 1)
-	assert.Contains(t, runner.bash[0], "ttal send --to 'owner'")
-	assert.NotContains(t, runner.bash[0], "reviewer")
-}
-
 func TestRunLoop_MixedSingleLineMessageBlockRunsCleanBashOnly(t *testing.T) {
 	t.Parallel()
-	emit := "m\"Testing now.\"\necho ok\n"
+	emit := "Testing now.\n" + lenosbash.BashBlock("echo ok")
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}}}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1576,7 +1487,7 @@ func TestRunLoop_MixedSingleLineMessageBlockRunsCleanBashOnly(t *testing.T) {
 
 func TestRunLoop_MixedMultilineMessageBlockKeepsBodyOnAssistantOnly(t *testing.T) {
 	t.Parallel()
-	emit := "m\"First line.\nSecond line.\"\necho ok\n"
+	emit := "First line.\nSecond line.\n" + lenosbash.BashBlock("echo ok")
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}}}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1594,90 +1505,10 @@ func TestRunLoop_MixedMultilineMessageBlockKeepsBodyOnAssistantOnly(t *testing.T
 	assert.Equal(t, "echo ok\n", results[0].CommandContent().Command)
 }
 
-func TestRunLoop_MixedSingleLineMessageBlockStillDeliversPairWith(t *testing.T) {
-	t.Parallel()
-	emit := "m\"Please review.\"\necho ok\n"
-	model := &scriptedModel{emits: []string{emit, "exit"}}
-	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}, {ExitCode: 0}}}
-	deps, ms := newDeps(t, model, runner, nil)
-	deps.pairWith = "reviewer"
-
-	stop, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	require.Len(t, runner.bash, 2)
-	assert.Equal(t, "echo ok\n", runner.bash[0])
-	assert.Contains(t, runner.bash[1], "ttal send --to 'reviewer'")
-
-	assistants := assistantsByOrder(ms)
-	require.Len(t, assistants, 2)
-	assert.Equal(t, emit, assistants[0].Content().Text)
-	results := resultsByOrder(ms)
-	require.Len(t, results, 1)
-	assert.Equal(t, "echo ok\n", results[0].CommandContent().Command)
-}
-
-func TestRunLoop_MixedMessageBlockSuppressesMessagesOnBashFailure(t *testing.T) {
-	t.Parallel()
-	emit := "m\"This should not publish.\"\nfalse\n"
-	model := &scriptedModel{emits: []string{emit, "exit"}}
-	runner := &fakeRunner{results: []ExecResult{{ExitCode: 1}}}
-	deps, ms := newDeps(t, model, runner, nil)
-
-	stop, err := runLoop(context.Background(), deps, nil, "")
-	require.NoError(t, err)
-	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{"false\n"}, runner.bash)
-
-	results := resultsByOrder(ms)
-	require.Len(t, results, 1)
-	cc := results[0].CommandContent()
-	assert.Equal(t, "false\n", cc.Command)
-	assistants := assistantsByOrder(ms)
-	require.NotEmpty(t, assistants)
-	assert.Equal(t, emit, assistants[0].Content().Text)
-	for _, assistant := range assistants[1:] {
-		assert.NotEqual(t, "This should not publish.", assistant.Content().Text)
-	}
-}
-
-func TestRunLoop_MessageBlockSameLineRePromptsWithoutRunningBash(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name string
-		emit string
-	}{
-		{name: "semicolon", emit: "echo ok; m\"Done.\"\n"},
-		{name: "background", emit: "sleep 1 & m\"Done.\"\n"},
-		{name: "pipeline", emit: "printf ok | m\"Done.\"\n"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			model := &scriptedModel{emits: []string{tc.emit, "exit"}}
-			runner := &fakeRunner{}
-			deps, ms := newDeps(t, model, runner, nil)
-
-			stop, err := runLoop(context.Background(), deps, nil, "")
-			require.NoError(t, err)
-			assert.Equal(t, stopExit, stop)
-			assert.Empty(t, runner.bash)
-
-			results := resultsByOrder(ms)
-			require.Len(t, results, 1)
-			obs := results[0].Content().Text
-			assert.Contains(t, obs, "invalid Lenos Bash")
-			assert.Contains(t, obs, "message block must start")
-			firstLine := strings.SplitN(strings.TrimRight(tc.emit, "\n"), "\n", 2)[0]
-			assert.Contains(t, obs, "  1 | "+firstLine)
-			assert.Contains(t, obs, "move `m` to its own physical line")
-		})
-	}
-}
-
 func TestRunLoop_HeredocSetupMessageLookingTextExecutesAsBash(t *testing.T) {
 	t.Parallel()
-	emit := "cat <<EOF m\"Done.\"\nEOF\n"
+	bash := "cat <<EOF m\"Done.\"\nEOF"
+	emit := lenosbash.BashBlock(bash)
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1685,16 +1516,17 @@ func TestRunLoop_HeredocSetupMessageLookingTextExecutesAsBash(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{emit}, runner.bash)
+	assert.Equal(t, []string{bash + "\n"}, runner.bash)
 
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
-	assert.Equal(t, emit, results[0].CommandContent().Command)
+	assert.Equal(t, bash+"\n", results[0].CommandContent().Command)
 }
 
 func TestRunLoop_NestedMessageBlockLookingTextExecutesAsBash(t *testing.T) {
 	t.Parallel()
-	emit := "if true; then\n  m\"Done.\"\nfi\n"
+	bash := "if true; then\n  m\"Done.\"\nfi"
+	emit := lenosbash.BashBlock(bash)
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{ExitCode: 127}}}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1702,16 +1534,17 @@ func TestRunLoop_NestedMessageBlockLookingTextExecutesAsBash(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{emit}, runner.bash)
+	assert.Equal(t, []string{bash + "\n"}, runner.bash)
 
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
-	assert.Equal(t, emit, results[0].CommandContent().Command)
+	assert.Equal(t, bash+"\n", results[0].CommandContent().Command)
 }
 
 func TestRunLoop_HeredocMessageLookingTextStaysPlainBash(t *testing.T) {
 	t.Parallel()
-	emit := "cat <<EOF\nm\"literal\"\nEOF\n"
+	bash := "cat <<EOF\nm\"literal\"\nEOF"
+	emit := lenosbash.BashBlock(bash)
 	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("m\"literal\"\n"), ExitCode: 0}}}
 	deps, ms := newDeps(t, model, runner, nil)
@@ -1719,49 +1552,47 @@ func TestRunLoop_HeredocMessageLookingTextStaysPlainBash(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{emit}, runner.bash)
+	assert.Equal(t, []string{bash + "\n"}, runner.bash)
 
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
-	assert.Equal(t, emit, results[0].CommandContent().Command)
+	assert.Equal(t, bash+"\n", results[0].CommandContent().Command)
 }
 
 func TestRunLoop_NaturalLanguageWithEqualsStaysBash(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{"Output=$(pwd)", "exit"}}
+	model := &scriptedModel{emits: []string{lenosbash.BashBlock("Output=$(pwd)"), "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("/tmp\n"), ExitCode: 0}}}
 	deps, _ := newDeps(t, model, runner, nil)
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{"Output=$(pwd)"}, runner.bash)
+	assert.Equal(t, []string{"Output=$(pwd)\n"}, runner.bash)
 }
 
-func TestRunLoop_NaturalLanguageFirstLineWithBashRestRewritesToMessageBlock(t *testing.T) {
+func TestRunLoop_NaturalLanguageWithoutBashTagsStopsWithoutRunning(t *testing.T) {
 	t.Parallel()
 	bash := "sed -n '90,130p' internal/agent/agent_run.go\n" +
 		"echo \"===SEPARATOR===\"\n" +
-		"grep -n \"func publishMessageBlocks\\|func publishMixedMessageBlocks\\|func handleMessageOnlyBlocks\\|func deliverMessageBlock\" internal/agent/loop.go\n"
+		"grep -n \"func runLoop\" internal/agent/loop.go\n"
 	emit := "Let me read the remaining key functions.\n\n" + bash
 	model := &scriptedModel{emits: []string{emit, "exit"}}
-	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}}}
+	runner := &fakeRunner{}
 	deps, ms := newDeps(t, model, runner, nil)
 
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopExit, stop)
-	assert.Equal(t, []string{bash}, runner.bash)
+	assert.Empty(t, runner.bash)
 
 	assistants := assistantsByOrder(ms)
-	require.GreaterOrEqual(t, len(assistants), 1)
-	assert.Equal(t, "m#\"Let me read the remaining key functions.\"#\n\n"+bash, assistants[0].Content().Text)
-	for _, assistant := range assistants[1:] {
-		assert.NotEqual(t, "Let me read the remaining key functions.", assistant.Content().Text)
-	}
+	require.Len(t, assistants, 1)
+	assert.Equal(t, emit, assistants[0].Content().Text)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
 }
 
-func TestRunLoop_NaturalLanguageShapesRePromptWithoutRunning(t *testing.T) {
+func TestRunLoop_NaturalLanguageShapesStopWithoutRunning(t *testing.T) {
 	t.Parallel()
 	for _, emit := range []string{
 		"Done.\n:continue",
@@ -1782,12 +1613,10 @@ func TestRunLoop_NaturalLanguageShapesRePromptWithoutRunning(t *testing.T) {
 			assert.Empty(t, runner.bash)
 
 			assistants := assistantsByOrder(ms)
-			require.Len(t, assistants, 2)
-			assert.Equal(t, message.FinishReasonToolUse, assistants[0].FinishReason())
+			require.Len(t, assistants, 1)
+			assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
 			results := resultsByOrder(ms)
-			require.Len(t, results, 1)
-			assert.Contains(t, results[0].Content().Text, `m"`)
-			assert.NotContains(t, results[0].Content().Text, "narrate")
+			require.Empty(t, results)
 		})
 	}
 }
@@ -1832,7 +1661,7 @@ func TestRunLoop_DrainOnToolCall(t *testing.T) {
 
 // TestObservationSSOT_EmptySuccess proves a command with no output carries
 // the same Observation body text that formatResultForModel produces, and
-// that replay via FormatResults wraps it in a single <result> envelope
+// that replay via FormatResults wraps it in a single result envelope
 // matching the live observation.
 func TestObservationSSOT_EmptySuccess(t *testing.T) {
 	t.Parallel()
@@ -1857,8 +1686,8 @@ func TestObservationSSOT_EmptySuccess(t *testing.T) {
 
 	// FormatResults should produce the same envelope the live loop sends.
 	envelope := message.FormatResults([]message.CommandContent{cc})
-	assert.Equal(t, "<result>\n"+expectedBody+"\n</result>", envelope,
-		"FormatResults must wrap Observation in single <result> envelope")
+	assert.Equal(t, lenosbash.ResultBlock(expectedBody), envelope,
+		"FormatResults must wrap Observation in single result envelope")
 
 	// Legacy fallback fields still set correctly.
 	assert.Equal(t, "echo -n", cc.Command)
@@ -1869,7 +1698,7 @@ func TestObservationSSOT_EmptySuccess(t *testing.T) {
 
 func TestRunLoop_RunnerErrorIsPersistedForModel(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{"pwd", "exit"}}
+	model := &scriptedModel{emits: []string{lenosbash.BashBlock("pwd"), "exit"}}
 	runner := &fakeRunner{results: []ExecResult{{
 		ExitCode: -1,
 		Err:      errors.New(`temenos: daemon returned HTTP 400: {"error":"validation error: path must be absolute: \".cursor/rules/\""}`),
@@ -1914,8 +1743,8 @@ func TestObservationSSOT_FailureWithStderr(t *testing.T) {
 
 	// Replay via FormatResults wraps body in envelope.
 	envelope := message.FormatResults([]message.CommandContent{cc})
-	// The envelope should contain the observation body inside <result> tags.
-	wantHead := "<result>\n" + cc.Observation + "\n</result>"
+	// The envelope should contain the observation body inside result tags.
+	wantHead := lenosbash.ResultBlock(cc.Observation)
 	assert.Equal(t, wantHead, envelope,
 		"FormatResults must use Observation verbatim, not fall back to Output")
 
