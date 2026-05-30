@@ -131,7 +131,7 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 			messageParts = append(messageParts, a.renderTextMessage(parsed.markdown, width))
 		}
 		if parsed.commandPreview != "" {
-			messageParts = append(messageParts, a.sty.Chat.Message.ResultHeader.Render(parsed.commandPreview))
+			messageParts = append(messageParts, a.renderCommandPreview(parsed.commandPreview))
 		}
 	}
 	if a.message.IsFinished() {
@@ -181,6 +181,15 @@ func bashEmitPreviewLine(bash string) string {
 	firstLine, _, _ := strings.Cut(bash, "\n")
 	return firstLine
 }
+
+func (a *AssistantMessageItem) renderCommandPreview(preview string) string {
+	if strings.HasPrefix(preview, "$") {
+		return a.sty.Chat.Message.CommandPrefix.Render("$") +
+			a.sty.Chat.Message.ResultHeader.Render(strings.TrimPrefix(preview, "$"))
+	}
+	return a.sty.Chat.Message.ResultHeader.Render(preview)
+}
+
 func (a *AssistantMessageItem) renderTextMessage(content string, width int) string {
 	renderer := common.MarkdownRenderer(a.sty, width)
 	rendered, err := renderer.Render(content)

@@ -104,6 +104,24 @@ func TestAssistantMessageItem_RenderMixedEmitShowsMarkdownAndCommand(t *testing.
 	assert.NotContains(t, rendered, "m#\"")
 	assert.NotContains(t, rendered, "\"#")
 }
+
+func TestAssistantMessageItem_RenderCommandPrefixUsesCommandPrefixStyle(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	content := "m\"Ready.\"\ncat main.go"
+	item := NewAssistantMessageItem(&sty, &message.Message{
+		ID:   "assistant-1",
+		Role: message.Assistant,
+		Parts: []message.ContentPart{
+			message.TextContent{Text: content},
+		},
+	}, true)
+
+	rendered := item.RawRender(80)
+
+	assert.Contains(t, rendered, sty.Chat.Message.CommandPrefix.Render("$"))
+}
+
 func TestAssistantMessageItem_RenderMessageBlockUsesMarkdownRenderer(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
