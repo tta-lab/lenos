@@ -80,19 +80,18 @@ func TestAssistantMessageItem_RenderColonWordAsMarkdown(t *testing.T) {
 	assert.Contains(t, rendered, "second line")
 }
 
-func TestAssistantMessageItem_RenderMessageBlockAsMarkdown(t *testing.T) {
+func TestAssistantMessageItem_RenderProseAsMarkdown(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	item := NewAssistantMessageItem(&sty, &message.Message{
 		ID:   "assistant-1",
 		Role: message.Assistant,
 		Parts: []message.ContentPart{
-			message.TextContent{Text: "Ready.", Kind: message.TextContentKindMessageBlock},
+			message.TextContent{Text: "Ready."},
 		},
 	}, true)
 	rendered := ansi.Strip(item.RawRender(80))
 	assert.Contains(t, rendered, "Ready.")
-	assert.NotContains(t, rendered, "$ Ready.")
 }
 
 func TestAssistantMessageItem_RenderMixedEmitShowsMarkdownAndCommand(t *testing.T) {
@@ -147,7 +146,7 @@ func TestAssistantMessageItem_RenderCommandPrefixUsesCommandPrefixStyle(t *testi
 	assert.Contains(t, rendered, sty.Chat.Message.CommandPrefix.Render("$"))
 }
 
-func TestAssistantMessageItem_RenderMessageBlockUsesMarkdownRenderer(t *testing.T) {
+func TestAssistantMessageItem_RenderProseUsesMarkdownRenderer(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	content := "# Ready\n\n- one"
@@ -180,7 +179,7 @@ func TestAssistantMessageItem_RenderMixedEmitMultilineBashOneLinePreview(t *test
 	assert.NotContains(t, rendered, "&& go test")
 }
 
-func TestAssistantMessageItem_RenderMultipleMessageBlocksJoined(t *testing.T) {
+func TestAssistantMessageItem_RenderMultipleProseParagraphsJoined(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	content := "First.\n\nSecond."
@@ -196,7 +195,7 @@ func TestAssistantMessageItem_RenderMultipleMessageBlocksJoined(t *testing.T) {
 	assert.Contains(t, rendered, "Second.")
 }
 
-func TestAssistantMessageItem_RenderMessageBlockOnlyNoCommandPreview(t *testing.T) {
+func TestAssistantMessageItem_RenderProseOnlyNoCommandPreview(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	content := "Long note."

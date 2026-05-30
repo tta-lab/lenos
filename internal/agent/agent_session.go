@@ -94,7 +94,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	totalUsage := streamResult.usage
 	providerMeta := streamResult.meta
 	summaryMessage = streamResult.message
-	normalizeSummaryMessageBlock(&summaryMessage)
+	normalizeSummaryMarkdown(&summaryMessage)
 
 	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
 	if err := a.messages.Update(genCtx, summaryMessage); err != nil {
@@ -432,7 +432,7 @@ comments, or any text before or after the summary.
 `
 }
 
-func normalizeSummaryMessageBlock(summaryMessage *message.Message) {
+func normalizeSummaryMarkdown(summaryMessage *message.Message) {
 	parsed, diag := lenosbash.Parse(summaryMessage.Content().Text)
 	if diag != nil || len(parsed.Bash) > 0 || strings.TrimSpace(parsed.Prose) == "" {
 		return

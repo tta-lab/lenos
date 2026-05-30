@@ -38,9 +38,9 @@ func TestMarshalUnmarshalParts(t *testing.T) {
 		require.Equal(t, "Hello, world!", tc.Text)
 	})
 
-	t.Run("TextContent kind", func(t *testing.T) {
+	t.Run("TextContent marshal/unmarshal", func(t *testing.T) {
 		t.Parallel()
-		parts := []ContentPart{TextContent{Text: "Ready.", Kind: TextContentKindMessageBlock}}
+		parts := []ContentPart{TextContent{Text: "Ready."}}
 		data, err := marshalParts(parts)
 		require.NoError(t, err)
 		got, err := unmarshalParts(data)
@@ -49,7 +49,6 @@ func TestMarshalUnmarshalParts(t *testing.T) {
 		tc, ok := got[0].(TextContent)
 		require.True(t, ok)
 		require.Equal(t, "Ready.", tc.Text)
-		require.Equal(t, TextContentKindMessageBlock, tc.Kind)
 	})
 
 	t.Run("CommandContent pending", func(t *testing.T) {

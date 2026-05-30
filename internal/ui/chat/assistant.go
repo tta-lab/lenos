@@ -147,12 +147,8 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 
 // parseContent extracts display parts from Lenos Bash content.
 // For valid Lenos Bash it returns markdown prose and a command preview from the
-// first parsed bash block. When the message has TextContentKindMessageBlock,
-// the content itself is already cleaned prose, so render it as markdown.
+// first parsed bash block.
 func (a *AssistantMessageItem) parseContent(content string) assistantContent {
-	if IsMessageBlockAssistant(a.message) {
-		return assistantContent{markdown: content}
-	}
 	parsed, diag := lenosbash.Parse(content)
 	if diag != nil {
 		// Not valid Lenos Bash — fall back to bash-emit preview.
@@ -189,10 +185,6 @@ func (a *AssistantMessageItem) renderTextMessage(content string, width int) stri
 		return content
 	}
 	return strings.TrimSpace(rendered)
-}
-
-func IsMessageBlockAssistant(msg *message.Message) bool {
-	return msg != nil && msg.Content().Kind == message.TextContentKindMessageBlock
 }
 
 // renderThinking renders the thinking/reasoning content with footer.

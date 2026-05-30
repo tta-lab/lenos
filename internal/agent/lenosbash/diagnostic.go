@@ -42,6 +42,7 @@ func RenderDiagnostic(source string, diag Diagnostic) string {
 	body = strings.TrimPrefix(body, RuntimeTag+"\n")
 	return RuntimeBlock(body)
 }
+
 func renderedDiagnostic(source string, diag Diagnostic) renderedDiagnosticView {
 	rendered := renderedDiagnosticView{
 		Kind:       diag.Kind,
@@ -59,6 +60,7 @@ func renderedDiagnostic(source string, diag Diagnostic) renderedDiagnosticView {
 	rendered.Help = diagnosticHelp(diag)
 	return rendered
 }
+
 func writeSourceExcerpt(b *strings.Builder, source string, diag renderedDiagnosticView) {
 	lines := sourceLines(source)
 	if len(lines) == 0 || diag.Line < 1 || diag.Line > len(lines) {
@@ -89,11 +91,13 @@ func writeSourceExcerpt(b *strings.Builder, source string, diag renderedDiagnost
 		}
 	}
 }
+
 func writeHelpRewrite(b *strings.Builder, diag renderedDiagnosticView) {
 	b.WriteString("\n")
 	b.WriteString(BashBlock("your command here"))
 	b.WriteString("\n")
 }
+
 func diagnosticLabel(diag Diagnostic) string {
 	switch {
 	case diag.Kind == "tag_unclosed" && strings.Contains(diag.Message, BashStartTag):
@@ -102,6 +106,7 @@ func diagnosticLabel(diag Diagnostic) string {
 		return "invalid syntax"
 	}
 }
+
 func diagnosticHelp(diag Diagnostic) string {
 	switch {
 	case diag.Kind == "tag_unclosed":
@@ -110,6 +115,7 @@ func diagnosticHelp(diag Diagnostic) string {
 		return "use bash tags for commands or plain text for prose"
 	}
 }
+
 func sourceLine(source string, lineNo int) string {
 	lines := sourceLines(source)
 	if lineNo < 1 || lineNo > len(lines) {
@@ -117,6 +123,7 @@ func sourceLine(source string, lineNo int) string {
 	}
 	return lines[lineNo-1]
 }
+
 func sourceLines(source string) []string {
 	if source == "" {
 		return nil
@@ -131,6 +138,7 @@ func sourceLines(source string) []string {
 	}
 	return lines
 }
+
 func displayColumn(line string, byteColumn int) int {
 	if byteColumn <= 1 {
 		return 1

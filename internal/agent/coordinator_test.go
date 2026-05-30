@@ -82,7 +82,7 @@ func TestCoordinator_Run_StopReasonMapping(t *testing.T) {
 		wantWrap string // substring that must appear in the returned error
 	}{
 		{
-			name:    "stopExit success → nil",
+			name:    "success → nil",
 			runErr:  nil,
 			wantNil: true,
 		},

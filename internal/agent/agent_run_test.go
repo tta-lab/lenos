@@ -231,7 +231,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, "user prompt", fantasyMessageText(prompt[4]))
 }
 
-func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t *testing.T) {
+func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedProseAndBash(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
 	primary := Model{
@@ -558,7 +558,7 @@ func TestRun_HookRunnerFiresPerStep(t *testing.T) {
 	require.NoError(t, err)
 
 	rec := newRecRunner(2) // 2 steps: echo hi + exit
-	bm := &scriptedModel{emits: []string{"echo hi", "exit"}}
+	bm := &scriptedModel{emits: []string{lenosbash.BashBlock("echo hi"), "exit"}}
 	agent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
@@ -594,7 +594,7 @@ func TestRun_HookRunnerFailingDoesNotAbortLoop(t *testing.T) {
 	sess, err := env.sessions.Create(t.Context(), "hook fail test")
 	require.NoError(t, err)
 
-	bm := &scriptedModel{emits: []string{"echo one", "echo two", "exit"}}
+	bm := &scriptedModel{emits: []string{lenosbash.BashBlock("echo one"), lenosbash.BashBlock("echo two"), "exit"}}
 	agent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
@@ -785,7 +785,7 @@ func TestRun_AutoCompactWaitsUntilNextStepAfterBashResult(t *testing.T) {
 	require.NoError(t, err)
 
 	model := &scriptedModel{
-		emits: []string{"printf 'ok\\n'", "summary text", "exit"},
+		emits: []string{lenosbash.BashBlock("printf 'ok\\n'"), "summary text", "exit"},
 		usages: []fantasy.Usage{
 			{InputTokens: 81, OutputTokens: 0},
 			{InputTokens: 0, OutputTokens: 0},
@@ -837,7 +837,7 @@ func TestRun_AutoCompactSummarizeErrorPropagates(t *testing.T) {
 	require.NoError(t, err)
 
 	model := &scriptedModel{
-		emits: []string{"trigger compact", "summary"},
+		emits: []string{lenosbash.BashBlock("trigger compact"), "summary"},
 		usages: []fantasy.Usage{
 			{InputTokens: 200_000, OutputTokens: 0},
 			{InputTokens: 0, OutputTokens: 0},
@@ -874,7 +874,7 @@ func TestRun_AutoCompactSummarizeSucceedsButReentryFails(t *testing.T) {
 	// [2] "do work" — re-entry crosses the threshold after its bash result.
 	// [3] "err" — errOn=[3] makes the second Summarize() fail.
 	model := &scriptedModel{
-		emits: []string{"trigger", "summary", "do work", "err"},
+		emits: []string{lenosbash.BashBlock("trigger"), "summary", lenosbash.BashBlock("do work"), "err"},
 		usages: []fantasy.Usage{
 			{InputTokens: 200_000, OutputTokens: 0},
 			{InputTokens: 0, OutputTokens: 0},

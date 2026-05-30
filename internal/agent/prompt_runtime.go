@@ -56,9 +56,11 @@ wrapper around bash commands — XML tags, JSON envelopes, or bracket
 notation — is discarded and never executed.
 
 To act, emit a bash block containing plain bash:
+  <bash>
   ls -la
   rg "needle" .
   src edit internal/agent/loop.go
+  </bash>
 
 To talk to the human, emit Markdown prose outside bash blocks.
 

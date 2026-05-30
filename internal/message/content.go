@@ -45,12 +45,6 @@ type ContentPart interface {
 	isPart()
 }
 
-type TextContentKind string
-
-const (
-	TextContentKindMessageBlock TextContentKind = "message_block"
-)
-
 type ReasoningContent struct {
 	Thinking         string                             `json:"thinking"`
 	Signature        string                             `json:"signature"`
@@ -67,8 +61,7 @@ func (tc ReasoningContent) String() string {
 func (ReasoningContent) isPart() {}
 
 type TextContent struct {
-	Text string          `json:"text"`
-	Kind TextContentKind `json:"kind,omitempty"`
+	Text string `json:"text"`
 }
 
 func (tc TextContent) String() string {
@@ -243,7 +236,7 @@ func (m *Message) AppendContent(delta string) {
 	found := false
 	for i, part := range m.Parts {
 		if c, ok := part.(TextContent); ok {
-			m.Parts[i] = TextContent{Text: c.Text + delta, Kind: c.Kind}
+			m.Parts[i] = TextContent{Text: c.Text + delta}
 			found = true
 		}
 	}

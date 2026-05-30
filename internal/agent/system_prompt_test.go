@@ -219,7 +219,7 @@ func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
 	assert.NotEmpty(t, got)
 }
 
-func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
+func TestInitializePrompt_IsMarkdownInstruction(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
@@ -233,7 +233,9 @@ func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
 	got, err := InitializePrompt(store)
 	require.NoError(t, err)
 
-	assertValidBashSyntax(t, got)
+	assert.Contains(t, got, "Analyze this codebase")
+	assert.Contains(t, got, "Clear markdown sections")
+	assert.NotContains(t, got, lenosbash.BashStartTag)
 }
 
 func assertValidBashSyntax(t *testing.T, script string) {
@@ -306,7 +308,7 @@ func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
 	assert.NotEmpty(t, got)
 }
 
-func TestSystemPrompt_PairWithDocumentsDefaultMessageBlockTarget(t *testing.T) {
+func TestSystemPrompt_PairWithDocumentsDefaultBashBlockTarget(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))

@@ -2,21 +2,23 @@ package agent
 
 import (
 	"bytes"
-	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/google"
-	"charm.land/fantasy/providers/openai"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/tta-lab/lenos/internal/agent/lenosbash"
-	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/temenos/client"
 	"html"
 	"log/slog"
 	"regexp"
 	"strings"
 	"time"
+
+	"charm.land/fantasy"
+	"charm.land/fantasy/providers/anthropic"
+	"charm.land/fantasy/providers/google"
+	"charm.land/fantasy/providers/openai"
+
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
+	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/temenos/client"
 )
 
 const (
@@ -50,7 +52,7 @@ type loopDeps struct {
 type stopReason int
 
 const (
-	stopExit stopReason = iota
+	stopEndTurn stopReason = iota
 	stopStepCap
 	stopError
 	stopCanceled
@@ -114,17 +116,8 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				slog.Warn("loop: persist sanitized assistant emit", "error", updateErr)
 			}
 		}
-		// Check for exit.
-		trimmed := strings.TrimSpace(emit)
-		if trimmed == "exit" {
-			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
-			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
-				slog.Warn("loop: persist exit finish", "error", updateErr)
-			}
-			return stopExit, nil
-		}
 		// Check for empty emit.
-		if trimmed == "" {
+		if strings.TrimSpace(emit) == "" {
 			obs := rePromptEmpty()
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
@@ -149,142 +142,133 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
-		// Execute parsed bash blocks.
+		// Execute parsed bash blocks: prose-only ends the turn.
 		if len(parsed.Bash) == 0 {
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 				slog.Warn("loop: persist text-only finish", "error", updateErr)
 			}
-			return stopExit, nil
+			return stopEndTurn, nil
 		}
-		// Execute bash blocks sequentially.
-		var bashFailed bool
-		for _, bashCmd := range parsed.Bash {
-			if strings.TrimSpace(bashCmd) == "" {
-				continue
-			}
-			if containsBlockedPattern(bashCmd) {
-				obs := rePromptBlockedPattern()
-				msgs = append(msgs,
-					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
-					fantasy.NewUserMessage(obs),
-				)
-				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-					slog.Warn("loop: persist banned re-prompt", "error", obsErr)
-				}
-				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-				msgs = drainAndAppend(ctx, deps, msgs)
-				goto nextStep
-			}
-			if cls, aux := classify(bashCmd); cls == classifyInvalidBash {
-				obs := rePromptInvalidBash(aux)
-				msgs = append(msgs,
-					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
-					fantasy.NewUserMessage(obs),
-				)
-				if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-					slog.Warn("loop: persist invalid-bash re-prompt", "error", obsErr)
-				}
-				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-				msgs = drainAndAppend(ctx, deps, msgs)
-				goto nextStep
-			}
-			resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-				Role:  message.Result,
-				Parts: []message.ContentPart{message.CommandContent{Command: bashCmd, Pending: true}},
-			})
-			if createErr != nil {
-				return stopError, fmt.Errorf("create result row: %w", createErr)
-			}
-			res := deps.runner.Run(ctx, bashCmd, deps.env, deps.paths)
-			if res.Background {
-				if deps.jobWatcher != nil {
-					deps.jobWatcher.AddJob(res.JobID, bashCmd)
-				}
-				obs := fmt.Sprintf(
-					"background job started (job_id: %s)\nyou can kill this job later via `temenos job kill %s`",
-					res.JobID, res.JobID,
-				)
-				obs = lenosbash.RuntimeBlock(obs)
-				resultMsg.Parts = []message.ContentPart{message.CommandContent{
-					Command: bashCmd, Pending: false, Observation: obs,
-				}}
-				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
-					slog.Warn("loop: persist background job result row", "error", updateErr)
-				}
-				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-				msgs = append(msgs,
-					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
-					fantasy.NewUserMessage(obs),
-				)
-				msgs = drainAndAppend(ctx, deps, msgs)
-				// Don't process further bash blocks after a background job started.
-				goto nextStep
-			}
-			if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-				abandonPending(ctx, deps.messages, &resultMsg)
-				return stopCanceled, ctx.Err()
-			}
-			exitCode := res.ExitCode
-			stderr := string(res.Stderr)
-			if res.Err != nil && len(res.Stdout) == 0 && stderr == "" {
-				stderr = res.Err.Error()
-			}
-			if res.ExitCode != 0 {
-				bashFailed = true
-			}
-			envelope := formatResultForModel(bashCmd, string(res.Stdout), stderr, res.ExitCode)
-			body := lenosbash.ResultBody(envelope)
-			resultMsg.Parts = []message.ContentPart{message.CommandContent{
-				Command:  bashCmd,
-				Output:   string(combine(res.Stdout, []byte(stderr))),
-				ExitCode: &exitCode, Pending: false,
-				Observation: body,
-			}}
-			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
-				slog.Warn("loop: persist result row", "error", updateErr)
+		// Execute the single bash block.
+		bashCmd := parsed.Bash[0]
+		if strings.TrimSpace(bashCmd) == "" {
+			msgs = drainAndAppend(ctx, deps, msgs)
+			continue
+		}
+		if containsBlockedPattern(bashCmd) {
+			obs := rePromptBlockedPattern()
+			msgs = append(msgs,
+				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				fantasy.NewUserMessage(obs),
+			)
+			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+				slog.Warn("loop: persist banned re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-			if errors.Is(res.Err, context.DeadlineExceeded) {
-				exitCode := 124
-				obs := rePromptTimeout(int(DefaultPerCmdTimeout / time.Second))
-				resultMsg.Parts = []message.ContentPart{message.CommandContent{
-					Command: bashCmd, Output: obs, ExitCode: &exitCode,
-					Pending: false, Observation: obs,
-				}}
-				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
-					slog.Warn("loop: persist timeout result row", "error", updateErr)
-				}
-				msgs = append(msgs,
-					assistantTextMessage(emit, assistantMsg.ReasoningContent()),
-					fantasy.NewUserMessage(obs),
-				)
-				msgs = drainAndAppend(ctx, deps, msgs)
-				goto nextStep
+			msgs = drainAndAppend(ctx, deps, msgs)
+			continue
+		}
+		if cls, aux := classify(bashCmd); cls == classifyInvalidBash {
+			obs := rePromptInvalidBash(aux)
+			msgs = append(msgs,
+				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				fantasy.NewUserMessage(obs),
+			)
+			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+				slog.Warn("loop: persist invalid-bash re-prompt", "error", obsErr)
 			}
-			obs := lenosbash.ResultBlock(body)
-			if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
-				rePrompt := rePromptCmdNotFound(firstNotFound)
-				obs = rePrompt + "\n\n" + obs
-				exitCode := 1
-				resultMsg.Parts = []message.ContentPart{message.CommandContent{
-					Command: bashCmd, Output: obs, ExitCode: &exitCode,
-					Pending: false, Observation: obs,
-				}}
-				if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
-					slog.Warn("loop: persist cmd-not-found result row", "error", updateErr)
-				}
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = drainAndAppend(ctx, deps, msgs)
+			continue
+		}
+		resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
+			Role:  message.Result,
+			Parts: []message.ContentPart{message.CommandContent{Command: bashCmd, Pending: true}},
+		})
+		if createErr != nil {
+			return stopError, fmt.Errorf("create result row: %w", createErr)
+		}
+		res := deps.runner.Run(ctx, bashCmd, deps.env, deps.paths)
+		if res.Background {
+			if deps.jobWatcher != nil {
+				deps.jobWatcher.AddJob(res.JobID, bashCmd)
+			}
+			obs := fmt.Sprintf(
+				"background job started (job_id: %s)\nyou can kill this job later via `temenos job kill %s`",
+				res.JobID, res.JobID,
+			)
+			obs = lenosbash.RuntimeBlock(obs)
+			resultMsg.Parts = []message.ContentPart{message.CommandContent{
+				Command: bashCmd, Pending: false, Observation: obs,
+			}}
+			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+				slog.Warn("loop: persist background job result row", "error", updateErr)
+			}
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = append(msgs,
+				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				fantasy.NewUserMessage(obs),
+			)
+			msgs = drainAndAppend(ctx, deps, msgs)
+			continue
+		}
+		if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			abandonPending(ctx, deps.messages, &resultMsg)
+			return stopCanceled, ctx.Err()
+		}
+		exitCode := res.ExitCode
+		stderr := string(res.Stderr)
+		if res.Err != nil && len(res.Stdout) == 0 && stderr == "" {
+			stderr = res.Err.Error()
+		}
+		envelope := formatResultForModel(bashCmd, string(res.Stdout), stderr, res.ExitCode)
+		body := lenosbash.ResultBody(envelope)
+		resultMsg.Parts = []message.ContentPart{message.CommandContent{
+			Command:  bashCmd,
+			Output:   string(combine(res.Stdout, []byte(stderr))),
+			ExitCode: &exitCode, Pending: false,
+			Observation: body,
+		}}
+		if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+			slog.Warn("loop: persist result row", "error", updateErr)
+		}
+		markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+		if errors.Is(res.Err, context.DeadlineExceeded) {
+			exitCode := 124
+			obs := rePromptTimeout(int(DefaultPerCmdTimeout / time.Second))
+			resultMsg.Parts = []message.ContentPart{message.CommandContent{
+				Command: bashCmd, Output: obs, ExitCode: &exitCode,
+				Pending: false, Observation: obs,
+			}}
+			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+				slog.Warn("loop: persist timeout result row", "error", updateErr)
 			}
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
-			if bashFailed {
-				break
+			msgs = drainAndAppend(ctx, deps, msgs)
+			continue
+		}
+		obs := lenosbash.ResultBlock(body)
+		if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
+			rePrompt := rePromptCmdNotFound(firstNotFound)
+			obs = rePrompt + "\n\n" + obs
+			exitCode := 1
+			resultMsg.Parts = []message.ContentPart{message.CommandContent{
+				Command: bashCmd, Output: obs, ExitCode: &exitCode,
+				Pending: false, Observation: obs,
+			}}
+			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+				slog.Warn("loop: persist cmd-not-found result row", "error", updateErr)
 			}
 		}
+		msgs = append(msgs,
+			assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+			fantasy.NewUserMessage(obs),
+		)
 		msgs = drainAndAppend(ctx, deps, msgs)
-	nextStep:
 	}
 	return stopStepCap, ErrStepCap
 }
@@ -409,6 +393,7 @@ func formatResultForModel(_ string, stdout, stderr string, exitCode int) string 
 	}
 	return lenosbash.ResultBlock(body)
 }
+
 func assistantTextMessage(text string, rc message.ReasoningContent) fantasy.Message {
 	var parts []fantasy.MessagePart
 	if rc.Thinking != "" {
@@ -432,20 +417,15 @@ func assistantTextMessage(text string, rc message.ReasoningContent) fantasy.Mess
 	}
 	return fantasy.Message{Role: fantasy.MessageRoleAssistant, Content: parts}
 }
+
 func replaceAssistantText(msg *message.Message, text string) {
-	replaceAssistantTextKind(msg, text, "")
-}
-func replaceAssistantTextKind(msg *message.Message, text string, kind message.TextContentKind) {
 	parts := make([]message.ContentPart, 0, len(msg.Parts)+1)
 	replaced := false
 	for _, part := range msg.Parts {
-		switch c := part.(type) {
+		switch part.(type) {
 		case message.TextContent:
 			if !replaced {
-				if kind == "" {
-					kind = c.Kind
-				}
-				parts = append(parts, message.TextContent{Text: text, Kind: kind})
+				parts = append(parts, message.TextContent{Text: text})
 				replaced = true
 			}
 		case message.Finish:
@@ -455,10 +435,11 @@ func replaceAssistantTextKind(msg *message.Message, text string, kind message.Te
 		}
 	}
 	if !replaced {
-		parts = append(parts, message.TextContent{Text: text, Kind: kind})
+		parts = append(parts, message.TextContent{Text: text})
 	}
 	msg.Parts = parts
 }
+
 func persistObservation(ctx context.Context, deps loopDeps, obs string) error {
 	_, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 		Role:  message.Result,
@@ -466,6 +447,7 @@ func persistObservation(ctx context.Context, deps loopDeps, obs string) error {
 	})
 	return err
 }
+
 func markStepFinished(ctx context.Context, deps loopDeps, msg *message.Message, reason message.FinishReason) {
 	if msg.IsFinished() {
 		return
@@ -475,6 +457,7 @@ func markStepFinished(ctx context.Context, deps loopDeps, msg *message.Message, 
 		slog.Warn("loop: persist step finish", "error", err)
 	}
 }
+
 func abandonPending(ctx context.Context, msgs message.Service, m *message.Message) {
 	exitCode := -1
 	cmd := ""
@@ -488,6 +471,7 @@ func abandonPending(ctx context.Context, msgs message.Service, m *message.Messag
 		slog.Warn("loop: abandon pending result", "error", err)
 	}
 }
+
 func combine(stdout, stderr []byte) []byte {
 	if len(stderr) == 0 {
 		return stdout
@@ -513,9 +497,11 @@ func scanFirstCmdNotFound(stderr string) string {
 	}
 	return m[1]
 }
+
 func isCanceled(err error) bool {
 	return errors.Is(err, context.Canceled)
 }
+
 func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) []fantasy.Message {
 	if deps.drainQueue == nil {
 		return msgs
