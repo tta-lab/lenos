@@ -198,6 +198,7 @@ func (a *AssistantMessageItem) renderTextMessage(content string, width int) stri
 	}
 	return strings.TrimSpace(rendered)
 }
+
 func IsMessageBlockAssistant(msg *message.Message) bool {
 	return msg != nil && msg.Content().Kind == message.TextContentKindMessageBlock
 }
@@ -237,6 +238,7 @@ func (a *AssistantMessageItem) renderThinking(thinking string, width int) string
 	}
 	return result
 }
+
 func bashEmitPreview(content string, width int) string {
 	firstLine, _, _ := strings.Cut(content, "\n")
 	preview := "$ " + firstLine
@@ -245,6 +247,7 @@ func bashEmitPreview(content string, width int) string {
 	}
 	return ansi.Truncate(preview, width, "…")
 }
+
 func renderAssistantMessageLines(sty *styles.Styles, focused bool, rendered string) string {
 	// XXX: Here, we're manually applying the focused/blurred styles because
 	// using lipgloss.Render can degrade performance for long messages due to
@@ -261,6 +264,7 @@ func renderAssistantMessageLines(sty *styles.Styles, focused bool, rendered stri
 	}
 	return strings.Join(lines, "\n")
 }
+
 func (a *AssistantMessageItem) renderSpinning() string {
 	if a.message.IsThinking() {
 		a.anim.SetLabel("Thinking")
@@ -325,6 +329,7 @@ func (a *AssistantMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	}
 	return false, nil
 }
+
 func (a *AssistantMessageItem) CopyText() string {
 	return a.message.Content().Text
 }

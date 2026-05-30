@@ -77,6 +77,7 @@ func TestResultMessageItem_HandleKeyEvent(t *testing.T) {
 		assert.Equal(t, "$ sleep 10", item.formatCommandForCopy())
 	})
 }
+
 func TestResultMessageItem_Highlightable(t *testing.T) {
 	sty := styles.DefaultStyles()
 	item := &ResultMessageItem{
@@ -97,6 +98,7 @@ func TestResultMessageItem_Highlightable(t *testing.T) {
 	assert.Equal(t, 1, endLine)
 	assert.Equal(t, 10, endCol) // max(0, 12-2)
 }
+
 func TestResultMessageItem_RenderEmptyCommandContentIsEmpty(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -109,6 +111,7 @@ func TestResultMessageItem_RenderEmptyCommandContentIsEmpty(t *testing.T) {
 	})
 	assert.Empty(t, strings.TrimSpace(ansi.Strip(item.RawRender(80))))
 }
+
 func TestResultMessageItem_RenderSuccessfulResultIsEmpty(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -128,6 +131,7 @@ func TestResultMessageItem_RenderSuccessfulResultIsEmpty(t *testing.T) {
 	rendered := ansi.Strip(item.RawRender(80))
 	assert.Empty(t, strings.TrimSpace(rendered))
 }
+
 func TestResultMessageItem_RenderMixedNonZeroShowsFailureOutput(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -149,6 +153,7 @@ func TestResultMessageItem_RenderMixedNonZeroShowsFailureOutput(t *testing.T) {
 	assert.Contains(t, rendered, "No such file")
 	assert.Contains(t, rendered, "1")
 }
+
 func TestResultMessageItem_RenderAddsMessagePrefix(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -176,6 +181,7 @@ func TestResultMessageItem_RenderAddsMessagePrefix(t *testing.T) {
 		})
 	}
 }
+
 func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 	sty := styles.DefaultStyles()
 	makeItem := func(id string, cmd, output string, exitCode *int, pending bool) *ResultMessageItem {
@@ -224,6 +230,7 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 		assert.Equal(t, "$ ls -la /tmp\ndrwxr-xr-x  4 neil staff  128 Apr 11 tmp\n-rw-r--r--  1 neil staff   64 Apr 11 log", got)
 	})
 }
+
 func intPtr(v int) *int {
 	return &v
 }

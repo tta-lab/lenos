@@ -26,6 +26,7 @@ func TestAssistantMessageItem_RenderBashEmitBeforeFinish(t *testing.T) {
 	rendered := ansi.Strip(item.RawRender(80))
 	assert.Contains(t, rendered, "$ # checking repo state")
 }
+
 func TestAssistantMessageItem_RenderBashEmitPreviewIsOneLine(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -42,6 +43,7 @@ func TestAssistantMessageItem_RenderBashEmitPreviewIsOneLine(t *testing.T) {
 	assert.NotContains(t, rendered, "echo two")
 	assert.Equal(t, "echo one\necho two", item.CopyText())
 }
+
 func TestAssistantMessageItem_RenderColonPrefixAsBashPreview(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -59,6 +61,7 @@ func TestAssistantMessageItem_RenderColonPrefixAsBashPreview(t *testing.T) {
 	assert.NotContains(t, rendered, "second line")
 	assert.Equal(t, content, item.CopyText())
 }
+
 func TestAssistantMessageItem_RenderColonWordAsBashPreview(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -73,6 +76,7 @@ func TestAssistantMessageItem_RenderColonWordAsBashPreview(t *testing.T) {
 	assert.Contains(t, rendered, "$ :data")
 	assert.NotContains(t, rendered, "second line")
 }
+
 func TestAssistantMessageItem_RenderMessageBlockAsMarkdown(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -87,6 +91,7 @@ func TestAssistantMessageItem_RenderMessageBlockAsMarkdown(t *testing.T) {
 	assert.Contains(t, rendered, "Ready.")
 	assert.NotContains(t, rendered, "$ Ready.")
 }
+
 func TestAssistantMessageItem_RenderMixedEmitShowsMarkdownAndCommand(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -137,6 +142,7 @@ func TestAssistantMessageItem_RenderMessageBlockUsesMarkdownRenderer(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, strings.TrimSpace(ansi.Strip(want)), strings.TrimSpace(ansi.Strip(item.RawRender(80))))
 }
+
 func TestAssistantMessageItem_RenderMixedEmitMultilineBashOneLinePreview(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -153,6 +159,7 @@ func TestAssistantMessageItem_RenderMixedEmitMultilineBashOneLinePreview(t *test
 	assert.Contains(t, rendered, "cat main.go")
 	assert.NotContains(t, rendered, "&& go test")
 }
+
 func TestAssistantMessageItem_RenderMultipleMessageBlocksJoined(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -169,6 +176,7 @@ func TestAssistantMessageItem_RenderMultipleMessageBlocksJoined(t *testing.T) {
 	assert.Contains(t, rendered, "Second.")
 	assert.NotContains(t, rendered, "m\"")
 }
+
 func TestAssistantMessageItem_RenderMessageBlockOnlyNoCommandPreview(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()

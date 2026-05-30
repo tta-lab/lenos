@@ -24,6 +24,7 @@ func TestExtractMessageItems_Assistant_EmptyContent(t *testing.T) {
 	_, ok := items[0].(*AssistantMessageItem)
 	assert.True(t, ok, "item must be an AssistantMessageItem")
 }
+
 func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommandWithoutOutput(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -43,6 +44,7 @@ func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommandWithoutOutput
 	items := ExtractMessageItems(&sty, msg, false)
 	assert.Empty(t, items, "completed successful command result is already represented by the assistant bash emit")
 }
+
 func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommand(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -62,6 +64,7 @@ func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommand(t *testing.T
 	items := ExtractMessageItems(&sty, msg, false)
 	assert.Empty(t, items)
 }
+
 func TestExtractMessageItems_Result_KeepsNonZeroResult(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -84,6 +87,7 @@ func TestExtractMessageItems_Result_KeepsNonZeroResult(t *testing.T) {
 	_, ok := items[0].(*ResultMessageItem)
 	assert.True(t, ok)
 }
+
 func TestExtractMessageItems_Result_SkipsEmptyCommandContent(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -97,6 +101,7 @@ func TestExtractMessageItems_Result_SkipsEmptyCommandContent(t *testing.T) {
 	items := ExtractMessageItems(&sty, msg, false)
 	assert.Empty(t, items)
 }
+
 func TestExtractMessageItems_Result_KeepsVisibleResultRows(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()

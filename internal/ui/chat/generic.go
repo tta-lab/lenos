@@ -104,6 +104,7 @@ func (m *ResultMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	}
 	return false, nil
 }
+
 func (m *ResultMessageItem) CopyText() string {
 	return m.formatCommandForCopy()
 }
