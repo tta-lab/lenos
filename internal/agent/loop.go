@@ -488,7 +488,7 @@ func rawMessageBlock(body string) string {
 	for strings.Contains(body, `"`+hashes) {
 		hashes += "#"
 	}
-	return "m" + hashes + `"` + body + `"` + hashes
+	return messageBlockPrefillToken + hashes[len(messageBlockDelimiter):] + `"` + body + `"` + hashes
 }
 
 func handleMessageOnlyBlocks(
