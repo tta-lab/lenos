@@ -16,7 +16,7 @@ import (
 func TestMarkDeepSeekAssistantPrefix(t *testing.T) {
 	t.Parallel()
 
-	body := []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"m"}]}`)
+	body := []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"` + messageBlockPrefillToken + `"}]}`)
 
 	got, err := markDeepSeekAssistantPrefix(body)
 
@@ -27,7 +27,7 @@ func TestMarkDeepSeekAssistantPrefix(t *testing.T) {
 	require.NoError(t, json.Unmarshal(got, &payload))
 	require.Len(t, payload.Messages, 2)
 	assert.Equal(t, true, payload.Messages[1]["prefix"])
-	assert.Equal(t, "m", payload.Messages[1]["content"])
+	assert.Equal(t, messageBlockPrefillToken, payload.Messages[1]["content"])
 }
 
 func TestMarkDeepSeekAssistantPrefixRequiresAssistantLast(t *testing.T) {
@@ -46,14 +46,14 @@ func TestDeepSeekPrefillModelAppendsAssistantPrefixMessage(t *testing.T) {
 	model := deepSeekPrefillModel{inner: inner}
 	_, err := model.StreamAssistantPrefill(context.Background(), fantasy.Call{
 		Prompt: fantasy.Prompt{fantasy.NewUserMessage("hi")},
-	}, "m")
+	}, messageBlockPrefillToken)
 
 	require.NoError(t, err)
 	require.Len(t, inner.captured, 1)
 	prompt := inner.captured[0]
 	require.Len(t, prompt, 2)
 	assert.Equal(t, fantasy.MessageRoleAssistant, prompt[1].Role)
-	assert.Equal(t, "m", fantasyMessageText(prompt[1]))
+	assert.Equal(t, messageBlockPrefillToken, fantasyMessageText(prompt[1]))
 }
 
 func TestDeepSeekPrefillTransportMarksRequestFromContext(t *testing.T) {
@@ -77,7 +77,7 @@ func TestDeepSeekPrefillTransportMarksRequestFromContext(t *testing.T) {
 		}, nil
 	})
 	transport := deepSeekPrefillTransport{base: base}
-	body := []byte(`{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"m"}]}`)
+	body := []byte(`{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"` + messageBlockPrefillToken + `"}]}`)
 	req := httptestRequest(t, context.WithValue(context.Background(), deepSeekPrefillContextKey{}, true), body)
 
 	resp, err := transport.RoundTrip(req)

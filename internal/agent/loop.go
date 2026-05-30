@@ -21,10 +21,16 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 )
 
-// StepCap bounds how many model emissions one Run() call can issue. Each
-// emission counts (bash, log call, exit, empty/invalid emit alike); when the
-// loop reaches the cap it halts with a runtime event and returns ErrStepCap.
-const StepCap = 500
+const (
+	// StepCap bounds how many model emissions one Run() call can issue. Each
+	// emission counts (bash, log call, exit, empty/invalid emit alike); when
+	// the loop reaches the cap it halts with a runtime event and returns
+	// ErrStepCap.
+	StepCap = 500
+
+	messageBlockDelimiter    = "#"
+	messageBlockPrefillToken = "m" + messageBlockDelimiter
+)
 
 // ErrStepCap signals that the loop halted because the model issued StepCap
 // emissions without hitting an `exit` (i.e. likely runaway).
@@ -40,8 +46,8 @@ type loopDeps struct {
 	// treats nil as "no drain hook" and is a no-op.
 	drainQueue func() []string
 	provOpts   fantasy.ProviderOptions
-	// messageBlockPrefill enables the hardcoded `m` prefix only when the
-	// model exposes native prefix completion support through
+	// messageBlockPrefill enables the shared message-block prefill token only
+	// when the model exposes native prefix completion support through
 	// assistantPrefillModel.
 	messageBlockPrefill bool
 	// pairWith is the default delivery target for untargeted m blocks.
@@ -478,7 +484,7 @@ func hasShellActionEvidence(script string) bool {
 }
 
 func rawMessageBlock(body string) string {
-	hashes := "#"
+	hashes := messageBlockDelimiter
 	for strings.Contains(body, `"`+hashes) {
 		hashes += "#"
 	}
@@ -635,7 +641,7 @@ func streamOneAttempt(
 	)
 	if deps.messageBlockPrefill {
 		if model, ok := deps.model.Model.(assistantPrefillModel); ok {
-			stream, err = model.StreamAssistantPrefill(ctx, call, "m")
+			stream, err = model.StreamAssistantPrefill(ctx, call, messageBlockPrefillToken)
 			usedPrefill = true
 		} else {
 			stream, err = deps.model.Model.Stream(ctx, call)
@@ -647,7 +653,7 @@ func streamOneAttempt(
 		return streamOneResult{}, err
 	}
 	if usedPrefill {
-		assistantMsg.AppendContent("m")
+		assistantMsg.AppendContent(messageBlockPrefillToken)
 		if uerr := deps.messages.Update(ctx, *assistantMsg); uerr != nil {
 			slog.Warn("loop: persist assistant prefill", "error", uerr)
 		}

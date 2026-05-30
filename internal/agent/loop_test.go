@@ -1430,7 +1430,7 @@ func TestRunLoop_MessageBlockOnlyPublishesAndStops(t *testing.T) {
 
 func TestRunLoop_AssistantPrefillUsesNativeModelSupport(t *testing.T) {
 	t.Parallel()
-	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"\n"}}}
+	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"#\n"}}}
 	runner := &fakeRunner{}
 	deps, _ := newDeps(t, model, runner, nil)
 	deps.messageBlockPrefill = true
@@ -1441,7 +1441,7 @@ func TestRunLoop_AssistantPrefillUsesNativeModelSupport(t *testing.T) {
 	assert.Equal(t, stopExit, stop)
 	assert.Equal(t, 1, model.prefillCalls)
 	assert.Equal(t, 0, model.normalCalls)
-	assert.Equal(t, []string{"m"}, model.prefills)
+	assert.Equal(t, []string{messageBlockPrefillToken}, model.prefills)
 	assert.Empty(t, runner.bash)
 }
 

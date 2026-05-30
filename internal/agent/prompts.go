@@ -114,12 +114,12 @@ func buildLenosWrapper(
 
 func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
-		Command:  "m\"Let me list registered projects and available skills.\"\nttal project list\nskill list",
+		Command:  rawMessageBlock("Let me list registered projects and available skills.") + "\nttal project list\nskill list",
 		Optional: true,
 	}}
 	if len(runtimeContext.ContextFiles) > 0 {
 		var readCmd strings.Builder
-		readCmd.WriteString("m\"Let me read key instructions.\"")
+		readCmd.WriteString(rawMessageBlock("Let me read key instructions."))
 		for _, file := range runtimeContext.ContextFiles {
 			readCmd.WriteString("\ncat ")
 			readCmd.WriteString(shellQuote(file.Path))
@@ -129,7 +129,7 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []Runtime
 		})
 	}
 	commands = append(commands, RuntimeContextCommand{
-		Command: "m\"\nReady.\n\nLets rock and roll.\n\"",
+		Command: rawMessageBlock("\nReady.\n\nLets rock and roll.\n"),
 	})
 	return commands
 }

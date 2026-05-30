@@ -63,8 +63,8 @@ type SessionAgentCall struct {
 	// reasoning_effort, etc).
 	ProviderOptions fantasy.ProviderOptions
 
-	// MessageBlockPrefill enables the hardcoded native assistant response
-	// prefill (`m`). It is ignored unless the model implements native
+	// MessageBlockPrefill enables the native assistant response prefill
+	// token. It is ignored unless the model implements native
 	// prefill support.
 	MessageBlockPrefill bool
 
