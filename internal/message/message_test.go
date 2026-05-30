@@ -107,21 +107,6 @@ func TestMarshalUnmarshalParts(t *testing.T) {
 		require.Equal(t, 127, *cc.ExitCode)
 	})
 
-	t.Run("CommandContent narration", func(t *testing.T) {
-		t.Parallel()
-		parts := []ContentPart{
-			CommandContent{Narration: "Ready."},
-		}
-		data, err := marshalParts(parts)
-		require.NoError(t, err)
-		got, err := unmarshalParts(data)
-		require.NoError(t, err)
-		require.Len(t, got, 1)
-		cc, ok := got[0].(CommandContent)
-		require.True(t, ok)
-		require.Equal(t, "Ready.", cc.Narration)
-	})
-
 	t.Run("ImageURLContent", func(t *testing.T) {
 		t.Parallel()
 		parts := []ContentPart{ImageURLContent{URL: "https://example.com/image.png", Detail: "high"}}

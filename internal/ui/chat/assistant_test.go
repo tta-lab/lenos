@@ -1,11 +1,18 @@
 package chat
+
 import (
+	"strings"
 	"testing"
+
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
+
 func TestAssistantMessageItem_RenderBashEmitBeforeFinish(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -96,6 +103,21 @@ func TestAssistantMessageItem_RenderMixedEmitShowsMarkdownAndCommand(t *testing.
 	assert.Contains(t, rendered, "cat main.go")
 	assert.NotContains(t, rendered, "m#\"")
 	assert.NotContains(t, rendered, "\"#")
+}
+func TestAssistantMessageItem_RenderMessageBlockUsesMarkdownRenderer(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	content := "m#\"\n# Ready\n\n- one\n\"#"
+	item := NewAssistantMessageItem(&sty, &message.Message{
+		ID:   "assistant-1",
+		Role: message.Assistant,
+		Parts: []message.ContentPart{
+			message.TextContent{Text: content},
+		},
+	}, true)
+	want, err := common.MarkdownRenderer(&sty, cappedMessageWidth(80)).Render("# Ready\n\n- one")
+	require.NoError(t, err)
+	assert.Equal(t, strings.TrimSpace(ansi.Strip(want)), strings.TrimSpace(ansi.Strip(item.RawRender(80))))
 }
 func TestAssistantMessageItem_RenderMixedEmitMultilineBashOneLinePreview(t *testing.T) {
 	t.Parallel()

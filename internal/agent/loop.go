@@ -399,7 +399,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				assistantTextMessage(assistantReplay, assistantMsg.ReasoningContent()),
 			)
 			if res.ExitCode == 0 && len(extractedMessages) > 0 {
-				if err := publishMixedMessageBlocks(ctx, deps, extractedMessages, &resultMsg); err != nil {
+				if err := publishMixedMessageBlocks(ctx, deps, extractedMessages); err != nil {
 					return stopError, err
 				}
 			}
@@ -517,18 +517,11 @@ func publishMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash
 				return err
 			}
 		}
-		if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-			Role:  message.Result,
-			Parts: []message.ContentPart{message.CommandContent{Narration: body}},
-		}); err != nil {
-			return fmt.Errorf("create message-block narration row: %w", err)
-		}
 	}
 	return nil
 }
 
-func publishMixedMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash.MessageBlock, resultMsg *message.Message) error {
-	var narrations []string
+func publishMixedMessageBlocks(ctx context.Context, deps loopDeps, blocks []lenosbash.MessageBlock) error {
 	for _, block := range blocks {
 		target := effectiveMessageBlockTarget(deps, block)
 		if target != "" {
@@ -536,20 +529,6 @@ func publishMixedMessageBlocks(ctx context.Context, deps loopDeps, blocks []leno
 				return err
 			}
 		}
-		body := strings.TrimSpace(block.Body)
-		if body == "" {
-			continue
-		}
-		narrations = append(narrations, body)
-	}
-	if resultMsg == nil || len(narrations) == 0 {
-		return nil
-	}
-	cmd := resultMsg.CommandContent()
-	cmd.Narration = strings.Join(narrations, "\n\n")
-	resultMsg.Parts = []message.ContentPart{cmd}
-	if err := deps.messages.Update(ctx, *resultMsg); err != nil {
-		return fmt.Errorf("update message-block narration row: %w", err)
 	}
 	return nil
 }

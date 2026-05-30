@@ -143,15 +143,13 @@ repaired `m` block as the assistant message. This keeps future model history
 full of valid Lenos Bash examples and teaches the protocol through its own
 prior turns.
 
-Published message bodies are display data. Store them on the related result
-message as narration content so the TUI renders user-visible prose from the
-result row, not by rewriting the assistant emit. Do the same for synthetic
-runtime messages such as the multiline Ready block. Synthetic mixed emits must
-store the raw `m` blocks as assistant history while executing only the cleaned
-bash. When changing where message-block bodies are stored, preserve the
-existing TUI prose renderer semantics; storage role changes should not make
-markdown look raw or change row alignment. See `internal/ui/AGENTS.md` for chat
-render rules.
+Published message bodies are display data parsed from the stored assistant
+Lenos Bash emit. Do not duplicate message-block bodies onto result rows.
+Synthetic mixed emits must store the raw `m` blocks as assistant history while
+executing only the cleaned bash. When changing message-block rendering,
+preserve the existing TUI prose renderer semantics; storage role changes
+should not make markdown look raw or change row alignment. See
+`internal/ui/AGENTS.md` for chat render rules.
 
 ## Build/Test/Lint Commands
 

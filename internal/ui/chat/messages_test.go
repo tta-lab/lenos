@@ -1,11 +1,15 @@
 package chat
+
 import (
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
+
 func TestExtractMessageItems_Assistant_EmptyContent(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
@@ -20,7 +24,7 @@ func TestExtractMessageItems_Assistant_EmptyContent(t *testing.T) {
 	_, ok := items[0].(*AssistantMessageItem)
 	assert.True(t, ok, "item must be an AssistantMessageItem")
 }
-func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommand(t *testing.T) {
+func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommandWithoutOutput(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	exitCode := 0
@@ -39,7 +43,7 @@ func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommand(t *testing.T
 	items := ExtractMessageItems(&sty, msg, false)
 	assert.Empty(t, items, "completed successful command result is already represented by the assistant bash emit")
 }
-func TestExtractMessageItems_Result_SkipsMixedSuccessfulResult(t *testing.T) {
+func TestExtractMessageItems_Result_SkipsCompletedSuccessfulCommand(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	exitCode := 0
@@ -48,20 +52,17 @@ func TestExtractMessageItems_Result_SkipsMixedSuccessfulResult(t *testing.T) {
 		Role: message.Result,
 		Parts: []message.ContentPart{
 			message.CommandContent{
-				Command:   "cat main.go",
-				Output:    "",
-				ExitCode:  &exitCode,
-				Pending:   false,
-				Narration: "Let me read the file.",
+				Command:  "cat main.go",
+				Output:   "",
+				ExitCode: &exitCode,
+				Pending:  false,
 			},
 		},
 	}
 	items := ExtractMessageItems(&sty, msg, false)
-	// Mixed successful result: narration already shown by assistant,
-	// exit 0 means nothing more to show.
 	assert.Empty(t, items)
 }
-func TestExtractMessageItems_Result_KeepsMixedNonZeroResult(t *testing.T) {
+func TestExtractMessageItems_Result_KeepsNonZeroResult(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	exitCode := 1
@@ -70,11 +71,10 @@ func TestExtractMessageItems_Result_KeepsMixedNonZeroResult(t *testing.T) {
 		Role: message.Result,
 		Parts: []message.ContentPart{
 			message.CommandContent{
-				Command:   "cat missing.go",
-				Output:    "No such file",
-				ExitCode:  &exitCode,
-				Pending:   false,
-				Narration: "Let me read it.",
+				Command:  "cat missing.go",
+				Output:   "No such file",
+				ExitCode: &exitCode,
+				Pending:  false,
 			},
 		},
 	}
@@ -84,21 +84,18 @@ func TestExtractMessageItems_Result_KeepsMixedNonZeroResult(t *testing.T) {
 	_, ok := items[0].(*ResultMessageItem)
 	assert.True(t, ok)
 }
-func TestExtractMessageItems_Result_KeepsNarrationOnly(t *testing.T) {
+func TestExtractMessageItems_Result_SkipsEmptyCommandContent(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	msg := &message.Message{
-		ID:   "result-narration-only",
+		ID:   "result-empty-command",
 		Role: message.Result,
 		Parts: []message.ContentPart{
-			message.CommandContent{Narration: "Ready."},
+			message.CommandContent{},
 		},
 	}
 	items := ExtractMessageItems(&sty, msg, false)
-	// Narration-only rows still render.
-	require.Len(t, items, 1)
-	_, ok := items[0].(*ResultMessageItem)
-	assert.True(t, ok)
+	assert.Empty(t, items)
 }
 func TestExtractMessageItems_Result_KeepsVisibleResultRows(t *testing.T) {
 	t.Parallel()

@@ -307,34 +307,25 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, showThinking 
 }
 
 func extractResultMessageItems(sty *styles.Styles, msg *message.Message) []MessageItem {
-	cmd := msg.CommandContent()
-	if !shouldRenderResultMessageItem(cmd) {
+	if !shouldRenderResultMessageItem(msg) {
 		return nil
 	}
 	return []MessageItem{NewResultMessageItem(sty, msg)}
 }
 
-func shouldRenderResultMessageItem(cmd message.CommandContent) bool {
-	hasNarration := strings.TrimSpace(cmd.Narration) != ""
-	hasCommand := cmd.Command != ""
-	if hasNarration && !hasCommand {
-		// Narration-only row: always render as markdown.
-		return true
+func shouldRenderResultMessageItem(msg *message.Message) bool {
+	cmd := msg.CommandContent()
+	if cmd.Command == "" {
+		return strings.TrimSpace(msg.Content().Text) != ""
 	}
-	if hasCommand && cmd.Pending {
+	if cmd.Pending {
 		// Pending command: show "running..."
 		return true
 	}
-	if hasCommand && (cmd.ExitCode == nil || *cmd.ExitCode != 0) {
+	if cmd.ExitCode == nil || *cmd.ExitCode != 0 {
 		// Non-zero or unknown exit: show failure output.
 		return true
 	}
-	if !hasCommand && !hasNarration {
-		// Runtime text response with no command: always render.
-		return true
-	}
-	// Exit 0 with or without narration: assistant already shows the command.
+	// Exit 0: assistant already shows the command.
 	return false
 }
-
-

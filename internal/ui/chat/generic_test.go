@@ -1,20 +1,24 @@
 package chat
+
 import (
 	"strings"
 	"testing"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/list"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
+
 // fakeKeyMsg is a test double for tea.KeyMsg.
 type fakeKeyMsg struct {
 	s string
 }
+
 func (f fakeKeyMsg) String() string { return f.s }
 func (f fakeKeyMsg) Key() tea.Key   { return tea.Key{} }
 func TestResultMessageItem_HandleKeyEvent(t *testing.T) {
@@ -93,22 +97,19 @@ func TestResultMessageItem_Highlightable(t *testing.T) {
 	assert.Equal(t, 1, endLine)
 	assert.Equal(t, 10, endCol) // max(0, 12-2)
 }
-func TestResultMessageItem_RenderNarrationAsMarkdown(t *testing.T) {
+func TestResultMessageItem_RenderEmptyCommandContentIsEmpty(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	item := NewResultMessageItem(&sty, &message.Message{
-		ID:   "result-1",
+		ID:   "result-empty",
 		Role: message.Result,
 		Parts: []message.ContentPart{
-			message.CommandContent{Narration: "Ready."},
+			message.CommandContent{},
 		},
 	})
-	want, err := common.MarkdownRenderer(&sty, cappedMessageWidth(80)).Render("Ready.")
-	require.NoError(t, err)
-	assert.Equal(t, strings.TrimSpace(ansi.Strip(want)), strings.TrimSpace(ansi.Strip(item.RawRender(80))))
-	assert.NotContains(t, ansi.Strip(item.RawRender(80)), "$")
+	assert.Empty(t, strings.TrimSpace(ansi.Strip(item.RawRender(80))))
 }
-func TestResultMessageItem_RenderMixedSuccessfulResultSkipsNarration(t *testing.T) {
+func TestResultMessageItem_RenderSuccessfulResultIsEmpty(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
 	exitCode := 0
@@ -117,19 +118,15 @@ func TestResultMessageItem_RenderMixedSuccessfulResultSkipsNarration(t *testing.
 		Role: message.Result,
 		Parts: []message.ContentPart{
 			message.CommandContent{
-				Command:   "cat main.go",
-				Output:    "",
-				ExitCode:  &exitCode,
-				Pending:   false,
-				Narration: "Let me read this file.",
+				Command:  "cat main.go",
+				Output:   "",
+				ExitCode: &exitCode,
+				Pending:  false,
 			},
 		},
 	})
 	rendered := ansi.Strip(item.RawRender(80))
-	// Mixed successful: assistant already rendered the narration, so result
-	// should only show the command result (which for exit 0 is empty).
-	assert.NotContains(t, rendered, "Let me read this file.")
-	assert.NotContains(t, rendered, "Ready.")
+	assert.Empty(t, strings.TrimSpace(rendered))
 }
 func TestResultMessageItem_RenderMixedNonZeroShowsFailureOutput(t *testing.T) {
 	t.Parallel()
@@ -140,11 +137,10 @@ func TestResultMessageItem_RenderMixedNonZeroShowsFailureOutput(t *testing.T) {
 		Role: message.Result,
 		Parts: []message.ContentPart{
 			message.CommandContent{
-				Command:   "cat missing.go",
-				Output:    "No such file",
-				ExitCode:  &exitCode,
-				Pending:   false,
-				Narration: "Let me read the file.",
+				Command:  "cat missing.go",
+				Output:   "No such file",
+				ExitCode: &exitCode,
+				Pending:  false,
 			},
 		},
 	})
@@ -152,22 +148,6 @@ func TestResultMessageItem_RenderMixedNonZeroShowsFailureOutput(t *testing.T) {
 	// Non-zero exit: output and exit badge should appear.
 	assert.Contains(t, rendered, "No such file")
 	assert.Contains(t, rendered, "1")
-	// Narration should not duplicate what assistant already rendered.
-	assert.NotContains(t, rendered, "Let me read the file.")
-}
-func TestResultMessageItem_RenderNarrationOnlyStillRendersMarkdown(t *testing.T) {
-	t.Parallel()
-	sty := styles.DefaultStyles()
-	item := NewResultMessageItem(&sty, &message.Message{
-		ID:   "result-narration-only",
-		Role: message.Result,
-		Parts: []message.ContentPart{
-			message.CommandContent{Narration: "Ready."},
-		},
-	})
-	rendered := ansi.Strip(item.RawRender(80))
-	// Narration-only rows still render as markdown.
-	assert.Contains(t, rendered, "Ready.")
 }
 func TestResultMessageItem_RenderAddsMessagePrefix(t *testing.T) {
 	t.Parallel()
@@ -177,11 +157,6 @@ func TestResultMessageItem_RenderAddsMessagePrefix(t *testing.T) {
 		part message.CommandContent
 		want string
 	}{
-		{
-			name: "narration",
-			part: message.CommandContent{Narration: "Ready."},
-			want: "Ready.",
-		},
 		{
 			name: "pending",
 			part: message.CommandContent{Command: "go test ./...", Pending: true},
@@ -237,19 +212,6 @@ func TestResultMessageItem_formatCommandForCopy(t *testing.T) {
 		item := makeItem("f3", "sleep 100", "", nil, true)
 		got := item.formatCommandForCopy()
 		assert.Equal(t, "$ sleep 100", got)
-	})
-	t.Run("narration copies body", func(t *testing.T) {
-		item := &ResultMessageItem{
-			highlightableMessageItem: defaultHighlighter(&sty),
-			cachedMessageItem:        &cachedMessageItem{},
-			focusableMessageItem:     &focusableMessageItem{},
-			message: &message.Message{
-				ID:    "narration",
-				Parts: []message.ContentPart{message.CommandContent{Narration: "Ready."}},
-			},
-			sty: &sty,
-		}
-		assert.Equal(t, "Ready.", item.formatCommandForCopy())
 	})
 	t.Run("empty output is command-only", func(t *testing.T) {
 		item := makeItem("f4", "echo", "", nil, false)

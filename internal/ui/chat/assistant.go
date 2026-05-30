@@ -1,21 +1,27 @@
 package chat
+
 import (
 	"fmt"
 	"strings"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/ui/anim"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
+
 // assistantMessageTruncateFormat is the text shown when an assistant message is
 // truncated.
 const assistantMessageTruncateFormat = "… (%d lines hidden) [click or space to expand]"
+
 // maxCollapsedThinkingHeight defines the maximum height of the thinking
 const maxCollapsedThinkingHeight = 10
+
 // AssistantMessageItem represents an assistant message in the chat UI.
 //
 // This item includes thinking, and the content but does not include the tool calls.
@@ -30,11 +36,13 @@ type AssistantMessageItem struct {
 	thinkingExpanded  bool
 	thinkingBoxHeight int // Tracks the rendered thinking box height for click detection.
 }
+
 // assistantContent holds the parsed display parts of a Lenos Bash content string.
 type assistantContent struct {
 	markdown       string
 	commandPreview string
 }
+
 // NewAssistantMessageItem creates a new AssistantMessageItem.
 func NewAssistantMessageItem(sty *styles.Styles, message *message.Message, showThinking bool) MessageItem {
 	a := &AssistantMessageItem{
@@ -55,6 +63,7 @@ func NewAssistantMessageItem(sty *styles.Styles, message *message.Message, showT
 	})
 	return a
 }
+
 // StartAnimation starts the assistant message animation if it should be spinning.
 func (a *AssistantMessageItem) StartAnimation() tea.Cmd {
 	if !a.isSpinning() {
@@ -62,6 +71,7 @@ func (a *AssistantMessageItem) StartAnimation() tea.Cmd {
 	}
 	return a.anim.Start()
 }
+
 // Animate progresses the assistant message animation if it should be spinning.
 func (a *AssistantMessageItem) Animate(msg anim.StepMsg) tea.Cmd {
 	if !a.isSpinning() {
@@ -69,10 +79,12 @@ func (a *AssistantMessageItem) Animate(msg anim.StepMsg) tea.Cmd {
 	}
 	return a.anim.Animate(msg)
 }
+
 // ID implements MessageItem.
 func (a *AssistantMessageItem) ID() string {
 	return a.message.ID
 }
+
 // RawRender implements [MessageItem].
 func (a *AssistantMessageItem) RawRender(width int) string {
 	cappedWidth := cappedMessageWidth(width)
@@ -96,10 +108,12 @@ func (a *AssistantMessageItem) RawRender(width int) string {
 	}
 	return highlightedContent
 }
+
 // Render implements MessageItem.
 func (a *AssistantMessageItem) Render(width int) string {
 	return renderAssistantMessageLines(a.sty, a.focused, a.RawRender(width))
 }
+
 // renderMessageContent renders the message content including thinking, main content, and finish reason.
 func (a *AssistantMessageItem) renderMessageContent(width int) string {
 	var messageParts []string
@@ -130,6 +144,7 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 	}
 	return strings.Join(messageParts, "\n")
 }
+
 // parseContent extracts display parts from Lenos Bash content.
 // For valid Lenos Bash it returns markdown from message blocks and a
 // command preview from the parsed bash. Falls back to the bash-emit
@@ -160,13 +175,14 @@ func (a *AssistantMessageItem) parseContent(content string) assistantContent {
 	}
 	return result
 }
+
 // bashEmitPreviewLine returns the first line of bash for a command preview.
 func bashEmitPreviewLine(bash string) string {
 	firstLine, _, _ := strings.Cut(bash, "\n")
 	return firstLine
 }
 func (a *AssistantMessageItem) renderTextMessage(content string, width int) string {
-	renderer := common.PlainMarkdownRenderer(a.sty, width)
+	renderer := common.MarkdownRenderer(a.sty, width)
 	rendered, err := renderer.Render(content)
 	if err != nil {
 		return content
@@ -176,6 +192,7 @@ func (a *AssistantMessageItem) renderTextMessage(content string, width int) stri
 func IsMessageBlockAssistant(msg *message.Message) bool {
 	return msg != nil && msg.Content().Kind == message.TextContentKindMessageBlock
 }
+
 // renderThinking renders the thinking/reasoning content with footer.
 func (a *AssistantMessageItem) renderThinking(thinking string, width int) string {
 	renderer := common.PlainMarkdownRenderer(a.sty, width)
@@ -243,6 +260,7 @@ func (a *AssistantMessageItem) renderSpinning() string {
 	}
 	return a.anim.Render()
 }
+
 // renderError renders an error message.
 func (a *AssistantMessageItem) renderError(width int) string {
 	finishPart := a.message.FinishPart()
@@ -252,6 +270,7 @@ func (a *AssistantMessageItem) renderError(width int) string {
 	details := a.sty.Chat.Message.ErrorDetails.Width(width - 2).Render(finishPart.Details)
 	return fmt.Sprintf("%s\n\n%s", title, details)
 }
+
 // isSpinning returns true if the assistant message is still generating.
 func (a *AssistantMessageItem) isSpinning() bool {
 	isThinking := a.message.IsThinking()
@@ -259,6 +278,7 @@ func (a *AssistantMessageItem) isSpinning() bool {
 	hasContent := strings.TrimSpace(a.message.Content().Text) != ""
 	return (isThinking || !isFinished) && !hasContent
 }
+
 // SetMessage is used to update the underlying message.
 func (a *AssistantMessageItem) SetMessage(message *message.Message) tea.Cmd {
 	wasSpinning := a.isSpinning()
@@ -269,11 +289,13 @@ func (a *AssistantMessageItem) SetMessage(message *message.Message) tea.Cmd {
 	}
 	return nil
 }
+
 // ToggleExpanded toggles the expanded state of the thinking box.
 func (a *AssistantMessageItem) ToggleExpanded() {
 	a.thinkingExpanded = !a.thinkingExpanded
 	a.clearCache()
 }
+
 // HandleMouseClick implements MouseClickable.
 func (a *AssistantMessageItem) HandleMouseClick(btn ansi.MouseButton, x, y int) bool {
 	if btn != ansi.MouseLeft {
@@ -286,6 +308,7 @@ func (a *AssistantMessageItem) HandleMouseClick(btn ansi.MouseButton, x, y int) 
 	}
 	return false
 }
+
 // HandleKeyEvent implements KeyEventHandler.
 func (a *AssistantMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	if k := key.String(); k == "c" || k == "y" {

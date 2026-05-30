@@ -33,21 +33,8 @@ The runtime already preserves raw assistant emits:
   `internal/agent/lenosbash.Parse`.
 - The cleaned bash is stored on a paired `message.Result` row as
   `CommandContent.Command`.
-- The message-block body is stored on that result row as
-  `CommandContent.Narration`.
-- `message.ToAIMessage` ignores `Narration`, so narration is display-only.
-
-The TUI currently leaks the raw shape:
-
-- `internal/ui/chat/assistant.go` renders ordinary assistant text as a one-line
-  bash preview using `bashEmitPreview`.
-- That means a raw mixed emit previews as `$ m#"` instead of rendering the
-  message-block body.
-- `internal/ui/chat/generic.go` renders result narration as markdown, but when
-  narration exists it does not also render the command.
-
-So the display is split across the wrong rows: the assistant row shows raw m
-syntax, and the result row can show the narration but not the command.
+- Message-block bodies are not duplicated into result rows. The assistant raw
+  emit is the display source of truth.
 
 ## Recommended Design
 
@@ -71,8 +58,8 @@ The mvdan shell fork already supports this split. `lenosbash.Parse` calls
 `parsed.HasBash`.
 
 Do not add these segments to the DB model unless a real storage need appears.
-The current storage contract is useful: raw assistant emit for provider replay,
-result narration for display, and command result rows for observations.
+The current storage contract is useful: raw assistant emit for provider replay
+and command result rows for observations.
 
 Suggested files:
 
@@ -80,12 +67,11 @@ Suggested files:
   render parsed bash as a single-line command preview.
 - `internal/ui/chat/messages.go`: keep extraction simple; assistant messages
   still produce one assistant item.
-- `internal/ui/chat/generic.go`: avoid duplicating mixed emit narration when the
-  assistant item already renders it. Result rows should still render:
-  - narration-only rows,
-  - pending command state if desired,
+- `internal/ui/chat/generic.go`: render command result state only. Result rows
+  should still render:
+  - pending command state,
   - non-zero command output and exit badge,
-  - legacy/runtime text rows.
+  - runtime text rows.
 
 ## Render Rules
 
@@ -105,16 +91,13 @@ For invalid parse or content that is not Lenos Bash:
 
 For result rows:
 
-- `CommandContent.Narration` with no command remains markdown.
-- A successful command result with narration should not render the narration
-  again if its assistant message already rendered the message block.
 - Pending command result rows can still render `running...`; the assistant row
   already shows the prose and command, while the result row shows execution
   state.
 - Successful exit-0 command result rows should disappear after completion, as
   they do today.
 - Non-zero command results still render output and the exit badge.
-- Provider replay remains unchanged because result `Narration` is display-only.
+- Message-only `m` block emits should not create result rows.
 
 ## Tests To Add
 
@@ -125,8 +108,8 @@ Add focused TUI tests before changing behavior:
 - Multiline bash renders as one command preview line.
 - Multiple message blocks render as one markdown area joined with blank lines.
 - Message-block-only assistant renders markdown and no command preview.
-- Result narration-only rows still render as markdown.
-- Mixed successful result rows do not duplicate narration.
+- Result rows with empty command content do not render.
+- Mixed successful result rows do not duplicate prose.
 - Non-zero mixed result rows still show command failure output.
 
 Good starting files:
