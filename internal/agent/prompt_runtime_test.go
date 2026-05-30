@@ -42,22 +42,6 @@ func TestRePromptBlockedPattern(t *testing.T) {
 	assert.Contains(t, got, "src edit")
 }
 
-func TestRePromptToolCallNoLiteralPatterns(t *testing.T) {
-	t.Parallel()
-
-	got := rePromptToolCall()
-
-	assert.True(t, strings.HasPrefix(got, alertPrefix+" "))
-	assert.Contains(t, got, "There is NO tool/function calling API")
-	assert.Contains(t, got, "emit a bash block")
-	assert.Contains(t, got, "Markdown prose")
-	assert.NotContains(t, got, "narrate")
-	forbidden := []string{"<tool_call>", "</tool_call>", "<function_call>", "[tool_call]", "<invoke"}
-	for _, s := range forbidden {
-		assert.NotContains(t, got, s, "literal wrong-shape pattern leaked into rePromptToolCall body")
-	}
-}
-
 func TestRePromptTimeout(t *testing.T) {
 	t.Parallel()
 

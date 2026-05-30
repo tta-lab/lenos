@@ -130,18 +130,6 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
-		if containsToolCallPattern(emit) {
-			obs := rePromptToolCall()
-			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
-				slog.Warn("loop: delete tool-call assistant message", "error", err)
-			}
-			msgs = append(msgs, fantasy.NewUserMessage(obs))
-			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
-				slog.Warn("loop: persist tool-call re-prompt", "error", obsErr)
-			}
-			msgs = drainAndAppend(ctx, deps, msgs)
-			continue
-		}
 		// Execute parsed bash blocks: prose-only ends the turn.
 		if len(parsed.Bash) == 0 {
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")

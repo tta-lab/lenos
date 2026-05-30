@@ -39,35 +39,6 @@ Use src edit for file modifications — e.g.:
 See src --help for usage.`)
 }
 
-// rePromptToolCall is the next-observation text after the model emitted a
-// structured tool/function call shape. This runtime has no tool-calling API.
-//
-// Body deliberately avoids spelling out the wrong shapes verbatim. Quoting
-// literal wrappers such as XML / bracket tool-call forms would re-inject the
-// same pattern we just deleted from assistant history in the tool-call branch.
-// The description stays abstract; the correct bash and Markdown shapes are
-// still demonstrated concretely because those are the patterns we want the
-// model to copy.
-func rePromptToolCall() string {
-	return lenosbash.AlertLine(`your last emit used a tool/function call format.
-
-There is NO tool/function calling API in this environment. Any structured
-wrapper around bash commands — XML tags, JSON envelopes, or bracket
-notation — is discarded and never executed.
-
-To act, emit a bash block containing plain bash:
-  <bash>
-  ls -la
-  rg "needle" .
-  src edit internal/agent/loop.go
-  </bash>
-
-To talk to the human, emit Markdown prose outside bash blocks.
-
-To end the turn, emit literally:
-  exit`)
-}
-
 // rePromptTimeout is the next-observation text after a per-call timeout.
 func rePromptTimeout(secs int) string {
 	return lenosbash.RuntimeBlock(fmt.Sprintf(`your last command exceeded the per-call timeout (%ds) and was killed.

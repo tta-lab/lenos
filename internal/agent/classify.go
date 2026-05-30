@@ -16,12 +16,6 @@ const (
 	classifyBanned
 )
 
-// toolCallXMLRe matches XML-style tool/function call hallucinations.
-var toolCallXMLRe = regexp.MustCompile(`(?i)</?(?:tool_call|minimax:tool_call|function_call|tool_use|invoke)\b[^>]*>`)
-
-// toolCallBracketRe matches bracket-style tool/function call hallucinations.
-var toolCallBracketRe = regexp.MustCompile(`(?i)\[/?(?:tool_?call|function_?call|tool_?use|invoke)\]`)
-
 // blockedCmdPatterns guards in-place file edits (sed -i / perl -i). CC native
 // sandbox is the dominant defense; this is a thin nudge to push agents toward
 // `src edit` for in-place file modifications.
@@ -39,9 +33,7 @@ var (
 // auxiliary string (bash stderr for classifyInvalidBash; "" otherwise).
 //
 // Classification order: banned → bash-syntax → exec.
-// Banned runs before bash-syntax so refused patterns never reach the parser;
-// assistant-message tool-call shapes are handled in runLoop before bash
-// classification.
+// Banned runs before bash-syntax so refused patterns never reach the parser.
 func classify(emit string) (cls classifyResult, aux string) {
 	if containsBlockedPattern(emit) {
 		return classifyBanned, ""
@@ -59,10 +51,6 @@ func containsBlockedPattern(emit string) bool {
 		}
 	}
 	return false
-}
-
-func containsToolCallPattern(emit string) bool {
-	return toolCallXMLRe.MatchString(emit) || toolCallBracketRe.MatchString(emit)
 }
 
 // bashSyntaxCheck parses the emit with mvdan's Bash parser. Returns "" on

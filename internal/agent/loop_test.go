@@ -1344,53 +1344,31 @@ func TestRunLoop_BashBlockExecutesLowercaseCommand(t *testing.T) {
 	assert.Equal(t, []string{"ls -la\n"}, runner.bash, "bash block must reach exec")
 }
 
-// TestRunLoop_ToolCall_FiresPreExec verifies tool-call shaped emits are
-// rejected before bash exec and persist a high-salience re-prompt.
-func TestRunLoop_ToolCall_FiresPreExec(t *testing.T) {
+func TestRunLoop_ToolCallTextWithoutBashTagsStopsAsProse(t *testing.T) {
 	t.Parallel()
-	inner := &scriptedModel{emits: []string{"<tool_call>{\"name\":\"bash\"}</tool_call>", "exit"}}
-	model := &streamCapturingModel{inner: inner}
-	runner := &fakeRunner{} // runner must NOT be called
+	emit := "<tool_call>{\"name\":\"bash\"}</tool_call>"
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{}
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
 
-	_, err := runLoop(context.Background(), deps, nil, "")
+	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
 
-	assert.Empty(t, runner.bash, "tool-call branch must not invoke runner")
+	assert.Empty(t, runner.bash)
+	assert.Empty(t, resultsByOrder(ms))
 
-	results := messagesByRole(ms, message.Result)
-	require.Len(t, results, 1)
-	obs := results[0].Content().Text
-
-	assistants := messagesByRole(ms, message.Assistant)
-	require.Len(t, assistants, 1, "bad tool-call assistant emit must be dropped from persistence")
-	assert.Equal(t, "exit", strings.TrimSpace(assistants[0].Content().Text))
-	assert.Contains(t, obs, alertPrefix)
-	assert.Contains(t, obs, "There is NO tool/function calling API")
-	assert.Contains(t, obs, "emit a bash block")
-
-	require.Len(t, model.captured, 2, "expected initial prompt and one re-prompt turn")
-	prompt := model.captured[1]
-	require.NotEmpty(t, prompt)
-	last := prompt[len(prompt)-1]
-	require.Equal(t, fantasy.MessageRoleUser, last.Role)
-	for _, m := range prompt {
-		if m.Role != fantasy.MessageRoleAssistant {
-			continue
-		}
-		for _, part := range m.Content {
-			if tp, ok := part.(fantasy.TextPart); ok {
-				assert.NotContains(t, tp.Text, "<tool_call>", "bad tool-call emit must not be replayed to model")
-			}
-		}
-	}
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, emit, assistants[0].Content().Text)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
 }
 
-func TestRunLoop_ToolCallInsideBashBlockDoesNotExecute(t *testing.T) {
+func TestRunLoop_ToolCallInsideBashBlockInvalidBashDoesNotExecute(t *testing.T) {
 	t.Parallel()
-	inner := &scriptedModel{emits: []string{lenosbash.BashBlock("<tool_call>{\"name\":\"bash\"}</tool_call>"), "exit"}}
-	model := &streamCapturingModel{inner: inner}
+	emit := lenosbash.BashBlock("<tool_call>{\"name\":\"bash\"}</tool_call>")
+	model := &scriptedModel{emits: []string{emit, "exit"}}
 	runner := &fakeRunner{}
 	deps, ms := newDeps(t, model, runner, nil)
 
@@ -1400,19 +1378,7 @@ func TestRunLoop_ToolCallInsideBashBlockDoesNotExecute(t *testing.T) {
 	assert.Empty(t, runner.bash, "tool-call-shaped bash block must not execute")
 	results := messagesByRole(ms, message.Result)
 	require.Len(t, results, 1)
-	assert.Contains(t, results[0].Content().Text, "There is NO tool/function calling API")
-
-	require.Len(t, model.captured, 2, "expected initial prompt and one re-prompt turn")
-	for _, m := range model.captured[1] {
-		if m.Role != fantasy.MessageRoleAssistant {
-			continue
-		}
-		for _, part := range m.Content {
-			if tp, ok := part.(fantasy.TextPart); ok {
-				assert.NotContains(t, tp.Text, "<tool_call>", "bad bash-block tool-call emit must not be replayed")
-			}
-		}
-	}
+	assert.Contains(t, results[0].Content().Text, "not valid bash")
 }
 
 func TestRunLoop_ProseOnlyStoresMarkdown(t *testing.T) {
@@ -1716,26 +1682,6 @@ func TestReplaceAssistantTextPreservesReasoning(t *testing.T) {
 	require.Len(t, msg.Parts, 2)
 }
 
-// TestRunLoop_DrainOnToolCall ensures queued user input still drains after the
-// tool-call re-prompt branch, matching other non-exec re-prompt paths.
-func TestRunLoop_DrainOnToolCall(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{"[tool_call]{\"name\":\"bash\"}[/tool_call]", "exit"}}
-	rec := &recordingRecorder{}
-	deps, ms := newDepsWithDrain(t, model, &fakeRunner{}, rec, cannedDrainer([]string{"q1"}))
-
-	_, err := runLoop(context.Background(), deps, nil, "go")
-	require.NoError(t, err)
-
-	results := messagesByRole(ms, message.Result)
-	require.Len(t, results, 1)
-	assert.Contains(t, results[0].Content().Text, alertPrefix)
-	assert.Contains(t, results[0].Content().Text, "There is NO tool/function calling API")
-	users := messagesByRole(ms, message.User)
-	require.Len(t, users, 1)
-	assert.Equal(t, "q1", users[0].Content().Text)
-}
-
 // --- SSOT equivalence tests ---
 
 // TestObservationSSOT_EmptySuccess proves a command with no output carries
@@ -1887,11 +1833,6 @@ func TestObservationSSOT_RePromptRoundTrip(t *testing.T) {
 			name: "empty",
 			obs:  rePromptEmpty(),
 			emit: "",
-		},
-		{
-			name: "tool-call",
-			obs:  rePromptToolCall(),
-			emit: "```\nsome\n```",
 		},
 		{
 			name: "invalid-bash",
