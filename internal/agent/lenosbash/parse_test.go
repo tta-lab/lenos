@@ -156,3 +156,36 @@ func TestParseXmlLookingTextIsPlainMarkdown(t *testing.T) {
 	assert.Empty(t, parsed.Bash)
 	assert.Equal(t, source, parsed.Prose)
 }
+
+func TestParseInlineBashTagsArePlainMarkdown(t *testing.T) {
+	t.Parallel()
+
+	source := "This PR switches to " + BashStartTag + "/" + BashEndTag + " tags."
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.Empty(t, parsed.Bash)
+	assert.Equal(t, source, parsed.Prose)
+}
+
+func TestParseIndentedBashTagsArePlainMarkdown(t *testing.T) {
+	t.Parallel()
+
+	source := "  " + BashStartTag + "\nls\n" + BashEndTag
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.Empty(t, parsed.Bash)
+	assert.Equal(t, "  "+BashStartTag+"\nls\n", parsed.Prose)
+}
+
+func TestParseLineMiddleEndTagInsideBashIsPlainText(t *testing.T) {
+	t.Parallel()
+
+	source := BashStartTag + "\necho " + BashEndTag + "\n" + BashEndTag
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "echo "+BashEndTag+"\n", parsed.Bash[0])
+}

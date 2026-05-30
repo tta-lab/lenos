@@ -63,10 +63,11 @@ func AlertLine(body string) string {
 	return RuntimeTag + " ALERT: " + strings.TrimSpace(body)
 }
 
-// Parse scans source for bash tags. Text before the first bash block is
-// Markdown prose. Text after the first completed bash block is reported as
-// dropped tail. Nested bash tags are treated as literal bash content so
-// heredocs can contain patch text with bash tags.
+// Parse scans source for column-1 bash tags. Text before the first bash block
+// is Markdown prose. Inline or indented tag text is plain text. Text after the
+// first completed bash block is reported as dropped tail. Nested bash tags are
+// treated as literal bash content so heredocs can contain patch text with bash
+// tags.
 func Parse(source string) (Parsed, *Diagnostic) {
 	if strings.TrimSpace(source) == "" {
 		return Parsed{Original: source}, nil
@@ -100,10 +101,10 @@ func (p *parser) scan() (Parsed, *Diagnostic) {
 			continue
 		}
 		switch {
-		case strings.HasPrefix(p.src[p.pos:], BashStartTag):
+		case p.atLineStart() && strings.HasPrefix(p.src[p.pos:], BashStartTag):
 			p.openBash()
 			p.advance(len(BashStartTag))
-		case strings.HasPrefix(p.src[p.pos:], BashEndTag):
+		case p.atLineStart() && strings.HasPrefix(p.src[p.pos:], BashEndTag):
 			p.closeBash()
 			p.advance(len(BashEndTag))
 		default:
@@ -156,8 +157,13 @@ func (p *parser) closeBash() {
 		p.acceptedUntil = p.pos + len(BashEndTag)
 		p.proseFrom = len(p.src) + 1
 	default:
+		p.flushProse()
 		p.proseFrom = p.pos + len(BashEndTag)
 	}
+}
+
+func (p *parser) atLineStart() bool {
+	return p.col == 1
 }
 
 func (p *parser) accepted() string {

@@ -7,6 +7,9 @@ executed. To run commands, put only the commands between the bash tags:
 
 {{.BashExample}}
 
+The bash start and end tags must begin at the start of their own lines. Inline
+or indented tag text is treated as plain text, not protocol.
+
 The runtime executes the first bash block with `bash -c` in a fresh subprocess.
 After {{.BashEndTag}}, stop. Anything after it is dropped. Shell state does
 not persist across responses. If a response has no bash block, the turn ends

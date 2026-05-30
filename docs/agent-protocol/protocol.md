@@ -34,10 +34,12 @@ exit
 ## Bash Blocks
 
 Only text between bash tags is executable. Markdown prose may appear before the
-bash block. After the first bash end tag, the runtime drops all remaining text
-from persistence, display, and execution, with a warning for non-whitespace
-tail content. Bash tags inside an open bash block are treated with stack depth
-so heredocs and edit payloads can contain literal tagged examples.
+bash block. Bash start and end tags are recognized only when they begin at
+column 1 on their own physical lines. Inline or indented tag text is plain
+text. After the first bash end tag, the runtime drops all remaining text from
+persistence, display, and execution, with a warning for non-whitespace tail
+content. Bash tags inside an open bash block are treated with stack depth so
+heredocs and edit payloads can contain literal tagged examples.
 
 ## Loop Lifecycle
 

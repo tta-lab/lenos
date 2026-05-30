@@ -20,6 +20,9 @@ not execute it.
 If no bash blocks are present, Lenos renders the Markdown prose and ends the
 loop.
 
+Protocol tags are recognized only at column 1 on their own physical lines.
+Inline or indented tag text is plain text.
+
 ## Syntax
 
 Basic form:
