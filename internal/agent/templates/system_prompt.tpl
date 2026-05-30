@@ -20,8 +20,10 @@ and heredocs are available. When a command fails, the runtime shows the result
 and continues the loop so you can recover. Use `exit` by itself to end the turn
 without text.
 
-Do not emit JSON tool calls, XML tool wrappers, Markdown fences around
-commands, or the old `m` message-block protocol.
+Do not use `sleep`; the runtime handles waiting and timeouts.
+
+Do not emit JSON tool calls, non-bash XML tool wrappers, Markdown fences
+around commands, or the old `m` message-block protocol.
 
 # Environment
 

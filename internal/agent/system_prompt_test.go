@@ -108,6 +108,8 @@ func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {
 	assert.NotContains(t, got, "narrate")
 	assert.NotContains(t, got, "temenos job list")
 	assert.NotContains(t, got, "temenos job log")
+	assert.NotContains(t, got, "temenos job wait")
+	assert.NotContains(t, got, "telemost job list")
 	assert.NotContains(t, got, "check status")
 }
 
