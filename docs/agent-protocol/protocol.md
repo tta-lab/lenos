@@ -1,64 +1,54 @@
 # Protocol
 
-The protocol is Lenos Bash: bash plus top-level `m` message blocks. Every
-assistant response is parsed once. Message blocks are removed, the remaining
-bash is executed with one `bash -c` call, and bare `exit` ends the loop without
-execution.
+The protocol is Lenos Bash: Markdown prose plus tagged bash blocks. Every
+assistant response is parsed once. Markdown outside bash tags is reader-facing
+prose. Each parsed bash block is syntax-checked, executed in source order, and
+replayed to the model as a result observation. Bare `exit` ends the loop
+without execution.
 
 ## Valid Shapes
 
-```bash
-ls -la
+```markdown
+Done. Tests pass.
 ```
 
-```bash
+```xml
+<bash>
+rg "func Parse" internal/agent
+</bash>
+```
+
+```xml
+Reading the parser before editing.
+
+<bash>
 # inspect before editing
 cat README.md && rg "needle" .
+</bash>
 ```
 
-```bash
-m"Done. Tests pass."
-```
-
-```bash
-m(reviewer)"Please review the auth change."
-```
-
-```bash
-m"Reading the parser before editing."
-rg "func Parse" internal/agent
-```
-
-```bash
+```text
 exit
 ```
 
-## Message Blocks
+## Bash Blocks
 
-`m"..."` is natural language. It can be single-line or multi-line. Use
-`m(target)"..."` to deliver the message to another agent. If `--pair-with` is
-set, untargeted message blocks are also delivered to that default target;
-explicit targets take precedence.
-
-Message blocks must be top-level and begin at the start of their own physical
-line, ignoring indentation. Text inside heredocs, shell strings, command words,
-or comments is normal bash text, not speech.
+Only text between bash tags is executable. Text outside bash tags is Markdown
+prose. Bash tags inside an open bash block are treated with stack depth so
+heredocs and edit payloads can contain literal tagged examples.
 
 ## Loop Lifecycle
 
 After parsing and optional bash execution:
 
-- If only message blocks remain, publish them and stop the loop.
-- If bash plus message blocks are present, run bash first. On exit code 0,
-  publish the messages and continue or stop according to the normal result
-  flow. On non-zero exit, persist the failed result and suppress the extracted
-  messages.
-- If exit code is 0 and there are no message blocks, send the command result
-  back to the model and continue.
-- If addressed message delivery fails, persist delivery status as a result row.
+- If no bash blocks are present, render the Markdown prose and stop the loop.
+- If bash blocks are present, execute them in source order.
+- If a command exits 0, send the command result back to the model and continue.
+- If a command exits non-zero, persist the failed result and continue with the
+  normal failure recovery flow.
 - If the model emits bare `exit`, stop the loop without executing bash.
 
 ## Natural-Language Safety Net
 
-Raw prose is invalid. The runtime sends a diagnostic that points at the text
-and asks for bash or a message block.
+Raw prose is valid Markdown. It ends the current turn when no bash block is
+present.

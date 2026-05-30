@@ -1,11 +1,10 @@
 package agent
 
 import (
-	"context"
-	"log/slog"
-	"os/exec"
 	"regexp"
 	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // classifyResult enumerates how the loop should handle a model emit.
@@ -52,11 +51,11 @@ var (
 // Classification order: empty → exit → banned → tool-call →
 // natural-language → bash-syntax → exec.
 // Empty short-circuits before exit so `   ` doesn't accidentally pass the
-// trim+exitRe check; banned runs before bash-syntax so we never invoke
-// `bash -n` on a refused pattern; tool-call and natural-language both run before
-// bash-syntax so obviously wrong non-bash shapes get dedicated corrections
-// instead of generic shell errors.
-func classify(ctx context.Context, emit string) (cls classifyResult, aux string) {
+// trim+exitRe check; banned runs before bash-syntax so refused patterns never
+// reach the parser; tool-call and natural-language both run before bash-syntax
+// so obviously wrong non-bash shapes get dedicated corrections instead of
+// generic shell errors.
+func classify(emit string) (cls classifyResult, aux string) {
 	trimmed := strings.TrimSpace(emit)
 	if trimmed == "" {
 		return classifyEmpty, ""
@@ -73,7 +72,7 @@ func classify(ctx context.Context, emit string) (cls classifyResult, aux string)
 	if isNaturalLanguageEmit(emit) {
 		return classifyNaturalLanguage, ""
 	}
-	if err := bashSyntaxCheck(ctx, emit); err != "" {
+	if err := bashSyntaxCheck(emit); err != "" {
 		return classifyInvalidBash, err
 	}
 	return classifyExec, ""
@@ -149,21 +148,12 @@ func hasCommandEvidence(line string, hadAssignment bool) bool {
 		pathLikeTokenRe.MatchString(line)
 }
 
-// bashSyntaxCheck runs `bash -n` against the emit on stdin. Returns "" on
-// valid syntax, the captured stderr on invalid. A subprocess-level failure
-// (binary missing, signal kill) is logged and treated as valid — the runtime
-// shouldn't block the agent on host-level breakage that's outside its control.
-func bashSyntaxCheck(ctx context.Context, emit string) string {
-	cmd := exec.CommandContext(ctx, "/bin/bash", "-n")
-	cmd.Stdin = strings.NewReader(emit)
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() != 0 {
-			return strings.TrimSpace(stderr.String())
-		}
-		slog.Warn("bash -n preflight failed at runtime level; treating as valid", "error", err)
-		return ""
+// bashSyntaxCheck parses the emit with mvdan's Bash parser. Returns "" on
+// valid syntax, or the parser diagnostic on invalid syntax.
+func bashSyntaxCheck(emit string) string {
+	parser := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	if _, err := parser.Parse(strings.NewReader(emit), "lenos-bash"); err != nil {
+		return err.Error()
 	}
 	return ""
 }

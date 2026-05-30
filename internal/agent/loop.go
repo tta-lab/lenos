@@ -127,7 +127,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
-		if cls, _ := classify(ctx, emit); cls == classifyToolCall {
+		if cls, _ := classify(emit); cls == classifyToolCall {
 			obs := rePromptToolCall()
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete tool-call assistant message", "error", err)
@@ -166,7 +166,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 				msgs = drainAndAppend(ctx, deps, msgs)
 				goto nextStep
 			}
-			if cls, aux := classify(ctx, bashCmd); cls == classifyInvalidBash {
+			if cls, aux := classify(bashCmd); cls == classifyInvalidBash {
 				obs := rePromptInvalidBash(aux)
 				msgs = append(msgs,
 					assistantTextMessage(emit, assistantMsg.ReasoningContent()),

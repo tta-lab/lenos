@@ -1,8 +1,6 @@
 package agent
 
 import (
-	"context"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +9,6 @@ import (
 
 func TestClassify_Exit(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	cases := []string{
 		"exit",
 		"exit 0",
@@ -22,7 +19,7 @@ func TestClassify_Exit(t *testing.T) {
 		"\texit\n", // leading tab + trailing newline
 	}
 	for _, in := range cases {
-		cls, _ := classify(ctx, in)
+		cls, _ := classify(in)
 		assert.Equalf(t, classifyExit, cls, "expected exit for %q", in)
 	}
 }
@@ -31,7 +28,6 @@ func TestClassify_Exit(t *testing.T) {
 // other commands that contain "exit" in prose, args, or quoted strings.
 func TestClassify_NotExit(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	cases := []string{
 		"exitcode",                          // word starting with exit
 		"echo 'exit'",                       // exit inside a quoted string
@@ -45,23 +41,21 @@ func TestClassify_NotExit(t *testing.T) {
 		"export EXIT=1",                     // env var assignment
 	}
 	for _, in := range cases {
-		cls, _ := classify(ctx, in)
+		cls, _ := classify(in)
 		assert.NotEqualf(t, classifyExit, cls, "expected NOT exit for %q (got %v)", in, cls)
 	}
 }
 
 func TestClassify_Empty(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	for _, in := range []string{"", "   ", "\n\t\n", "  \t  "} {
-		cls, _ := classify(ctx, in)
+		cls, _ := classify(in)
 		assert.Equalf(t, classifyEmpty, cls, "expected empty for %q", in)
 	}
 }
 
 func TestClassify_Banned(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	cases := []string{
 		`sed -i 's/a/b/' f.txt`,
 		`echo x | sed --in-place s/a/b/ f`,
@@ -69,14 +63,13 @@ func TestClassify_Banned(t *testing.T) {
 		`ls && sed -i s/a/b/ f`,
 	}
 	for _, in := range cases {
-		cls, _ := classify(ctx, in)
+		cls, _ := classify(in)
 		assert.Equalf(t, classifyBanned, cls, "expected banned for %q", in)
 	}
 }
 
 func TestClassify_ToolCall(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	cases := []struct {
 		name string
 		emit string
@@ -93,7 +86,7 @@ func TestClassify_ToolCall(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cls, aux := classify(ctx, tc.emit)
+			cls, aux := classify(tc.emit)
 			assert.Equal(t, classifyToolCall, cls)
 			assert.Empty(t, aux)
 		})
@@ -102,36 +95,27 @@ func TestClassify_ToolCall(t *testing.T) {
 
 func TestClassify_InvalidBash(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash not available")
-	}
-	ctx := context.Background()
 	cases := []string{
 		`if true then`, // missing semicolon and fi
 		`echo $(`,      // unclosed command sub
 		`fn() {`,       // unclosed function body
 	}
 	for _, in := range cases {
-		cls, errOut := classify(ctx, in)
+		cls, errOut := classify(in)
 		assert.Equalf(t, classifyInvalidBash, cls, "expected invalid for %q (got %v)", in, cls)
-		assert.NotEmptyf(t, errOut, "expected bash -n stderr for %q", in)
+		assert.Containsf(t, errOut, "lenos-bash:", "expected mvdan parser position for %q", in)
 	}
 }
 
 func TestClassify_ToolCallBeatsInvalidBash(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	emit := "<tool_call>\n{\"name\":\"bash\",\"arguments\":{\"command\":\"echo $(\"}}\n</tool_call>"
-	cls, _ := classify(ctx, emit)
+	cls, _ := classify(emit)
 	require.Equal(t, classifyToolCall, cls)
 }
 
 func TestClassify_NaturalLanguage(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash not available")
-	}
-	ctx := context.Background()
 	cases := []struct {
 		emit string
 		want classifyResult
@@ -151,7 +135,7 @@ func TestClassify_NaturalLanguage(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.emit, func(t *testing.T) {
 			t.Parallel()
-			cls, _ := classify(ctx, tc.emit)
+			cls, _ := classify(tc.emit)
 			require.Equal(t, tc.want, cls)
 		})
 	}
@@ -159,13 +143,9 @@ func TestClassify_NaturalLanguage(t *testing.T) {
 
 func TestClassify_NaturalLanguageFirstLineWithValidBashRestStaysNaturalLanguage(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash not available")
-	}
-	ctx := context.Background()
 	emit := "I'll inspect the repo.\ncat README.md && ls"
 
-	cls, aux := classify(ctx, emit)
+	cls, aux := classify(emit)
 
 	require.Equal(t, classifyNaturalLanguage, cls)
 	assert.Empty(t, aux)
@@ -173,10 +153,6 @@ func TestClassify_NaturalLanguageFirstLineWithValidBashRestStaysNaturalLanguage(
 
 func TestClassify_NaturalLanguageMultilineCJKStaysNaturalLanguage(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash not available")
-	}
-	ctx := context.Background()
 	cases := []string{
 		"我已经完成了。\n不需要继续操作。",
 		"確認しました。\n次の操作は不要です。",
@@ -186,7 +162,7 @@ func TestClassify_NaturalLanguageMultilineCJKStaysNaturalLanguage(t *testing.T) 
 		t.Run(emit, func(t *testing.T) {
 			t.Parallel()
 
-			cls, aux := classify(ctx, emit)
+			cls, aux := classify(emit)
 
 			require.Equal(t, classifyNaturalLanguage, cls)
 			assert.Empty(t, aux)
@@ -196,10 +172,6 @@ func TestClassify_NaturalLanguageMultilineCJKStaysNaturalLanguage(t *testing.T) 
 
 func TestClassify_Exec(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash not available")
-	}
-	ctx := context.Background()
 	cases := []string{
 		`ls -la`,
 		`go test ./...`,
@@ -208,7 +180,7 @@ func TestClassify_Exec(t *testing.T) {
 		`# comment-only emit`, // bash treats a sole comment as valid syntax
 	}
 	for _, in := range cases {
-		cls, _ := classify(ctx, in)
+		cls, _ := classify(in)
 		assert.Equalf(t, classifyExec, cls, "expected exec for %q (got %v)", in, cls)
 	}
 }
@@ -218,21 +190,13 @@ func TestClassify_Exec(t *testing.T) {
 // content after the heredoc, so it's not a bare-exit emit).
 func TestClassify_HeredocWithExit(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash not available")
-	}
-	ctx := context.Background()
 	emit := "cat <<'EOF'\nexit\nEOF"
-	cls, _ := classify(ctx, emit)
+	cls, _ := classify(emit)
 	require.Equal(t, classifyExec, cls)
 }
 
 func TestClassify_TrailingExitIsExec(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash not available")
-	}
-	ctx := context.Background()
 	cases := []struct {
 		name string
 		emit string
@@ -251,7 +215,7 @@ func TestClassify_TrailingExitIsExec(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cls, _ := classify(ctx, tc.emit)
+			cls, _ := classify(tc.emit)
 			require.Equal(t, classifyExec, cls,
 				"expected trailing exit to remain plain exec for %q (got %v)", tc.emit, cls)
 		})
@@ -260,23 +224,15 @@ func TestClassify_TrailingExitIsExec(t *testing.T) {
 
 func TestClassify_BareExitStillBareExit(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash not available")
-	}
 	// Bare `exit` must classify as classifyExit (the emit-IS-the-exit path).
-	ctx := context.Background()
-	cls, _ := classify(ctx, "exit")
+	cls, _ := classify("exit")
 	require.Equal(t, classifyExit, cls)
-	cls, _ = classify(ctx, "exit 0")
+	cls, _ = classify("exit 0")
 	require.Equal(t, classifyExit, cls)
 }
 
 func TestClassify_NaturalLanguageReplacesTitleCaseProseHeuristic(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash not available")
-	}
-	ctx := context.Background()
 	cases := []struct {
 		emit string
 		want classifyResult
@@ -292,7 +248,7 @@ func TestClassify_NaturalLanguageReplacesTitleCaseProseHeuristic(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.emit, func(t *testing.T) {
 			t.Parallel()
-			cls, _ := classify(ctx, tc.emit)
+			cls, _ := classify(tc.emit)
 			assert.Equal(t, tc.want, cls)
 		})
 	}
@@ -300,8 +256,7 @@ func TestClassify_NaturalLanguageReplacesTitleCaseProseHeuristic(t *testing.T) {
 
 func TestClassify_NaturalLanguageBeatsInvalidBash(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	emit := "Read the file and tell me what's wrong with $('"
-	cls, _ := classify(ctx, emit)
+	cls, _ := classify(emit)
 	require.Equal(t, classifyNaturalLanguage, cls)
 }

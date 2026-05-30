@@ -2,16 +2,16 @@
 
 Lenos uses one agent output protocol: Lenos Bash.
 
-Lenos Bash is bash plus `m` message blocks. The model emits one text response.
-The runtime parses message blocks, executes the remaining shell text, records
-results in SQLite, and either loops with a result observation or stops.
+Lenos Bash is Markdown prose plus tagged bash blocks. The model emits one text
+response. The runtime renders Markdown outside tags, executes each parsed bash
+block, records results in SQLite, and either loops with a result observation or
+stops.
 
 ## Core Documents
 
 - [Protocol](protocol.md): the Lenos Bash contract and loop lifecycle.
-- [Message Blocks](message-blocks.md): `m` block syntax for speaking natural
-  language from Lenos Bash.
-- [Classifier](classifier.md): how an emit becomes exit, bash, message blocks,
+- [Bash Tags](message-blocks.md): tagged bash syntax and parser edge cases.
+- [Classifier](classifier.md): how an emit becomes exit, bash, Markdown prose,
   or a runtime correction.
 - [Runtime Recovery](runtime-recovery.md): re-prompts for invalid shapes and
   failed execution.
@@ -23,7 +23,7 @@ results in SQLite, and either loops with a result observation or stops.
 - `internal/agent/classify.go`: emit classification and natural-language
   detection.
 - `internal/agent/loop.go`: model loop, command execution, result persistence,
-  message delivery, and stop/continue rules.
+  and stop/continue rules.
 - `internal/agent/prompt_runtime.go`: corrective runtime observations.
 - `internal/agent/templates/system_prompt.tpl`: base prompt for the Lenos Bash
   protocol.
@@ -33,5 +33,5 @@ results in SQLite, and either loops with a result observation or stops.
 
 ## Design Rule
 
-There is no second in-band markdown protocol. Human-facing language belongs in
-message blocks. Everything else is shell.
+There is no second message protocol. Human-facing language is plain Markdown
+outside bash blocks. Executable work belongs inside bash blocks.

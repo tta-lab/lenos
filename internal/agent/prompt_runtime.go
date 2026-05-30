@@ -14,17 +14,16 @@ func rePromptEmpty() string {
 	return lenosbash.RuntimeLine("your last response was empty. emit Markdown prose, a bash block, or `exit` to end the turn.")
 }
 
-// rePromptInvalidBash is the next-observation text after `bash -n` rejected
-// the emit. bashErr carries the raw stderr from `bash -n`.
-//
-func rePromptInvalidBash(bashErr string) string {
-	return lenosbash.RuntimeBlock(fmt.Sprintf(`your last bash block was not valid bash. bash -n said:
+// rePromptInvalidBash is the next-observation text after the shell parser
+// rejected the bash block.
+func rePromptInvalidBash(parseErr string) string {
+	return lenosbash.RuntimeBlock(fmt.Sprintf(`your last bash block was not valid bash. the shell parser said:
   %s
 
 Fix the bash quoting. "unexpected
 EOF while looking for matching" errors come from unbalanced quotes —
 apostrophes inside single quotes close the quote prematurely. Use double
-quotes or a heredoc for any text containing apostrophes.`, bashErr))
+quotes or a heredoc for any text containing apostrophes.`, parseErr))
 }
 
 func rePromptInvalidLenosBash(source string, diag lenosbash.Diagnostic) string {

@@ -27,7 +27,7 @@ func TestRePromptInvalidBash(t *testing.T) {
 
 	assert.True(t, strings.HasPrefix(got, lenosbash.RuntimeTag+"\n"))
 	assert.Contains(t, got, "not valid bash")
-	assert.Contains(t, got, "bash -n said:")
+	assert.Contains(t, got, "the shell parser said:")
 	assert.Contains(t, got, "syntax error near token `then'")
 	assert.NotContains(t, got, "narrate")
 }

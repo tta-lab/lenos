@@ -1,0 +1,79 @@
+obviously current m protocol is fighting with model's train.
+model will end long text response early without end m protocol 's "# since in training data the `.` is the most possible token and it's harder to let our prompt to overwrite that.
+
+also, model will directly put cmd into the m block when we force the prefill, since model think they dont need all cmd have prose, they want omit prose then they put the cmd after the m block.
+
+we should stop to fight with the model and back to xml tag protocol
+
+* new protocol
+
+** example:
+
+## ....
+....
+
+....
+
+
+<bash>
+git commit -m..
+</bash>
+
+** edge case 1
+
+...
+
+<bash>
+cat <<'EOF' | src edit main.go
+===BEFORE===
+<bash>
+hello
+</bash>
+===AFTER===
+<bash>
+world
+</bash>
+EOF
+</bash>
+
+
+*** solution
+this is easy to be fix if we add a stack based parser
+
+** edge case 2
+...
+
+<bash>
+cat <<'EOF' | src edit main.go
+===BEFORE===
+<bash>
+hello
+</bash>
+===AFTER===
+<bash>
+world
+</bash>
+EOF
+</bash>
+</bash>
+
+there is one extra bash, but since the stack is already empty, we ignore that token
+
+when reach end but stack still not empty , we give proper diag to agent.
+
+** conclusion
+
+we decide to not to fight with model just to keep our reverse-mode cleanest lensh. this doesnt work well in production although it may save 40% for cmd but if we have to prefill and force model to give prose, that's still add more overhead than it save.
+
+and we need keep good thing we got from recent commits.
+
+the ui should be able to keep the same, and the bash diag can be keep.
+
+also system prompt can be simpler.
+
+for lifecycle, still: if no cmd in a response, we end the turn.
+
+(one note: only gpt 5.5 seems have no issue on follow m protocol..)
+
+
+** open questions -- TBD
