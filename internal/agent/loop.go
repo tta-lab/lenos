@@ -484,11 +484,11 @@ func hasShellActionEvidence(script string) bool {
 }
 
 func rawMessageBlock(body string) string {
-	hashes := messageBlockDelimiter
-	for strings.Contains(body, `"`+hashes) {
+	hashes := ""
+	for strings.Contains(body, `"`+messageBlockDelimiter+hashes) {
 		hashes += "#"
 	}
-	return messageBlockPrefillToken + hashes[len(messageBlockDelimiter):] + `"` + body + `"` + hashes
+	return messageBlockPrefillToken + hashes + `"` + body + `"` + messageBlockDelimiter + hashes
 }
 
 func handleMessageOnlyBlocks(
