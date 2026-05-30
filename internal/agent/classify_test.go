@@ -21,7 +21,7 @@ func TestClassify_Banned(t *testing.T) {
 	}
 }
 
-func TestClassify_ToolCall(t *testing.T) {
+func TestContainsToolCallPattern(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
@@ -39,9 +39,7 @@ func TestClassify_ToolCall(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cls, aux := classify(tc.emit)
-			assert.Equal(t, classifyToolCall, cls)
-			assert.Empty(t, aux)
+			assert.True(t, containsToolCallPattern(tc.emit))
 		})
 	}
 }
@@ -60,11 +58,10 @@ func TestClassify_InvalidBash(t *testing.T) {
 	}
 }
 
-func TestClassify_ToolCallBeatsInvalidBash(t *testing.T) {
+func TestContainsToolCallPatternBeforeInvalidBash(t *testing.T) {
 	t.Parallel()
 	emit := "<tool_call>\n{\"name\":\"bash\",\"arguments\":{\"command\":\"echo $(\"}}\n</tool_call>"
-	cls, _ := classify(emit)
-	require.Equal(t, classifyToolCall, cls)
+	require.True(t, containsToolCallPattern(emit))
 }
 
 func TestClassify_Exec(t *testing.T) {

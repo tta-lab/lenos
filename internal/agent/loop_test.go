@@ -1387,6 +1387,34 @@ func TestRunLoop_ToolCall_FiresPreExec(t *testing.T) {
 	}
 }
 
+func TestRunLoop_ToolCallInsideBashBlockDoesNotExecute(t *testing.T) {
+	t.Parallel()
+	inner := &scriptedModel{emits: []string{lenosbash.BashBlock("<tool_call>{\"name\":\"bash\"}</tool_call>"), "exit"}}
+	model := &streamCapturingModel{inner: inner}
+	runner := &fakeRunner{}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	_, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+
+	assert.Empty(t, runner.bash, "tool-call-shaped bash block must not execute")
+	results := messagesByRole(ms, message.Result)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Content().Text, "There is NO tool/function calling API")
+
+	require.Len(t, model.captured, 2, "expected initial prompt and one re-prompt turn")
+	for _, m := range model.captured[1] {
+		if m.Role != fantasy.MessageRoleAssistant {
+			continue
+		}
+		for _, part := range m.Content {
+			if tp, ok := part.(fantasy.TextPart); ok {
+				assert.NotContains(t, tp.Text, "<tool_call>", "bad bash-block tool-call emit must not be replayed")
+			}
+		}
+	}
+}
+
 func TestRunLoop_ProseOnlyStoresMarkdown(t *testing.T) {
 	t.Parallel()
 	emit := "Done. Tests pass."

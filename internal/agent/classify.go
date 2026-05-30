@@ -12,7 +12,6 @@ type classifyResult int
 
 const (
 	classifyExec classifyResult = iota
-	classifyToolCall
 	classifyInvalidBash
 	classifyBanned
 )
@@ -39,16 +38,13 @@ var (
 // classify inspects an agent emit and returns the action class plus an
 // auxiliary string (bash stderr for classifyInvalidBash; "" otherwise).
 //
-// Classification order: banned → tool-call → bash-syntax → exec.
+// Classification order: banned → bash-syntax → exec.
 // Banned runs before bash-syntax so refused patterns never reach the parser;
-// tool-call runs before bash-syntax so obviously wrong non-bash shapes get
-// dedicated corrections instead of generic shell errors.
+// assistant-message tool-call shapes are handled in runLoop before bash
+// classification.
 func classify(emit string) (cls classifyResult, aux string) {
 	if containsBlockedPattern(emit) {
 		return classifyBanned, ""
-	}
-	if containsToolCallPattern(emit) {
-		return classifyToolCall, ""
 	}
 	if err := bashSyntaxCheck(emit); err != "" {
 		return classifyInvalidBash, err

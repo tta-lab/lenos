@@ -130,7 +130,7 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
-		if cls, _ := classify(emit); cls == classifyToolCall {
+		if containsToolCallPattern(emit) {
 			obs := rePromptToolCall()
 			if err := deps.messages.Delete(ctx, assistantMsg.ID); err != nil {
 				slog.Warn("loop: delete tool-call assistant message", "error", err)
