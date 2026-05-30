@@ -19,18 +19,16 @@ DEFAULT_PROMPT = (
     "Complete the partial assistant response by closing the JSON. "
     "Do not start a new object. Do not add markdown."
 )
-DEFAULT_PREFILL = '{"prefill_marker":"ZXQ73","continued":'
-LENOS_BASH_PROMPT = (
-    "You are in a bash-first runtime. Emit one harmless bash command that "
-    "inspects the current directory, then emit exit if the task is complete."
-)
-SHORT_LENOS_SYSTEM_PROMPT = """You are running inside a bash-first runtime.
-Every response is executed as bash. There is no chat channel and no markdown renderer.
-Valid shapes are raw bash commands, bash comments starting with #, m message blocks for prose, and exit.
-Do not emit markdown fences, XML/JSON tool calls, or plain English at top level.
-If you want to leave a note before a command, write it as a bash comment:
-# short note
-then write the command on the next line."""
+SHORT_LENOS_SYSTEM_PROMPT = """Reply in Markdown. To run commands, add one bash block:
+
+<bash>
+your command here
+</bash>
+
+Bash tags must start at column 1 on their own lines.
+The runtime executes the first bash block in a fresh subprocess.
+Without a bash block, the turn ends after Markdown is shown.
+Do not use sleep or emit JSON tool calls."""
 
 
 @dataclass(frozen=True)
@@ -207,10 +205,10 @@ def resolve_prompt_defaults(
     system_prompt: str | None,
 ) -> tuple[str, str, str | None]:
     if not lenos_bash:
-        return prompt or DEFAULT_PROMPT, prefill or DEFAULT_PREFILL, system_prompt
+        return prompt or DEFAULT_PROMPT, prefill or "", system_prompt
     return (
-        prompt or LENOS_BASH_PROMPT,
-        prefill if prefill is not None else "# ",
+        prompt or "List the files in the current directory and explain what you see.",
+        prefill if prefill is not None else "",
         system_prompt or SHORT_LENOS_SYSTEM_PROMPT,
     )
 
@@ -317,13 +315,9 @@ def extract_content(response: dict[str, Any]) -> str:
 
 def summarize(prefill: str, content: str) -> str:
     stripped = content.lstrip()
-    if stripped.startswith(prefill):
+    if prefill and stripped.startswith(prefill):
         return "looks like full prefilled text was returned"
-    if stripped.startswith("true") or stripped.startswith(" true"):
-        return "looks like continuation-only text was returned"
-    if "prefill_marker" in stripped or "ZXQ73" in stripped:
-        return "marker appeared, but shape needs manual inspection"
-    return "no obvious prefill marker in returned content"
+    return "content does not start with prefill"
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -347,7 +341,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--lenos-bash",
         action="store_true",
-        help="Use a short lenos-like bash-first system prompt and '# ' prefill.",
+        help="Use a short tagged-bash system prompt.",
     )
     parser.add_argument(
         "--use-lenos-system-prompt",
