@@ -191,9 +191,9 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 			{Path: env.workingDir},
 		},
 		ContextCommands: []RuntimeContextCommand{{
-			Command: "m\"Let me read key instructions.\"\ncat " + shellQuote(contextFile),
+			Command: rawMessageBlock("Let me read key instructions.") + "\ncat " + shellQuote(contextFile),
 		}, {
-			Command: "m\"\nReady.\n\nLets rock and roll.\n\"",
+			Command: rawMessageBlock("\nReady.\n\nLets rock and roll.\n"),
 		}},
 	})
 	require.NoError(t, err)
@@ -202,14 +202,14 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(msgs), 5)
 	require.Equal(t, message.Assistant, msgs[0].Role)
-	require.Equal(t, "m\"Let me read key instructions.\"\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
+	require.Equal(t, rawMessageBlock("Let me read key instructions.")+"\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
 	require.Equal(t, "cat "+shellQuote(contextFile), msgs[1].CommandContent().Command)
 	require.Equal(t, "Let me read key instructions.", msgs[1].CommandContent().Narration)
 	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)
 	require.Equal(t, message.Assistant, msgs[2].Role)
-	require.Equal(t, "m\"\nReady.\n\nLets rock and roll.\n\"", msgs[2].Content().Text)
+	require.Equal(t, rawMessageBlock("\nReady.\n\nLets rock and roll.\n"), msgs[2].Content().Text)
 	require.Nil(t, msgs[2].FinishPart())
 	require.Equal(t, "test-model", msgs[2].Model)
 	require.Equal(t, "test-provider", msgs[2].Provider)
@@ -226,7 +226,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, fantasy.MessageRoleUser, prompt[2].Role)
 	require.Contains(t, fantasyMessageText(prompt[2]), "project instructions")
 	require.Equal(t, fantasy.MessageRoleAssistant, prompt[3].Role)
-	require.Equal(t, "m\"\nReady.\n\nLets rock and roll.\n\"", fantasyMessageText(prompt[3]))
+	require.Equal(t, rawMessageBlock("\nReady.\n\nLets rock and roll.\n"), fantasyMessageText(prompt[3]))
 	require.Equal(t, "user prompt", fantasyMessageText(prompt[4]))
 }
 
@@ -250,7 +250,7 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	sess, err := env.sessions.Create(t.Context(), "runtime context")
 	require.NoError(t, err)
 
-	raw := "m\"Let me list registered projects and available skills.\"\nttal project list\nskill list"
+	raw := rawMessageBlock("Let me list registered projects and available skills.") + "\nttal project list\nskill list"
 	runner := &fakeRunner{results: []ExecResult{{
 		Stdout:   []byte("project-a\nskill-a\n"),
 		ExitCode: 0,

@@ -28,7 +28,8 @@ const (
 	// ErrStepCap.
 	StepCap = 500
 
-	messageBlockPrefillToken = "m#"
+	messageBlockDelimiter    = "#"
+	messageBlockPrefillToken = "m" + messageBlockDelimiter
 )
 
 // ErrStepCap signals that the loop halted because the model issued StepCap
@@ -483,7 +484,7 @@ func hasShellActionEvidence(script string) bool {
 }
 
 func rawMessageBlock(body string) string {
-	hashes := "#"
+	hashes := messageBlockDelimiter
 	for strings.Contains(body, `"`+hashes) {
 		hashes += "#"
 	}
