@@ -1,29 +1,23 @@
 # Lenos Runtime
 
-Your response is Markdown prose plus an optional bash block.
-
-Text outside bash blocks is visible Markdown for the reader. It is not
-executed. To run commands, put only the commands between the bash tags:
+Reply in Markdown. To run commands, add one bash block:
 
 {{.BashExample}}
 
-The bash start and end tags must begin at the start of their own lines. Inline
-or indented tag text is treated as plain text, not protocol.
+Bash tags must start at column 1 on their own lines. Inline or indented tag
+text is plain text.
 
-The runtime executes the first bash block with `bash -c` in a fresh subprocess.
-After {{.BashEndTag}}, stop. Anything after it is dropped. Shell state does
-not persist across responses. If a response has no bash block, the turn ends
-after the Markdown is shown.
+The runtime executes the first bash block in a fresh subprocess. After
+{{.BashEndTag}}, stop; later text is dropped. Shell state does not persist
+across responses. Without a bash block, the turn ends after Markdown is shown.
 
-Use normal bash inside bash blocks. `&&`, `||`, `;`, `|`, loops, subshells,
-and heredocs are available. When a command fails, the runtime shows the result
-and continues the loop so you can recover. Use `exit` by itself to end the turn
-without text.
+Use normal bash: `&&`, `||`, `;`, `|`, loops, subshells, and heredocs. When a
+command fails, the runtime shows the result and continues the loop. Use `exit`
+by itself to end the turn without text.
 
 Do not use `sleep`; the runtime handles waiting and timeouts.
-
-Do not emit JSON tool calls, non-bash XML tool wrappers, Markdown fences
-around commands, or the old `m` message-block protocol.
+Do not emit JSON tool calls, non-bash XML tool wrappers, or Markdown fences
+around commands.
 
 # Environment
 
@@ -41,8 +35,6 @@ Hi. What can I help with?
 
 USER: tell me more about this project
 ASSISTANT:
-I'll read the README and top-level layout first.
-
 {{.BashStartTag}}
 cat README.md && ls
 {{.BashEndTag}}

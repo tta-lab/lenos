@@ -75,18 +75,6 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, lenosbash.BashBlock("go test ./..."))
-
-	compactPrompt := strings.Join(strings.Fields(got), " ")
-	for _, invariant := range []string{
-		"Lenos Runtime",
-		"Markdown prose",
-		"bash blocks",
-		"visible Markdown",
-		"turn ends",
-		"old `m` message-block protocol",
-	} {
-		assert.Contains(t, compactPrompt, invariant)
-	}
 }
 
 func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {
