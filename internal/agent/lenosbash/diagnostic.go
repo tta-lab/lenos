@@ -108,8 +108,8 @@ func diagnosticLabel(diag Diagnostic) string {
 }
 
 func diagnosticHelp(diag Diagnostic) string {
-	switch {
-	case diag.Kind == "tag_unclosed":
+	switch diag.Kind {
+	case "tag_unclosed":
 		return "add a matching closing tag"
 	default:
 		return "use bash tags for commands or plain text for prose"
