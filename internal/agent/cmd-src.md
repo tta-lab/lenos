@@ -93,12 +93,20 @@ Recovery steps:
 
 ## STOP - File Editing Rules
 
-**Only `src` may modify files:**
+**Existing files:** use `src`.
 
 Use `src edit`, `src replace`, `src insert`, or `src delete`.
 
-**NEVER use these tools to modify files:** heredoc-to-`tee`, shell redirection
-to a file, `sed -i`, `perl -i`, `awk ... > file`, `python script.py` (when
-writing), `printf ... > file`.
+**New files:** use a plain heredoc redirect:
+
+```bash
+cat > path/to/file <<'EOF'
+content
+EOF
+```
+
+**NEVER use these tools to modify existing files:** heredoc-to-`tee`, shell
+redirection to a file, `sed -i`, `perl -i`, `awk ... > file`, `python
+script.py` (when writing), `printf ... > file`.
 
 You may freely use `sed`, `perl`, `awk`, `python` to **read** or **transform** data in pipelines — the restriction is only on writing changes to disk.
