@@ -315,14 +315,26 @@ func extractResultMessageItems(sty *styles.Styles, msg *message.Message) []Messa
 }
 
 func shouldRenderResultMessageItem(cmd message.CommandContent) bool {
-	if strings.TrimSpace(cmd.Narration) != "" {
+	hasNarration := strings.TrimSpace(cmd.Narration) != ""
+	hasCommand := cmd.Command != ""
+	if hasNarration && !hasCommand {
+		// Narration-only row: always render as markdown.
 		return true
 	}
-	if cmd.Command == "" || cmd.Pending {
+	if hasCommand && cmd.Pending {
+		// Pending command: show "running..."
 		return true
 	}
-	if cmd.ExitCode == nil || *cmd.ExitCode != 0 {
+	if hasCommand && (cmd.ExitCode == nil || *cmd.ExitCode != 0) {
+		// Non-zero or unknown exit: show failure output.
 		return true
 	}
+	if !hasCommand && !hasNarration {
+		// Runtime text response with no command: always render.
+		return true
+	}
+	// Exit 0 with or without narration: assistant already shows the command.
 	return false
 }
+
+

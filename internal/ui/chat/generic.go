@@ -1,9 +1,7 @@
 package chat
-
 import (
 	"fmt"
 	"strings"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/tta-lab/lenos/internal/message"
@@ -11,7 +9,6 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
 )
-
 // genericPrettyName converts a snake_case or kebab-case tool name to a
 // human-readable title case name.
 func genericPrettyName(name string) string {
@@ -19,19 +16,15 @@ func genericPrettyName(name string) string {
 	name = strings.ReplaceAll(name, "-", " ")
 	return stringext.Capitalize(name)
 }
-
 // ResultMessageItem represents a command result message in the chat UI.
 type ResultMessageItem struct {
 	*highlightableMessageItem
 	*cachedMessageItem
 	*focusableMessageItem
-
 	message *message.Message
 	sty     *styles.Styles
 }
-
 var _ MessageItem = (*ResultMessageItem)(nil)
-
 // NewResultMessageItem creates a new ResultMessageItem.
 func NewResultMessageItem(sty *styles.Styles, message *message.Message) MessageItem {
 	return &ResultMessageItem{
@@ -42,31 +35,31 @@ func NewResultMessageItem(sty *styles.Styles, message *message.Message) MessageI
 		sty:                      sty,
 	}
 }
-
 // RawRender implements [MessageItem].
 func (m *ResultMessageItem) RawRender(width int) string {
 	cappedWidth := cappedMessageWidth(width)
-
 	rendered, height, ok := m.getCachedRender(cappedWidth)
 	if ok {
 		return m.renderHighlighted(rendered, cappedWidth, height)
 	}
-
 	var content string
 	cmd := m.message.CommandContent()
-	if strings.TrimSpace(cmd.Narration) != "" {
+	hasNarration := strings.TrimSpace(cmd.Narration) != ""
+	hasCommand := cmd.Command != ""
+	if hasNarration && !hasCommand {
+		// Narration-only: render as markdown.
 		content = m.renderNarration(cappedWidth, cmd.Narration)
-	} else if cmd.Command != "" {
+	} else if hasCommand {
+		// Command present (with or without narration): render command result.
+		// Narration already shown by the assistant message block parsing.
 		content = m.renderCommandResult(cappedWidth, cmd)
 	} else {
 		content = m.sty.Chat.Message.ResultBlock.Render(m.message.Content().Text)
 	}
-
 	height = lipgloss.Height(content)
 	m.setCachedRender(content, cappedWidth, height)
 	return m.renderHighlighted(content, cappedWidth, height)
 }
-
 func (m *ResultMessageItem) renderNarration(width int, body string) string {
 	renderer := common.MarkdownRenderer(m.sty, width)
 	rendered, err := renderer.Render(body)
@@ -75,7 +68,6 @@ func (m *ResultMessageItem) renderNarration(width int, body string) string {
 	}
 	return strings.TrimSpace(rendered)
 }
-
 // renderCommandResult renders a command result with header and output.
 func (m *ResultMessageItem) renderCommandResult(width int, cmd message.CommandContent) string {
 	if cmd.Pending {
@@ -100,17 +92,14 @@ func (m *ResultMessageItem) renderCommandResult(width int, cmd message.CommandCo
 	}
 	return strings.Join(parts, "\n\n")
 }
-
 // Render implements MessageItem.
 func (m *ResultMessageItem) Render(width int) string {
 	return renderAssistantMessageLines(m.sty, m.focused, m.RawRender(width))
 }
-
 // ID implements MessageItem.
 func (m *ResultMessageItem) ID() string {
 	return m.message.ID
 }
-
 // HandleKeyEvent implements [KeyEventHandler].
 func (m *ResultMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	if k := key.String(); k == "c" || k == "y" {
@@ -118,15 +107,12 @@ func (m *ResultMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	}
 	return false, nil
 }
-
 func (m *ResultMessageItem) CopyText() string {
 	return m.formatCommandForCopy()
 }
-
 // formatCommandForCopy formats the command result for clipboard copying.
 func (m *ResultMessageItem) formatCommandForCopy() string {
 	cmd := m.message.CommandContent()
-
 	// TextContent (runtime responses): return text directly.
 	if cmd.Command == "" {
 		if cmd.Narration != "" {
@@ -134,27 +120,22 @@ func (m *ResultMessageItem) formatCommandForCopy() string {
 		}
 		return m.message.Content().Text
 	}
-
 	// Pending commands: just the command line.
 	if cmd.Pending {
 		return "$ " + cmd.Command
 	}
-
 	var sb strings.Builder
 	sb.WriteString("$ ")
 	sb.WriteString(cmd.Command)
-
 	if cmd.Output != "" {
 		sb.WriteString("\n")
 		sb.WriteString(cmd.Output)
 	}
-
 	// Append exit code for non-zero exits on its own line.
 	if cmd.ExitCode != nil && *cmd.ExitCode != 0 {
 		sb.WriteString("\n[")
 		fmt.Fprintf(&sb, "%d", *cmd.ExitCode)
 		sb.WriteString("]")
 	}
-
 	return sb.String()
 }
