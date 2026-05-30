@@ -113,13 +113,11 @@ func buildLenosWrapper(
 
 func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
-		Command:  lenosbash.WrapBash("Let me list registered projects and available skills.", "ttal project list\nskill list"),
+		Command:  lenosbash.BashBlock("ttal project list\nskill list"),
 		Optional: true,
 	}}
 	if len(runtimeContext.ContextFiles) > 0 {
 		var readCmd strings.Builder
-		readCmd.WriteString("Let me read key instructions.")
-		readCmd.WriteString("\n")
 		readCmd.WriteString(lenosbash.BashStartTag)
 		for _, file := range runtimeContext.ContextFiles {
 			readCmd.WriteString("\ncat ")
