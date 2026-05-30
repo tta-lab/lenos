@@ -29,17 +29,50 @@ func TestContainsToolCallPattern(t *testing.T) {
 	}{
 		{"xml tool_call", "<tool_call>\n{\"name\":\"bash\"}\n</tool_call>"},
 		{"xml minimax tool_call", "<minimax:tool_call>\n<invoke name=\"rg\" />\n</minimax:tool_call>"},
+		{"generic invoke", "<invoke name=\"cat\">"},
+		{"closing tool_call tag", "</tool_call>"},
+		{"tool_call with attributes", "<tool_call name=\"foo\">"},
+		{"closing invoke tag", "</invoke>"},
 		{"function call tag", "<function_call>{}</function_call>"},
+		{"closing function_call tag", "</function_call>"},
+		{"function_call with attributes", "<function_call name=\"foo\">"},
+		{"minimax closing tag", "</minimax:tool_call>"},
 		{"tool use tag", "<tool_use name=\"bash\">"},
 		{"invoke tag", "<invoke name=\"bash\">"},
 		{"bracket tool_call", "[tool_call]{\"name\":\"bash\"}[/tool_call]"},
+		{"bracket TOOL_CALL", "[TOOL_CALL]{tool => 'shell'}[/TOOL_CALL]"},
+		{"bracket mixed case", "[Tool_Call]content[/Tool_Call]"},
+		{"bracket opening only", "[TOOL_CALL]partial content"},
+		{"bracket closing only", "[/TOOL_CALL]"},
 		{"bracket function_call uppercase", "[FUNCTION_CALL]{}[/FUNCTION_CALL]"},
 		{"bracket tool_use", "[tool_use]rg[/tool_use]"},
+		{"bracket invoke", "[INVOKE]content[/INVOKE]"},
+		{"bracket no underscore toolcall", "[TOOLCALL]content"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			assert.True(t, containsToolCallPattern(tc.emit))
+		})
+	}
+}
+
+func TestContainsToolCallPatternFalsePositives(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		emit string
+	}{
+		{"harmless brackets", "[some other content]"},
+		{"markdown link", "[click here](https://example.com)"},
+		{"json array", "[1, 2, 3]"},
+		{"plain text", "Here is the answer to your question."},
+		{"invoke in prose", "We invoke the function by calling..."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.False(t, containsToolCallPattern(tc.emit))
 		})
 	}
 }
