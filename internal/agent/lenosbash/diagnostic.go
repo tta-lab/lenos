@@ -23,23 +23,24 @@ type renderedDiagnosticView struct {
 func RenderDiagnostic(source string, diag Diagnostic) string {
 	rendered := renderedDiagnostic(source, diag)
 	var b strings.Builder
-	b.WriteString("[runtime] invalid Lenos Bash\n\n")
+	b.WriteString(RuntimeTag)
+	b.WriteString("\ninvalid Lenos Bash\n\n")
 	b.WriteString("error: ")
 	b.WriteString(rendered.Message)
 	b.WriteString("\n")
-
 	if rendered.Line > 0 && rendered.SourceLine != "" {
 		b.WriteString("\n")
 		writeSourceExcerpt(&b, source, rendered)
 	}
-
 	if rendered.Help != "" {
 		b.WriteString("\nhelp: ")
 		b.WriteString(rendered.Help)
 		b.WriteString("\n")
 		writeHelpRewrite(&b, rendered)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	body := strings.TrimRight(b.String(), "\n")
+	body = strings.TrimPrefix(body, RuntimeTag+"\n")
+	return RuntimeBlock(body)
 }
 
 func renderedDiagnostic(source string, diag Diagnostic) renderedDiagnosticView {
@@ -65,7 +66,6 @@ func writeSourceExcerpt(b *strings.Builder, source string, diag renderedDiagnost
 	if len(lines) == 0 || diag.Line < 1 || diag.Line > len(lines) {
 		return
 	}
-
 	start := max(diag.Line-1, 1)
 	end := min(diag.Line+1, len(lines))
 	width := len(fmt.Sprintf("%d", end))
@@ -93,47 +93,26 @@ func writeSourceExcerpt(b *strings.Builder, source string, diag renderedDiagnost
 }
 
 func writeHelpRewrite(b *strings.Builder, diag renderedDiagnosticView) {
-	switch {
-	case diag.Incomplete || strings.Contains(diag.Message, "closing message block"):
-		b.WriteString("\n  m#####\"\n")
-		b.WriteString("  Text can mention m####\"...\"#### safely.\n")
-		b.WriteString("  \"#####\n")
-	case strings.Contains(diag.Message, "message block"):
-		b.WriteString("\n  m\"Testing now.\"\n  go test ./...\n")
-	default:
-		b.WriteString("\n  m\"Done.\"\n  go test ./...\n")
-	}
+	b.WriteString("\n")
+	b.WriteString(BashBlock("your command here"))
+	b.WriteString("\n")
 }
 
 func diagnosticLabel(diag Diagnostic) string {
 	switch {
-	case diag.Incomplete || strings.Contains(diag.Message, "closing message block"):
-		return "message block starts here"
-	case strings.Contains(diag.Message, "beginning of a physical line"):
-		return "move `m` to its own physical line"
-	case strings.Contains(diag.Message, "top level"):
-		return "message blocks must be top-level"
-	case strings.Contains(diag.Message, "target"):
-		return "message block target is invalid"
-	case diag.Kind == "shell_parse_error":
-		return "bash syntax error"
+	case diag.Kind == "tag_unclosed" && strings.Contains(diag.Message, BashStartTag):
+		return "unclosed bash tag"
 	default:
 		return "invalid syntax"
 	}
 }
 
 func diagnosticHelp(diag Diagnostic) string {
-	switch {
-	case diag.Incomplete || strings.Contains(diag.Message, "closing message block"):
-		return "use a matching closing delimiter. If the body contains `\"####`, wrap the outer message with more `#`"
-	case strings.Contains(diag.Message, "beginning of a physical line"):
-		return "put the message block on its own line"
-	case strings.Contains(diag.Message, "top level"):
-		return "put the message block at top level and keep control flow in bash"
-	case strings.Contains(diag.Message, "target"):
-		return "use a simple target name or omit the target"
+	switch diag.Kind {
+	case "tag_unclosed":
+		return "add a matching closing tag"
 	default:
-		return "emit valid bash or put natural language in a message block"
+		return "use bash tags for commands or plain text for prose"
 	}
 }
 

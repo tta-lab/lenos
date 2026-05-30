@@ -14,6 +14,8 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
+
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 )
 
 type MessageRole string
@@ -43,12 +45,6 @@ type ContentPart interface {
 	isPart()
 }
 
-type TextContentKind string
-
-const (
-	TextContentKindMessageBlock TextContentKind = "message_block"
-)
-
 type ReasoningContent struct {
 	Thinking         string                             `json:"thinking"`
 	Signature        string                             `json:"signature"`
@@ -65,8 +61,7 @@ func (tc ReasoningContent) String() string {
 func (ReasoningContent) isPart() {}
 
 type TextContent struct {
-	Text string          `json:"text"`
-	Kind TextContentKind `json:"kind,omitempty"`
+	Text string `json:"text"`
 }
 
 func (tc TextContent) String() string {
@@ -241,7 +236,7 @@ func (m *Message) AppendContent(delta string) {
 	found := false
 	for i, part := range m.Parts {
 		if c, ok := part.(TextContent); ok {
-			m.Parts[i] = TextContent{Text: c.Text + delta, Kind: c.Kind}
+			m.Parts[i] = TextContent{Text: c.Text + delta}
 			found = true
 		}
 	}
@@ -491,11 +486,8 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 	return messages
 }
 
-// FormatResults renders a slice of completed CommandContent as the
-// `<result>...</result>` text the next-turn user message carries back to the
-// model. Stdout and stderr are HTML-escaped so a literal `</result>` inside
-// output cannot close the wrapper early. The envelope is preserved so
-// providers cached on older sessions don't re-train.
+// FormatResults renders completed CommandContent as the result block the
+// next-turn user message carries back to the model.
 func FormatResults(results []CommandContent) string {
 	if len(results) == 0 {
 		return ""
@@ -504,7 +496,7 @@ func FormatResults(results []CommandContent) string {
 	for i, r := range results {
 		parts[i] = formatOneResult(r)
 	}
-	return "<result>\n" + strings.Join(parts, "\n") + "\n</result>"
+	return lenosbash.ResultBlock(strings.Join(parts, "\n"))
 }
 
 func formatOneResult(r CommandContent) string {

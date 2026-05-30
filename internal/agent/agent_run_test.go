@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/temenos/client"
 
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
@@ -30,6 +31,7 @@ type mockMessageService struct {
 	mu       sync.Mutex
 	messages map[string]message.Message
 	order    []string // insertion order for deterministic iteration
+	updates  []message.Message
 	idSeq    int
 }
 
@@ -66,6 +68,8 @@ func (m *mockMessageService) Update(_ context.Context, msg message.Message) erro
 		msg.UpdatedAt = existing.UpdatedAt
 	}
 	m.messages[msg.ID] = msg
+	clone := msg.Clone()
+	m.updates = append(m.updates, clone)
 	return nil
 }
 
@@ -191,9 +195,9 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 			{Path: env.workingDir},
 		},
 		ContextCommands: []RuntimeContextCommand{{
-			Command: rawMessageBlock("Let me read key instructions.") + "\ncat " + shellQuote(contextFile),
+			Command: lenosbash.WrapBash("Read key instructions.", "cat "+shellQuote(contextFile)),
 		}, {
-			Command: rawMessageBlock("\nReady.\n\nLets rock and roll.\n"),
+			Command: "\nReady.\n\nLets rock and roll.\n",
 		}},
 	})
 	require.NoError(t, err)
@@ -202,13 +206,13 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(msgs), 4)
 	require.Equal(t, message.Assistant, msgs[0].Role)
-	require.Equal(t, rawMessageBlock("Let me read key instructions.")+"\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
+	require.Equal(t, lenosbash.WrapBash("Read key instructions.", "cat "+shellQuote(contextFile)), msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
-	require.Equal(t, "cat "+shellQuote(contextFile), msgs[1].CommandContent().Command)
+	require.Equal(t, "cat "+shellQuote(contextFile)+"\n", msgs[1].CommandContent().Command)
 	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)
 	require.Equal(t, message.Assistant, msgs[2].Role)
-	require.Equal(t, rawMessageBlock("\nReady.\n\nLets rock and roll.\n"), msgs[2].Content().Text)
+	require.Equal(t, "\nReady.\n\nLets rock and roll.\n", msgs[2].Content().Text)
 	require.Nil(t, msgs[2].FinishPart())
 	require.Equal(t, "test-model", msgs[2].Model)
 	require.Equal(t, "test-provider", msgs[2].Provider)
@@ -223,11 +227,11 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, fantasy.MessageRoleUser, prompt[2].Role)
 	require.Contains(t, fantasyMessageText(prompt[2]), "project instructions")
 	require.Equal(t, fantasy.MessageRoleAssistant, prompt[3].Role)
-	require.Equal(t, rawMessageBlock("\nReady.\n\nLets rock and roll.\n"), fantasyMessageText(prompt[3]))
+	require.Equal(t, "Ready.\n\nLets rock and roll.", fantasyMessageText(prompt[3]))
 	require.Equal(t, "user prompt", fantasyMessageText(prompt[4]))
 }
 
-func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t *testing.T) {
+func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedProseAndBash(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
 	primary := Model{
@@ -247,7 +251,7 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	sess, err := env.sessions.Create(t.Context(), "runtime context")
 	require.NoError(t, err)
 
-	raw := rawMessageBlock("Let me list registered projects and available skills.") + "\nttal project list\nskill list"
+	raw := lenosbash.WrapBash("List registered projects and available skills.", "ttal project list\nskill list")
 	runner := &fakeRunner{results: []ExecResult{{
 		Stdout:   []byte("project-a\nskill-a\n"),
 		ExitCode: 0,
@@ -260,7 +264,7 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	}, runner)
 	require.NoError(t, err)
 
-	require.Equal(t, []string{"ttal project list\nskill list"}, runner.bash)
+	require.Equal(t, []string{"ttal project list\nskill list\n"}, runner.bash)
 
 	msgs, err := env.messages.List(t.Context(), sess.ID)
 	require.NoError(t, err)
@@ -269,56 +273,12 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	require.Equal(t, raw, msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
-	require.Equal(t, "ttal project list\nskill list", msgs[1].CommandContent().Command)
+	require.Equal(t, "ttal project list\nskill list\n", msgs[1].CommandContent().Command)
 	require.Equal(t, "project-a\nskill-a\n", msgs[1].CommandContent().Output)
-}
-
-func TestRun_PassesAssistantPrefillToLoop(t *testing.T) {
-	t.Parallel()
-	env := testEnv(t)
-
-	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{"\"Done.\"#\n"}}}
-	primary := Model{
-		Model:      model,
-		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
-		ModelCfg:   config.SelectedModel{Provider: "test-provider", Model: "test-model"},
-	}
-	agent := NewSessionAgent(SessionAgentOptions{
-		LargeModel:           primary,
-		SmallModel:           primary,
-		PrimaryModel:         primary,
-		SystemPrompt:         "system prompt",
-		Sessions:             env.sessions,
-		Messages:             env.messages,
-		DisableAutoSummarize: true,
-	}).(*sessionAgent)
-	sess, err := env.sessions.Create(t.Context(), "assistant prefill")
-	require.NoError(t, err)
-
-	err = agent.Run(t.Context(), SessionAgentCall{
-		SessionID:           sess.ID,
-		Prompt:              "user prompt",
-		MessageBlockPrefill: true,
-	})
-
-	require.NoError(t, err)
-	assert.Equal(t, []string{messageBlockPrefillToken}, model.prefills)
-	assert.Equal(t, 1, model.prefillCalls)
-	assert.Equal(t, 0, model.normalCalls)
 }
 
 func TestRun_GeneratesTaskTitleWhenRuntimeContextInjected(t *testing.T) {
 	env := testEnv(t)
-
-	tmp := t.TempDir()
-	oldPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
-	os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
-
-	fakeTask := filepath.Join(tmp, "task")
-	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/usr/bin/env sh
-printf '[{"description":"Fix synthetic context title","status":"pending"}]'
-`), 0o755))
 
 	contextFile := filepath.Join(env.workingDir, "context.md")
 	require.NoError(t, os.WriteFile(contextFile, []byte("project instructions"), 0o644))
@@ -337,6 +297,9 @@ printf '[{"description":"Fix synthetic context title","status":"pending"}]'
 		Messages:             env.messages,
 		DisableAutoSummarize: true,
 	}).(*sessionAgent)
+	agent.taskExporter = func(context.Context, string) ([]byte, error) {
+		return []byte(`[{"description":"Fix synthetic context title","status":"pending"}]`), nil
+	}
 	sess, err := env.sessions.Create(t.Context(), "runtime context")
 	require.NoError(t, err)
 
@@ -361,16 +324,6 @@ printf '[{"description":"Fix synthetic context title","status":"pending"}]'
 func TestRun_RefreshesTaskTitleOnExistingSession(t *testing.T) {
 	env := testEnv(t)
 
-	tmp := t.TempDir()
-	oldPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
-	os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
-
-	fakeTask := filepath.Join(tmp, "task")
-	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/usr/bin/env sh
-printf '[{"description":"Updated task title","status":"pending"}]'
-`), 0o755))
-
 	primary := Model{
 		Model:      &scriptedModel{emits: []string{"exit"}},
 		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
@@ -385,6 +338,9 @@ printf '[{"description":"Updated task title","status":"pending"}]'
 		Messages:             env.messages,
 		DisableAutoSummarize: true,
 	}).(*sessionAgent)
+	agent.taskExporter = func(context.Context, string) ([]byte, error) {
+		return []byte(`[{"description":"Updated task title","status":"pending"}]`), nil
+	}
 	sess, err := env.sessions.Create(t.Context(), "Old title")
 	require.NoError(t, err)
 	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
@@ -588,7 +544,7 @@ func TestRun_HookRunnerFiresPerStep(t *testing.T) {
 	require.NoError(t, err)
 
 	rec := newRecRunner(2) // 2 steps: echo hi + exit
-	bm := &scriptedModel{emits: []string{"echo hi", "exit"}}
+	bm := &scriptedModel{emits: []string{lenosbash.BashBlock("echo hi"), "exit"}}
 	agent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
@@ -624,7 +580,7 @@ func TestRun_HookRunnerFailingDoesNotAbortLoop(t *testing.T) {
 	sess, err := env.sessions.Create(t.Context(), "hook fail test")
 	require.NoError(t, err)
 
-	bm := &scriptedModel{emits: []string{"echo one", "echo two", "exit"}}
+	bm := &scriptedModel{emits: []string{lenosbash.BashBlock("echo one"), lenosbash.BashBlock("echo two"), "exit"}}
 	agent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
 		SmallModel:   Model{Model: bm, CatwalkCfg: catwalk.Model{ContextWindow: 200000}},
@@ -815,7 +771,7 @@ func TestRun_AutoCompactWaitsUntilNextStepAfterBashResult(t *testing.T) {
 	require.NoError(t, err)
 
 	model := &scriptedModel{
-		emits: []string{"printf 'ok\\n'", "summary text", "exit"},
+		emits: []string{lenosbash.BashBlock("printf 'ok\\n'"), "summary text", "exit"},
 		usages: []fantasy.Usage{
 			{InputTokens: 81, OutputTokens: 0},
 			{InputTokens: 0, OutputTokens: 0},
@@ -867,7 +823,7 @@ func TestRun_AutoCompactSummarizeErrorPropagates(t *testing.T) {
 	require.NoError(t, err)
 
 	model := &scriptedModel{
-		emits: []string{"trigger compact", "summary"},
+		emits: []string{lenosbash.BashBlock("trigger compact"), "summary"},
 		usages: []fantasy.Usage{
 			{InputTokens: 200_000, OutputTokens: 0},
 			{InputTokens: 0, OutputTokens: 0},
@@ -904,7 +860,7 @@ func TestRun_AutoCompactSummarizeSucceedsButReentryFails(t *testing.T) {
 	// [2] "do work" — re-entry crosses the threshold after its bash result.
 	// [3] "err" — errOn=[3] makes the second Summarize() fail.
 	model := &scriptedModel{
-		emits: []string{"trigger", "summary", "do work", "err"},
+		emits: []string{lenosbash.BashBlock("trigger"), "summary", lenosbash.BashBlock("do work"), "err"},
 		usages: []fantasy.Usage{
 			{InputTokens: 200_000, OutputTokens: 0},
 			{InputTokens: 0, OutputTokens: 0},
@@ -1179,7 +1135,7 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.NoError(t, err)
 
 	inner := &scriptedModel{
-		emits: []string{"m####\"Summary\"####"},
+		emits: []string{"Summary"},
 	}
 	model := &streamCapturingModel{inner: inner}
 	primary := Model{
@@ -1225,7 +1181,7 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.Equal(t, fantasy.MessageRoleUser, last.Role)
 	lastText := fantasyMessageText(last)
 	require.NotEmpty(t, lastText)
-	require.Contains(t, lastText, `m####"`)
+	require.Contains(t, lastText, "Emit only the summary Markdown")
 	require.NotContains(t, lastText, "narrate")
 
 	systemMessages := 0

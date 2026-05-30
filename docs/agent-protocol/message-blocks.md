@@ -1,225 +1,101 @@
-# Message Blocks
+# Bash Tags
 
-Message blocks are the natural-language form for Lenos Bash. They let an
-assistant response mix prose and shell while preserving the rule that one
-assistant emit maps to one bash subprocess.
+Tagged bash blocks are the executable form for Lenos Bash. They let an
+assistant response mix Markdown prose and shell while preserving one protocol:
+Markdown before the tag, bash inside the tag.
 
-This document is an executable-facing spec for parser and runtime work. The
-fixture corpus lives in `internal/agent/messageblock/testdata/fixtures.json`.
+This document is parser-facing. The tag constants and render helpers live in
+`internal/agent/lenosbash`; prompts and tests should use those helpers instead
+of spelling protocol tags directly.
 
 ## Contract
 
-Lenos Bash is bash plus top-level `m` message blocks.
+Only text inside the first bash block is executable. Text before the bash block
+is Markdown prose.
 
-Everything outside a message block is bash. Raw prose, markdown fences, and
-tool wrappers are not valid response syntax.
+If bash remains after parsing, Lenos runs the first bash block. If the bash
+block fails parser validation, the runtime sends a syntax diagnostic and does
+not execute it.
 
-A message block is valid only when `m` is the first non-whitespace token on its
-own physical line. Leading indentation is allowed at top level. The block is
-removed before the remaining bash is executed.
+If no bash blocks are present, Lenos renders the Markdown prose and ends the
+loop.
 
-If bash remains after message removal, Lenos runs that bash once. If the bash
-succeeds, Lenos publishes the extracted messages in source order. If the bash
-fails, Lenos publishes none of the extracted messages and uses the normal
-failure recovery flow.
-
-If only message blocks remain, Lenos publishes them and ends the loop.
+Protocol tags are recognized only at column 1 on their own physical lines.
+Inline or indented tag text is plain text.
 
 ## Syntax
 
 Basic form:
 
-```bash
-m"Done."
+```xml
+<bash>
+ls -la
+</bash>
 ```
 
-Multiline form:
+Mixed prose and bash:
 
-```bash
-m"First line.
-Second line."
+```xml
+Reading the parser before editing.
+
+<bash>
+rg "func Parse" internal/agent
+</bash>
 ```
 
-Raw multiline form:
+Literal tags inside heredocs are valid. The parser tracks nested tag depth
+inside an open bash block so edit payloads can contain examples:
 
-```bash
-m####"
-Ready.
-
-- First point.
-- Second point.
-"####
-```
-
-Raw-string form with hashes:
-
-```bash
-m#"Body with "quotes"."#
-```
-
-The `#` characters are raw-string delimiters, not bash comments. They follow
-Rust raw string rules: the opener and closer must use the same number of
-hashes, and the body is literal. Add enough hashes so the exact closing
-delimiter does not appear inside the body.
-
-Use more hashes when the body contains a delimiter candidate:
-
-```bash
-m##"Body with "# delimiter candidate."##
-```
-
-Use more hashes for the outer message when the body itself mentions a raw
-message block. Here the body contains a four-hash example, so the outer block
-uses five hashes:
-
-```bash
-m#####"
-Use this shape for long notes:
-m####"
-body
-"####
-"#####
-```
-
-Addressed form:
-
-```bash
-m(neil)"Please review this."
-```
-
-When `--pair-with` is set, untargeted message blocks are also delivered to that
-default target. Explicit `m(target)"..."` blocks override the default.
-
-Mixed bash and message blocks:
-
-```bash
-m"Inspecting files."
-rg "needle" .
-```
-
-Indented top-level message blocks are valid:
-
-```bash
-  m"Done."
-```
-
-## Non-Protocol Text
-
-Message-looking text inside normal bash syntax is not speech.
-
-Inside a heredoc body, it is literal heredoc content:
-
-```bash
-cat <<EOF
-m"literal"
+```xml
+<bash>
+cat <<'EOF' | src edit main.go
+===BEFORE===
+<bash>
+hello
+</bash>
+===AFTER===
+<bash>
+world
+</bash>
 EOF
+</bash>
 ```
 
-Inside a shell string, it is a string:
+After the first closing bash tag, all remaining text is dropped from
+persistence, display, and execution. Non-whitespace dropped tail content is
+logged as a warning.
 
-```bash
-printf '%s\n' 'm"literal"'
-```
+An extra closing bash tag before a bash block opens is ignored. If the parser
+reaches end of input while a bash block is still open, it returns a diagnostic
+instead of executing partial shell.
 
-Inside a comment, it is a comment:
+## Runtime Tags
 
-```bash
-# m"not speech"
-echo ok
-```
-
-These forms extract no messages.
+Command observations are wrapped in result tags. Runtime-owned repairs and
+notifications are wrapped in runtime tags. These tags are model-facing protocol
+markers owned by `internal/agent/lenosbash`.
 
 ## Invalid Forms
 
-Raw prose before bash is invalid:
+Unclosed bash blocks are invalid:
 
-```text
-I will inspect files.
-rg "needle" .
+```xml
+<bash>
+ls
 ```
 
-Fenced bash is invalid:
+Malformed bash inside a valid bash block is invalid:
+
+```xml
+<bash>
+if true then
+</bash>
+```
+
+Fenced bash is Markdown prose, not executable bash:
 
 ````markdown
 ```bash
 ls
 ```
 ````
-
-Same-line message forms are invalid:
-
-```bash
-echo ok; m"Done."
-sleep 1 & m"Done."
-printf ok | m"Done."
-cat <<EOF m"Done."
-EOF
-```
-
-Message blocks are invalid inside control flow, functions, substitutions, or
-ordinary command words:
-
-```bash
-if true; then
-  m"Done."
-fi
-```
-
-```bash
-for file in *; do
-  m"Checking."
-done
-```
-
-```bash
-say_done() {
-  m"Done."
-}
-```
-
-```bash
-value=$(m"Done.")
-```
-
-```bash
-command m"Done."
-```
-
-Unterminated and mismatched raw blocks are invalid:
-
-```bash
-m"Started.
-```
-
-```bash
-m##"body"#
-```
-
-Targets may contain only parser-approved agent-name characters. Whitespace is
-invalid:
-
-```bash
-m(bad target)"Done."
-```
-
-Do not define convenience variants for old control-flow concepts. Message
-blocks do not have a continue form; mixed bash plus `m` already continues
-through normal bash result flow, and message-only `m` ends. Unknown words should
-be handled by normal bash/runtime repair paths, not by adding named protocol
-diagnostics.
-
-## Fixture Shape
-
-Each fixture records:
-
-- `source`: original assistant emit.
-- `messages`: extracted message events with target, body, and source position.
-- `bash`: remaining bash source after message removal.
-- `has_bash`: whether any executable bash remains.
-- `lifecycle`: `message-only`, `continue`, or `parse-error`.
-- `error`: expected parse diagnostic, when the source is invalid.
-
-The fixture corpus is intentionally parser-facing. Runtime work may add more
-tests for execution and storage, but it should preserve these examples as the
-shared protocol baseline.

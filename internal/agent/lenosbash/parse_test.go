@@ -7,128 +7,185 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseMessageOnly(t *testing.T) {
+func TestParseProseOnly(t *testing.T) {
 	t.Parallel()
 
-	parsed, diag := Parse("m\"Done.\"\n")
+	source := "Let me check the files."
+	parsed, diag := Parse(source)
 
 	require.Nil(t, diag)
-	assert.False(t, parsed.HasBash)
 	assert.Empty(t, parsed.Bash)
-	require.Len(t, parsed.Messages, 1)
-	assert.Equal(t, "Done.", parsed.Messages[0].Body)
-	assert.Empty(t, parsed.Messages[0].Target)
-	assert.Equal(t, 1, parsed.Messages[0].Line)
-	assert.Equal(t, 1, parsed.Messages[0].Column)
-	assert.Equal(t, 0, parsed.Messages[0].Offset)
+	assert.Equal(t, source, parsed.Prose)
 }
 
-func TestParseMixedMessageAndBash(t *testing.T) {
+func TestParseBashOnly(t *testing.T) {
 	t.Parallel()
 
-	parsed, diag := Parse("m\"Inspecting.\"\nrg \"needle\" .\n")
-
-	require.Nil(t, diag)
-	assert.True(t, parsed.HasBash)
-	assert.Equal(t, "rg \"needle\" .\n", parsed.Bash)
-	require.Len(t, parsed.Messages, 1)
-	assert.Equal(t, "Inspecting.", parsed.Messages[0].Body)
-}
-
-func TestParseMessageBodyMayContainMessageBlockText(t *testing.T) {
-	t.Parallel()
-
-	source := "m####\"\nText before.\nm\"Done.\"\nText after.\n\"####\n"
+	source := BashBlock("ls -la")
 	parsed, diag := Parse(source)
 
 	require.Nil(t, diag)
-	assert.False(t, parsed.HasBash)
-	require.Len(t, parsed.Messages, 1)
-	assert.Contains(t, parsed.Messages[0].Body, "m\"Done.\"")
+	assert.Empty(t, parsed.Prose)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "ls -la\n", parsed.Bash[0])
+	assert.Equal(t, source, parsed.Accepted)
+	assert.Empty(t, parsed.DroppedPostBash)
 }
 
-func TestParseMixedMessageBodyMayContainIndentedHashDelimitedExample(t *testing.T) {
+func TestParseProseThenBash(t *testing.T) {
 	t.Parallel()
 
-	source := "echo \"Let me demonstrate nesting.\"\nm####\"\nExample:\n\n    m###\"\n    Inner message body.\n    \"###\n\"####\n"
+	source := "Let me check the files.\n" + BashBlock("ls -la\ncat README.md")
 	parsed, diag := Parse(source)
 
 	require.Nil(t, diag)
-	assert.True(t, parsed.HasBash)
-	assert.Equal(t, "echo \"Let me demonstrate nesting.\"\n", parsed.Bash)
-	require.Len(t, parsed.Messages, 1)
-	assert.Contains(t, parsed.Messages[0].Body, "    m###\"")
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "ls -la\ncat README.md\n", parsed.Bash[0])
+	assert.Equal(t, "Let me check the files.\n", parsed.Prose)
+	assert.Equal(t, source, parsed.Accepted)
+	assert.Empty(t, parsed.DroppedPostBash)
 }
 
-func TestParseAddressedMessage(t *testing.T) {
+func TestParseDropsTextAfterFirstBashBlock(t *testing.T) {
 	t.Parallel()
 
-	parsed, diag := Parse("m(neil)#\"Please review \"message blocks\".\"#\n")
-
-	require.Nil(t, diag)
-	require.Len(t, parsed.Messages, 1)
-	assert.Equal(t, "neil", parsed.Messages[0].Target)
-	assert.Equal(t, "Please review \"message blocks\".", parsed.Messages[0].Body)
-}
-
-func TestParseHeredocLiteralMessageLookingText(t *testing.T) {
-	t.Parallel()
-
-	source := "cat <<EOF\nm\"literal\"\nEOF\n"
+	source := "Before.\n" + BashBlock("ls") + "\nDone.\n"
 	parsed, diag := Parse(source)
 
 	require.Nil(t, diag)
-	assert.True(t, parsed.HasBash)
-	assert.Equal(t, source, parsed.Bash)
-	assert.Empty(t, parsed.Messages)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "ls\n", parsed.Bash[0])
+	assert.Equal(t, "Before.\n", parsed.Prose)
+	assert.Equal(t, "Before.\n"+BashBlock("ls"), parsed.Accepted)
+	assert.Equal(t, "\nDone.\n", parsed.DroppedPostBash)
 }
 
-func TestParseSameLineMessageReturnsDiagnostic(t *testing.T) {
+func TestParseDropsSecondBashBlock(t *testing.T) {
 	t.Parallel()
 
-	_, diag := Parse("echo ok; m\"Done.\"\n")
+	source := BashBlock("ls") + "\n" + BashBlock("pwd")
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "ls\n", parsed.Bash[0])
+	assert.Empty(t, parsed.Prose)
+	assert.Equal(t, BashBlock("ls"), parsed.Accepted)
+	assert.Equal(t, "\n"+BashBlock("pwd"), parsed.DroppedPostBash)
+}
+
+func TestParseEmptyString(t *testing.T) {
+	t.Parallel()
+
+	parsed, diag := Parse("")
+
+	require.Nil(t, diag)
+	assert.Empty(t, parsed.Bash)
+	assert.Empty(t, parsed.Prose)
+}
+
+func TestParseWhitespaceOnly(t *testing.T) {
+	t.Parallel()
+
+	parsed, diag := Parse("  \n  \t  ")
+
+	require.Nil(t, diag)
+	assert.Empty(t, parsed.Bash)
+	assert.Empty(t, parsed.Prose)
+}
+
+func TestParseBashInsideBashIsLiteral(t *testing.T) {
+	t.Parallel()
+
+	source := BashStartTag + "\ncat <<'EOF' | src edit main.go\n===BEFORE===\n" +
+		BashStartTag + "\nhello\n" + BashEndTag + "\n===AFTER===\n" +
+		BashStartTag + "\nworld\n" + BashEndTag + "\nEOF\n" + BashEndTag
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	require.Len(t, parsed.Bash, 1)
+	body := parsed.Bash[0]
+	assert.Contains(t, body, "===BEFORE===")
+	assert.Contains(t, body, BashStartTag)
+	assert.Contains(t, body, BashEndTag)
+	assert.Contains(t, body, "===AFTER===")
+}
+
+func TestParseExtraCloseTagIgnored(t *testing.T) {
+	t.Parallel()
+
+	source := BashBlock("ls") + "\n" + BashEndTag
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "ls\n", parsed.Bash[0])
+	assert.Empty(t, parsed.Prose)
+}
+
+func TestParseUnclosedTagReturnsDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	source := "Let me check.\n" + BashStartTag + "\nls -la\n"
+	_, diag := Parse(source)
 
 	require.NotNil(t, diag)
-	assert.Equal(t, "message_block_error", diag.Kind)
-	assert.Contains(t, diag.Message, "message block must start")
-	assert.Equal(t, 1, diag.Line)
-	assert.Equal(t, 10, diag.Column)
-	assert.Equal(t, 9, diag.Offset)
-}
-
-func TestParseNestedMessageLookingTextStaysBash(t *testing.T) {
-	t.Parallel()
-
-	source := "if true; then\n  m\"Done.\"\nfi\n"
-	parsed, diag := Parse(source)
-
-	require.Nil(t, diag)
-	assert.True(t, parsed.HasBash)
-	assert.Equal(t, source, parsed.Bash)
-	assert.Empty(t, parsed.Messages)
-}
-
-func TestParseInvalidTargetReturnsDiagnostic(t *testing.T) {
-	t.Parallel()
-
-	_, diag := Parse("m(bad target)\"Done.\"\n")
-
-	require.NotNil(t, diag)
-	assert.Equal(t, "message_block_error", diag.Kind)
-	assert.Contains(t, diag.Message, "invalid target character")
-	assert.Equal(t, 1, diag.Line)
-	assert.Equal(t, 6, diag.Column)
-	assert.Equal(t, 5, diag.Offset)
-}
-
-func TestParseInvalidCleanBashReturnsDiagnostic(t *testing.T) {
-	t.Parallel()
-
-	_, diag := Parse("m\"Starting.\"\nif true then\n")
-
-	require.NotNil(t, diag)
-	assert.Equal(t, "shell_parse_error", diag.Kind)
-	assert.Contains(t, diag.Message, "then")
-	assert.Equal(t, 2, diag.Line)
+	assert.Equal(t, "tag_unclosed", diag.Kind)
+	assert.Contains(t, diag.Message, "unclosed "+BashStartTag)
 	assert.True(t, diag.Incomplete)
+}
+
+func TestParseLessThanInProseIsNotTag(t *testing.T) {
+	t.Parallel()
+
+	source := "use < for stdin redirection"
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.Empty(t, parsed.Bash)
+	assert.Contains(t, parsed.Prose, "use < for stdin redirection")
+}
+
+func TestParseXmlLookingTextIsPlainMarkdown(t *testing.T) {
+	t.Parallel()
+
+	source := "<note>Reviewed.</note>"
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.Empty(t, parsed.Bash)
+	assert.Equal(t, source, parsed.Prose)
+}
+
+func TestParseInlineBashTagsArePlainMarkdown(t *testing.T) {
+	t.Parallel()
+
+	source := "This PR switches to " + BashStartTag + "/" + BashEndTag + " tags."
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.Empty(t, parsed.Bash)
+	assert.Equal(t, source, parsed.Prose)
+}
+
+func TestParseIndentedBashTagsArePlainMarkdown(t *testing.T) {
+	t.Parallel()
+
+	source := "  " + BashStartTag + "\nls\n" + BashEndTag
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	assert.Empty(t, parsed.Bash)
+	assert.Equal(t, "  "+BashStartTag+"\nls\n", parsed.Prose)
+}
+
+func TestParseLineMiddleEndTagInsideBashIsPlainText(t *testing.T) {
+	t.Parallel()
+
+	source := BashStartTag + "\necho " + BashEndTag + "\n" + BashEndTag
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "echo "+BashEndTag+"\n", parsed.Bash[0])
 }

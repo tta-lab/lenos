@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	temenos "github.com/tta-lab/temenos/client"
 )
 
@@ -18,7 +19,7 @@ type TemenosJobClient interface {
 }
 
 // JobWatcher polls the temenos job socket for completed background jobs
-// and enqueues <-Runtime notifications into the session messageQueue.
+// and enqueues runtime notifications into the session messageQueue.
 // It blocks on a channel when idle — zero temenos traffic until a job
 // enters background.
 type JobWatcher struct {
@@ -140,17 +141,19 @@ func (w *JobWatcher) remove(jobID string) {
 }
 
 func (w *JobWatcher) formatAndEnqueueCompleted(info *temenos.JobInfo, command string) {
-	obs := fmt.Sprintf(
-		"<-Runtime background job completed (job_id: %s)\n\n<result>\ncommand: %s\nexit_code: %d\nstdout: %s\nstderr: %s\n</result>",
-		info.ID, command, info.ExitCode, info.Stdout, info.Stderr,
-	)
-	w.enqueue(obs)
+	result := lenosbash.ResultBlock(fmt.Sprintf(
+		"command: %s\nexit_code: %d\nstdout: %s\nstderr: %s",
+		command, info.ExitCode, info.Stdout, info.Stderr,
+	))
+	obs := fmt.Sprintf("background job completed (job_id: %s)\n\n%s", info.ID, result)
+	w.enqueue(lenosbash.RuntimeBlock(obs))
 }
 
 func (w *JobWatcher) formatAndEnqueueKilled(info *temenos.JobInfo, command string) {
-	obs := fmt.Sprintf(
-		"<-Runtime background job killed (job_id: %s)\n\n<result>\ncommand: %s\nexit_code: %d\n</result>",
-		info.ID, command, info.ExitCode,
-	)
-	w.enqueue(obs)
+	result := lenosbash.ResultBlock(fmt.Sprintf(
+		"command: %s\nexit_code: %d",
+		command, info.ExitCode,
+	))
+	obs := fmt.Sprintf("background job killed (job_id: %s)\n\n%s", info.ID, result)
+	w.enqueue(lenosbash.RuntimeBlock(obs))
 }

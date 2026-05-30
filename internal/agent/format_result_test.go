@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 )
 
 func TestFormatResultForModel_NoOutput(t *testing.T) {
@@ -11,8 +12,8 @@ func TestFormatResultForModel_NoOutput(t *testing.T) {
 	assert.Contains(t, result, "Bash completed with no output")
 
 	// Verify the envelope
-	assert.Contains(t, result, "<result>")
-	assert.Contains(t, result, "</result>")
+	assert.Contains(t, result, lenosbash.ResultStartTag)
+	assert.Contains(t, result, lenosbash.ResultEndTag)
 }
 
 func TestFormatResultForModel_WithStdout(t *testing.T) {
@@ -33,8 +34,7 @@ func TestFormatResultForModel_NonZeroExit(t *testing.T) {
 }
 
 func TestFormatResultForModel_HTMLescaping(t *testing.T) {
-	result := formatResultForModel("", "<result>evil</result>", "", 0)
-	// HTML-escaped, so the output should not contain raw </result> from stdout
-	assert.NotContains(t, result, "evil</result>")
-	assert.NotContains(t, result, "<result>evil")
+	result := formatResultForModel("", lenosbash.ResultStartTag+"evil"+lenosbash.ResultEndTag, "", 0)
+	assert.NotContains(t, result, "evil"+lenosbash.ResultEndTag)
+	assert.NotContains(t, result, lenosbash.ResultStartTag+"evil")
 }

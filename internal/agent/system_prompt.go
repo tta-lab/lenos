@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 )
 
 //go:embed templates/system_prompt.tpl
@@ -29,12 +31,19 @@ type promptData struct {
 	Platform   string
 	Date       string
 	Commands   []CommandDoc
+
+	BashStartTag string
+	BashEndTag   string
+	BashExample  string
 }
 
 // buildBaseSystemPrompt renders the bash-first system prompt with runtime
 // context. The result is the base prompt; SystemPrompt() appends git repo
 // guidance and the lenos coder post-template.
 func buildBaseSystemPrompt(d promptData) (string, error) {
+	d.BashStartTag = lenosbash.BashStartTag
+	d.BashEndTag = lenosbash.BashEndTag
+	d.BashExample = lenosbash.BashBlock("go test ./...")
 	var buf strings.Builder
 	if err := systemPromptTmpl.Execute(&buf, d); err != nil {
 		return "", fmt.Errorf("execute system prompt template: %w", err)

@@ -94,7 +94,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	totalUsage := streamResult.usage
 	providerMeta := streamResult.meta
 	summaryMessage = streamResult.message
-	normalizeSummaryMessageBlock(&summaryMessage)
+	normalizeSummaryMarkdown(&summaryMessage)
 
 	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
 	if err := a.messages.Update(genCtx, summaryMessage); err != nil {
@@ -233,16 +233,26 @@ func recentUserMessages(msgs []message.Message, limit int) []message.Message {
 	return recent
 }
 
+type taskTitleExporter func(context.Context, string) ([]byte, error)
+
+func exportTaskForTitle(ctx context.Context, taskID string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "task",
+		"rc.verbose=nothing", "rc.hooks=off", "rc.confirmation=no", "rc.json.array=on",
+		taskID, "export")
+	return cmd.Output()
+}
+
 // generateTitle refreshes the session title from the current task.
 func (a *sessionAgent) generateTitle(ctx context.Context, sessionID, taskID string) {
 	var title string
 	if taskID == "" {
 		return
 	} else {
-		cmd := exec.CommandContext(ctx, "task",
-			"rc.verbose=nothing", "rc.hooks=off", "rc.confirmation=no", "rc.json.array=on",
-			taskID, "export")
-		out, err := cmd.Output()
+		exporter := a.taskExporter
+		if exporter == nil {
+			exporter = exportTaskForTitle
+		}
+		out, err := exporter(ctx, taskID)
 		if err != nil {
 			slog.Warn("Failed to export task for title", "err", err)
 			title = DefaultSessionName
@@ -427,23 +437,17 @@ func summaryInstructionsPrompt() string {
 func summaryOutputProtocolPrompt() string {
 	return `Output protocol:
 
-You must emit exactly one Lenos Bash message block in this form:
-
-m####"
-Summary markdown goes here.
-"####
-
-Do not emit Markdown fences, JSON, XML, comments, or any text before or after
-the message block.
+Emit only the summary Markdown. Do not emit Markdown fences, JSON, XML,
+comments, or any text before or after the summary.
 `
 }
 
-func normalizeSummaryMessageBlock(summaryMessage *message.Message) {
+func normalizeSummaryMarkdown(summaryMessage *message.Message) {
 	parsed, diag := lenosbash.Parse(summaryMessage.Content().Text)
-	if diag != nil || parsed.HasBash || len(parsed.Messages) != 1 {
+	if diag != nil || len(parsed.Bash) > 0 || strings.TrimSpace(parsed.Prose) == "" {
 		return
 	}
-	replaceAssistantText(summaryMessage, parsed.Messages[0].Body)
+	replaceAssistantText(summaryMessage, parsed.Prose)
 }
 
 func buildCompactSummaryPrompt(ctx context.Context, jobID string) string {

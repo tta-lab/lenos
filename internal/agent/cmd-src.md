@@ -91,13 +91,22 @@ Recovery steps:
 
 **If none of these work**: run `ttal alert "src failed: <reason>"` — do not use sed, awk, perl, or python to edit files.
 
-## ⚠️ STOP — File Editing Rules
+## STOP - File Editing Rules
 
-**Only two tools may modify files:**
+**Existing files:** use `src`.
 
-1. **`src edit`** — symbol-aware editing (preferred for targeted changes)
-2. **`heredoc pipeline`** — `cat <<'EOF' | tee file >/dev/null` for whole-file writes
+Use `src edit`, `src replace`, `src insert`, or `src delete`.
 
-**NEVER use these tools to modify files:** `sed -i`, `perl -i`, `awk ... > file`, `python script.py` (when writing), `printf ... > file`.
+**New files:** use a plain heredoc redirect:
+
+```bash
+cat > path/to/file <<'EOF'
+content
+EOF
+```
+
+**NEVER use these tools to modify existing files:** heredoc-to-`tee`, shell
+redirection to a file, `sed -i`, `perl -i`, `awk ... > file`, `python
+script.py` (when writing), `printf ... > file`.
 
 You may freely use `sed`, `perl`, `awk`, `python` to **read** or **transform** data in pipelines — the restriction is only on writing changes to disk.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/config"
 )
 
@@ -73,22 +74,7 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "m####\"")
-
-	compactPrompt := strings.Join(strings.Fields(got), " ")
-	for _, invariant := range []string{
-		"Lenos Bash",
-		"message blocks",
-		"speak natural language",
-		"single-line",
-		"multi-line",
-		"more `#`",
-		"m#####\"",
-		"visible",
-		"bash",
-	} {
-		assert.Contains(t, compactPrompt, invariant)
-	}
+	assert.Contains(t, got, lenosbash.BashBlock("go test ./..."))
 }
 
 func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {
@@ -110,6 +96,8 @@ func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {
 	assert.NotContains(t, got, "narrate")
 	assert.NotContains(t, got, "temenos job list")
 	assert.NotContains(t, got, "temenos job log")
+	assert.NotContains(t, got, "temenos job wait")
+	assert.NotContains(t, got, "telemost job list")
 	assert.NotContains(t, got, "check status")
 }
 
@@ -231,7 +219,7 @@ func TestSystemPrompt_GitContextDoesNotInjectStatusSnapshot(t *testing.T) {
 	assert.NotEmpty(t, got)
 }
 
-func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
+func TestInitializePrompt_IsMarkdownInstruction(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
@@ -245,7 +233,9 @@ func TestInitializePrompt_IsBashNarrateScript(t *testing.T) {
 	got, err := InitializePrompt(store)
 	require.NoError(t, err)
 
-	assertValidBashSyntax(t, got)
+	assert.Contains(t, got, "Analyze this codebase")
+	assert.Contains(t, got, "Clear markdown sections")
+	assert.NotContains(t, got, lenosbash.BashStartTag)
 }
 
 func assertValidBashSyntax(t *testing.T, script string) {
@@ -318,7 +308,7 @@ func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
 	assert.NotEmpty(t, got)
 }
 
-func TestSystemPrompt_PairWithDocumentsDefaultMessageBlockTarget(t *testing.T) {
+func TestSystemPrompt_PairWithDocumentsDefaultBashBlockTarget(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
@@ -336,8 +326,8 @@ func TestSystemPrompt_PairWithDocumentsDefaultMessageBlockTarget(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "reviewer")
-	assert.Contains(t, got, "Untargeted message blocks")
-	assert.Contains(t, got, `m(target)"..."`)
+	assert.Contains(t, got, "available shell command for messaging")
+	assert.Contains(t, got, "bash block")
 	assert.NotEmpty(t, got)
 }
 

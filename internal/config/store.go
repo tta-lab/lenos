@@ -41,8 +41,7 @@ type RuntimeOverrides struct {
 	// Set by ApplyEphemeralModelOverride. Zero-value (empty string) is
 	// treated as Large by the coordinator for backward compat.
 	ActiveTier SelectedModelType
-	// PairWith is the default delivery target for untargeted message blocks.
-	// Explicit m(target)"..." blocks still take precedence.
+	// PairWith is the default external recipient for callers that support it.
 	PairWith string
 }
 

@@ -1,17 +1,14 @@
 # Storage And Rendering
 
 SQLite remains the source of truth for session history. The runtime stores
-assistant emits, published message blocks, command results, and runtime-owned
-delivery diagnostics.
+assistant emits, command results, and runtime-owned diagnostics.
 
 ## Assistant Messages
 
 Assistant text stores the Lenos Bash emit, after any runtime auto-repair. Bash
-emits and `m` message-block emits both remain protocol-shaped in history so
-future model calls see valid examples of what they emitted.
-
-Published message block bodies are display data parsed from assistant emits.
-Do not duplicate them onto result rows.
+blocks remain protocol-shaped in history so future model calls see valid
+examples of what they emitted. Markdown prose outside bash blocks is rendered
+from the stored assistant text.
 
 ## Command Results
 
@@ -35,6 +32,5 @@ stdout/stderr.
 
 - Successful commands are hidden.
 - Failed commands render as command output plus the failure badge.
-- Message-block prose renders from parsed assistant `m` blocks as assistant
-  markdown.
-- Message delivery failures render as result rows.
+- Markdown prose outside bash blocks renders as assistant markdown.
+- Runtime diagnostics render as result rows.

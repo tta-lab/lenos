@@ -48,13 +48,13 @@ func (a *sessionAgent) persistRuntimeContextCommands(ctx context.Context, call S
 }
 
 func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call SessionAgentCall, runner Runner, cmd RuntimeContextCommand) error {
-	if handled, err := a.persistSyntheticMessageBlocks(ctx, call, cmd.Command); handled || err != nil {
+	if handled, err := a.persistSyntheticProse(ctx, call, cmd.Command); handled || err != nil {
 		return err
 	}
 
 	commandForBash := cmd.Command
-	if parsed, diag := lenosbash.Parse(cmd.Command); diag == nil && parsed.HasBash && len(parsed.Messages) > 0 {
-		commandForBash = parsed.Bash
+	if parsed, diag := lenosbash.Parse(cmd.Command); diag == nil && len(parsed.Bash) > 0 {
+		commandForBash = parsed.Bash[0]
 	}
 
 	res := runner.Run(ctx, commandForBash, call.Env, call.AllowedPaths)
@@ -86,8 +86,7 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 		stderr = []byte(res.Err.Error())
 	}
 	envelope := formatResultForModel(commandForBash, string(res.Stdout), string(stderr), res.ExitCode)
-	body := strings.TrimPrefix(envelope, "<result>\n")
-	body = strings.TrimSuffix(body, "\n</result>")
+	body := lenosbash.ResultBody(envelope)
 	resultMsg.Parts = []message.ContentPart{message.CommandContent{
 		Command:     commandForBash,
 		Output:      string(combine(res.Stdout, stderr)),
@@ -102,12 +101,12 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 	return nil
 }
 
-func (a *sessionAgent) persistSyntheticMessageBlocks(ctx context.Context, call SessionAgentCall, command string) (bool, error) {
+func (a *sessionAgent) persistSyntheticProse(ctx context.Context, call SessionAgentCall, command string) (bool, error) {
 	parsed, diag := lenosbash.Parse(command)
 	if diag != nil {
 		return false, nil
 	}
-	if len(parsed.Messages) == 0 || parsed.HasBash {
+	if strings.TrimSpace(parsed.Prose) == "" || len(parsed.Bash) > 0 {
 		return false, nil
 	}
 	model := a.primaryModel.Get()
@@ -117,7 +116,7 @@ func (a *sessionAgent) persistSyntheticMessageBlocks(ctx context.Context, call S
 		Model:    model.messageModelID(),
 		Provider: model.messageProviderID(),
 	}); err != nil {
-		return true, fmt.Errorf("create synthetic message block: %w", err)
+		return true, fmt.Errorf("create synthetic prose: %w", err)
 	}
 	return true, nil
 }
@@ -301,17 +300,16 @@ runLoopReentry:
 		}
 	}
 	deps := loopDeps{
-		model:               primaryModel,
-		provOpts:            call.ProviderOptions,
-		messageBlockPrefill: call.MessageBlockPrefill,
-		pairWith:            call.PairWith,
-		messages:            a.messages,
-		runner:              runner,
-		sessionID:           call.SessionID,
-		sysPrompt:           a.systemPrompt.Get(),
-		env:                 call.Env,
-		paths:               call.AllowedPaths,
-		postStepHook:        postStepHook,
+		model:        primaryModel,
+		provOpts:     call.ProviderOptions,
+		pairWith:     call.PairWith,
+		messages:     a.messages,
+		runner:       runner,
+		sessionID:    call.SessionID,
+		sysPrompt:    a.systemPrompt.Get(),
+		env:          call.Env,
+		paths:        call.AllowedPaths,
+		postStepHook: postStepHook,
 		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
 			s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
 			if !ok {
@@ -393,12 +391,8 @@ runLoopReentry:
 // follow-up replaces any tool-use/end-turn finish on the LAST one with an
 // error-flavored finish so the UI banner makes sense.
 //
-// Boundary note: "most recent assistant" no longer implies "assistant from
-// the immediately previous streamed turn". The loop may delete assistant rows
-// for transport-shape failures such as tool-call emits before re-prompting,
-// so the latest surviving assistant can be an earlier message.
-// That is intentional: attach the error banner to the newest durable
-// assistant row rather than assuming every streamed emit still exists.
+// Boundary note: attach the error banner to the newest durable assistant row
+// rather than assuming every streamed emit still exists.
 func (a *sessionAgent) attachErrorFinish(ctx context.Context, sessionID string, runErr error, model string) {
 	all, listErr := a.messages.List(ctx, sessionID)
 	if listErr != nil {

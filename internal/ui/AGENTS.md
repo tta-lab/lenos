@@ -136,11 +136,10 @@ The TUI renders conversation messages with distinct visual treatments based on r
 - Copy-to-clipboard extracts clean text (no bar, no metadata)
 
 #### Assistant Bash Emits
-- Valid Lenos Bash with `m` blocks renders message block bodies as assistant
-  markdown prose with `MarkdownRenderer`.
-- If the same emit has bash, render the parsed clean bash after the prose as a
-  single-line `$ ` command preview using `ResultHeader`.
-- Invalid or legacy assistant text falls back to the one-line bash preview.
+- Valid Lenos Bash renders Markdown prose with `MarkdownRenderer`.
+- If the same emit has a `<bash>` block, render the parsed clean bash after the
+  prose as a single-line `$ ` command preview using `ResultHeader`.
+- Invalid assistant text falls back to the one-line bash preview.
 - Keep raw assistant text unchanged for provider replay.
 
 #### Bash Results (Result role messages)
@@ -149,17 +148,17 @@ The TUI renders conversation messages with distinct visual treatments based on r
 - Pending: `running...`
 - Result row copy-to-clipboard includes command output and non-zero exit code.
 
-#### Message Block Prose
-- Message block bodies come from parsed assistant rows, not Result rows.
+#### Assistant Prose
+- Prose comes from parsed assistant rows, not Result rows.
 - Do not write or render `CommandContent.Narration`.
-- Message-only `m` block emits do not create result rows.
-- When changing message-block rendering, add tests for raw render and wrapped
+- Prose-only assistant emits do not create result rows.
+- When changing prose rendering, add tests for raw render and wrapped
   `Render` alignment so the TUI does not regress into raw/flush-left output.
 
 #### Runtime Responses (stored as Result rows)
 - Exit code 1: command-not-found re-prompt
 - Exit code 124: timeout re-prompt  
-- Exit code 127: prose-prefix re-prompt
+- Exit code 127: command-not-found re-prompt
 - No separate User message created — re-prompt text lives in the result row's Output/Observation
 
 

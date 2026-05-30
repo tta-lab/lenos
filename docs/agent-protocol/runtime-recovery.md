@@ -5,18 +5,18 @@ correct model shape errors without adding a second output protocol.
 
 ## Empty Emit
 
-An empty response gets a short runtime prompt asking for bash, a message block,
-or bare `exit`.
+An empty response gets a short runtime prompt asking for Markdown prose, a bash
+block, or bare `exit`.
 
 ## Invalid Lenos Bash
 
-If the message-block parser rejects the emit, the runtime shows the offending
-line, a caret, help text, and a suggested rewrite.
+If the tag parser rejects the emit, the runtime shows the offending line, a
+caret, help text, and a suggested rewrite.
 
 ## Invalid Bash
 
-If `bash -n` rejects the emit, the runtime sends the syntax error back and
-suggests a message block when the likely mistake is reader-facing prose.
+If the mvdan Bash parser rejects a bash block, the runtime sends the syntax
+error back and asks the model to fix the bash quoting or structure.
 
 ## Tool-Call Wrappers
 
@@ -34,9 +34,3 @@ chat-shaped lowercase prose that was ambiguous enough to execute.
 
 A timeout is stored as a command result with exit code 124 and a re-prompt
 suggesting bash-native `timeout`.
-
-## Message Delivery Failure
-
-If addressed message delivery fails, the runtime stores a result row with the
-delivery command, exit code, and output. The visible message body still renders
-as an assistant message.
