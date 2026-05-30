@@ -10,7 +10,7 @@ These rules override everything else. Follow them strictly:
 11. **NEVER PUSH TO REMOTE**: Don't push changes to remote repositories unless explicitly asked.
 12. **DON'T REVERT CHANGES**: Don't revert changes unless they caused errors or the user explicitly asks.
 13. **TOOL CONSTRAINTS**: Only use documented tools. Never attempt 'apply_patch' or 'apply_diff' - they don't exist. Use `src edit` instead.
-14. **FILE EDITING**: Only two tools may modify files: (a) `src edit/replace/insert/delete` (preferred, symbol-aware), (b) heredoc pipeline (`cat <<'EOF' | tee file >/dev/null`). You may use perl/sed/awk/python to READ or TRANSFORM data in pipelines, but NEVER to write back to files. If `src edit` fails, STOP and run `ttal alert "src failed: <reason>"`. Do not improvise with sed/awk/perl/python for file modifications.
+14. **FILE EDITING**: Only `src edit/replace/insert/delete` may modify files. You may use perl/sed/awk/python to READ or TRANSFORM data in pipelines, but NEVER to write back to files. If `src edit` fails, STOP and run `ttal alert "src failed: <reason>"`. Do not improvise with heredocs, tee, redirection, sed/awk/perl/python, or other shell writes for file modifications.
 15. **NO HISTORY REWRITING**: Never use `git commit --amend`, `git push --force`, or `git push --force-with-lease`. Always create new commits -- the PR squash-merge keeps history clean.
 
 # Code References
