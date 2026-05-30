@@ -233,16 +233,26 @@ func recentUserMessages(msgs []message.Message, limit int) []message.Message {
 	return recent
 }
 
+type taskTitleExporter func(context.Context, string) ([]byte, error)
+
+func exportTaskForTitle(ctx context.Context, taskID string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "task",
+		"rc.verbose=nothing", "rc.hooks=off", "rc.confirmation=no", "rc.json.array=on",
+		taskID, "export")
+	return cmd.Output()
+}
+
 // generateTitle refreshes the session title from the current task.
 func (a *sessionAgent) generateTitle(ctx context.Context, sessionID, taskID string) {
 	var title string
 	if taskID == "" {
 		return
 	} else {
-		cmd := exec.CommandContext(ctx, "task",
-			"rc.verbose=nothing", "rc.hooks=off", "rc.confirmation=no", "rc.json.array=on",
-			taskID, "export")
-		out, err := cmd.Output()
+		exporter := a.taskExporter
+		if exporter == nil {
+			exporter = exportTaskForTitle
+		}
+		out, err := exporter(ctx, taskID)
 		if err != nil {
 			slog.Warn("Failed to export task for title", "err", err)
 			title = DefaultSessionName

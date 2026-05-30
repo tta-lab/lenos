@@ -280,16 +280,6 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedProseAndBash(t 
 func TestRun_GeneratesTaskTitleWhenRuntimeContextInjected(t *testing.T) {
 	env := testEnv(t)
 
-	tmp := t.TempDir()
-	oldPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
-	os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
-
-	fakeTask := filepath.Join(tmp, "task")
-	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/usr/bin/env sh
-printf '[{"description":"Fix synthetic context title","status":"pending"}]'
-`), 0o755))
-
 	contextFile := filepath.Join(env.workingDir, "context.md")
 	require.NoError(t, os.WriteFile(contextFile, []byte("project instructions"), 0o644))
 
@@ -307,6 +297,9 @@ printf '[{"description":"Fix synthetic context title","status":"pending"}]'
 		Messages:             env.messages,
 		DisableAutoSummarize: true,
 	}).(*sessionAgent)
+	agent.taskExporter = func(context.Context, string) ([]byte, error) {
+		return []byte(`[{"description":"Fix synthetic context title","status":"pending"}]`), nil
+	}
 	sess, err := env.sessions.Create(t.Context(), "runtime context")
 	require.NoError(t, err)
 
@@ -331,16 +324,6 @@ printf '[{"description":"Fix synthetic context title","status":"pending"}]'
 func TestRun_RefreshesTaskTitleOnExistingSession(t *testing.T) {
 	env := testEnv(t)
 
-	tmp := t.TempDir()
-	oldPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
-	os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
-
-	fakeTask := filepath.Join(tmp, "task")
-	require.NoError(t, os.WriteFile(fakeTask, []byte(`#!/usr/bin/env sh
-printf '[{"description":"Updated task title","status":"pending"}]'
-`), 0o755))
-
 	primary := Model{
 		Model:      &scriptedModel{emits: []string{"exit"}},
 		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1024},
@@ -355,6 +338,9 @@ printf '[{"description":"Updated task title","status":"pending"}]'
 		Messages:             env.messages,
 		DisableAutoSummarize: true,
 	}).(*sessionAgent)
+	agent.taskExporter = func(context.Context, string) ([]byte, error) {
+		return []byte(`[{"description":"Updated task title","status":"pending"}]`), nil
+	}
 	sess, err := env.sessions.Create(t.Context(), "Old title")
 	require.NoError(t, err)
 	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{

@@ -3,8 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -67,18 +65,12 @@ func TestGenerateTitle(t *testing.T) {
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)
 
-		// Create a fake "task" binary that outputs a JSON array.
-		tmp := t.TempDir()
-		oldPath := os.Getenv("PATH")
-		t.Cleanup(func() { os.Setenv("PATH", oldPath) })
-		os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
-
-		fakeTask := filepath.Join(tmp, "task")
-		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf(`#!/usr/bin/env sh
-printf '[{"description":"%s","status":"pending"}]' "$@"
-		`, "Fix the authentication bug")), 0o755))
-
-		a := &sessionAgent{sessions: env.sessions}
+		a := &sessionAgent{
+			sessions: env.sessions,
+			taskExporter: func(context.Context, string) ([]byte, error) {
+				return []byte(`[{"description":"Fix the authentication bug","status":"pending"}]`), nil
+			},
+		}
 		a.generateTitle(t.Context(), sess.ID, "25620b89")
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
@@ -91,15 +83,12 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)
 
-		tmp := t.TempDir()
-		oldPath := os.Getenv("PATH")
-		t.Cleanup(func() { os.Setenv("PATH", oldPath) })
-		os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
-
-		fakeTask := filepath.Join(tmp, "task")
-		require.NoError(t, os.WriteFile(fakeTask, []byte("#!/usr/bin/env sh\nprintf '[]' \"$@\""), 0o755))
-
-		a := &sessionAgent{sessions: env.sessions}
+		a := &sessionAgent{
+			sessions: env.sessions,
+			taskExporter: func(context.Context, string) ([]byte, error) {
+				return []byte(`[]`), nil
+			},
+		}
 		a.generateTitle(t.Context(), sess.ID, "25620b89")
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)
@@ -125,16 +114,13 @@ printf '[{"description":"%s","status":"pending"}]' "$@"
 		sess, err := env.sessions.Create(t.Context(), "Untitled Session")
 		require.NoError(t, err)
 
-		tmp := t.TempDir()
-		oldPath := os.Getenv("PATH")
-		t.Cleanup(func() { os.Setenv("PATH", oldPath) })
-		os.Setenv("PATH", tmp+string(os.PathListSeparator)+oldPath)
-
 		longDesc := strings.Repeat("x", 150)
-		fakeTask := filepath.Join(tmp, "task")
-		require.NoError(t, os.WriteFile(fakeTask, []byte(fmt.Sprintf("#!/usr/bin/env sh\nprintf '[{\"description\":\"%s\",\"status\":\"pending\"}]' \"$@\"", longDesc)), 0o755))
-
-		a := &sessionAgent{sessions: env.sessions}
+		a := &sessionAgent{
+			sessions: env.sessions,
+			taskExporter: func(context.Context, string) ([]byte, error) {
+				return []byte(fmt.Sprintf(`[{"description":"%s","status":"pending"}]`, longDesc)), nil
+			},
+		}
 		a.generateTitle(t.Context(), sess.ID, "25620b89")
 
 		updated, err := env.sessions.Get(t.Context(), sess.ID)

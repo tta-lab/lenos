@@ -152,6 +152,7 @@ type sessionAgent struct {
 	messageQueue   *csync.Map[string, []SessionAgentCall]
 	activeRequests *csync.Map[string, context.CancelFunc]
 	hookRunner     hooks.Runner
+	taskExporter   taskTitleExporter
 }
 
 type SessionAgentOptions struct {
@@ -185,5 +186,6 @@ func NewSessionAgent(
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
 		hookRunner:           opts.HookRunner,
+		taskExporter:         exportTaskForTitle,
 	}
 }
