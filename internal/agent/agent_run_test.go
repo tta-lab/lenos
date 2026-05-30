@@ -31,6 +31,7 @@ type mockMessageService struct {
 	mu       sync.Mutex
 	messages map[string]message.Message
 	order    []string // insertion order for deterministic iteration
+	updates  []message.Message
 	idSeq    int
 }
 
@@ -67,6 +68,8 @@ func (m *mockMessageService) Update(_ context.Context, msg message.Message) erro
 		msg.UpdatedAt = existing.UpdatedAt
 	}
 	m.messages[msg.ID] = msg
+	clone := msg.Clone()
+	m.updates = append(m.updates, clone)
 	return nil
 }
 

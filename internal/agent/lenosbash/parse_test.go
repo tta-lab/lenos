@@ -28,32 +28,50 @@ func TestParseBashOnly(t *testing.T) {
 	assert.Empty(t, parsed.Prose)
 	require.Len(t, parsed.Bash, 1)
 	assert.Equal(t, "ls -la\n", parsed.Bash[0])
+	assert.Equal(t, source, parsed.Accepted)
+	assert.Empty(t, parsed.DroppedPostBash)
 }
 
 func TestParseProseThenBash(t *testing.T) {
 	t.Parallel()
 
-	source := "Let me check the files.\n" + BashBlock("ls -la\ncat README.md") + "\nLooks good."
+	source := "Let me check the files.\n" + BashBlock("ls -la\ncat README.md")
 	parsed, diag := Parse(source)
 
 	require.Nil(t, diag)
 	require.Len(t, parsed.Bash, 1)
 	assert.Equal(t, "ls -la\ncat README.md\n", parsed.Bash[0])
-	assert.Contains(t, parsed.Prose, "Let me check the files")
-	assert.Contains(t, parsed.Prose, "Looks good")
+	assert.Equal(t, "Let me check the files.\n", parsed.Prose)
+	assert.Equal(t, source, parsed.Accepted)
+	assert.Empty(t, parsed.DroppedPostBash)
 }
 
-func TestParseMultipleBashBlocks(t *testing.T) {
+func TestParseDropsTextAfterFirstBashBlock(t *testing.T) {
 	t.Parallel()
 
-	source := BashBlock("ls") + "\nDone.\n" + BashBlock("pwd")
+	source := "Before.\n" + BashBlock("ls") + "\nDone.\n"
 	parsed, diag := Parse(source)
 
 	require.Nil(t, diag)
-	require.Len(t, parsed.Bash, 2)
+	require.Len(t, parsed.Bash, 1)
 	assert.Equal(t, "ls\n", parsed.Bash[0])
-	assert.Equal(t, "pwd\n", parsed.Bash[1])
-	assert.Equal(t, "Done.\n", parsed.Prose)
+	assert.Equal(t, "Before.\n", parsed.Prose)
+	assert.Equal(t, "Before.\n"+BashBlock("ls"), parsed.Accepted)
+	assert.Equal(t, "\nDone.\n", parsed.DroppedPostBash)
+}
+
+func TestParseDropsSecondBashBlock(t *testing.T) {
+	t.Parallel()
+
+	source := BashBlock("ls") + "\n" + BashBlock("pwd")
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "ls\n", parsed.Bash[0])
+	assert.Empty(t, parsed.Prose)
+	assert.Equal(t, BashBlock("ls"), parsed.Accepted)
+	assert.Equal(t, "\n"+BashBlock("pwd"), parsed.DroppedPostBash)
 }
 
 func TestParseEmptyString(t *testing.T) {

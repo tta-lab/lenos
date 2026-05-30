@@ -104,6 +104,16 @@ func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prom
 			msgs = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
+		if len(parsed.Bash) > 0 && parsed.Accepted != "" && parsed.Accepted != emit {
+			if strings.TrimSpace(parsed.DroppedPostBash) != "" {
+				slog.Warn("loop: post-bash text dropped from assistant emit", "len", len(parsed.DroppedPostBash))
+			}
+			emit = parsed.Accepted
+			replaceAssistantText(&assistantMsg, emit)
+			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+				slog.Warn("loop: persist sanitized assistant emit", "error", updateErr)
+			}
+		}
 		// Check for exit.
 		trimmed := strings.TrimSpace(emit)
 		if trimmed == "exit" {
@@ -323,16 +333,19 @@ func streamOneAttempt(
 		return streamOneResult{}, err
 	}
 	var (
-		usage fantasy.Usage
-		meta  fantasy.ProviderMetadata
+		rawText strings.Builder
+		usage   fantasy.Usage
+		meta    fantasy.ProviderMetadata
 	)
 	for part := range stream {
 		switch part.Type {
 		case fantasy.StreamPartTypeTextDelta:
+			rawText.WriteString(part.Delta)
 			if rc := assistantMsg.ReasoningContent(); rc.Thinking != "" && rc.FinishedAt == 0 {
 				assistantMsg.FinishThinking()
 			}
 			assistantMsg.AppendContent(part.Delta)
+			trimAssistantPostBashTail(assistantMsg)
 			if uerr := deps.messages.Update(ctx, *assistantMsg); uerr != nil {
 				slog.Warn("loop: persist text delta", "error", uerr)
 			}
@@ -369,11 +382,20 @@ func streamOneAttempt(
 		}
 	}
 	return streamOneResult{
-		emit:  assistantMsg.Content().Text,
+		emit:  rawText.String(),
 		usage: usage,
 		meta:  meta,
 	}, nil
 }
+
+func trimAssistantPostBashTail(assistantMsg *message.Message) {
+	parsed, diag := lenosbash.Parse(assistantMsg.Content().Text)
+	if diag != nil || len(parsed.Bash) == 0 || parsed.Accepted == "" || parsed.Accepted == assistantMsg.Content().Text {
+		return
+	}
+	replaceAssistantText(assistantMsg, parsed.Accepted)
+}
+
 func formatResultForModel(_ string, stdout, stderr string, exitCode int) string {
 	body := html.EscapeString(stdout)
 	if stderr != "" {

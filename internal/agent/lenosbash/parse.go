@@ -13,9 +13,11 @@ const (
 )
 
 type Parsed struct {
-	Original string
-	Prose    string
-	Bash     []string
+	Original        string
+	Accepted        string
+	DroppedPostBash string
+	Prose           string
+	Bash            []string
 }
 
 type Diagnostic struct {
@@ -61,9 +63,10 @@ func AlertLine(body string) string {
 	return RuntimeTag + " ALERT: " + strings.TrimSpace(body)
 }
 
-// Parse scans source for bash tags. Text outside bash tags is Markdown prose.
-// Nested bash tags are treated as literal bash content so heredocs can contain
-// patch text with bash tags.
+// Parse scans source for bash tags. Text before the first bash block is
+// Markdown prose. Text after the first completed bash block is reported as
+// dropped tail. Nested bash tags are treated as literal bash content so
+// heredocs can contain patch text with bash tags.
 func Parse(source string) (Parsed, *Diagnostic) {
 	if strings.TrimSpace(source) == "" {
 		return Parsed{Original: source}, nil
@@ -79,8 +82,9 @@ type parser struct {
 	line int
 	col  int
 
-	depth     int
-	proseFrom int
+	depth         int
+	proseFrom     int
+	acceptedUntil int
 
 	prose []string
 	bash  []string
@@ -91,6 +95,10 @@ type parser struct {
 func (p *parser) scan() (Parsed, *Diagnostic) {
 	p.proseFrom = 0
 	for p.pos < len(p.src) {
+		if len(p.bash) > 0 {
+			p.advance(1)
+			continue
+		}
 		switch {
 		case strings.HasPrefix(p.src[p.pos:], BashStartTag):
 			p.openBash()
@@ -117,9 +125,11 @@ func (p *parser) scan() (Parsed, *Diagnostic) {
 	}
 	p.flushProse()
 	return Parsed{
-		Original: p.src,
-		Prose:    strings.Join(p.prose, "\n"),
-		Bash:     p.bash,
+		Original:        p.src,
+		Accepted:        p.accepted(),
+		DroppedPostBash: p.droppedPostBash(),
+		Prose:           strings.Join(p.prose, "\n"),
+		Bash:            p.bash,
 	}, nil
 }
 
@@ -143,10 +153,25 @@ func (p *parser) closeBash() {
 		p.depth = 0
 		body := strings.TrimPrefix(p.block.String(), "\n")
 		p.bash = append(p.bash, body)
-		p.proseFrom = p.pos + len(BashEndTag)
+		p.acceptedUntil = p.pos + len(BashEndTag)
+		p.proseFrom = len(p.src) + 1
 	default:
 		p.proseFrom = p.pos + len(BashEndTag)
 	}
+}
+
+func (p *parser) accepted() string {
+	if p.acceptedUntil == 0 {
+		return p.src
+	}
+	return p.src[:p.acceptedUntil]
+}
+
+func (p *parser) droppedPostBash() string {
+	if p.acceptedUntil == 0 || p.acceptedUntil >= len(p.src) {
+		return ""
+	}
+	return p.src[p.acceptedUntil:]
 }
 
 func (p *parser) flushProse() {

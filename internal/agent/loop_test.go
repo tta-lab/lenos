@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"iter"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -24,13 +26,14 @@ import (
 // scriptedModel returns a sequence of canned emits via Stream(). Each call
 // to Stream consumes one entry; missing entries panic the test.
 type scriptedModel struct {
-	mu       sync.Mutex
-	emits    []string
-	usages   []fantasy.Usage // optional: per-emit usage override; default Usage{1,1}
-	errOn    []int           // call indices (pre-increment) where Stream yields an error
-	calls    int
-	modelID  string
-	provider string
+	mu         sync.Mutex
+	emits      []string
+	emitChunks [][]string
+	usages     []fantasy.Usage // optional: per-emit usage override; default Usage{1,1}
+	errOn      []int           // call indices (pre-increment) where Stream yields an error
+	calls      int
+	modelID    string
+	provider   string
 }
 
 // recorderIface is a local substitute for the removed transcript.Recorder.
@@ -81,14 +84,23 @@ func (m *scriptedModel) Stream(_ context.Context, _ fantasy.Call) (fantasy.Strea
 		}
 	}
 	out := m.emits[m.calls]
+	var chunks []string
+	if m.calls < len(m.emitChunks) {
+		chunks = m.emitChunks[m.calls]
+	}
+	if len(chunks) == 0 {
+		chunks = []string{out}
+	}
 	u := fantasy.Usage{InputTokens: 1, OutputTokens: 1}
 	if m.calls < len(m.usages) {
 		u = m.usages[m.calls]
 	}
 	m.calls++
 	seq := iter.Seq[fantasy.StreamPart](func(yield func(fantasy.StreamPart) bool) {
-		if !yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextDelta, Delta: out}) {
-			return
+		for _, chunk := range chunks {
+			if !yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextDelta, Delta: chunk}) {
+				return
+			}
 		}
 		if !yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeFinish, Usage: u}) {
 			return
@@ -1503,6 +1515,56 @@ func TestRunLoop_MixedMultilineMessageBlockKeepsBodyOnAssistantOnly(t *testing.T
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
 	assert.Equal(t, "echo ok\n", results[0].CommandContent().Command)
+}
+
+func TestRunLoop_DropsPostBashTextFromPersistenceAndExecution(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	origDefault := slog.Default()
+	slog.SetDefault(logger)
+	defer slog.SetDefault(origDefault)
+
+	accepted := "Testing now.\n" + lenosbash.BashBlock("echo ok")
+	emit := accepted + "\nThis text must be dropped.\n" + lenosbash.BashBlock("pwd")
+	model := &scriptedModel{emits: []string{emit, "exit"}}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+	assert.Equal(t, []string{"echo ok\n"}, runner.bash)
+
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 2)
+	assert.Equal(t, accepted, assistants[0].Content().Text)
+	assert.NotContains(t, assistants[0].Content().Text, "This text must be dropped")
+	assert.NotContains(t, assistants[0].Content().Text, "pwd")
+	assert.Contains(t, buf.String(), "post-bash text dropped from assistant emit")
+}
+
+func TestRunLoop_DropsPostBashTextDuringStreaming(t *testing.T) {
+	accepted := "Testing now.\n" + lenosbash.BashBlock("echo ok")
+	tail := "\nThis text must never be persisted during streaming."
+	model := &scriptedModel{
+		emits:      []string{accepted + tail, "exit"},
+		emitChunks: [][]string{{accepted, tail}},
+	}
+	runner := &fakeRunner{results: []ExecResult{{Stdout: []byte("ok\n"), ExitCode: 0}}}
+	deps, ms := newDeps(t, model, runner, nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, stopExit, stop)
+
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	for _, update := range ms.updates {
+		if update.Role != message.Assistant {
+			continue
+		}
+		assert.NotContains(t, update.Content().Text, "must never be persisted")
+	}
 }
 
 func TestRunLoop_HeredocSetupMessageLookingTextExecutesAsBash(t *testing.T) {

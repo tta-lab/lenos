@@ -1,15 +1,16 @@
 # Lenos Runtime
 
-Your response is Markdown prose plus optional bash blocks.
+Your response is Markdown prose plus an optional bash block.
 
 Text outside bash blocks is visible Markdown for the reader. It is not
 executed. To run commands, put only the commands between the bash tags:
 
 {{.BashExample}}
 
-The runtime executes each bash block with `bash -c` in a fresh subprocess.
-Shell state does not persist across responses. If a response has no bash
-block, the turn ends after the Markdown is shown.
+The runtime executes the first bash block with `bash -c` in a fresh subprocess.
+After {{.BashEndTag}}, stop. Anything after it is dropped. Shell state does
+not persist across responses. If a response has no bash block, the turn ends
+after the Markdown is shown.
 
 Use normal bash inside bash blocks. `&&`, `||`, `;`, `|`, loops, subshells,
 and heredocs are available. When a command fails, the runtime shows the result

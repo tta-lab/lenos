@@ -113,6 +113,23 @@ func TestAssistantMessageItem_RenderMixedEmitShowsMarkdownAndCommand(t *testing.
 	assert.NotContains(t, rendered, lenosbash.BashEndTag)
 }
 
+func TestAssistantMessageItem_DropsPostBashText(t *testing.T) {
+	t.Parallel()
+	sty := styles.DefaultStyles()
+	content := "Let me read this file.\n\n" + lenosbash.BashBlock("cat main.go") + "\nThis should not render."
+	item := NewAssistantMessageItem(&sty, &message.Message{
+		ID:   "assistant-1",
+		Role: message.Assistant,
+		Parts: []message.ContentPart{
+			message.TextContent{Text: content},
+		},
+	}, true)
+	rendered := ansi.Strip(item.RawRender(80))
+	assert.Contains(t, rendered, "Let me read this file.")
+	assert.Contains(t, rendered, "cat main.go")
+	assert.NotContains(t, rendered, "This should not render.")
+}
+
 func TestAssistantMessageItem_RenderCommandPrefixUsesCommandPrefixStyle(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
