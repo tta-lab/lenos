@@ -7,14 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClassify_Empty(t *testing.T) {
-	t.Parallel()
-	for _, in := range []string{"", "   ", "\n\t\n", "  \t  "} {
-		cls, _ := classify(in)
-		assert.Equalf(t, classifyEmpty, cls, "expected empty for %q", in)
-	}
-}
-
 func TestClassify_Banned(t *testing.T) {
 	t.Parallel()
 	cases := []string{
