@@ -195,7 +195,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 			{Path: env.workingDir},
 		},
 		ContextCommands: []RuntimeContextCommand{{
-			Command: lenosbash.BashBlock("cat " + shellQuote(contextFile)),
+			Command: lenosbash.WrapBash("Read key instructions.", "cat "+shellQuote(contextFile)),
 		}, {
 			Command: "\nReady.\n\nLets rock and roll.\n",
 		}},
@@ -206,7 +206,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(msgs), 4)
 	require.Equal(t, message.Assistant, msgs[0].Role)
-	require.Equal(t, lenosbash.BashBlock("cat "+shellQuote(contextFile)), msgs[0].Content().Text)
+	require.Equal(t, lenosbash.WrapBash("Read key instructions.", "cat "+shellQuote(contextFile)), msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
 	require.Equal(t, "cat "+shellQuote(contextFile)+"\n", msgs[1].CommandContent().Command)
@@ -251,7 +251,7 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	sess, err := env.sessions.Create(t.Context(), "runtime context")
 	require.NoError(t, err)
 
-	raw := lenosbash.BashBlock("ttal project list\nskill list")
+	raw := lenosbash.WrapBash("List registered projects and available skills.", "ttal project list\nskill list")
 	runner := &fakeRunner{results: []ExecResult{{
 		Stdout:   []byte("project-a\nskill-a\n"),
 		ExitCode: 0,
