@@ -1402,8 +1402,7 @@ func TestRunLoop_NaturalLanguageAutoWrapsMessageBlock(t *testing.T) {
 	assert.Equal(t, `m#"Done. Tests pass."#`, assistants[0].Content().Text)
 
 	results := resultsByOrder(ms)
-	require.Len(t, results, 1)
-	assert.Equal(t, emit, results[0].CommandContent().Narration)
+	require.Empty(t, results)
 }
 
 func TestRunLoop_MessageBlockOnlyPublishesAndStops(t *testing.T) {
@@ -1424,8 +1423,7 @@ func TestRunLoop_MessageBlockOnlyPublishesAndStops(t *testing.T) {
 	assert.Equal(t, emit, assistants[0].Content().Text)
 
 	results := resultsByOrder(ms)
-	require.Len(t, results, 1)
-	assert.Equal(t, "Done for the user.", results[0].CommandContent().Narration)
+	require.Empty(t, results)
 }
 
 func TestRunLoop_AssistantPrefillUsesNativeModelSupport(t *testing.T) {
@@ -1491,9 +1489,7 @@ func TestRunLoop_MessageBlockOnlyMultipleBlocksPreserveOrder(t *testing.T) {
 	assert.Equal(t, emit, assistants[0].Content().Text)
 
 	results := resultsByOrder(ms)
-	require.Len(t, results, 2)
-	assert.Equal(t, "First.", results[0].CommandContent().Narration)
-	assert.Equal(t, "Second.", results[1].CommandContent().Narration)
+	require.Empty(t, results)
 }
 
 func TestRunLoop_AddressedMessageBlockDeliveryFailureStillStops(t *testing.T) {
@@ -1510,13 +1506,12 @@ func TestRunLoop_AddressedMessageBlockDeliveryFailureStillStops(t *testing.T) {
 	assert.Contains(t, runner.bash[0], "ttal send --to 'owner'")
 
 	results := resultsByOrder(ms)
-	require.Len(t, results, 2)
+	require.Len(t, results, 1)
 	cc := results[0].CommandContent()
 	require.NotNil(t, cc.ExitCode)
 	assert.Equal(t, 9, *cc.ExitCode)
 	assert.Contains(t, cc.Output, "send failed")
 	assert.Contains(t, cc.Observation, "message delivery failed")
-	assert.Equal(t, "Please review.", results[1].CommandContent().Narration)
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 1)
@@ -1557,7 +1552,7 @@ func TestRunLoop_MessageBlockTargetOverridesPairWith(t *testing.T) {
 	assert.NotContains(t, runner.bash[0], "reviewer")
 }
 
-func TestRunLoop_MixedSingleLineMessageBlockRunsCleanBashAndStoresNarration(t *testing.T) {
+func TestRunLoop_MixedSingleLineMessageBlockRunsCleanBashOnly(t *testing.T) {
 	t.Parallel()
 	emit := "m\"Testing now.\"\necho ok\n"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
@@ -1573,14 +1568,13 @@ func TestRunLoop_MixedSingleLineMessageBlockRunsCleanBashAndStoresNarration(t *t
 	require.Len(t, results, 1)
 	cc := results[0].CommandContent()
 	assert.Equal(t, "echo ok\n", cc.Command)
-	assert.Equal(t, "Testing now.", cc.Narration)
 
 	assistants := assistantsByOrder(ms)
 	require.Len(t, assistants, 2)
 	assert.Equal(t, emit, assistants[0].Content().Text)
 }
 
-func TestRunLoop_MixedMultilineMessageBlockRendersBodyOnSuccess(t *testing.T) {
+func TestRunLoop_MixedMultilineMessageBlockKeepsBodyOnAssistantOnly(t *testing.T) {
 	t.Parallel()
 	emit := "m\"First line.\nSecond line.\"\necho ok\n"
 	model := &scriptedModel{emits: []string{emit, "exit"}}
@@ -1597,7 +1591,7 @@ func TestRunLoop_MixedMultilineMessageBlockRendersBodyOnSuccess(t *testing.T) {
 	assert.Equal(t, emit, assistants[0].Content().Text)
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
-	assert.Equal(t, "First line.\nSecond line.", results[0].CommandContent().Narration)
+	assert.Equal(t, "echo ok\n", results[0].CommandContent().Command)
 }
 
 func TestRunLoop_MixedSingleLineMessageBlockStillDeliversPairWith(t *testing.T) {
@@ -1620,7 +1614,7 @@ func TestRunLoop_MixedSingleLineMessageBlockStillDeliversPairWith(t *testing.T) 
 	assert.Equal(t, emit, assistants[0].Content().Text)
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
-	assert.Equal(t, "Please review.", results[0].CommandContent().Narration)
+	assert.Equal(t, "echo ok\n", results[0].CommandContent().Command)
 }
 
 func TestRunLoop_MixedMessageBlockSuppressesMessagesOnBashFailure(t *testing.T) {

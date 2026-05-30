@@ -235,6 +235,7 @@ type Styles struct {
 			ErrorDetails     lipgloss.Style
 			SectionHeader    lipgloss.Style
 			ResultBlock      lipgloss.Style
+			CommandPrefix    lipgloss.Style // Bash command prompt prefix.
 			ResultHeader     lipgloss.Style // Command result header: $ <command>
 
 			// Thinking section styles
@@ -1217,6 +1218,8 @@ func DefaultStyles() Styles {
 	s.Chat.Message.SectionHeader = s.Base.PaddingLeft(2)
 	s.Chat.Message.ResultBlock = lipgloss.NewStyle().
 		Foreground(fgSubtle)
+	s.Chat.Message.CommandPrefix = lipgloss.NewStyle().
+		Foreground(s.Green)
 	s.Chat.Message.ResultHeader = lipgloss.NewStyle().
 		Foreground(fgBase)
 	s.Chat.Message.AssistantInfoIcon = s.Subtle

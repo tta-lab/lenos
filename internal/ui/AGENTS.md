@@ -136,28 +136,25 @@ The TUI renders conversation messages with distinct visual treatments based on r
 - Copy-to-clipboard extracts clean text (no bar, no metadata)
 
 #### Assistant Bash Emits
-- `$ ` prefix with no Glamour (raw terminal style)
-- Displayed using `ResultHeader` style
-- Stored assistant text is always rendered as a bash preview
+- Valid Lenos Bash with `m` blocks renders message block bodies as assistant
+  markdown prose with `MarkdownRenderer`.
+- If the same emit has bash, render the parsed clean bash after the prose as a
+  single-line `$ ` command preview using `ResultHeader`.
+- Invalid or legacy assistant text falls back to the one-line bash preview.
+- Keep raw assistant text unchanged for provider replay.
 
 #### Bash Results (Result role messages)
 - Exit 0: skipped
 - Non-zero exit: `$ command` + output body + exit code badge (red)
-- Result row copy-to-clipboard includes command output and non-zero exit code;
-  narration content renders as assistant-style markdown items. Message block
-  bodies should come from result narration, not rewritten assistant rows.
+- Pending: `running...`
+- Result row copy-to-clipboard includes command output and non-zero exit code.
 
-#### Message Block Narration
-- Treat published `m` block bodies as assistant prose, even when they are
-  stored on Result rows for history/persistence reasons.
-- Reuse the same visual component or renderer semantics as assistant markdown
-  prose. Do not swap to `PlainMarkdownRenderer` or a raw result renderer just
-  because the data moved to a Result row.
-- Keep storage and rendering separate: assistant rows preserve the Lenos Bash
-  emit; result narration rows provide the user-visible markdown body.
-- When moving message content between roles or fields, add render tests for
-  both the raw render style and the wrapped `Render` alignment so the TUI does
-  not regress into raw/flush-left output.
+#### Message Block Prose
+- Message block bodies come from parsed assistant rows, not Result rows.
+- Do not write or render `CommandContent.Narration`.
+- Message-only `m` block emits do not create result rows.
+- When changing message-block rendering, add tests for raw render and wrapped
+  `Render` alignment so the TUI does not regress into raw/flush-left output.
 
 #### Runtime Responses (stored as Result rows)
 - Exit code 1: command-not-found re-prompt

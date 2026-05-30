@@ -200,23 +200,20 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 
 	msgs, err := env.messages.List(t.Context(), sess.ID)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(msgs), 5)
+	require.GreaterOrEqual(t, len(msgs), 4)
 	require.Equal(t, message.Assistant, msgs[0].Role)
 	require.Equal(t, rawMessageBlock("Let me read key instructions.")+"\ncat "+shellQuote(contextFile), msgs[0].Content().Text)
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
 	require.Equal(t, "cat "+shellQuote(contextFile), msgs[1].CommandContent().Command)
-	require.Equal(t, "Let me read key instructions.", msgs[1].CommandContent().Narration)
 	require.Equal(t, "project instructions", msgs[1].CommandContent().Output)
 	require.Equal(t, message.Assistant, msgs[2].Role)
 	require.Equal(t, rawMessageBlock("\nReady.\n\nLets rock and roll.\n"), msgs[2].Content().Text)
 	require.Nil(t, msgs[2].FinishPart())
 	require.Equal(t, "test-model", msgs[2].Model)
 	require.Equal(t, "test-provider", msgs[2].Provider)
-	require.Equal(t, message.Result, msgs[3].Role)
-	require.Equal(t, "Ready.\n\nLets rock and roll.", msgs[3].CommandContent().Narration)
-	require.Equal(t, message.User, msgs[4].Role)
-	require.Equal(t, "user prompt", msgs[4].Content().Text)
+	require.Equal(t, message.User, msgs[3].Role)
+	require.Equal(t, "user prompt", msgs[3].Content().Text)
 
 	require.Len(t, model.captured, 1)
 	prompt := model.captured[0]
@@ -273,7 +270,6 @@ func TestPersistRuntimeContextCommands_ExecutesCleanBashFromMixedMessageBlocks(t
 	require.Equal(t, message.FinishReasonToolUse, msgs[0].FinishReason())
 	require.Equal(t, message.Result, msgs[1].Role)
 	require.Equal(t, "ttal project list\nskill list", msgs[1].CommandContent().Command)
-	require.Equal(t, "Let me list registered projects and available skills.", msgs[1].CommandContent().Narration)
 	require.Equal(t, "project-a\nskill-a\n", msgs[1].CommandContent().Output)
 }
 

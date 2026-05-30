@@ -307,22 +307,25 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, showThinking 
 }
 
 func extractResultMessageItems(sty *styles.Styles, msg *message.Message) []MessageItem {
-	cmd := msg.CommandContent()
-	if !shouldRenderResultMessageItem(cmd) {
+	if !shouldRenderResultMessageItem(msg) {
 		return nil
 	}
 	return []MessageItem{NewResultMessageItem(sty, msg)}
 }
 
-func shouldRenderResultMessageItem(cmd message.CommandContent) bool {
-	if strings.TrimSpace(cmd.Narration) != "" {
-		return true
+func shouldRenderResultMessageItem(msg *message.Message) bool {
+	cmd := msg.CommandContent()
+	if cmd.Command == "" {
+		return strings.TrimSpace(msg.Content().Text) != ""
 	}
-	if cmd.Command == "" || cmd.Pending {
+	if cmd.Pending {
+		// Pending command: show "running..."
 		return true
 	}
 	if cmd.ExitCode == nil || *cmd.ExitCode != 0 {
+		// Non-zero or unknown exit: show failure output.
 		return true
 	}
+	// Exit 0: assistant already shows the command.
 	return false
 }
