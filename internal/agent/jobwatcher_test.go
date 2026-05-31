@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tta-lab/lenos/internal/csync"
 	temenos "github.com/tta-lab/temenos/client"
 )
 
@@ -15,6 +16,7 @@ type mockTemenosClient struct {
 	mu     sync.Mutex
 	jobs   map[string]*temenos.JobInfo
 	killed []string
+	onKill func(id string)
 }
 
 var _ TemenosJobClient = (*mockTemenosClient)(nil)
@@ -34,6 +36,9 @@ func (m *mockTemenosClient) GetJob(_ context.Context, id string) (*temenos.JobIn
 }
 
 func (m *mockTemenosClient) KillJob(_ context.Context, id string) (*temenos.JobInfo, error) {
+	if m.onKill != nil {
+		m.onKill(id)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.killed = append(m.killed, id)
@@ -214,6 +219,64 @@ func TestJobWatcher_KillJobKillsRemovesAndEnqueuesRuntimeResult(t *testing.T) {
 	}
 	if !strings.Contains(received[0], "background job killed (job_id: job-1)") {
 		t.Fatalf("expected killed runtime message to include job id, got %q", received[0])
+	}
+}
+
+func TestJobWatcher_KillJobIgnoresNotFoundAfterJobRemoved(t *testing.T) {
+	t.Parallel()
+	mock := newMockTemenosClient()
+	w := &JobWatcher{
+		active: map[string]string{"job-1": "sleep 20"},
+		client: mock,
+	}
+	mock.onKill = func(id string) {
+		w.remove(id)
+	}
+
+	if err := w.KillJob(context.Background(), "job-1"); err != nil {
+		t.Fatalf("expected already-removed job to be treated as done, got %v", err)
+	}
+	if w.ActiveCount() != 0 {
+		t.Fatalf("expected no active jobs, got %d", w.ActiveCount())
+	}
+}
+
+func TestJobWatcher_KillJobReturnsNotFoundWhenJobStillActive(t *testing.T) {
+	t.Parallel()
+	mock := newMockTemenosClient()
+	w := &JobWatcher{
+		active: map[string]string{"job-1": "sleep 20"},
+		client: mock,
+	}
+
+	if err := w.KillJob(context.Background(), "job-1"); err == nil {
+		t.Fatal("expected not found error for job still marked active")
+	}
+	if w.ActiveCount() != 1 {
+		t.Fatalf("expected job to remain active, got %d", w.ActiveCount())
+	}
+}
+
+func TestSessionAgentStopBackgroundJobsCancelsAndRemovesWatcher(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	a := &sessionAgent{
+		jobWatchers: csync.NewMap[string, *sessionJobWatcher](),
+	}
+	a.jobWatchers.Set("session-1", &sessionJobWatcher{
+		watcher: NewJobWatcher(newMockTemenosClient(), "session-1", func(string) {}),
+		cancel:  cancel,
+	})
+
+	a.stopBackgroundJobs("session-1")
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("expected watcher context to be canceled")
+	}
+	if _, ok := a.jobWatchers.Get("session-1"); ok {
+		t.Fatal("expected watcher to be removed")
 	}
 }
 

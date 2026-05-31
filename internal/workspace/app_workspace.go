@@ -54,6 +54,7 @@ func (w *AppWorkspace) SaveSession(ctx context.Context, sess session.Session) (s
 }
 
 func (w *AppWorkspace) DeleteSession(ctx context.Context, sessionID string) error {
+	w.app.AgentCoordinator.StopBackgroundJobs(sessionID)
 	return w.app.Sessions.Delete(ctx, sessionID)
 }
 

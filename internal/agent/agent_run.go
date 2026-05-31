@@ -205,14 +205,7 @@ runLoopReentry:
 	// Start background job watcher for sandbox sessions.
 	var jobWatcher *JobWatcher
 	if call.Sandbox && call.SandboxClient != nil {
-		jw := a.jobWatchers.GetOrSet(call.SessionID, func() *JobWatcher {
-			watcher := NewJobWatcher(call.SandboxClient, call.SessionID, func(msg string) {
-				a.enqueueBackgroundJobResult(ctx, call, msg)
-			})
-			go watcher.Run(ctx)
-			return watcher
-		})
-		jobWatcher = jw
+		jobWatcher = a.getOrCreateJobWatcher(call)
 	}
 
 	primaryModel := a.primaryModel.Get()
@@ -450,6 +443,41 @@ func (a *sessionAgent) enqueueBackgroundJobResult(ctx context.Context, call Sess
 			slog.Warn("background job result: run failed", "session_id", call.SessionID, "error", err)
 		}
 	}()
+}
+
+func (a *sessionAgent) getOrCreateJobWatcher(call SessionAgentCall) *JobWatcher {
+	a.jobWatchersMu.Lock()
+	defer a.jobWatchersMu.Unlock()
+
+	if managed, ok := a.jobWatchers.Get(call.SessionID); ok && managed != nil {
+		return managed.watcher
+	}
+
+	watcherCtx, cancel := context.WithCancel(context.Background())
+	watcher := NewJobWatcher(call.SandboxClient, call.SessionID, func(msg string) {
+		a.enqueueBackgroundJobResult(watcherCtx, call, msg)
+	})
+	watcher.onIdle = func() {
+		a.stopIdleBackgroundJobs(call.SessionID, watcher)
+	}
+	a.jobWatchers.Set(call.SessionID, &sessionJobWatcher{
+		watcher: watcher,
+		cancel:  cancel,
+	})
+	go watcher.Run(watcherCtx)
+	return watcher
+}
+
+func (a *sessionAgent) stopIdleBackgroundJobs(sessionID string, watcher *JobWatcher) {
+	a.jobWatchersMu.Lock()
+	defer a.jobWatchersMu.Unlock()
+
+	managed, ok := a.jobWatchers.Get(sessionID)
+	if !ok || managed == nil || managed.watcher != watcher || watcher.ActiveCount() > 0 {
+		return
+	}
+	a.jobWatchers.Del(sessionID)
+	managed.cancel()
 }
 
 // combineQueuedCalls collapses N queued calls into one re-entry call.

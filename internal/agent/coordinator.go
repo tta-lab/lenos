@@ -69,6 +69,7 @@ type Coordinator interface {
 	ClearQueue(sessionID string)
 	ActiveBackgroundJobs(sessionID string) []BackgroundJob
 	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
+	StopBackgroundJobs(sessionID string)
 	Summarize(context.Context, string) error
 	Model() Model
 	UpdateModels(ctx context.Context) error
@@ -881,6 +882,10 @@ func (c *coordinator) ActiveBackgroundJobs(sessionID string) []BackgroundJob {
 
 func (c *coordinator) KillBackgroundJob(ctx context.Context, sessionID, jobID string) error {
 	return c.currentAgent.KillBackgroundJob(ctx, sessionID, jobID)
+}
+
+func (c *coordinator) StopBackgroundJobs(sessionID string) {
+	c.currentAgent.StopBackgroundJobs(sessionID)
 }
 
 func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {

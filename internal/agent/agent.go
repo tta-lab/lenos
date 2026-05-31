@@ -119,6 +119,7 @@ type SessionAgent interface {
 	ClearQueue(sessionID string)
 	ActiveBackgroundJobs(sessionID string) []BackgroundJob
 	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
+	StopBackgroundJobs(sessionID string)
 	Summarize(context.Context, string, fantasy.ProviderOptions) error
 	Model() Model
 }
@@ -163,10 +164,16 @@ type sessionAgent struct {
 
 	messageQueue    *csync.Map[string, []SessionAgentCall]
 	activeRequests  *csync.Map[string, context.CancelFunc]
-	jobWatchers     *csync.Map[string, *JobWatcher]
+	jobWatchers     *csync.Map[string, *sessionJobWatcher]
+	jobWatchersMu   sync.Mutex
 	sessionUpdateMu sync.Mutex
 	hookRunner      hooks.Runner
 	taskExporter    taskTitleExporter
+}
+
+type sessionJobWatcher struct {
+	watcher *JobWatcher
+	cancel  context.CancelFunc
 }
 
 type SessionAgentOptions struct {
@@ -199,7 +206,7 @@ func NewSessionAgent(
 		notify:               opts.Notify,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
-		jobWatchers:          csync.NewMap[string, *JobWatcher](),
+		jobWatchers:          csync.NewMap[string, *sessionJobWatcher](),
 		hookRunner:           opts.HookRunner,
 		taskExporter:         exportTaskForTitle,
 	}

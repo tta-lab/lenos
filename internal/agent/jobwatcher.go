@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ type JobWatcher struct {
 	client    TemenosJobClient
 	enqueue   func(msg string)
 	sessionID string
+	onIdle    func()
 }
 
 // NewJobWatcher creates a dormant watcher. Call Run in a goroutine to start.
@@ -99,6 +101,9 @@ func (w *JobWatcher) KillJob(ctx context.Context, jobID string) error {
 	}
 	info, err := w.client.KillJob(ctx, jobID)
 	if err != nil {
+		if isTemenosJobNotFound(err) && !w.hasJob(jobID) {
+			return nil
+		}
 		return err
 	}
 	if info == nil {
@@ -182,7 +187,22 @@ func (w *JobWatcher) pollAll(ctx context.Context) {
 func (w *JobWatcher) remove(jobID string) {
 	w.mu.Lock()
 	delete(w.active, jobID)
+	idle := len(w.active) == 0
 	w.mu.Unlock()
+	if idle && w.onIdle != nil {
+		w.onIdle()
+	}
+}
+
+func (w *JobWatcher) hasJob(jobID string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, ok := w.active[jobID]
+	return ok
+}
+
+func isTemenosJobNotFound(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "not found")
 }
 
 func (w *JobWatcher) formatAndEnqueueCompleted(info *temenos.JobInfo, command string) {
