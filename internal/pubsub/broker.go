@@ -2,28 +2,38 @@ package pubsub
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 )
 
-const bufferSize = 64
+// Ported from upstream commit 0585f498.
+// Original: fix(pubsub): raise default per-subscriber buffer (64→4096)
+const defaultBufferSize = 4096
 
+// Ported from upstream commits 0585f498, abeaff09.
+// 0585f498: fix(pubsub): raise default per-subscriber buffer (64→4096)
+// abeaff09: fix(pubsub): respect channelBufferSize parameter in Subscribe
 type Broker[T any] struct {
-	subs      map[chan Event[T]]struct{}
-	mu        sync.RWMutex
-	done      chan struct{}
-	subCount  int
-	maxEvents int
+	subs              map[chan Event[T]]struct{}
+	mu                sync.RWMutex
+	done              chan struct{}
+	subCount          int
+	channelBufferSize int
 }
 
+// Ported from upstream commit 0585f498.
+// Original: fix(pubsub): raise default per-subscriber buffer (64→4096)
 func NewBroker[T any]() *Broker[T] {
-	return NewBrokerWithOptions[T](bufferSize, 1000)
+	return NewBrokerWithOptions[T](defaultBufferSize)
 }
 
-func NewBrokerWithOptions[T any](channelBufferSize, maxEvents int) *Broker[T] {
+// Ported from upstream commit abeaff09.
+// Original: fix(pubsub): respect channelBufferSize parameter in Subscribe
+func NewBrokerWithOptions[T any](channelBufferSize int) *Broker[T] {
 	return &Broker[T]{
-		subs:      make(map[chan Event[T]]struct{}),
-		done:      make(chan struct{}),
-		maxEvents: maxEvents,
+		subs:              make(map[chan Event[T]]struct{}),
+		done:              make(chan struct{}),
+		channelBufferSize: channelBufferSize,
 	}
 }
 
@@ -46,6 +56,8 @@ func (b *Broker[T]) Shutdown() {
 	b.subCount = 0
 }
 
+// Ported from upstream commit abeaff09.
+// Original: fix(pubsub): respect channelBufferSize parameter in Subscribe
 func (b *Broker[T]) Subscribe(ctx context.Context) <-chan Event[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -58,7 +70,7 @@ func (b *Broker[T]) Subscribe(ctx context.Context) <-chan Event[T] {
 	default:
 	}
 
-	sub := make(chan Event[T], bufferSize)
+	sub := make(chan Event[T], b.channelBufferSize)
 	b.subs[sub] = struct{}{}
 	b.subCount++
 
@@ -88,6 +100,8 @@ func (b *Broker[T]) GetSubscriberCount() int {
 	return b.subCount
 }
 
+// Ported from upstream commit b223e24e.
+// Original: feat(logs): add a log line for dropped events
 func (b *Broker[T]) Publish(t EventType, payload T) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -106,6 +120,7 @@ func (b *Broker[T]) Publish(t EventType, payload T) {
 		default:
 			// Channel is full, subscriber is slow - skip this event
 			// This prevents blocking the publisher
+			slog.Warn("pubsub: event dropped, subscriber buffer full", "type", t)
 		}
 	}
 }
