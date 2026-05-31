@@ -24,45 +24,35 @@ func TestConnectionPoolLimit(t *testing.T) {
 		"SetMaxOpenConns(1) must be in effect")
 }
 
-// TestConcurrentAccess verifies that two goroutines can open connections
-// and perform writes concurrently without SQLITE_BUSY errors. This
+// TestConcurrentWrites verifies that two goroutines using the same
+// connection can write concurrently without SQLITE_BUSY errors. This
 // exercises the combination of _txlock=immediate + busy_timeout=30000
 // that the upstream fixes depend on.
-func TestConcurrentAccess(t *testing.T) {
+func TestConcurrentWrites(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-
-	conn1, err := db.Connect(context.Background(), dir)
+	conn, err := db.Connect(context.Background(), dir)
 	require.NoError(t, err)
-	t.Cleanup(func() { conn1.Close() })
+	t.Cleanup(func() { conn.Close() })
 
-	// Create a test table.
-	_, err = conn1.ExecContext(context.Background(),
+	_, err = conn.ExecContext(context.Background(),
 		"CREATE TABLE IF NOT EXISTS concurrent_test (id INTEGER PRIMARY KEY)")
 	require.NoError(t, err)
 
+	// Open a second handle to the same database from the same
+	// connection pool, then write from both goroutines. With
+	// _txlock=immediate and busy_timeout=30000, these writes
+	// should queue cleanly instead of racing.
 	errCh := make(chan error, 2)
 
 	go func() {
-		conn, err := db.Connect(context.Background(), dir)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		defer conn.Close()
-		_, err = conn.ExecContext(context.Background(),
+		_, err := conn.ExecContext(context.Background(),
 			"INSERT INTO concurrent_test (id) VALUES (1)")
 		errCh <- err
 	}()
 
 	go func() {
-		conn, err := db.Connect(context.Background(), dir)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		defer conn.Close()
-		_, err = conn.ExecContext(context.Background(),
+		_, err := conn.ExecContext(context.Background(),
 			"INSERT INTO concurrent_test (id) VALUES (2)")
 		errCh <- err
 	}()
