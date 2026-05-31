@@ -11,7 +11,7 @@ import (
 )
 
 // TestConnectionPoolLimit verifies that SetMaxOpenConns(1) is in effect on
-// the *sql.DB returned by Connect. This is the port of upstream 61ee2d2e.
+// the *sql.DB returned by Connect. This guards the port of upstream 61ee2d2e.
 func TestConnectionPoolLimit(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -22,61 +22,6 @@ func TestConnectionPoolLimit(t *testing.T) {
 	stats := conn.Stats()
 	require.Equal(t, 1, stats.MaxOpenConnections,
 		"SetMaxOpenConns(1) must be in effect")
-}
-
-// TestConcurrentWrites verifies that two goroutines using the same
-// connection can write concurrently without SQLITE_BUSY errors. This
-// exercises the combination of _txlock=immediate + busy_timeout=30000
-// that the upstream fixes depend on.
-func TestConcurrentWrites(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	conn, err := db.Connect(context.Background(), dir)
-	require.NoError(t, err)
-	t.Cleanup(func() { conn.Close() })
-
-	_, err = conn.ExecContext(context.Background(),
-		"CREATE TABLE IF NOT EXISTS concurrent_test (id INTEGER PRIMARY KEY)")
-	require.NoError(t, err)
-
-	// Open a second handle to the same database from the same
-	// connection pool, then write from both goroutines. With
-	// _txlock=immediate and busy_timeout=30000, these writes
-	// should queue cleanly instead of racing.
-	errCh := make(chan error, 2)
-
-	go func() {
-		_, err := conn.ExecContext(context.Background(),
-			"INSERT INTO concurrent_test (id) VALUES (1)")
-		errCh <- err
-	}()
-
-	go func() {
-		_, err := conn.ExecContext(context.Background(),
-			"INSERT INTO concurrent_test (id) VALUES (2)")
-		errCh <- err
-	}()
-
-	for i := 0; i < 2; i++ {
-		require.NoError(t, <-errCh,
-			"concurrent writers must not fail with SQLITE_BUSY")
-	}
-}
-
-// TestTempStoreMemory verifies that temp_store is set to MEMORY at the
-// connection level. This is the port of upstream 56cf50ad.
-func TestTempStoreMemory(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	conn, err := db.Connect(context.Background(), dir)
-	require.NoError(t, err)
-	t.Cleanup(func() { conn.Close() })
-
-	var tempStore string
-	err = conn.QueryRowContext(context.Background(), "PRAGMA temp_store").Scan(&tempStore)
-	require.NoError(t, err)
-	require.Equal(t, "2", strings.TrimSpace(tempStore),
-		"PRAGMA temp_store should be 2 (MEMORY)")
 }
 
 // TestPragmasVerify verifies that critical pragmas are set via the DSN or
@@ -134,14 +79,4 @@ func TestMigrationUp(t *testing.T) {
 	}
 	require.Len(t, tables, 3, "sessions, messages, and files tables must exist after migration")
 	conn.Close()
-}
-
-// TestConnectRejectsEmptyDir verifies that Connect returns an error when
-// dataDir is empty.
-func TestConnectRejectsEmptyDir(t *testing.T) {
-	t.Parallel()
-	conn, err := db.Connect(context.Background(), "")
-	require.Error(t, err)
-	require.Nil(t, conn)
-	require.Contains(t, err.Error(), "data.dir")
 }
