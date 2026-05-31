@@ -316,9 +316,11 @@ func TestRun_GeneratesTaskTitleWhenRuntimeContextInjected(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updated, err := env.sessions.Get(t.Context(), sess.ID)
-	require.NoError(t, err)
-	require.Equal(t, "Fix synthetic context title", updated.Title)
+	require.Eventually(t, func() bool {
+		updated, err := env.sessions.Get(t.Context(), sess.ID)
+		require.NoError(t, err)
+		return updated.Title == "Fix synthetic context title"
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestRun_RefreshesTaskTitleOnExistingSession(t *testing.T) {
@@ -359,9 +361,11 @@ func TestRun_RefreshesTaskTitleOnExistingSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updated, err := env.sessions.Get(t.Context(), sess.ID)
-	require.NoError(t, err)
-	require.Equal(t, "Updated task title", updated.Title)
+	require.Eventually(t, func() bool {
+		updated, err := env.sessions.Get(t.Context(), sess.ID)
+		require.NoError(t, err)
+		return updated.Title == "Updated task title"
+	}, time.Second, 10*time.Millisecond)
 }
 
 func fantasyMessageText(msg fantasy.Message) string {

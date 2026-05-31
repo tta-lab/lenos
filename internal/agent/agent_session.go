@@ -276,6 +276,8 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID, taskID stri
 		}
 	}
 
+	a.sessionUpdateMu.Lock()
+	defer a.sessionUpdateMu.Unlock()
 	if err := a.sessions.Rename(ctx, sessionID, title); err != nil {
 		slog.Error("Failed to save session title", "error", err)
 	}
@@ -318,6 +320,8 @@ func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage
 // original session is returned unchanged and a warning is logged.
 func (a *sessionAgent) saveSessionUsage(ctx context.Context, sessionID string, usage fantasy.Usage, meta fantasy.ProviderMetadata, logMsg string) (session.Session, bool) {
 	pm := a.primaryModel.Get()
+	a.sessionUpdateMu.Lock()
+	defer a.sessionUpdateMu.Unlock()
 	s, err := a.sessions.Get(ctx, sessionID)
 	if err != nil {
 		slog.Warn("Failed to load session for usage update", "session_id", sessionID, "error", err)

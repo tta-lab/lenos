@@ -10,6 +10,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"sync"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
@@ -160,11 +161,12 @@ type sessionAgent struct {
 	disableAutoSummarize bool
 	notify               pubsub.Publisher[notify.Notification]
 
-	messageQueue   *csync.Map[string, []SessionAgentCall]
-	activeRequests *csync.Map[string, context.CancelFunc]
-	jobWatchers    *csync.Map[string, *JobWatcher]
-	hookRunner     hooks.Runner
-	taskExporter   taskTitleExporter
+	messageQueue    *csync.Map[string, []SessionAgentCall]
+	activeRequests  *csync.Map[string, context.CancelFunc]
+	jobWatchers     *csync.Map[string, *JobWatcher]
+	sessionUpdateMu sync.Mutex
+	hookRunner      hooks.Runner
+	taskExporter    taskTitleExporter
 }
 
 type SessionAgentOptions struct {
