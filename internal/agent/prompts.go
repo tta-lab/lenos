@@ -19,6 +19,9 @@ var lenosWrapperTmpl []byte
 //go:embed templates/coder.md
 var embeddedCoderMd []byte
 
+//go:embed templates/reviewer.md
+var embeddedReviewerMd []byte
+
 //go:embed templates/initialize.md.tpl
 var initializePromptTmpl []byte
 
@@ -85,15 +88,22 @@ func SystemPrompt(
 //
 //   - If Overrides().AgentContextFile is set (--agent flag resolved to a file),
 //     reads and frontmatter-strips it.
-//   - Otherwise returns the embedded coder.md as fallback.
+//   - Otherwise returns the embedded identity for the selected built-in agent.
 func resolveIdentityBody(store *config.ConfigStore) string {
 	agentFile := store.Overrides().AgentContextFile
 	if agentFile != "" {
 		data, err := os.ReadFile(agentFile)
 		if err != nil {
-			return stripYAMLFrontmatter(string(embeddedCoderMd))
+			return embeddedIdentityFallback(store)
 		}
 		return stripYAMLFrontmatter(string(data))
+	}
+	return embeddedIdentityFallback(store)
+}
+
+func embeddedIdentityFallback(store *config.ConfigStore) string {
+	if store.Overrides().AgentName == config.AgentReviewer {
+		return stripYAMLFrontmatter(string(embeddedReviewerMd))
 	}
 	return stripYAMLFrontmatter(string(embeddedCoderMd))
 }

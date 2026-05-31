@@ -54,6 +54,7 @@ func init() {
 		dirsCmd,
 		updateProvidersCmd,
 		logsCmd,
+		reviewCmd,
 		schemaCmd,
 		loginCmd,
 		statsCmd,
@@ -235,7 +236,7 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 
 	// Default agent identity to "coder" when none specified via --agent.
 	if agentName == "" {
-		agentName = "coder"
+		agentName = config.AgentCoder
 	}
 	agentContextFile, resolveErr := resolveAgentFile(agentName, cfg.Options.AgentPaths)
 	if resolveErr != nil {
@@ -392,7 +393,8 @@ func ResolveCwd(cmd *cobra.Command) (string, error) {
 //
 // Returns:
 //   - (path, nil) if the agent file is found on disk.
-//   - ("", nil) if name == "coder" and not found on disk (caller uses embedded fallback).
+//   - ("", nil) if name is an embedded agent and not found on disk
+//     (caller uses embedded fallback).
 //   - ("", err) for any other failure.
 func resolveAgentFile(agentName string, agentPaths []string) (string, error) {
 	flatName := agentName + ".md"
@@ -414,7 +416,7 @@ func resolveAgentFile(agentName string, agentPaths []string) (string, error) {
 			}
 		}
 	}
-	if agentName == "coder" {
+	if agentName == config.AgentCoder || agentName == config.AgentReviewer {
 		// Embedded fallback for the well-known default identity.
 		return "", nil
 	}

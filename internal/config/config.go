@@ -58,7 +58,8 @@ const (
 )
 
 const (
-	AgentCoder string = "coder"
+	AgentCoder    string = "coder"
+	AgentReviewer string = "reviewer"
 )
 
 type SelectedModel struct {
