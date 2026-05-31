@@ -2317,6 +2317,7 @@ func (m *UI) insertCompletionText(text string) bool {
 	m.textarea.InsertRune(' ')
 	return true
 }
+
 // insertFileCompletion inserts the selected file path into the textarea,
 // replacing the @query. The agent reads the file manually — we no longer
 // auto-attach file contents.
@@ -2327,7 +2328,6 @@ func (m *UI) insertFileCompletion(path string) tea.Cmd {
 	}
 	return m.handleTextareaHeightChange(prevHeight)
 }
-
 
 // completionsPosition returns the X and Y position for the completions popup.
 func (m *UI) completionsPosition() image.Point {
@@ -2751,6 +2751,7 @@ func hasPasteExceededThreshold(msg tea.PasteMsg) bool {
 	}
 	return false
 }
+
 // handleFilePathPaste handles a pasted file path.
 func (m *UI) handleFilePathPaste(path string) tea.Cmd {
 	return func() tea.Msg {
