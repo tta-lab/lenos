@@ -48,6 +48,7 @@ type Commands struct {
 	hasSession bool
 	hasTodos   bool
 	hasQueue   bool
+	hasJobs    bool
 	selected   CommandType
 
 	spinner spinner.Model
@@ -65,7 +66,7 @@ type Commands struct {
 var _ Dialog = (*Commands)(nil)
 
 // NewCommands creates a new commands dialog.
-func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, hasQueue bool, customCommands []commands.CustomCommand) (*Commands, error) {
+func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, hasQueue, hasJobs bool, customCommands []commands.CustomCommand) (*Commands, error) {
 	c := &Commands{
 		com:            com,
 		selected:       SystemCommands,
@@ -73,6 +74,7 @@ func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, has
 		hasSession:     hasSession,
 		hasTodos:       hasTodos,
 		hasQueue:       hasQueue,
+		hasJobs:        hasJobs,
 		customCommands: customCommands,
 	}
 
@@ -357,6 +359,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	// Only show compact command if there's an active session
 	if c.hasSession {
 		commands = append(commands, NewCommandItem(c.com.Styles, "compact", "Compact Session", "", ActionCompact{SessionID: c.sessionID}))
+	}
+	if c.hasJobs {
+		commands = append(commands, NewCommandItem(c.com.Styles, "background_jobs", "Background Jobs", "", ActionOpenDialog{DialogID: BackgroundJobsID}))
 	}
 
 	// Add reasoning toggle for models that support it

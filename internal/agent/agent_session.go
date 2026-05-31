@@ -361,6 +361,22 @@ func (a *sessionAgent) ClearQueue(sessionID string) {
 	}
 }
 
+func (a *sessionAgent) ActiveBackgroundJobs(sessionID string) []BackgroundJob {
+	watcher, ok := a.jobWatchers.Get(sessionID)
+	if !ok || watcher == nil {
+		return nil
+	}
+	return watcher.ListActive()
+}
+
+func (a *sessionAgent) KillBackgroundJob(ctx context.Context, sessionID, jobID string) error {
+	watcher, ok := a.jobWatchers.Get(sessionID)
+	if !ok || watcher == nil {
+		return fmt.Errorf("no background jobs for session %s", sessionID)
+	}
+	return watcher.KillJob(ctx, jobID)
+}
+
 func (a *sessionAgent) CancelAll() {
 	if !a.IsBusy() {
 		return

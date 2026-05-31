@@ -205,11 +205,14 @@ runLoopReentry:
 	// Start background job watcher for sandbox sessions.
 	var jobWatcher *JobWatcher
 	if call.Sandbox && call.SandboxClient != nil {
-		jw := NewJobWatcher(call.SandboxClient, call.SessionID, func(msg string) {
-			a.enqueueBackgroundJobResult(ctx, call, msg)
+		jw := a.jobWatchers.GetOrSet(call.SessionID, func() *JobWatcher {
+			watcher := NewJobWatcher(call.SandboxClient, call.SessionID, func(msg string) {
+				a.enqueueBackgroundJobResult(ctx, call, msg)
+			})
+			go watcher.Run(ctx)
+			return watcher
 		})
 		jobWatcher = jw
-		go jw.Run(ctx)
 	}
 
 	primaryModel := a.primaryModel.Get()

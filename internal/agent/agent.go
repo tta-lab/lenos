@@ -116,6 +116,8 @@ type SessionAgent interface {
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
 	ClearQueue(sessionID string)
+	ActiveBackgroundJobs(sessionID string) []BackgroundJob
+	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
 	Summarize(context.Context, string, fantasy.ProviderOptions) error
 	Model() Model
 }
@@ -160,6 +162,7 @@ type sessionAgent struct {
 
 	messageQueue   *csync.Map[string, []SessionAgentCall]
 	activeRequests *csync.Map[string, context.CancelFunc]
+	jobWatchers    *csync.Map[string, *JobWatcher]
 	hookRunner     hooks.Runner
 	taskExporter   taskTitleExporter
 }
@@ -194,6 +197,7 @@ func NewSessionAgent(
 		notify:               opts.Notify,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
+		jobWatchers:          csync.NewMap[string, *JobWatcher](),
 		hookRunner:           opts.HookRunner,
 		taskExporter:         exportTaskForTitle,
 	}

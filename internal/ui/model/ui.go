@@ -1083,6 +1083,10 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		})
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionKillBackgroundJob:
+		cmds = append(cmds, dialog.KillBackgroundJobCmd(m.com, msg.SessionID, msg.JobID))
+		m.dialog.CloseDialog(dialog.BackgroundJobsID)
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleHelp:
 		m.status.ToggleHelp()
 		m.dialog.CloseDialog(dialog.CommandsID)
@@ -2509,6 +2513,10 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		if cmd := m.openFilesDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case dialog.BackgroundJobsID:
+		if cmd := m.openBackgroundJobsDialog(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case dialog.QuitID:
 		if cmd := m.openQuitDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -2567,14 +2575,31 @@ func (m *UI) openCommandsDialog() tea.Cmd {
 	}
 	hasTodos := hasSession && hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
+	hasJobs := hasSession && len(m.com.Workspace.AgentActiveBackgroundJobs(sessionID)) > 0
 
-	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, m.customCommands)
+	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, hasJobs, m.customCommands)
 	if err != nil {
 		return util.ReportError(err)
 	}
 
 	m.dialog.OpenDialog(commands)
 
+	return nil
+}
+
+func (m *UI) openBackgroundJobsDialog() tea.Cmd {
+	if m.session == nil {
+		return util.ReportWarn("No active session")
+	}
+	if m.dialog.ContainsDialog(dialog.BackgroundJobsID) {
+		m.dialog.BringToFront(dialog.BackgroundJobsID)
+		return nil
+	}
+	jobsDialog, err := dialog.NewBackgroundJobs(m.com, m.session.ID)
+	if err != nil {
+		return util.ReportError(err)
+	}
+	m.dialog.OpenDialog(jobsDialog)
 	return nil
 }
 

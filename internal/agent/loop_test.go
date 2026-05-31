@@ -833,7 +833,7 @@ func TestRunLoop_DrainOnTimeout(t *testing.T) {
 	assert.Contains(t, results[0].CommandContent().Output, "exceeded the per-call timeout")
 }
 
-func TestRunLoop_BackgroundJobStartMentionsKillWithoutStatusPolling(t *testing.T) {
+func TestRunLoop_BackgroundJobStartDoesNotTeachManualJobControl(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{lenosbash.BashBlock("sleep 20"), "exit"}}
 	runner := &fakeRunner{results: []ExecResult{
@@ -849,7 +849,8 @@ func TestRunLoop_BackgroundJobStartMentionsKillWithoutStatusPolling(t *testing.T
 	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
 	obs := results[0].CommandContent().Observation
-	assert.Contains(t, obs, "temenos job kill job-123")
+	assert.Contains(t, obs, "background job started (job_id: job-123)")
+	assert.NotContains(t, obs, "temenos job kill")
 	assert.NotContains(t, obs, "check status")
 	assert.NotContains(t, obs, "temenos job list")
 	assert.NotContains(t, obs, "temenos job log")

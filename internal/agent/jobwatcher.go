@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -16,6 +17,12 @@ const jobPollInterval = 10 * time.Second
 // TemenosJobClient is the subset of temenos client.Client used by JobWatcher.
 type TemenosJobClient interface {
 	GetJob(ctx context.Context, id string) (*temenos.JobInfo, error)
+	KillJob(ctx context.Context, id string) (*temenos.JobInfo, error)
+}
+
+type BackgroundJob struct {
+	ID      string
+	Command string
 }
 
 // JobWatcher polls the temenos job socket for completed background jobs
@@ -62,6 +69,44 @@ func (w *JobWatcher) ActiveCount() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return len(w.active)
+}
+
+func (w *JobWatcher) ListActive() []BackgroundJob {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	jobs := make([]BackgroundJob, 0, len(w.active))
+	for id, command := range w.active {
+		jobs = append(jobs, BackgroundJob{ID: id, Command: command})
+	}
+	slices.SortFunc(jobs, func(a, b BackgroundJob) int {
+		if a.ID < b.ID {
+			return -1
+		}
+		if a.ID > b.ID {
+			return 1
+		}
+		return 0
+	})
+	return jobs
+}
+
+func (w *JobWatcher) KillJob(ctx context.Context, jobID string) error {
+	w.mu.Lock()
+	command, ok := w.active[jobID]
+	w.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("background job %s is not active", jobID)
+	}
+	info, err := w.client.KillJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	if info == nil {
+		info = &temenos.JobInfo{ID: jobID, Status: "killed", ExitCode: -1}
+	}
+	w.formatAndEnqueueKilled(info, command)
+	w.remove(jobID)
+	return nil
 }
 
 // Run blocks when idle and polls when jobs are active. Run in a goroutine;

@@ -67,6 +67,8 @@ type Coordinator interface {
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
 	ClearQueue(sessionID string)
+	ActiveBackgroundJobs(sessionID string) []BackgroundJob
+	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
 	Summarize(context.Context, string) error
 	Model() Model
 	UpdateModels(ctx context.Context) error
@@ -871,6 +873,14 @@ func (c *coordinator) QueuedPrompts(sessionID string) int {
 
 func (c *coordinator) QueuedPromptsList(sessionID string) []string {
 	return c.currentAgent.QueuedPromptsList(sessionID)
+}
+
+func (c *coordinator) ActiveBackgroundJobs(sessionID string) []BackgroundJob {
+	return c.currentAgent.ActiveBackgroundJobs(sessionID)
+}
+
+func (c *coordinator) KillBackgroundJob(ctx context.Context, sessionID, jobID string) error {
+	return c.currentAgent.KillBackgroundJob(ctx, sessionID, jobID)
 }
 
 func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {

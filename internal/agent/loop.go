@@ -189,8 +189,8 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				deps.jobWatcher.AddJob(res.JobID, bashCmd)
 			}
 			obs := fmt.Sprintf(
-				"background job started (job_id: %s)\nyou can kill this job later via `temenos job kill %s`",
-				res.JobID, res.JobID,
+				"background job started (job_id: %s)",
+				res.JobID,
 			)
 			obs = lenosbash.RuntimeBlock(obs)
 			resultMsg.Parts = []message.ContentPart{message.CommandContent{

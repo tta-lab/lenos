@@ -11,8 +11,9 @@ import (
 )
 
 type mockTemenosClient struct {
-	mu   sync.Mutex
-	jobs map[string]*temenos.JobInfo
+	mu     sync.Mutex
+	jobs   map[string]*temenos.JobInfo
+	killed []string
 }
 
 var _ TemenosJobClient = (*mockTemenosClient)(nil)
@@ -28,6 +29,18 @@ func (m *mockTemenosClient) GetJob(_ context.Context, id string) (*temenos.JobIn
 	if !ok {
 		return nil, fmt.Errorf("temenos: job %s not found", id)
 	}
+	return info, nil
+}
+
+func (m *mockTemenosClient) KillJob(_ context.Context, id string) (*temenos.JobInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.killed = append(m.killed, id)
+	info, ok := m.jobs[id]
+	if !ok {
+		return nil, fmt.Errorf("temenos: job %s not found", id)
+	}
+	info.Status = "killed"
 	return info, nil
 }
 
@@ -128,6 +141,63 @@ func TestJobWatcher_KilledJobEnqueuesMessage(t *testing.T) {
 	defer mu.Unlock()
 	if len(received) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(received))
+	}
+}
+
+func TestJobWatcher_ListActiveJobs(t *testing.T) {
+	t.Parallel()
+	w := &JobWatcher{
+		active: map[string]string{
+			"job-1": "go test ./...",
+			"job-2": "sleep 20",
+		},
+		notify: make(chan struct{}, 1),
+	}
+
+	jobs := w.ListActive()
+
+	if len(jobs) != 2 {
+		t.Fatalf("expected 2 jobs, got %d", len(jobs))
+	}
+	if jobs[0].ID != "job-1" || jobs[0].Command != "go test ./..." {
+		t.Fatalf("unexpected first job: %#v", jobs[0])
+	}
+	if jobs[1].ID != "job-2" || jobs[1].Command != "sleep 20" {
+		t.Fatalf("unexpected second job: %#v", jobs[1])
+	}
+}
+
+func TestJobWatcher_KillJobKillsRemovesAndEnqueuesRuntimeResult(t *testing.T) {
+	t.Parallel()
+	mock := newMockTemenosClient()
+	mock.setJob(&temenos.JobInfo{ID: "job-1", Status: "running", ExitCode: 137})
+
+	var received []string
+	var mu sync.Mutex
+	w := &JobWatcher{
+		active:  map[string]string{"job-1": "sleep 20"},
+		notify:  make(chan struct{}, 1),
+		client:  mock,
+		enqueue: func(msg string) { mu.Lock(); received = append(received, msg); mu.Unlock() },
+	}
+
+	if err := w.KillJob(context.Background(), "job-1"); err != nil {
+		t.Fatalf("kill job: %v", err)
+	}
+
+	if w.ActiveCount() != 0 {
+		t.Fatalf("expected no active jobs, got %d", w.ActiveCount())
+	}
+	if len(mock.killed) != 1 || mock.killed[0] != "job-1" {
+		t.Fatalf("unexpected killed jobs: %#v", mock.killed)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(received) != 1 {
+		t.Fatalf("expected 1 runtime message, got %d", len(received))
+	}
+	if received[0] == "" {
+		t.Fatal("expected non-empty runtime message")
 	}
 }
 
