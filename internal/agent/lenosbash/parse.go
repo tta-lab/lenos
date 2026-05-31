@@ -115,14 +115,22 @@ func (p *parser) scan() (Parsed, *Diagnostic) {
 		}
 	}
 	if p.depth > 0 {
-		return Parsed{Original: p.src}, &Diagnostic{
-			Kind:       "tag_unclosed",
-			Message:    "unclosed " + BashStartTag + " tag at end of response",
-			Line:       p.line,
-			Column:     p.col,
-			Offset:     p.pos,
-			Incomplete: true,
-		}
+		p.flushProse()
+		body := strings.TrimPrefix(p.block.String(), "\n")
+		return Parsed{
+				Original:        p.src,
+				Prose:           strings.Join(p.prose, "\n"),
+				Bash:            []string{body},
+				Accepted:        p.src,
+				DroppedPostBash: "",
+			}, &Diagnostic{
+				Kind:       "tag_unclosed",
+				Message:    "unclosed " + BashStartTag + " tag at end of response",
+				Line:       p.line,
+				Column:     p.col,
+				Offset:     p.pos,
+				Incomplete: true,
+			}
 	}
 	p.flushProse()
 	return Parsed{

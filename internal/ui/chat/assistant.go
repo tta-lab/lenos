@@ -147,10 +147,11 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 
 // parseContent extracts display parts from Lenos Bash content.
 // For valid Lenos Bash it returns markdown prose and a command preview from the
-// first parsed bash block.
+// first parsed bash block. When the parse is incomplete (unclosed tag during
+// streaming), prose and in-progress bash are returned for progressive rendering.
 func (a *AssistantMessageItem) parseContent(content string) assistantContent {
 	parsed, diag := lenosbash.Parse(content)
-	if diag != nil {
+	if diag != nil && !diag.Incomplete {
 		// Not valid Lenos Bash — fall back to bash-emit preview.
 		return assistantContent{
 			commandPreview: bashEmitPreview(content, 0),
