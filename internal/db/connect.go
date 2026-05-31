@@ -41,10 +41,27 @@ func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
 		return nil, err
 	}
 
+	// Ported from upstream commit 61ee2d2e.
+	// Original: fix(db): use connection pool to avoid corrupted writes
+	db.SetMaxOpenConns(1)
+
 	if err = db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
+
+	// Adapted from upstream commit 6923820a.
+	// Original: feat(db): refuse to open a data directory in use by another crush
+	// Renamed: CRUSH_SKIP_DATADIR_LOCK → LENOS_SKIP_DATADIR_LOCK
+	lockFile, err := lockDataDir(dataDir)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	// Intentional: the lock file is not closed. flock is released
+	// when the process exits. Closing the file descriptor and then
+	// unlinking would create a race window on the inode.
+	_ = lockFile
 
 	gooseMu.Lock()
 	defer gooseMu.Unlock()

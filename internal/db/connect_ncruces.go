@@ -11,13 +11,21 @@ import (
 )
 
 func openDB(dbPath string) (*sql.DB, error) {
-	db, err := driver.Open(dbPath, func(c *sqlite3.Conn) error {
-		// Set pragmas for better performance via _pragma query params.
+	// Ported from upstream commit 40108413.
+	// Original: fix(db): prevent SQLITE_NOTADB corruption under concurrent sub-agents
+	dsn := fmt.Sprintf("file:%s?_txlock=immediate", dbPath)
+	db, err := driver.Open(dsn, func(c *sqlite3.Conn) error {
+		// Set pragmas for better performance.
 		// Format: PRAGMA name = value;
 		for name, value := range pragmas {
 			if err := c.Exec(fmt.Sprintf("PRAGMA %s = %s;", name, value)); err != nil {
 				return fmt.Errorf("failed to set pragma %q: %w", name, err)
 			}
+		}
+		// Ported from upstream commit 56cf50ad.
+		// Original: fix(db): keep SQLite temp files in memory
+		if err := c.Exec("PRAGMA temp_store = MEMORY;"); err != nil {
+			return fmt.Errorf("failed to set pragma temp_store: %w", err)
 		}
 		return nil
 	})
