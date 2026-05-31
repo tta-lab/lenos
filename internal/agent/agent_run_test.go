@@ -737,6 +737,28 @@ func TestEnqueueBackgroundJobResultStartsIdleAgentTurn(t *testing.T) {
 	require.Equal(t, "background job completed", fantasyMessageText(model.Captured()[0][1]))
 }
 
+func TestEnqueueBackgroundJobResultIgnoresCanceledWatcherContext(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "canceled watcher context")
+	require.NoError(t, err)
+
+	inner := &scriptedModel{emits: []string{"exit"}}
+	model := &streamCapturingModel{inner: inner}
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+	watcherCtx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	agent.enqueueBackgroundJobResult(watcherCtx, SessionAgentCall{
+		SessionID: sess.ID,
+	}, "background job completed")
+
+	require.Eventually(t, func() bool {
+		return len(model.Captured()) == 1
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, "background job completed", fantasyMessageText(model.Captured()[0][1]))
+}
+
 func TestRun_PostLoopDrainAllQueued(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)

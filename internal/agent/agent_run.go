@@ -439,7 +439,7 @@ func (a *sessionAgent) enqueueBackgroundJobResult(ctx context.Context, call Sess
 		return
 	}
 	go func() {
-		if err := a.Run(ctx, runtimeCall); err != nil {
+		if err := a.Run(context.Background(), runtimeCall); err != nil {
 			slog.Warn("background job result: run failed", "session_id", call.SessionID, "error", err)
 		}
 	}()
