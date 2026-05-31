@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -112,6 +113,12 @@ func TestJobWatcher_CompletedJobEnqueuesMessage(t *testing.T) {
 	if received[0] == "" {
 		t.Fatal("expected non-empty message")
 	}
+	if !strings.Contains(received[0], "background job completed (job_id: job-1)") {
+		t.Fatalf("expected completed message to include job id, got %q", received[0])
+	}
+	if strings.Count(received[0], "job_id") < 2 {
+		t.Fatalf("expected completed result body to include job id, got %q", received[0])
+	}
 	if w.ActiveCount() != 0 {
 		t.Fatalf("expected 0 active after remove, got %d", w.ActiveCount())
 	}
@@ -141,6 +148,12 @@ func TestJobWatcher_KilledJobEnqueuesMessage(t *testing.T) {
 	defer mu.Unlock()
 	if len(received) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(received))
+	}
+	if !strings.Contains(received[0], "background job killed (job_id: job-2)") {
+		t.Fatalf("expected killed message to include job id, got %q", received[0])
+	}
+	if strings.Count(received[0], "job_id") < 2 {
+		t.Fatalf("expected killed result body to include job id, got %q", received[0])
 	}
 }
 
@@ -198,6 +211,9 @@ func TestJobWatcher_KillJobKillsRemovesAndEnqueuesRuntimeResult(t *testing.T) {
 	}
 	if received[0] == "" {
 		t.Fatal("expected non-empty runtime message")
+	}
+	if !strings.Contains(received[0], "background job killed (job_id: job-1)") {
+		t.Fatalf("expected killed runtime message to include job id, got %q", received[0])
 	}
 }
 

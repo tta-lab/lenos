@@ -2,6 +2,7 @@ package dialog
 
 import (
 	"context"
+	"fmt"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -169,6 +170,6 @@ func KillBackgroundJobCmd(com *common.Common, sessionID, jobID string) tea.Cmd {
 		if err := com.Workspace.AgentKillBackgroundJob(context.Background(), sessionID, jobID); err != nil {
 			return util.ReportError(err)()
 		}
-		return util.NewInfoMsg("Background job killed")
+		return util.NewInfoMsg(fmt.Sprintf("Background job killed: %s", jobID))
 	}
 }

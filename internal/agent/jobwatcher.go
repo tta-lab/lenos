@@ -187,8 +187,8 @@ func (w *JobWatcher) remove(jobID string) {
 
 func (w *JobWatcher) formatAndEnqueueCompleted(info *temenos.JobInfo, command string) {
 	result := lenosbash.ResultBlock(fmt.Sprintf(
-		"command: %s\nexit_code: %d\nstdout: %s\nstderr: %s",
-		command, info.ExitCode, info.Stdout, info.Stderr,
+		"job_id: %s\ncommand: %s\nexit_code: %d\nstdout: %s\nstderr: %s",
+		info.ID, command, info.ExitCode, info.Stdout, info.Stderr,
 	))
 	obs := fmt.Sprintf("background job completed (job_id: %s)\n\n%s", info.ID, result)
 	w.enqueue(lenosbash.RuntimeBlock(obs))
@@ -196,8 +196,8 @@ func (w *JobWatcher) formatAndEnqueueCompleted(info *temenos.JobInfo, command st
 
 func (w *JobWatcher) formatAndEnqueueKilled(info *temenos.JobInfo, command string) {
 	result := lenosbash.ResultBlock(fmt.Sprintf(
-		"command: %s\nexit_code: %d",
-		command, info.ExitCode,
+		"job_id: %s\ncommand: %s\nexit_code: %d",
+		info.ID, command, info.ExitCode,
 	))
 	obs := fmt.Sprintf("background job killed (job_id: %s)\n\n%s", info.ID, result)
 	w.enqueue(lenosbash.RuntimeBlock(obs))
