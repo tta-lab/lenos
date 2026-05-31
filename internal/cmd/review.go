@@ -63,7 +63,7 @@ lenos review -m gpt-5
 
 		if _, err := program.Run(); err != nil {
 			event.Error(err)
-			return errors.New("Lenos crashed during review")
+			return errors.New("lenos crashed during review")
 		}
 		return nil
 	},
