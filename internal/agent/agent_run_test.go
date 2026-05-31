@@ -770,6 +770,25 @@ func TestRun_PostLoopDrainAllQueued(t *testing.T) {
 	agent.activeRequests.Del(sess.ID)
 }
 
+func TestQueuedPromptsHidesRuntimeOnlyQueue(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "runtime queue")
+	require.NoError(t, err)
+
+	agent := testSessionAgent(env, nil, nil, "sys").(*sessionAgent)
+	agent.messageQueue.Set(sess.ID, []SessionAgentCall{
+		{SessionID: sess.ID, Prompt: "background job completed", runtimePrompt: true},
+	})
+
+	require.Equal(t, 0, agent.QueuedPrompts(sess.ID))
+	require.Empty(t, agent.QueuedPromptsList(sess.ID))
+
+	queued, ok := agent.messageQueue.Get(sess.ID)
+	require.True(t, ok)
+	require.Len(t, queued, 1)
+}
+
 func TestRun_AutoCompactBeforeFirstStepRunsBeforePersistingCurrentPrompt(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)

@@ -439,7 +439,14 @@ func (a *sessionAgent) QueuedPrompts(sessionID string) int {
 	if !ok {
 		return 0
 	}
-	return len(l)
+	count := 0
+	for _, call := range l {
+		if call.runtimePrompt {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
