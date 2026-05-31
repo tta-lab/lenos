@@ -50,21 +50,6 @@ func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Adapted from upstream commit 6923820a.
-	// Original: feat(db): refuse to open a data directory in use by another crush
-	//
-	// Uses LOCK_SH (shared) — multiple lenos processes can share the
-	// database concurrently. SQLite WAL mode with _txlock=immediate
-	// and busy_timeout handles cross-process write serialization.
-	// The shared lock is a safety net against concurrent goose.Up()
-	// migration runs.
-	//
-	// Renamed: CRUSH_SKIP_DATADIR_LOCK → LENOS_SKIP_DATADIR_LOCK
-	if err := lockDataDir(dataDir); err != nil {
-		db.Close()
-		return nil, err
-	}
-
 	gooseMu.Lock()
 	defer gooseMu.Unlock()
 
