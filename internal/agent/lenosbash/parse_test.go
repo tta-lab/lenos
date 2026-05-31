@@ -189,3 +189,43 @@ func TestParseLineMiddleEndTagInsideBashIsPlainText(t *testing.T) {
 	require.Len(t, parsed.Bash, 1)
 	assert.Equal(t, "echo "+BashEndTag+"\n", parsed.Bash[0])
 }
+
+func TestParseUnclosedTagReturnsPartialProseAndBash(t *testing.T) {
+	t.Parallel()
+
+	source := "Let me check.\n" + BashStartTag + "\nls -la\n"
+	parsed, diag := Parse(source)
+
+	require.NotNil(t, diag)
+	assert.True(t, diag.Incomplete)
+	assert.Equal(t, "Let me check.\n", parsed.Prose)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "ls -la\n", parsed.Bash[0])
+	assert.Equal(t, source, parsed.Original)
+}
+
+func TestParseUnclosedTagWithProseAfterWhitespace(t *testing.T) {
+	t.Parallel()
+
+	source := "\n\n" + BashStartTag + "\necho hello\n"
+	parsed, diag := Parse(source)
+
+	require.NotNil(t, diag)
+	assert.True(t, diag.Incomplete)
+	assert.Empty(t, parsed.Prose)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "echo hello\n", parsed.Bash[0])
+}
+
+func TestParseUnclosedTagNoProse(t *testing.T) {
+	t.Parallel()
+
+	source := BashStartTag + "\ncat main.go\n"
+	parsed, diag := Parse(source)
+
+	require.NotNil(t, diag)
+	assert.True(t, diag.Incomplete)
+	assert.Empty(t, parsed.Prose)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "cat main.go\n", parsed.Bash[0])
+}
