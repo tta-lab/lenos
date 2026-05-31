@@ -63,6 +63,7 @@ func TestMigrationUp(t *testing.T) {
 
 	conn, err := db.Connect(context.Background(), dir)
 	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
 	require.NotNil(t, conn)
 
 	// Verify the migrations actually created tables.
@@ -78,5 +79,4 @@ func TestMigrationUp(t *testing.T) {
 		tables = append(tables, name)
 	}
 	require.Len(t, tables, 3, "sessions, messages, and files tables must exist after migration")
-	conn.Close()
 }
