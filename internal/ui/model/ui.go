@@ -2575,9 +2575,8 @@ func (m *UI) openCommandsDialog() tea.Cmd {
 	}
 	hasTodos := hasSession && hasIncompleteTodos(m.effectiveTodos())
 	hasQueue := m.promptQueue > 0
-	hasJobs := hasSession && len(m.com.Workspace.AgentActiveBackgroundJobs(sessionID)) > 0
 
-	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, hasJobs, m.customCommands)
+	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, m.customCommands)
 	if err != nil {
 		return util.ReportError(err)
 	}

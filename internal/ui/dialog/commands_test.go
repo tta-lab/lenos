@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/ui/common"
@@ -14,16 +13,11 @@ import (
 
 type commandTestWorkspace struct {
 	workspace.Workspace
-	cfg  *config.Config
-	jobs []agent.BackgroundJob
+	cfg *config.Config
 }
 
 func (w commandTestWorkspace) Config() *config.Config {
 	return w.cfg
-}
-
-func (w commandTestWorkspace) AgentActiveBackgroundJobs(string) []agent.BackgroundJob {
-	return w.jobs
 }
 
 func TestDefaultCommandsIncludesManualCompact(t *testing.T) {
@@ -37,7 +31,7 @@ func TestDefaultCommandsIncludesManualCompact(t *testing.T) {
 			Agents:    map[string]config.Agent{},
 		}},
 		Styles: &sty,
-	}, "session-id", true, false, false, false, nil)
+	}, "session-id", true, false, false, nil)
 	require.NoError(t, err)
 
 	var compact *CommandItem
@@ -53,21 +47,18 @@ func TestDefaultCommandsIncludesManualCompact(t *testing.T) {
 	require.True(t, ok, "compact command should dispatch ActionCompact")
 }
 
-func TestDefaultCommandsIncludesBackgroundJobsWhenActive(t *testing.T) {
+func TestDefaultCommandsIncludesBackgroundJobsForActiveSession(t *testing.T) {
 	t.Parallel()
 
 	sty := styles.DefaultStyles()
 	cmds, err := NewCommands(&common.Common{
-		Workspace: commandTestWorkspace{
-			cfg: &config.Config{
-				Models:    map[config.SelectedModelType]config.SelectedModel{},
-				Providers: csync.NewMap[string, config.ProviderConfig](),
-				Agents:    map[string]config.Agent{},
-			},
-			jobs: []agent.BackgroundJob{{ID: "job-1", Command: "sleep 20"}},
-		},
+		Workspace: commandTestWorkspace{cfg: &config.Config{
+			Models:    map[config.SelectedModelType]config.SelectedModel{},
+			Providers: csync.NewMap[string, config.ProviderConfig](),
+			Agents:    map[string]config.Agent{},
+		}},
 		Styles: &sty,
-	}, "session-id", true, false, false, true, nil)
+	}, "session-id", true, false, false, nil)
 	require.NoError(t, err)
 
 	var jobs *CommandItem
@@ -77,7 +68,7 @@ func TestDefaultCommandsIncludesBackgroundJobsWhenActive(t *testing.T) {
 			break
 		}
 	}
-	require.NotNil(t, jobs, "active background jobs should expose a command")
+	require.NotNil(t, jobs, "active sessions should expose a background jobs command")
 	require.Equal(t, "Background Jobs", jobs.title)
 	action, ok := jobs.Action().(ActionOpenDialog)
 	require.True(t, ok, "background jobs command should open a dialog")

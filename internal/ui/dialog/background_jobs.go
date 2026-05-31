@@ -44,7 +44,11 @@ func NewBackgroundJobs(com *common.Common, sessionID string) (*BackgroundJobs, e
 	b.help = help.New()
 	b.help.Styles = com.Styles.DialogHelpStyles()
 
-	b.list = list.NewFilterableList(backgroundJobItems(com.Styles, sessionID, b.jobs...)...)
+	items := backgroundJobItems(com.Styles, sessionID, b.jobs...)
+	if len(items) == 0 {
+		items = append(items, NewCommandItem(com.Styles, "no_background_jobs", "No active background jobs", "", nil))
+	}
+	b.list = list.NewFilterableList(items...)
 	b.list.Focus()
 	b.list.SetSelected(0)
 
