@@ -87,10 +87,9 @@ The coder turn dispatches on `RuntimeOverrides.ActiveTier`:
 `agent_session.go` all use `a.primaryModel.Get()`.
 `Summarize()` also uses `a.primaryModel.Get()` so compact uses the same
 active tier/provider/model as the current session.
-Compact summarization keeps the normal bash-first system prompt as the first
+Compact summarization keeps the normal tagged-bash system prompt as the first
 message and appends the compact instruction as the final user message. This
-keeps the shared prompt prefix cacheable while instructing the model to emit
-one `m####"..."####` message block.
+keeps the shared prompt prefix cacheable.
 
 ### CLI behavior matrix
 
@@ -136,20 +135,21 @@ current session.
 
 ### Lenos Bash Storage Invariant
 
-Assistant messages in the database should preserve the Lenos Bash text the
-agent emitted, after any runtime auto-repair. For example, if the model emits
-plain reader-facing prose and the runtime repairs it to `m#"..."#`, store the
-repaired `m` block as the assistant message. This keeps future model history
-full of valid Lenos Bash examples and teaches the protocol through its own
-prior turns.
+Assistant messages in the database should preserve the full tagged-bash
+response the agent emitted, after any runtime auto-repair. For example, if
+the model emits plain reader-facing prose and the runtime repairs it to a
+bash block, store the repaired response as the assistant message. This keeps
+future model history full of valid protocol examples and teaches the
+protocol through its own prior turns.
 
 Published message bodies are display data parsed from the stored assistant
-Lenos Bash emit. Do not duplicate message-block bodies onto result rows.
-Synthetic mixed emits must store the raw `m` blocks as assistant history while
-executing only the cleaned bash. When changing message-block rendering,
-preserve the existing TUI prose renderer semantics; storage role changes
-should not make markdown look raw or change row alignment. See
-`internal/ui/AGENTS.md` for chat render rules.
+emit. Assistant prose/markdown bodies belong on assistant rows only; do not
+duplicate them onto result rows (result rows carry command output). Synthetic mixed
+emits must store the raw tagged-bash response as assistant history while
+executing only the cleaned bash. When changing response rendering, preserve
+the existing TUI prose renderer semantics; storage role changes should not
+make markdown look raw or change row alignment. See `internal/ui/AGENTS.md`
+for chat render rules.
 
 ## Build/Test/Lint Commands
 

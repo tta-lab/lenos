@@ -2319,38 +2319,14 @@ func (m *UI) insertCompletionText(text string) bool {
 }
 
 // insertFileCompletion inserts the selected file path into the textarea,
-// replacing the @query, and adds the file as an attachment.
+// replacing the @query. The agent reads the file manually — we no longer
+// auto-attach file contents.
 func (m *UI) insertFileCompletion(path string) tea.Cmd {
 	prevHeight := m.textarea.Height()
 	if !m.insertCompletionText(path) {
 		return nil
 	}
-	heightCmd := m.handleTextareaHeightChange(prevHeight)
-
-	fileCmd := func() tea.Msg {
-		absPath, _ := filepath.Abs(path)
-
-		if slices.Contains(m.sessionFileReads, absPath) {
-			return nil
-		}
-
-		m.sessionFileReads = append(m.sessionFileReads, absPath)
-
-		// Add file as attachment.
-		content, err := os.ReadFile(path)
-		if err != nil {
-			// If it fails, let the LLM handle it later.
-			return nil
-		}
-
-		return message.Attachment{
-			FilePath: path,
-			FileName: filepath.Base(path),
-			MimeType: mimeOf(content),
-			Content:  content,
-		}
-	}
-	return tea.Batch(heightCmd, fileCmd)
+	return m.handleTextareaHeightChange(prevHeight)
 }
 
 // completionsPosition returns the X and Y position for the completions popup.
