@@ -66,6 +66,17 @@ func TestResolveAgentFile_CoderFallsBackToEmbedded(t *testing.T) {
 	}
 }
 
+func TestResolveAgentFile_ReviewerFallsBackToEmbedded(t *testing.T) {
+	td := t.TempDir()
+	path, err := resolveAgentFile("reviewer", []string{td})
+	if err != nil {
+		t.Fatalf("expected no error for reviewer fallback, got: %v", err)
+	}
+	if path != "" {
+		t.Errorf("expected empty path for embedded fallback, got: %s", path)
+	}
+}
+
 func TestResolveAgentFile_NonCoderNotFound_Errors(t *testing.T) {
 	td := t.TempDir()
 	_, err := resolveAgentFile("nonexistent", []string{td})

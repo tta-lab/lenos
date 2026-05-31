@@ -394,3 +394,24 @@ func TestResolveIdentityBody_ReadErrorFallsBackToEmbedded(t *testing.T) {
 		t.Errorf("read-error fallback should contain embedded coder identity, got:\n%s", body)
 	}
 }
+
+func TestResolveIdentityBody_ReviewerFallsBackToEmbeddedReviewer(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	store.Overrides().AgentName = config.AgentReviewer
+
+	body := resolveIdentityBody(store)
+
+	assert.Contains(t, body, "You are Lenos Reviewer")
+	assert.Contains(t, body, "Never run `git fetch`, `git pull`, `git checkout`, or network git commands.")
+	assert.Contains(t, body, "`ttal pr view`")
+	assert.Contains(t, body, "Do not run unit tests, linters, formatters, or build checks.")
+	assert.NotContains(t, body, "You are Lenos, a powerful AI Assistant")
+}
