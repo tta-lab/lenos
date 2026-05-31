@@ -143,7 +143,8 @@ future model history full of valid protocol examples and teaches the
 protocol through its own prior turns.
 
 Published message bodies are display data parsed from the stored assistant
-emit. Do not duplicate command output onto result rows. Synthetic mixed
+emit. Assistant prose/markdown bodies belong on assistant rows only; do not
+duplicate them onto result rows (result rows carry command output). Synthetic mixed
 emits must store the raw tagged-bash response as assistant history while
 executing only the cleaned bash. When changing response rendering, preserve
 the existing TUI prose renderer semantics; storage role changes should not
