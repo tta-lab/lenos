@@ -660,11 +660,77 @@ func TestCombineQueuedCalls_ManyCallsJoinedWithSeparator(t *testing.T) {
 	require.Equal(t, "s1", out.SessionID)
 }
 
+func TestCombineQueuedCalls_PreservesRuntimePromptVisibility(t *testing.T) {
+	t.Parallel()
+	calls := []SessionAgentCall{
+		{SessionID: "s1", Prompt: "job done", runtimePrompt: true},
+		{SessionID: "s1", Prompt: "human follow-up"},
+	}
+	out := combineQueuedCalls(calls)
+	require.Equal(t, "job done\n\nhuman follow-up", out.Prompt)
+	require.Equal(t, "s1", out.SessionID)
+	require.Len(t, out.turnPrompts, 2)
+	require.Equal(t, turnPrompt{Text: "job done", Persist: false}, out.turnPrompts[0])
+	require.Equal(t, turnPrompt{Text: "human follow-up", Persist: true}, out.turnPrompts[1])
+}
+
 func TestCombineQueuedCalls_EmptyPrecondition(t *testing.T) {
 	t.Parallel()
 	assert.Panics(t, func() {
 		_ = combineQueuedCalls(nil)
 	})
+}
+
+func TestRun_RuntimePromptFeedsModelWithoutPersistingUserMessage(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "runtime prompt")
+	require.NoError(t, err)
+
+	inner := &scriptedModel{emits: []string{"exit"}}
+	model := &streamCapturingModel{inner: inner}
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID:     sess.ID,
+		Prompt:        "background job completed",
+		runtimePrompt: true,
+	})
+	require.NoError(t, err)
+
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	for _, msg := range msgs {
+		require.NotEqual(t, message.User, msg.Role, "runtime prompt must not render as a user chat row")
+	}
+	require.Len(t, model.captured, 1)
+	require.Equal(t, "background job completed", fantasyMessageText(model.captured[0][1]))
+}
+
+func TestEnqueueBackgroundJobResultStartsIdleAgentTurn(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "idle runtime prompt")
+	require.NoError(t, err)
+
+	inner := &scriptedModel{emits: []string{"exit"}}
+	model := &streamCapturingModel{inner: inner}
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+
+	agent.enqueueBackgroundJobResult(t.Context(), SessionAgentCall{
+		SessionID: sess.ID,
+	}, "background job completed")
+
+	require.Eventually(t, func() bool {
+		return len(model.captured) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	for _, msg := range msgs {
+		require.NotEqual(t, message.User, msg.Role, "idle background result must not render as a user chat row")
+	}
+	require.Equal(t, "background job completed", fantasyMessageText(model.captured[0][1]))
 }
 
 func TestRun_PostLoopDrainAllQueued(t *testing.T) {

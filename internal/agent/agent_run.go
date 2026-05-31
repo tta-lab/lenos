@@ -206,15 +206,7 @@ runLoopReentry:
 	var jobWatcher *JobWatcher
 	if call.Sandbox && call.SandboxClient != nil {
 		jw := NewJobWatcher(call.SandboxClient, call.SessionID, func(msg string) {
-			existing, ok := a.messageQueue.Get(call.SessionID)
-			if !ok {
-				existing = []SessionAgentCall{}
-			}
-			existing = append(existing, SessionAgentCall{
-				SessionID: call.SessionID,
-				Prompt:    msg,
-			})
-			a.messageQueue.Set(call.SessionID, existing)
+			a.enqueueBackgroundJobResult(ctx, call, msg)
 		})
 		jobWatcher = jw
 		go jw.Run(ctx)
@@ -251,11 +243,9 @@ runLoopReentry:
 		}
 	}
 
-	if _, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
-		Role:  message.User,
-		Parts: []message.ContentPart{message.TextContent{Text: call.Prompt}},
-	}); err != nil {
-		return fmt.Errorf("failed to create user message: %w", err)
+	turnPrompts := turnPromptsForCall(call)
+	if err := a.persistVisibleTurnPrompts(ctx, call.SessionID, turnPrompts); err != nil {
+		return err
 	}
 
 	var wg sync.WaitGroup
@@ -327,21 +317,17 @@ runLoopReentry:
 			used := currentSession.PromptTokens + currentSession.CompletionTokens
 			return shouldAutoCompact(int64(primaryModel.CatwalkCfg.ContextWindow), used)
 		},
-		drainQueue: func() []string {
+		drainQueue: func() []turnPrompt {
 			queued, ok := a.messageQueue.Take(call.SessionID)
 			if !ok || len(queued) == 0 {
 				return nil
 			}
-			prompts := make([]string, len(queued))
-			for i, q := range queued {
-				prompts[i] = q.Prompt
-			}
-			return prompts
+			return turnPromptsForCall(combineQueuedCalls(queued))
 		},
 		jobWatcher: jobWatcher,
 	}
 
-	stop, runErr := runLoop(streamCtx, deps, history, call.Prompt)
+	stop, runErr := runLoopWithPrompts(streamCtx, deps, history, turnPrompts)
 
 	a.eventPromptResponded(call.SessionID, time.Since(startTime).Truncate(time.Second))
 
@@ -417,6 +403,52 @@ func autoCompactContinuationPrompt(prompt string) string {
 	return fmt.Sprintf("%s, the initial user request was: `%s`", autoCompactContinuationPrefix, prompt)
 }
 
+func turnPromptsForCall(call SessionAgentCall) []turnPrompt {
+	if len(call.turnPrompts) > 0 {
+		return call.turnPrompts
+	}
+	return []turnPrompt{{
+		Text:    call.Prompt,
+		Persist: !call.runtimePrompt,
+	}}
+}
+
+func (a *sessionAgent) persistVisibleTurnPrompts(ctx context.Context, sessionID string, prompts []turnPrompt) error {
+	for _, prompt := range prompts {
+		if !prompt.Persist {
+			continue
+		}
+		if _, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
+			Role:  message.User,
+			Parts: []message.ContentPart{message.TextContent{Text: prompt.Text}},
+		}); err != nil {
+			return fmt.Errorf("failed to create user message: %w", err)
+		}
+	}
+	return nil
+}
+
+func (a *sessionAgent) enqueueBackgroundJobResult(ctx context.Context, call SessionAgentCall, msg string) {
+	runtimeCall := call
+	runtimeCall.Prompt = msg
+	runtimeCall.runtimePrompt = true
+	runtimeCall.turnPrompts = nil
+	if a.IsSessionBusy(call.SessionID) {
+		existing, ok := a.messageQueue.Get(call.SessionID)
+		if !ok {
+			existing = []SessionAgentCall{}
+		}
+		existing = append(existing, runtimeCall)
+		a.messageQueue.Set(call.SessionID, existing)
+		return
+	}
+	go func() {
+		if err := a.Run(ctx, runtimeCall); err != nil {
+			slog.Warn("background job result: run failed", "session_id", call.SessionID, "error", err)
+		}
+	}()
+}
+
 // combineQueuedCalls collapses N queued calls into one re-entry call.
 // Prompts join with "\n\n"; runtime fields take from the FIRST queued call.
 // Caller must check len(calls) > 0 before invoking.
@@ -429,12 +461,17 @@ func combineQueuedCalls(calls []SessionAgentCall) SessionAgentCall {
 		return first
 	}
 	var sb strings.Builder
-	sb.WriteString(first.Prompt)
-	for _, c := range calls[1:] {
-		sb.WriteString(queuedPromptSep)
+	prompts := make([]turnPrompt, 0, len(calls))
+	for i, c := range calls {
+		if i > 0 {
+			sb.WriteString(queuedPromptSep)
+		}
 		sb.WriteString(c.Prompt)
+		prompts = append(prompts, turnPromptsForCall(c)...)
 	}
 	first.Prompt = sb.String()
+	first.turnPrompts = prompts
+	first.runtimePrompt = false
 	return first
 }
 

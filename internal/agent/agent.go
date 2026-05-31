@@ -57,6 +57,10 @@ var summaryPrompt []byte
 type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
+	// runtimePrompt marks Prompt as runtime feedback that should be sent to
+	// the model without persisting a user-visible chat row.
+	runtimePrompt bool
+	turnPrompts   []turnPrompt
 
 	// ProviderOptions are the per-provider streaming options merged from
 	// catwalk + provider config + model config (anthropic thinking, openai
@@ -94,6 +98,11 @@ type SessionAgentCall struct {
 type RuntimeContextCommand struct {
 	Command  string
 	Optional bool
+}
+
+type turnPrompt struct {
+	Text    string
+	Persist bool
 }
 
 type SessionAgent interface {

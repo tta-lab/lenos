@@ -409,9 +409,12 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 	if !ok {
 		return nil
 	}
-	prompts := make([]string, len(l))
-	for i, call := range l {
-		prompts[i] = call.Prompt
+	prompts := make([]string, 0, len(l))
+	for _, call := range l {
+		if call.runtimePrompt {
+			continue
+		}
+		prompts = append(prompts, call.Prompt)
 	}
 	return prompts
 }

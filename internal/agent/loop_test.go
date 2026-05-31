@@ -234,7 +234,7 @@ func newDeps(t *testing.T, model fantasy.LanguageModel, runner Runner, rec recor
 	return newDepsWithDrain(t, model, runner, rec, nil)
 }
 
-func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, rec recorderIface, drain func() []string) (loopDeps, *mockMessageService) {
+func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, rec recorderIface, drain func() []turnPrompt) (loopDeps, *mockMessageService) {
 	t.Helper()
 	ms := newMockMessageService()
 	return loopDeps{
@@ -247,13 +247,16 @@ func newDepsWithDrain(t *testing.T, model fantasy.LanguageModel, runner Runner, 
 	}, ms
 }
 
-func cannedDrainer(rounds ...[]string) func() []string {
+func cannedDrainer(rounds ...[]string) func() []turnPrompt {
 	i := 0
-	return func() []string {
+	return func() []turnPrompt {
 		if i >= len(rounds) {
 			return nil
 		}
-		out := rounds[i]
+		out := make([]turnPrompt, len(rounds[i]))
+		for j, prompt := range rounds[i] {
+			out[j] = turnPrompt{Text: prompt, Persist: true}
+		}
 		i++
 		return out
 	}

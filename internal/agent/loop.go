@@ -33,7 +33,7 @@ var ErrStepCap = errors.New("agent: step cap reached")
 // loopDeps wires the bash-first loop to its environment.
 type loopDeps struct {
 	model                     Model
-	drainQueue                func() []string
+	drainQueue                func() []turnPrompt
 	provOpts                  fantasy.ProviderOptions
 	pairWith                  string
 	messages                  message.Service
@@ -61,10 +61,16 @@ const (
 
 // runLoop drives one turn: stream → parse → execute bash blocks → repeat.
 func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prompt string) (stopReason, error) {
-	msgs := make([]fantasy.Message, 0, len(history)+2)
+	return runLoopWithPrompts(ctx, deps, history, []turnPrompt{{Text: prompt}})
+}
+
+func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Message, prompts []turnPrompt) (stopReason, error) {
+	msgs := make([]fantasy.Message, 0, len(history)+1+len(prompts))
 	msgs = append(msgs, fantasy.NewSystemMessage(deps.sysPrompt))
 	msgs = append(msgs, history...)
-	msgs = append(msgs, fantasy.NewUserMessage(prompt))
+	for _, prompt := range prompts {
+		msgs = append(msgs, fantasy.NewUserMessage(prompt.Text))
+	}
 	for step := 0; step < StepCap; step++ {
 		if deps.shouldSummarizeBeforeStep != nil && deps.shouldSummarizeBeforeStep(step) {
 			return stopShouldSummarize, nil
@@ -496,13 +502,15 @@ func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) 
 	}
 	drained := deps.drainQueue()
 	for _, prompt := range drained {
-		if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-			Role:  message.User,
-			Parts: []message.ContentPart{message.TextContent{Text: prompt}},
-		}); err != nil {
-			slog.Warn("loop: persist drained user msg", "error", err)
+		if prompt.Persist {
+			if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
+				Role:  message.User,
+				Parts: []message.ContentPart{message.TextContent{Text: prompt.Text}},
+			}); err != nil {
+				slog.Warn("loop: persist drained user msg", "error", err)
+			}
 		}
-		msgs = append(msgs, fantasy.NewUserMessage(prompt))
+		msgs = append(msgs, fantasy.NewUserMessage(prompt.Text))
 	}
 	return msgs
 }
