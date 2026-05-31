@@ -1139,6 +1139,14 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.transparent", newValue); err != nil {
 				return util.ReportError(err)()
 			}
+			// Update in-memory config so commands dialog label reflects the new state.
+			if cfg.Options == nil {
+				cfg.Options = &config.Options{}
+			}
+			if cfg.Options.TUI == nil {
+				cfg.Options.TUI = &config.TUIOptions{}
+			}
+			cfg.Options.TUI.Transparent = &newValue
 			m.isTransparent = newValue
 
 			status := "disabled"
