@@ -54,6 +54,7 @@ func (w *AppWorkspace) SaveSession(ctx context.Context, sess session.Session) (s
 }
 
 func (w *AppWorkspace) DeleteSession(ctx context.Context, sessionID string) error {
+	w.app.AgentCoordinator.StopBackgroundJobs(sessionID)
 	return w.app.Sessions.Delete(ctx, sessionID)
 }
 
@@ -141,6 +142,20 @@ func (w *AppWorkspace) AgentClearQueue(sessionID string) {
 	if w.app.AgentCoordinator != nil {
 		w.app.AgentCoordinator.ClearQueue(sessionID)
 	}
+}
+
+func (w *AppWorkspace) AgentActiveBackgroundJobs(sessionID string) []agent.BackgroundJob {
+	if w.app.AgentCoordinator == nil {
+		return nil
+	}
+	return w.app.AgentCoordinator.ActiveBackgroundJobs(sessionID)
+}
+
+func (w *AppWorkspace) AgentKillBackgroundJob(ctx context.Context, sessionID, jobID string) error {
+	if w.app.AgentCoordinator == nil {
+		return errors.New("agent coordinator not initialized")
+	}
+	return w.app.AgentCoordinator.KillBackgroundJob(ctx, sessionID, jobID)
 }
 
 func (w *AppWorkspace) AgentCompact(ctx context.Context, sessionID string) error {

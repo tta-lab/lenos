@@ -10,6 +10,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"sync"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
@@ -57,6 +58,10 @@ var summaryPrompt []byte
 type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
+	// runtimePrompt marks Prompt as runtime feedback that should be sent to
+	// the model without persisting a user-visible chat row.
+	runtimePrompt bool
+	turnPrompts   []turnPrompt
 
 	// ProviderOptions are the per-provider streaming options merged from
 	// catwalk + provider config + model config (anthropic thinking, openai
@@ -96,6 +101,11 @@ type RuntimeContextCommand struct {
 	Optional bool
 }
 
+type turnPrompt struct {
+	Text    string
+	Persist bool
+}
+
 type SessionAgent interface {
 	Run(context.Context, SessionAgentCall) error
 	SetModels(large Model, small Model, primary Model)
@@ -107,6 +117,9 @@ type SessionAgent interface {
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
 	ClearQueue(sessionID string)
+	ActiveBackgroundJobs(sessionID string) []BackgroundJob
+	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
+	StopBackgroundJobs(sessionID string)
 	Summarize(context.Context, string, fantasy.ProviderOptions) error
 	Model() Model
 }
@@ -149,10 +162,18 @@ type sessionAgent struct {
 	disableAutoSummarize bool
 	notify               pubsub.Publisher[notify.Notification]
 
-	messageQueue   *csync.Map[string, []SessionAgentCall]
-	activeRequests *csync.Map[string, context.CancelFunc]
-	hookRunner     hooks.Runner
-	taskExporter   taskTitleExporter
+	messageQueue    *csync.Map[string, []SessionAgentCall]
+	activeRequests  *csync.Map[string, context.CancelFunc]
+	jobWatchers     *csync.Map[string, *sessionJobWatcher]
+	jobWatchersMu   sync.Mutex
+	sessionUpdateMu sync.Mutex
+	hookRunner      hooks.Runner
+	taskExporter    taskTitleExporter
+}
+
+type sessionJobWatcher struct {
+	watcher *JobWatcher
+	cancel  context.CancelFunc
 }
 
 type SessionAgentOptions struct {
@@ -185,6 +206,7 @@ func NewSessionAgent(
 		notify:               opts.Notify,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
+		jobWatchers:          csync.NewMap[string, *sessionJobWatcher](),
 		hookRunner:           opts.HookRunner,
 		taskExporter:         exportTaskForTitle,
 	}

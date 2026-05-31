@@ -276,6 +276,8 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID, taskID stri
 		}
 	}
 
+	a.sessionUpdateMu.Lock()
+	defer a.sessionUpdateMu.Unlock()
 	if err := a.sessions.Rename(ctx, sessionID, title); err != nil {
 		slog.Error("Failed to save session title", "error", err)
 	}
@@ -318,6 +320,8 @@ func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage
 // original session is returned unchanged and a warning is logged.
 func (a *sessionAgent) saveSessionUsage(ctx context.Context, sessionID string, usage fantasy.Usage, meta fantasy.ProviderMetadata, logMsg string) (session.Session, bool) {
 	pm := a.primaryModel.Get()
+	a.sessionUpdateMu.Lock()
+	defer a.sessionUpdateMu.Unlock()
 	s, err := a.sessions.Get(ctx, sessionID)
 	if err != nil {
 		slog.Warn("Failed to load session for usage update", "session_id", sessionID, "error", err)
@@ -361,7 +365,41 @@ func (a *sessionAgent) ClearQueue(sessionID string) {
 	}
 }
 
+func (a *sessionAgent) ActiveBackgroundJobs(sessionID string) []BackgroundJob {
+	managed, ok := a.jobWatchers.Get(sessionID)
+	if !ok || managed == nil {
+		return nil
+	}
+	return managed.watcher.ListActive()
+}
+
+func (a *sessionAgent) KillBackgroundJob(ctx context.Context, sessionID, jobID string) error {
+	managed, ok := a.jobWatchers.Get(sessionID)
+	if !ok || managed == nil {
+		return fmt.Errorf("no background jobs for session %s", sessionID)
+	}
+	return managed.watcher.KillJob(ctx, jobID)
+}
+
+func (a *sessionAgent) StopBackgroundJobs(sessionID string) {
+	a.stopBackgroundJobs(sessionID)
+}
+
+func (a *sessionAgent) stopBackgroundJobs(sessionID string) {
+	a.jobWatchersMu.Lock()
+	defer a.jobWatchersMu.Unlock()
+
+	managed, ok := a.jobWatchers.Take(sessionID)
+	if !ok || managed == nil {
+		return
+	}
+	managed.cancel()
+}
+
 func (a *sessionAgent) CancelAll() {
+	for sessionID := range a.jobWatchers.Seq2() {
+		a.stopBackgroundJobs(sessionID)
+	}
 	if !a.IsBusy() {
 		return
 	}
@@ -401,7 +439,14 @@ func (a *sessionAgent) QueuedPrompts(sessionID string) int {
 	if !ok {
 		return 0
 	}
-	return len(l)
+	count := 0
+	for _, call := range l {
+		if call.runtimePrompt {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
@@ -409,9 +454,12 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 	if !ok {
 		return nil
 	}
-	prompts := make([]string, len(l))
-	for i, call := range l {
-		prompts[i] = call.Prompt
+	prompts := make([]string, 0, len(l))
+	for _, call := range l {
+		if call.runtimePrompt {
+			continue
+		}
+		prompts = append(prompts, call.Prompt)
 	}
 	return prompts
 }

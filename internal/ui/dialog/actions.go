@@ -55,6 +55,10 @@ type (
 	ActionCompact                     struct {
 		SessionID string
 	}
+	ActionKillBackgroundJob struct {
+		SessionID string
+		JobID     string
+	}
 	// ActionSelectReasoningEffort is a message indicating a reasoning effort
 	// has been selected.
 	ActionSelectReasoningEffort struct {

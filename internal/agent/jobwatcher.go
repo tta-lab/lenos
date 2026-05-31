@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +18,12 @@ const jobPollInterval = 10 * time.Second
 // TemenosJobClient is the subset of temenos client.Client used by JobWatcher.
 type TemenosJobClient interface {
 	GetJob(ctx context.Context, id string) (*temenos.JobInfo, error)
+	KillJob(ctx context.Context, id string) (*temenos.JobInfo, error)
+}
+
+type BackgroundJob struct {
+	ID      string
+	Command string
 }
 
 // JobWatcher polls the temenos job socket for completed background jobs
@@ -29,6 +37,7 @@ type JobWatcher struct {
 	client    TemenosJobClient
 	enqueue   func(msg string)
 	sessionID string
+	onIdle    func()
 }
 
 // NewJobWatcher creates a dormant watcher. Call Run in a goroutine to start.
@@ -62,6 +71,47 @@ func (w *JobWatcher) ActiveCount() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return len(w.active)
+}
+
+func (w *JobWatcher) ListActive() []BackgroundJob {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	jobs := make([]BackgroundJob, 0, len(w.active))
+	for id, command := range w.active {
+		jobs = append(jobs, BackgroundJob{ID: id, Command: command})
+	}
+	slices.SortFunc(jobs, func(a, b BackgroundJob) int {
+		if a.ID < b.ID {
+			return -1
+		}
+		if a.ID > b.ID {
+			return 1
+		}
+		return 0
+	})
+	return jobs
+}
+
+func (w *JobWatcher) KillJob(ctx context.Context, jobID string) error {
+	w.mu.Lock()
+	command, ok := w.active[jobID]
+	w.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("background job %s is not active", jobID)
+	}
+	info, err := w.client.KillJob(ctx, jobID)
+	if err != nil {
+		if isTemenosJobNotFound(err) && !w.hasJob(jobID) {
+			return nil
+		}
+		return err
+	}
+	if info == nil {
+		info = &temenos.JobInfo{ID: jobID, Status: "killed", ExitCode: -1}
+	}
+	w.formatAndEnqueueKilled(info, command)
+	w.remove(jobID)
+	return nil
 }
 
 // Run blocks when idle and polls when jobs are active. Run in a goroutine;
@@ -137,13 +187,28 @@ func (w *JobWatcher) pollAll(ctx context.Context) {
 func (w *JobWatcher) remove(jobID string) {
 	w.mu.Lock()
 	delete(w.active, jobID)
+	idle := len(w.active) == 0
 	w.mu.Unlock()
+	if idle && w.onIdle != nil {
+		w.onIdle()
+	}
+}
+
+func (w *JobWatcher) hasJob(jobID string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, ok := w.active[jobID]
+	return ok
+}
+
+func isTemenosJobNotFound(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "not found")
 }
 
 func (w *JobWatcher) formatAndEnqueueCompleted(info *temenos.JobInfo, command string) {
 	result := lenosbash.ResultBlock(fmt.Sprintf(
-		"command: %s\nexit_code: %d\nstdout: %s\nstderr: %s",
-		command, info.ExitCode, info.Stdout, info.Stderr,
+		"job_id: %s\ncommand: %s\nexit_code: %d\nstdout: %s\nstderr: %s",
+		info.ID, command, info.ExitCode, info.Stdout, info.Stderr,
 	))
 	obs := fmt.Sprintf("background job completed (job_id: %s)\n\n%s", info.ID, result)
 	w.enqueue(lenosbash.RuntimeBlock(obs))
@@ -151,8 +216,8 @@ func (w *JobWatcher) formatAndEnqueueCompleted(info *temenos.JobInfo, command st
 
 func (w *JobWatcher) formatAndEnqueueKilled(info *temenos.JobInfo, command string) {
 	result := lenosbash.ResultBlock(fmt.Sprintf(
-		"command: %s\nexit_code: %d",
-		command, info.ExitCode,
+		"job_id: %s\ncommand: %s\nexit_code: %d",
+		info.ID, command, info.ExitCode,
 	))
 	obs := fmt.Sprintf("background job killed (job_id: %s)\n\n%s", info.ID, result)
 	w.enqueue(lenosbash.RuntimeBlock(obs))
