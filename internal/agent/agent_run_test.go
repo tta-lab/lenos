@@ -219,8 +219,8 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	require.Equal(t, message.User, msgs[3].Role)
 	require.Equal(t, "user prompt", msgs[3].Content().Text)
 
-	require.Len(t, model.captured, 1)
-	prompt := model.captured[0]
+	require.Len(t, model.Captured(), 1)
+	prompt := model.Captured()[0]
 	require.Len(t, prompt, 5)
 	require.Equal(t, fantasy.MessageRoleSystem, prompt[0].Role)
 	require.Equal(t, fantasy.MessageRoleAssistant, prompt[1].Role)
@@ -707,8 +707,8 @@ func TestRun_RuntimePromptFeedsModelWithoutPersistingUserMessage(t *testing.T) {
 	for _, msg := range msgs {
 		require.NotEqual(t, message.User, msg.Role, "runtime prompt must not render as a user chat row")
 	}
-	require.Len(t, model.captured, 1)
-	require.Equal(t, "background job completed", fantasyMessageText(model.captured[0][1]))
+	require.Len(t, model.Captured(), 1)
+	require.Equal(t, "background job completed", fantasyMessageText(model.Captured()[0][1]))
 }
 
 func TestEnqueueBackgroundJobResultStartsIdleAgentTurn(t *testing.T) {
@@ -726,7 +726,7 @@ func TestEnqueueBackgroundJobResultStartsIdleAgentTurn(t *testing.T) {
 	}, "background job completed")
 
 	require.Eventually(t, func() bool {
-		return len(model.captured) == 1
+		return len(model.Captured()) == 1
 	}, time.Second, 10*time.Millisecond)
 
 	msgs, err := env.messages.List(t.Context(), sess.ID)
@@ -734,7 +734,7 @@ func TestEnqueueBackgroundJobResultStartsIdleAgentTurn(t *testing.T) {
 	for _, msg := range msgs {
 		require.NotEqual(t, message.User, msg.Role, "idle background result must not render as a user chat row")
 	}
-	require.Equal(t, "background job completed", fantasyMessageText(model.captured[0][1]))
+	require.Equal(t, "background job completed", fantasyMessageText(model.Captured()[0][1]))
 }
 
 func TestRun_PostLoopDrainAllQueued(t *testing.T) {
@@ -1237,8 +1237,8 @@ func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t 
 	require.NoError(t, err)
 	require.Equal(t, "Summary", summaryMsg.Content().Text)
 
-	require.Len(t, model.captured, 1)
-	prompt := model.captured[0]
+	require.Len(t, model.Captured(), 1)
+	prompt := model.Captured()[0]
 	require.GreaterOrEqual(t, len(prompt), 3)
 
 	first := prompt[0]

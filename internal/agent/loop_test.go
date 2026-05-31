@@ -126,6 +126,16 @@ func (c *streamCapturingModel) Stream(ctx context.Context, call fantasy.Call) (f
 	return c.inner.Stream(ctx, call)
 }
 
+func (c *streamCapturingModel) Captured() [][]fantasy.Message {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([][]fantasy.Message, len(c.captured))
+	for i, prompt := range c.captured {
+		out[i] = append([]fantasy.Message(nil), prompt...)
+	}
+	return out
+}
+
 func (c *streamCapturingModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
 	return c.inner.Generate(ctx, call)
 }
@@ -1137,9 +1147,9 @@ func TestRunLoop_ProseThenCommand_StderrMatch_FiresRePrompt(t *testing.T) {
 	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
 
 	// Salience flip: the second Stream() call must receive the alert BEFORE the
-	// result envelope. cm.captured[1] is the prompt for the re-prompt turn.
-	require.Len(t, cm.captured, 2, "expected exactly two Stream() calls")
-	lastUserMsg := cm.captured[1][len(cm.captured[1])-1]
+	// result envelope. cm.Captured()[1] is the prompt for the re-prompt turn.
+	require.Len(t, cm.Captured(), 2, "expected exactly two Stream() calls")
+	lastUserMsg := cm.Captured()[1][len(cm.Captured()[1])-1]
 	var obs string
 	for _, part := range lastUserMsg.Content {
 		if tp, ok := part.(fantasy.TextPart); ok {
@@ -1203,10 +1213,10 @@ func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	require.NoError(t, err)
 
 	// Second Stream() call carries the re-prompt messages (first is initial prompt).
-	require.GreaterOrEqual(t, len(cm.captured), 2,
+	require.GreaterOrEqual(t, len(cm.Captured()), 2,
 		"must have at least 2 Stream() calls (initial + re-prompt turn)")
 
-	prompt := cm.captured[1]
+	prompt := cm.Captured()[1]
 	var rePrompt string
 	for _, m := range prompt {
 		if m.Role != fantasy.MessageRoleUser {
