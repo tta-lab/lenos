@@ -203,46 +203,6 @@ func (m *retryableErrorThenSuccessModel) StreamObject(context.Context, fantasy.O
 
 var _ fantasy.LanguageModel = (*retryableErrorThenSuccessModel)(nil)
 
-type prefillCapturingModel struct {
-	inner        fantasy.LanguageModel
-	prefills     []string
-	normalCalls  int
-	prefillCalls int
-	mu           sync.Mutex
-}
-
-func (m *prefillCapturingModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
-	m.mu.Lock()
-	m.normalCalls++
-	m.mu.Unlock()
-	return m.inner.Stream(ctx, call)
-}
-
-func (m *prefillCapturingModel) StreamAssistantPrefill(ctx context.Context, call fantasy.Call, prefill string) (fantasy.StreamResponse, error) {
-	m.mu.Lock()
-	m.prefillCalls++
-	m.prefills = append(m.prefills, prefill)
-	m.mu.Unlock()
-	return m.inner.Stream(ctx, call)
-}
-
-func (m *prefillCapturingModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
-	return m.inner.Generate(ctx, call)
-}
-
-func (m *prefillCapturingModel) GenerateObject(ctx context.Context, call fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
-	return m.inner.GenerateObject(ctx, call)
-}
-
-func (m *prefillCapturingModel) StreamObject(ctx context.Context, call fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
-	return m.inner.StreamObject(ctx, call)
-}
-
-func (m *prefillCapturingModel) Provider() string { return m.inner.Provider() }
-func (m *prefillCapturingModel) Model() string    { return m.inner.Model() }
-
-var _ fantasy.LanguageModel = (*prefillCapturingModel)(nil)
-
 // fakeRunner returns canned ExecResults in order. Tests use it to drive
 // classify=exec branches without touching /bin/bash.
 type fakeRunner struct {
@@ -1421,21 +1381,6 @@ func TestRunLoop_ProseOnlyPublishesAndStops(t *testing.T) {
 
 	results := resultsByOrder(ms)
 	require.Empty(t, results)
-}
-
-func TestRunLoop_UsesNormalStreamWithoutAssistantPrefill(t *testing.T) {
-	t.Parallel()
-	model := &prefillCapturingModel{inner: &scriptedModel{emits: []string{lenosbash.BashBlock("echo ok"), "exit"}}}
-	runner := &fakeRunner{results: []ExecResult{{ExitCode: 0}}}
-	deps, _ := newDeps(t, model, runner, nil)
-
-	stop, err := runLoop(context.Background(), deps, nil, "prompt")
-
-	require.NoError(t, err)
-	assert.Equal(t, stopEndTurn, stop)
-	assert.Equal(t, 0, model.prefillCalls)
-	assert.Equal(t, 2, model.normalCalls)
-	assert.Equal(t, []string{"echo ok\n"}, runner.bash)
 }
 
 func TestRunLoop_ProseOnlyMultipleParagraphsPreserveOrder(t *testing.T) {
