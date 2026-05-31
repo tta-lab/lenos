@@ -17,6 +17,12 @@ func openDB(dbPath string) (*sql.DB, error) {
 	for name, value := range pragmas {
 		params.Add("_pragma", fmt.Sprintf("%s(%s)", name, value))
 	}
+	// Ported from upstream commit 40108413.
+	// Original: fix(db): prevent SQLITE_NOTADB corruption under concurrent sub-agents
+	params.Add("_txlock", "immediate")
+	// Ported from upstream commit 56cf50ad.
+	// Original: fix(db): keep SQLite temp files in memory
+	params.Add("_pragma", "temp_store(MEMORY)")
 
 	dsn := fmt.Sprintf("file:%s?%s", dbPath, params.Encode())
 	db, err := sql.Open("sqlite", dsn)

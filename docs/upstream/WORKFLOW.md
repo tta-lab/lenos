@@ -129,14 +129,28 @@ chore(upstream): port 74e6e378 — fix(agent): harden fallback usage accounting
 
 After merging a tracking PR:
 
-1. Update the corresponding v0.74-*.md file to mark each commit as `✅ MERGED`:
+1. Update the corresponding `v0.74-*.md` file to mark each ported commit
+   as `✅ MERGED` or `❌ SKIPPED` with reasoning:
 
    ```markdown
    ### `61ee2d2e` — fix(db): use connection pool to avoid corrupted writes
    ✅ **MERGED** (PR #123)
    ```
 
-2. Remove from the "Quick merge checklist" in README.md.
+2. When all applicable commits in a category file are resolved (all
+   marked MERGED or SKIPPED), rename the file to `v0.74-*.done.md`.
+   This makes it visually obvious which categories are complete vs.
+   still pending, without needing to open each file.
+
+   ```bash
+   mv docs/upstream/v0.74-db.md docs/upstream/v0.74-db.done.md
+   ```
+
+3. Remove from the "Quick merge checklist" in README.md.
+
+4. Keep the PR description in sync: if the PR evolves (e.g. a commit
+   is reverted or skipped after initial porting), update the upstream
+   references table in the PR body to reflect the final state.
 
 ---
 

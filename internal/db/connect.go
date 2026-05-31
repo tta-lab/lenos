@@ -41,6 +41,10 @@ func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
 		return nil, err
 	}
 
+	// Ported from upstream commit 61ee2d2e.
+	// Original: fix(db): use connection pool to avoid corrupted writes
+	db.SetMaxOpenConns(1)
+
 	if err = db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)

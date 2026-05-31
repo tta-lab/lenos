@@ -9,11 +9,10 @@
 
 | File | Priority | Commits | Focus |
 |---|---|---|---|
-| [DB/sqlc](v0.74-db.md) | **HIGH** | 11 | Pool, corruption, lock, migration |
+| [DB/sqlc](v0.74-db.done.md) | **HIGH** ✅ | 11 | Pool, corruption, lock, migration |
 | [Agent/Loop](v0.74-agent.md) | **MEDIUM** | ~25 | Token accounting, race fixes, env hardening |
 | [Config](v0.74-config.md) | **HIGH** | ~20 | Path discovery, model fallback, OAuth, expansion |
 | [UI/Perf](v0.74-ui.md) | **HIGH** | ~87 | Chat rendering, caching, scrollbar, dialogs |
-| [Skills](v0.74-skills.md) | **MEDIUM** | ~16 | Discovery, picker, dedup, prompt |
 | [Pubsub](v0.74-pubsub.md) | **MEDIUM** | 9 | Buffer size, dropped events, batching |
 | [Hooks](v0.74-hooks.md) | **MEDIUM** | 6 | Matcher, env vars, runner |
 | [Other](v0.74-other.md) | **LOW** | ~15 | Notifications, fsext, prompts, providers |
