@@ -1,5 +1,5 @@
-// Package main provides the lenos-installer: an interactive terminal
-// installer for Lenos and its ecosystem tools (temenos, organon, einai, ttal).
+// Package main provides the lenos-installer: an interactive macOS terminal
+// installer for Lenos and its ecosystem tools (temenos, organon, einai).
 package main
 
 import (
@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -22,6 +23,8 @@ import (
 	"github.com/pkg/browser"
 )
 
+const websiteURL = "https://tta-lab.github.io/lenos-website/"
+
 var (
 	githubOrg = "tta-lab"
 
@@ -30,7 +33,6 @@ var (
 		{Name: "Temenos", Repo: "temenos", Binary: "temenos", ConfigKind: "toml"},
 		{Name: "Organon", Repo: "organon", Binary: "organon", ConfigKind: "toml"},
 		{Name: "Einai", Repo: "einai", Binary: "einai", ConfigKind: "toml"},
-		{Name: "TTAL", Repo: "ttal-cli", Binary: "ttal", ConfigKind: "toml"},
 	}
 )
 
@@ -47,7 +49,6 @@ type model struct {
 	err       error
 	done      bool
 	binDir    string
-	configDir string
 	installed []string
 	statusMsg string
 }
@@ -85,9 +86,10 @@ func (m model) View() tea.View {
 	b.WriteString("\n  Lenos Installer\n\n")
 
 	if m.err != nil {
-		b.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#ff5555")).
-			Render(fmt.Sprintf("  Error: %v\n", m.err)))
+		fmt.Fprintf(&b, "  %s\n",
+			lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#ff5555")).
+				Render(fmt.Sprintf("Error: %v", m.err)))
 		return tea.NewView(b.String())
 	}
 
@@ -114,7 +116,7 @@ func (m model) View() tea.View {
 }
 
 func (m *model) openWebsite() {
-	_ = browser.OpenURL("https://lenos.sh")
+	_ = browser.OpenURL(websiteURL)
 }
 
 func (m *model) run() error {
@@ -124,13 +126,9 @@ func (m *model) run() error {
 	}
 
 	m.binDir = filepath.Join(home, ".local", "bin")
-	m.configDir = filepath.Join(home, ".config", "ttal")
 
 	if err := os.MkdirAll(m.binDir, 0o755); err != nil {
 		return fmt.Errorf("cannot create bin dir: %w", err)
-	}
-	if err := os.MkdirAll(m.configDir, 0o755); err != nil {
-		return fmt.Errorf("cannot create config dir: %w", err)
 	}
 
 	m.statusMsg = fmt.Sprintf("Installing %s...", tools[0].Name)
@@ -167,7 +165,9 @@ func installTool(binDir string, t tool) error {
 		githubOrg, t.Repo, t.Binary, titleOS(), arch(),
 	)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, downloadURL, nil)
+	req, err := http.NewRequestWithContext(
+		context.Background(), http.MethodGet, downloadURL, nil,
+	)
 	if err != nil {
 		return fmt.Errorf("build request %s: %w", t.Name, err)
 	}
@@ -225,8 +225,6 @@ func titleOS() string {
 	switch runtime.GOOS {
 	case "darwin":
 		return "Darwin"
-	case "linux":
-		return "Linux"
 	default:
 		return runtime.GOOS
 	}
@@ -236,13 +234,15 @@ func arch() string {
 	switch runtime.GOARCH {
 	case "amd64":
 		return "x86_64"
+	case "arm64":
+		return "arm64"
 	default:
 		return runtime.GOARCH
 	}
 }
 
 var httpClient = func() *http.Client {
-	return &http.Client{Timeout: 60 * time.Second}
+	return &http.Client{Timeout: 120 * time.Second}
 }
 
 func main() {
@@ -261,100 +261,40 @@ func main() {
 	fmt.Printf("  export PATH=\"%s:$PATH\"\n\n", binDir)
 
 	writeDefaultConfigs()
+	setupLaunchd()
+}
+
+func setupLaunchd() {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+
+	temenosBin, err := exec.LookPath("temenos")
+	if err != nil {
+		fmt.Println("  ⚠ temenos not in PATH — skipping daemon setup.")
+		return
+	}
+
+	fmt.Println("  → Setting up temenos daemon (launchd)...")
+	// Run `temenos daemon install` which handles plist creation and bootstrapping.
+	cmd := exec.Command(temenosBin, "daemon", "install")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("  ⚠ temenos daemon setup: %v\n", err)
+		fmt.Println("  Run `temenos daemon install` manually to set up the daemon.")
+	} else {
+		fmt.Println("  ✓ Temenos daemon installed and started.")
+	}
 }
 
 func writeDefaultConfigs() {
 	home, _ := os.UserHomeDir()
-	configDir := filepath.Join(home, ".config", "ttal")
-	os.MkdirAll(configDir, 0o755)
 
-	ttalCfg := `shell = "fish"
-
-references_path = "~/code/references"
-
-[flicknote]
-  inline_projects = ["plan", "fix", "orientation"]
-
-[sync]
-  worker_agent_paths = []
-  global_prompt_path = ""
-  rules_paths = []
-  skills_paths = []
-
-[voice]
-  vocabulary = ["session", "claude", "codex", "worker", "tmux", "taskwarrior", "flicknote"]
-
-[teams.default]
-  team_path = ""
-  data_dir = "~/.ttal"
-  taskrc = "~/.taskrc"
-  voice_language = "en"
-  default_runtime = "lenos"
-  emoji_reactions = false
-
-[kubernetes]
-  allowed_namespaces = ["default"]
-
-mcp_port = 9783
-allow_env = [
-  "TTAL_*",
-  "LENOS_*",
-  "TMUX",
-  "TMUX_*",
-  "GOROOT",
-  "GOPATH",
-  "GOBIN",
-  "CGO_ENABLED",
-  "CARGO_HOME",
-  "RUSTUP_HOME",
-]
-
-allow_write = [
-  "~/.einai",
-  "~/.ttal",
-  "~/.task",
-  "~/.config/ttal",
-  "~/.diary",
-  "~/.local/share/flicknote",
-  "/tmp",
-  "~/go/pkg",
-  "~/.cache/go/build",
-  "~/.cache/golangci-lint",
-  "~/.cache/cargo",
-  "~/.cargo/registry",
-  "~/.cargo/git",
-  "~/.cache/organon",
-  "~/.npm/_logs",
-  "~/.claude",
-  "~/.agents",
-]
-
-allow_read = [
-  "~/.mmx",
-  "~/.config/diary",
-  "~/.config/temenos",
-  "~/.config/flicknote",
-  "~/.config/git",
-  "~/.gitconfig",
-  "~/.taskrc",
-  "~/.cargo/config.toml",
-  "~/.rustup",
-  "~/code/projects",
-  "~/code/references",
-]
-
-default_runtime = "lenos"
-agents_paths = []
-references_path = "~/code/references"
-`
-
-	writeIfNew(filepath.Join(configDir, "config.toml"), ttalCfg)
-	writeIfNew(filepath.Join(configDir, "projects.toml"), defaultProjectsTOML())
-	writeIfNew(filepath.Join(configDir, "humans.toml"), defaultHumansTOML())
-	writeIfNew(filepath.Join(configDir, "roles.toml"), defaultRolesTOML())
-	writeIfNew(filepath.Join(configDir, "sandbox.toml"), defaultSandboxTOML())
-	writeIfNew(filepath.Join(configDir, "pipelines.toml"), defaultPipelinesTOML())
-	writeIfNew(filepath.Join(configDir, "prompts.toml"), defaultPromptsTOML())
+	// Temenos config.
+	temeDir := filepath.Join(home, ".config", "temenos")
+	os.MkdirAll(temeDir, 0o755)
+	writeIfNew(filepath.Join(temeDir, "config.toml"), temenosConfigTOML())
 
 	// Lenos config.json.
 	lenosDir := filepath.Join(home, ".lenos")
@@ -388,45 +328,98 @@ func writeIfNew(path, content string) {
 	}
 }
 
-func defaultProjectsTOML() string {
-	return `# TTAL Project Registry
-# Maps short aliases to repo paths. Used by ` + "`ttal jump <alias>`" + `.
-#
-# Format:
-#   [alias]
-#   name = "Full Name"
-#   path = "/absolute/path"
-#   tags = ["tag1", "tag2"]
-`
-}
+func temenosConfigTOML() string {
+	return `# Temenos sandbox configuration.
+# Temenos starts a background daemon that runs all lenos commands
+# inside a sandbox. Edit this file to change which paths the sandbox
+# can read and write, or to adjust the daemon port.
 
-func defaultHumansTOML() string {
-	return `# Human contact registry. Used by ` + "`ttal send`" + `.
-#
-# Format:
-#   [handle]
-#   name = "Full Name"
-#   telegram = "@username"
-`
-}
+mcp_port = 9783
 
-func defaultRolesTOML() string {
-	return `# Role definitions for agents.
-`
-}
+# Environment variables the sandbox passes through.
+allow_env = [
+  "LENOS_*",
+  "TMUX",
+  "TMUX_*",
+  "GOROOT",
+  "GOPATH",
+  "GOBIN",
+  "GOMODCACHE",
+  "GOCACHE",
+  "GOTOOLCHAIN",
+  "GOTELEMETRY",
+  "GOPROXY",
+  "GOSUMDB",
+  "GOPRIVATE",
+  "GONOPROXY",
+  "GONOSUMDB",
+  "CGO_ENABLED",
+  "CC",
+  "CXX",
+  "PKG_CONFIG_*",
+  "CARGO_HOME",
+  "CARGO_TARGET_DIR",
+  "CARGO_BUILD_TARGET",
+  "CARGO_TARGET_*",
+  "RUSTUP_HOME",
+  "RUSTUP_TOOLCHAIN",
+  "RUSTC",
+  "RUSTDOC",
+  "RUSTFLAGS",
+  "RUSTDOCFLAGS",
+  "RUST_BACKTRACE",
+  "RUST_LOG",
+  "LIBCLANG_PATH",
+  "BINDGEN_EXTRA_CLANG_ARGS",
+  "EXA_API_KEY",
+  "BRAVE_API_KEY",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+  "no_proxy",
+]
 
-func defaultSandboxTOML() string {
-	return `# Sandbox configuration for temenos.
-# Default: no overrides — temenos uses its own config.
-`
-}
+# Paths the sandbox can write to.
+allow_write = [
+  "~/.temenos",
+  "~/.lenos",
+  "~/.ttal",
+  "~/.task",
+  "~/.diary",
+  "~/.local/share/flicknote",
+  "/private/var/folders",
+  "~/go/pkg",
+  "~/Library/Caches/go-build",
+  "~/Library/Caches/golangci-lint",
+  "~/Library/Caches/cargo",
+  "~/.cargo/registry",
+  "~/.cargo/git",
+  "~/.cargo/advisory-dbs",
+  "~/.cache/organon",
+  "~/.npm/_logs",
+  "~/.claude",
+  "~/.agents",
+]
 
-func defaultPipelinesTOML() string {
-	return `# Pipeline definitions for ttal task orchestration.
-`
-}
-
-func defaultPromptsTOML() string {
-	return `# Custom prompt templates.
+# Paths the sandbox can read from.
+allow_read = [
+  "~/.mmx",
+  "~/.config/diary",
+  "~/.config/temenos",
+  "~/.config/flicknote",
+  "~/.config/git",
+  "~/.gitconfig",
+  "~/.taskrc",
+  "~/.cargo/config.toml",
+  "~/.rustup",
+  "~/code/projects",
+  "~/code/references",
+  "/etc/static/ssl/certs",
+  "/Library/Developer/CommandLineTools",
+]
 `
 }

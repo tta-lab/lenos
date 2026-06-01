@@ -40,27 +40,12 @@ builds:
       - arm64
     ldflags:
       - -s -w -X github.com/tta-lab/lenos/internal/version.Version={{.Version}}
-  - id: narrate
-    main: ./cmd/narrate
-    binary: narrate
-    env:
-      - CGO_ENABLED=0
-      - GOEXPERIMENT=greenteagc
-    goos:
-      - linux
-      - darwin
-    goarch:
-      - amd64
-      - arm64
-    ldflags:
-      - -s -w
   - id: lenos-installer
     main: ./cmd/lenos-installer
     binary: lenos-installer
     env:
       - CGO_ENABLED=0
     goos:
-      - linux
       - darwin
     goarch:
       - amd64
@@ -73,7 +58,6 @@ archives:
     formats: [tar.gz]
     builds:
       - lenos
-      - narrate
     name_template: >-
       lenos_
       {{- title .Os }}_
@@ -118,7 +102,6 @@ brews:
     license: "FSL-1.1-MIT"
     install: |
       bin.install "lenos"
-      bin.install "narrate"
       bash_completion.install "completions/lenos.bash" => "lenos"
       zsh_completion.install "completions/lenos.zsh" => "_lenos"
       fish_completion.install "completions/lenos.fish"
