@@ -278,6 +278,15 @@ func (w *AppWorkspace) IsGitWorktree(ctx context.Context) bool {
 	return err == nil
 }
 
+func (w *AppWorkspace) CurrentBranch(ctx context.Context) string {
+	cmd := exec.CommandContext(ctx, "git", "-C", w.WorkingDir(), "branch", "--show-current")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return string(bytes.TrimSpace(out))
+}
+
 func (w *AppWorkspace) ListModifiedFiles(ctx context.Context) ([]ModifiedFile, error) {
 	dir := w.store.WorkingDir()
 	var tracked, untracked []ModifiedFile
