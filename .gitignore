@@ -40,7 +40,6 @@ Thumbs.db
 
 # Binary
 /lenos
-/narrate
 
 # Local environment variables
 .env
@@ -56,3 +55,4 @@ completions/crush.*sh
 .prettierignore
 .task
 scripts/__pycache__
+/lenos-installer
