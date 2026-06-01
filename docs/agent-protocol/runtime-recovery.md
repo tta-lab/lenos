@@ -8,14 +8,14 @@ correct model shape errors without adding a second output protocol.
 An empty response gets a short runtime prompt asking for Markdown prose, a bash
 block, or bare `exit`.
 
-## Invalid Lenos Bash
+## Invalid Lenos Run
 
 If the tag parser rejects the emit, the runtime shows the offending line, a
 caret, help text, and a suggested rewrite.
 
 ## Invalid Bash
 
-If the mvdan Bash parser rejects a bash block, the runtime sends the syntax
+If the mvdan Bash parser rejects a run block, the runtime sends the syntax
 error back and asks the model to fix the bash quoting or structure.
 
 ## Tool-Call Wrappers

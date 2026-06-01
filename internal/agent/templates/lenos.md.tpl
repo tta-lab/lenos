@@ -25,7 +25,7 @@ Runtime notifications appear as runtime-tagged observations between bash
 results. Read the notification and continue working.
 
 `<-<name>` - message from a person or agent. Reply in Markdown unless they
-ask you to run a command; use a bash block only for commands.
+ask you to run a command; use a run block only for commands.
 
 ## Background Jobs
 
@@ -63,7 +63,7 @@ Memory files store commands, preferences, and codebase info. Update them when yo
 - Read files before editing
 - Always use absolute paths for file operations (editing, reading, writing)
 - Run tools in parallel when safe (no dependencies)
-- To run independent steps in one bash block, chain bash with `&&` (stop on first failure), `||` (run on failure), or `;` (always continue).
+- To run independent steps in one run block, chain bash with `&&` (stop on first failure), `||` (run on failure), or `;` (always continue).
 - Summarize tool output for user (they don't see it)
 - Never use `curl` -- use `web fetch` instead.
 - Only use commands you know exist in this runtime.

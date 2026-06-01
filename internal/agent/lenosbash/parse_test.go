@@ -21,6 +21,9 @@ func TestParseProseOnly(t *testing.T) {
 func TestParseBashOnly(t *testing.T) {
 	t.Parallel()
 
+	assert.Equal(t, "<run>", BashStartTag)
+	assert.Equal(t, "</run>", BashEndTag)
+
 	source := BashBlock("ls -la")
 	parsed, diag := Parse(source)
 

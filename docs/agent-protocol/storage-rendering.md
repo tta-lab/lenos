@@ -5,9 +5,9 @@ assistant emits, command results, and runtime-owned diagnostics.
 
 ## Assistant Messages
 
-Assistant text stores the Lenos Bash emit, after any runtime auto-repair. Bash
+Assistant text stores the Lenos Run emit, after any runtime auto-repair. Bash
 blocks remain protocol-shaped in history so future model calls see valid
-examples of what they emitted. Markdown prose outside bash blocks is rendered
+examples of what they emitted. Markdown prose outside run blocks is rendered
 from the stored assistant text.
 
 ## Command Results
@@ -32,5 +32,5 @@ stdout/stderr.
 
 - Successful commands are hidden.
 - Failed commands render as command output plus the failure badge.
-- Markdown prose outside bash blocks renders as assistant markdown.
+- Markdown prose outside run blocks renders as assistant markdown.
 - Runtime diagnostics render as result rows.

@@ -215,7 +215,7 @@ func TestAssistantMessageItem_RenderProseOnlyNoCommandPreview(t *testing.T) {
 func TestAssistantMessageItem_StreamingProseBeforeBashRendersMarkdown(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
-	// Simulate streaming: prose + unclosed bash block
+	// Simulate streaming: prose + unclosed run block
 	content := "Let me check the files.\n\n" + lenosbash.BashStartTag + "\nls -la\n"
 	item := NewAssistantMessageItem(&sty, &message.Message{
 		ID:   "assistant-1",
@@ -233,7 +233,7 @@ func TestAssistantMessageItem_StreamingProseBeforeBashRendersMarkdown(t *testing
 func TestAssistantMessageItem_StreamingUnclosedBashShowsCommandPreview(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
-	// Streaming: bash block opened, command partially received
+	// Streaming: run block opened, command partially received
 	content := lenosbash.BashStartTag + "\ncat /etc/hosts\n"
 	item := NewAssistantMessageItem(&sty, &message.Message{
 		ID:   "assistant-1",
@@ -250,7 +250,7 @@ func TestAssistantMessageItem_StreamingUnclosedBashShowsCommandPreview(t *testin
 func TestAssistantMessageItem_StreamingClosedBashDropsPostBash(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
-	// Complete bash block + trailing post-bash text
+	// Complete run block + trailing post-bash text
 	content := "Before.\n" + lenosbash.BashBlock("cat main.go") + "\nExtra text."
 	item := NewAssistantMessageItem(&sty, &message.Message{
 		ID:   "assistant-1",
@@ -268,7 +268,7 @@ func TestAssistantMessageItem_StreamingClosedBashDropsPostBash(t *testing.T) {
 func TestAssistantMessageItem_StreamingOnlyBashBlockOpened(t *testing.T) {
 	t.Parallel()
 	sty := styles.DefaultStyles()
-	// Just started opening a bash block — nothing in it yet
+	// Just started opening a run block — nothing in it yet
 	content := "Let's run this.\n" + lenosbash.BashStartTag + "\n"
 	item := NewAssistantMessageItem(&sty, &message.Message{
 		ID:   "assistant-1",

@@ -75,8 +75,10 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, lenosbash.BashBlock("go test ./..."))
-	assert.Contains(t, got, "Put a blank line before the opening bash tag.")
+	assert.Contains(t, got, "Put a blank line before the opening run tag.")
 	assert.Contains(t, got, "tags must start at column 1")
+	assert.NotContains(t, got, "<bash>")
+	assert.NotContains(t, got, "</bash>")
 }
 
 func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {
@@ -329,7 +331,7 @@ func TestSystemPrompt_PairWithDocumentsDefaultBashBlockTarget(t *testing.T) {
 
 	assert.Contains(t, got, "reviewer")
 	assert.Contains(t, got, "available shell command for messaging")
-	assert.Contains(t, got, "bash block")
+	assert.Contains(t, got, "run block")
 	assert.NotEmpty(t, got)
 }
 

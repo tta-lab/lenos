@@ -3,8 +3,8 @@ package lenosbash
 import "strings"
 
 const (
-	BashStartTag = "<bash>"
-	BashEndTag   = "</bash>"
+	BashStartTag = "<run>"
+	BashEndTag   = "</run>"
 
 	ResultStartTag = "<result>"
 	ResultEndTag   = "</result>"
@@ -63,11 +63,10 @@ func AlertLine(body string) string {
 	return RuntimeTag + " ALERT: " + strings.TrimSpace(body)
 }
 
-// Parse scans source for column-1 bash tags. Text before the first bash block
+// Parse scans source for column-1 run tags. Text before the first run block
 // is Markdown prose. Inline or indented tag text is plain text. Text after the
-// first completed bash block is reported as dropped tail. Nested bash tags are
-// treated as literal bash content so heredocs can contain patch text with bash
-// tags.
+// first completed run block is reported as dropped tail. Nested run tags are
+// treated as literal bash content so heredocs can contain tagged examples.
 func Parse(source string) (Parsed, *Diagnostic) {
 	if strings.TrimSpace(source) == "" {
 		return Parsed{Original: source}, nil

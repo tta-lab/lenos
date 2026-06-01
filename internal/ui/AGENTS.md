@@ -136,8 +136,8 @@ The TUI renders conversation messages with distinct visual treatments based on r
 - Copy-to-clipboard extracts clean text (no bar, no metadata)
 
 #### Assistant Bash Emits
-- Valid Lenos Bash renders Markdown prose with `MarkdownRenderer`.
-- If the same emit has a `<bash>` block, render the parsed clean bash after the
+- Valid Lenos Run renders Markdown prose with `MarkdownRenderer`.
+- If the same emit has a `<run>` block, render the parsed clean bash after the
   prose as a single-line `$ ` command preview using `ResultHeader`.
 - Invalid assistant text falls back to the one-line bash preview.
 - Keep raw assistant text unchanged for provider replay.

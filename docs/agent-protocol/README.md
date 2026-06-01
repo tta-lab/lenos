@@ -1,17 +1,17 @@
 # Agent Protocol MOC
 
-Lenos uses one agent output protocol: Lenos Bash.
+Lenos uses one agent output protocol: Lenos Run.
 
-Lenos Bash is Markdown prose plus tagged bash blocks. The model emits one text
+Lenos Run is Markdown prose plus tagged run blocks. The model emits one text
 response. The runtime renders Markdown outside tags, executes each parsed bash
 block, records results in SQLite, and either loops with a result observation or
 stops.
 
 ## Core Documents
 
-- [Protocol](protocol.md): the Lenos Bash contract and loop lifecycle.
-- [Bash Tags](message-blocks.md): tagged bash syntax and parser edge cases.
-- [Classifier](classifier.md): how an emit becomes exit, bash, Markdown prose,
+- [Protocol](protocol.md): the Lenos Run contract and loop lifecycle.
+- [Run Tags](message-blocks.md): tagged run syntax and parser edge cases.
+- [Classifier](classifier.md): how an emit becomes exit, command execution, Markdown prose,
   or a runtime correction.
 - [Runtime Recovery](runtime-recovery.md): re-prompts for invalid shapes and
   failed execution.
@@ -25,7 +25,7 @@ stops.
 - `internal/agent/loop.go`: model loop, command execution, result persistence,
   and stop/continue rules.
 - `internal/agent/prompt_runtime.go`: corrective runtime observations.
-- `internal/agent/templates/system_prompt.tpl`: base prompt for the Lenos Bash
+- `internal/agent/templates/system_prompt.tpl`: base prompt for the Lenos Run
   protocol.
 - `internal/message/content.go`: `CommandContent` and result replay formatting.
 - `internal/ui/chat/generic.go`: command result rendering.
@@ -34,4 +34,4 @@ stops.
 ## Design Rule
 
 There is no second message protocol. Human-facing language is plain Markdown
-outside bash blocks. Executable work belongs inside bash blocks.
+outside run blocks. Executable work belongs inside run blocks.

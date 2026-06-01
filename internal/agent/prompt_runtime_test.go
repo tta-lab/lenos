@@ -16,7 +16,7 @@ func TestRePromptEmpty(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got, lenosbash.RuntimeTag+" "))
 	assert.Contains(t, got, "your last response was empty")
 	assert.Contains(t, got, "exit")
-	assert.Contains(t, got, "bash block")
+	assert.Contains(t, got, "run block")
 	assert.NotContains(t, got, "narrate")
 }
 

@@ -9,14 +9,14 @@ before execution.
 2. Bare `exit` or `exit N`: end the loop.
 3. Blocked edit patterns such as `sed -i` and `perl -i`: re-prompt.
 4. Tool-call-shaped wrappers: delete the bad assistant row and re-prompt.
-5. Lenos Bash tag parse: extract the first bash block or re-prompt on invalid tag
+5. Lenos Run tag parse: extract the first run block or re-prompt on invalid tag
    syntax.
 6. Natural-language emit: end the turn as Markdown prose.
 7. mvdan Bash syntax check: re-prompt on syntax failure.
-8. Everything else inside the accepted bash block: execute as bash.
+8. Everything else inside the accepted run block: execute as bash.
 
-Markdown prose before a bash block is valid reader-facing output. Any content
-after the bash block is dropped from persistence, display, and execution.
+Markdown prose before a run block is valid reader-facing output. Any content
+after the run block is dropped from persistence, display, and execution.
 
 ## Natural-Language Detector
 

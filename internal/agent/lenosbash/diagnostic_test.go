@@ -19,7 +19,7 @@ func TestRenderDiagnosticTagUnclosed(t *testing.T) {
 		Incomplete: true,
 	})
 
-	assert.Contains(t, rendered, RuntimeTag+"\ninvalid Lenos Bash")
+	assert.Contains(t, rendered, RuntimeTag+"\ninvalid Lenos Run")
 	assert.Contains(t, rendered, "error: unclosed "+BashStartTag+" tag at end of response")
 	assert.Contains(t, rendered, BashBlock("your command here"))
 }

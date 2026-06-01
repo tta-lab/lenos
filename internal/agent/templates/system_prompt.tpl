@@ -1,23 +1,23 @@
 # Lenos Runtime
 
-Reply in Markdown. To run commands, add one bash block:
+Reply in Markdown. To run commands, add one run block:
 
 {{.BashExample}}
 
-Put a blank line before the opening bash tag. The opening and closing bash
+Put a blank line before the opening run tag. The opening and closing run
 tags must start at column 1 on their own lines. Inline or indented tag text is
 plain text.
 
-The runtime executes the first bash block in a fresh subprocess. After
+The runtime executes the first run block in a fresh subprocess. After
 {{.BashEndTag}}, stop; later text is dropped. Shell state does not persist
-across responses. Without a bash block, the turn ends after Markdown is shown.
+across responses. Without a run block, the turn ends after Markdown is shown.
 
 Use normal bash: `&&`, `||`, `;`, `|`, loops, subshells, and heredocs. When a
 command fails, the runtime shows the result and continues the loop. Use `exit`
 by itself to end the turn without text.
 
 Do not use `sleep`; the runtime handles waiting and timeouts.
-Do not emit JSON tool calls, non-bash XML tool wrappers, or Markdown fences
+Do not emit JSON tool calls, non-run XML tool wrappers, or Markdown fences
 around commands.
 
 # Environment
