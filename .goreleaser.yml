@@ -88,32 +88,6 @@ changelog:
       - "^test"
       - "^chore"
 
-homebrew_casks:
-  - name: lenos
-    ids:
-      - lenos
-    binaries:
-      - lenos
-    commit_author:
-      name: tta-lab-bot
-      email: bot@tta-lab.com
-    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
-    homepage: "https://github.com/tta-lab/lenos"
-    description: "A terminal-first AI assistant and interactive runtime for the ttal ecosystem"
-    manpages:
-      - manpages/lenos.1.gz
-    completions:
-      bash: completions/lenos.bash
-      zsh: completions/lenos.zsh
-      fish: completions/lenos.fish
-    conflicts:
-      - formula: lenos
-    repository:
-      owner: tta-lab
-      name: homebrew-ttal
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-
 nfpms:
   - id: packages
     package_name: lenos
