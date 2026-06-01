@@ -50,7 +50,7 @@ builds:
 archives:
   - id: lenos
     formats: [tar.gz]
-    builds:
+    ids:
       - lenos
     name_template: >-
       lenos_
@@ -64,7 +64,7 @@ archives:
       - README*
   - id: lenos-installer
     formats: [tar.gz]
-    builds:
+    ids:
       - lenos-installer
     name_template: >-
       lenos-installer_
@@ -88,24 +88,26 @@ changelog:
       - "^test"
       - "^chore"
 
-brews:
+homebrew_casks:
   - name: lenos
+    ids:
+      - lenos
+    binaries:
+      - lenos
     commit_author:
       name: tta-lab-bot
       email: bot@tta-lab.com
-    commit_msg_template: "feat(formula): update {{ .ProjectName }} to {{ .Tag }}"
-    directory: Formula
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
     homepage: "https://github.com/tta-lab/lenos"
     description: "A terminal-first AI assistant and interactive runtime for the ttal ecosystem"
-    license: "FSL-1.1-MIT"
-    install: |
-      bin.install "lenos"
-      bash_completion.install "completions/lenos.bash" => "lenos"
-      zsh_completion.install "completions/lenos.zsh" => "_lenos"
-      fish_completion.install "completions/lenos.fish"
-      man1.install "manpages/lenos.1.gz"
-    test: |
-      system "#{bin}/lenos", "--version"
+    manpages:
+      - manpages/lenos.1.gz
+    completions:
+      bash: completions/lenos.bash
+      zsh: completions/lenos.zsh
+      fish: completions/lenos.fish
+    conflicts:
+      - formula: lenos
     repository:
       owner: tta-lab
       name: homebrew-ttal
