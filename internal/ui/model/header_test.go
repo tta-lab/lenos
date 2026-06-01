@@ -184,6 +184,6 @@ func TestRenderHeaderDetailsOpenUsesFullPathCacheBranchAndJobDetails(t *testing.
 
 	assert.Contains(t, got, "/home/neil/code/projects/GuionAI/flick-backend")
 	assert.Contains(t, got, "feat/header")
-	assert.Contains(t, got, "cache 40%")
+	assert.Contains(t, got, "cache 36%")
 	assert.Contains(t, got, "jobs 2: go test ./..., task lint")
 }

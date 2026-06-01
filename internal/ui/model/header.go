@@ -143,8 +143,8 @@ func renderHeaderDetails(
 		parts = append(parts, formattedPercentage)
 	}
 
-	if detailsOpen && sess.PromptTokens > 0 {
-		cachePercentage := float64(sess.CacheReadTokens) / float64(sess.PromptTokens) * 100
+	if detailsOpen && sess.PromptTokens+sess.CacheCreationTokens > 0 {
+		cachePercentage := float64(sess.CacheReadTokens) / float64(sess.PromptTokens+sess.CacheCreationTokens) * 100
 		parts = append(parts, t.Header.Percentage.Render(fmt.Sprintf("cache %d%%", int(cachePercentage))))
 	}
 
