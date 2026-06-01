@@ -1,14 +1,13 @@
 #!/bin/sh
 # Lenos Installer Bootstrap (macOS)
-# Usage: curl -fsSL https://tta-lab.github.io/lenos-website/install.sh | sh
+# Usage: curl -fsSL https://github.com/tta-lab/lenos/releases/latest/download/install.sh | sh
 #
-# Downloads the lenos-installer binary and runs the interactive setup.
+# Downloads the lenos binary and runs `lenos install` for interactive setup.
 
 set -eu
 
 ORG="tta-lab"
 REPO="lenos"
-INSTALLER="lenos-installer"
 BIN_DIR="${HOME}/.local/bin"
 
 ARCH="$(uname -m)"
@@ -32,7 +31,7 @@ else
 	RELEASE_URL="https://github.com/${ORG}/${REPO}/releases/download/${VERSION}"
 fi
 
-ARCHIVE="${INSTALLER}_Darwin_${GOARCH}.tar.gz"
+ARCHIVE="lenos_Darwin_${GOARCH}.tar.gz"
 DOWNLOAD_URL="${RELEASE_URL}/${ARCHIVE}"
 
 echo "→ Lenos installer bootstrap"
@@ -52,7 +51,7 @@ else
 	exit 1
 fi
 
-tar -xzf "${TMPDIR}/${ARCHIVE}" -C "$BIN_DIR" "$INSTALLER"
-chmod +x "${BIN_DIR}/${INSTALLER}"
+tar -xzf "${TMPDIR}/${ARCHIVE}" -C "$BIN_DIR" lenos
+chmod +x "${BIN_DIR}/lenos"
 
-exec "${BIN_DIR}/${INSTALLER}" "$@"
+exec "${BIN_DIR}/lenos" install "$@"
