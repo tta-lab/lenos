@@ -10,19 +10,17 @@
 | File | Priority | Commits | Focus |
 |---|---|---|---|
 | [DB/sqlc](v0.74-db.done.md) | **HIGH** ✅ | 11 | Pool, corruption, lock, migration |
-| [Agent/Loop](v0.74-agent.md) | **MEDIUM** | ~25 | Token accounting, race fixes, env hardening |
+| [Agent/Loop](v0.74-agent.done.md) | **MEDIUM** ✅ | ~25 | Token accounting, race fixes, env hardening |
 | [Config](v0.74-config.md) | **HIGH** | ~20 | Path discovery, model fallback, OAuth, expansion |
 | [UI/Perf](v0.74-ui.md) | **HIGH** | ~87 | Chat rendering, caching, scrollbar, dialogs |
 | [Pubsub](v0.74-pubsub.done.md) | **MEDIUM** ✅ | 9 | Buffer size, dropped events, batching |
 | [Hooks](v0.74-hooks.md) | **MEDIUM** | 6 | Matcher, env vars, runner |
 | [Other](v0.74-other.md) | **LOW** | ~15 | Notifications, fsext, prompts, providers |
 
-## Quick merge checklist (top 7)
+## Quick merge checklist (top 5)
 
 1. `6938dedd` — Perf: batch streaming updates → DB/UI load
-2. `c2be8cbf` — Agent: `EDITOR=false PAGER=cat` → prevent hangs
-3. `9d346688` — Agent: release activeRequests → spinner stuck
-4. `2faa467a` — Agent: reasoning_effort only when supported
-5. `77b6c38b` — UI: render only visible lines → perf
-6. `6b101f38` — UI: skip unchanged items → perf
-7. `e2e0bc09` — Config: scope discovery to repo boundary
+2. `77b6c38b` — UI: render only visible lines → perf
+3. `6b101f38` — UI: skip unchanged items → perf
+4. `e2e0bc09` — Config: scope discovery to repo boundary
+5. `ace430c7` — UI: restore tooltips for truncated text

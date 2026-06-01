@@ -182,23 +182,9 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	}
 
 	// Refresh OAuth token if expired before running.
-	if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
-		slog.Debug("OAuth token expired, refreshing", "provider", providerCfg.ID)
-		if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
-			return err
-		}
-		freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-		if !ok {
-			return fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
-		}
-		providerCfg = freshCfg
-		// Rebuild provider so the new credentials take effect on the next
-		// fantasy.LanguageModel.Stream call. The current sessionAgent's model
-		// holds a reference to the provider — refresh it via UpdateModels.
-		if err := c.UpdateModels(ctx); err != nil {
-			return fmt.Errorf("rebuild model after token refresh: %w", err)
-		}
-		model = c.currentAgent.Model()
+	// Ported from upstream 8cd4786c (extract token refresh helpers).
+	if err := c.maybeRefreshToken(ctx, &model, &providerCfg); err != nil {
+		return err
 	}
 
 	call := c.buildCall(ctx, sessionID, prompt, model, providerCfg)
@@ -340,10 +326,15 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 		providerType = openai.Name
 	}
 
+	// Only set reasoning_effort if the model actually supports the requested
+	// effort level. Ported from upstream 2faa467a.
+	shouldSetEffort := model.CatwalkCfg.CanReason &&
+		(model.ModelCfg.ReasoningEffort == "" || slices.Contains(model.CatwalkCfg.ReasoningLevels, model.ModelCfg.ReasoningEffort))
+
 	switch providerType {
 	case openai.Name, azure.Name:
 		_, hasReasoningEffort := mergedOptions["reasoning_effort"]
-		if !hasReasoningEffort && model.ModelCfg.ReasoningEffort != "" {
+		if !hasReasoningEffort && shouldSetEffort && model.ModelCfg.ReasoningEffort != "" {
 			mergedOptions["reasoning_effort"] = model.ModelCfg.ReasoningEffort
 		}
 		if openai.IsResponsesModel(model.CatwalkCfg.ID) {
@@ -366,11 +357,13 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 			_, hasEffort = mergedOptions["effort"]
 			_, hasThink  = mergedOptions["thinking"]
 		)
-		switch {
-		case !hasEffort && model.ModelCfg.ReasoningEffort != "":
-			mergedOptions["effort"] = model.ModelCfg.ReasoningEffort
-		case !hasThink && model.ModelCfg.Think:
-			mergedOptions["thinking"] = map[string]any{"budget_tokens": 2000}
+		if shouldSetEffort {
+			switch {
+			case !hasEffort && model.ModelCfg.ReasoningEffort != "":
+				mergedOptions["effort"] = model.ModelCfg.ReasoningEffort
+			case !hasThink && model.ModelCfg.Think:
+				mergedOptions["thinking"] = map[string]any{"budget_tokens": 2000}
+			}
 		}
 		parsed, err := anthropic.ParseOptions(mergedOptions)
 		if err == nil {
@@ -894,7 +887,38 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 	if !ok {
 		return errModelProviderNotConfigured
 	}
+
+	// Refresh OAuth token if expired before summarizing.
+	// Ported from upstream a4020df6 / 8cd4786c.
+	if err := c.maybeRefreshToken(ctx, &model, &providerCfg); err != nil {
+		return err
+	}
+
 	return c.currentAgent.Summarize(ctx, sessionID, getProviderOptions(model, providerCfg))
+}
+
+// maybeRefreshToken refreshes the OAuth token if expired, rebuilds the
+// provider, and updates the local model/providerCfg references. Returns nil
+// if no refresh was needed.
+// Ported from upstream 8cd4786c (extract token refresh helpers).
+func (c *coordinator) maybeRefreshToken(ctx context.Context, model *Model, providerCfg *config.ProviderConfig) error {
+	if providerCfg.OAuthToken == nil || !providerCfg.OAuthToken.IsExpired() {
+		return nil
+	}
+	slog.Debug("OAuth token expired, refreshing", "provider", providerCfg.ID)
+	if err := c.refreshOAuth2Token(ctx, *providerCfg); err != nil {
+		return err
+	}
+	if err := c.UpdateModels(ctx); err != nil {
+		return fmt.Errorf("rebuild model after token refresh: %w", err)
+	}
+	*model = c.currentAgent.Model()
+	freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+	if !ok {
+		return fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
+	}
+	*providerCfg = freshCfg
+	return nil
 }
 
 // isUnauthorized reports whether err is a fantasy.ProviderError with a 401 status

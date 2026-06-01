@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/tta-lab/temenos/client"
@@ -112,7 +113,7 @@ func (s SandboxRunner) Run(ctx context.Context, bash string, env map[string]stri
 	start := time.Now()
 	resp, err := s.Client.Run(ctx, client.RunRequest{
 		Command:             bash,
-		Env:                 env,
+		Env:                 applyNonInteractiveDefaults(env),
 		AllowedPaths:        allowedPaths,
 		Timeout:             int(DefaultPerCmdTimeout / time.Second),
 		CallerID:            s.SessionID,
@@ -140,7 +141,27 @@ func (s SandboxRunner) Run(ctx context.Context, bash string, env map[string]stri
 // mergeEnv overlays the explicit env map on top of the parent environment.
 // Explicit map keys win on collision so callers can override LENOS_SESSION_ID
 // or any inherited variable deterministically.
+// applyNonInteractiveDefaults ensures the env map has safe defaults that
+// prevent commands from spawning editors, pagers, or other interactive TUI
+// programs that would hang on a nonexistent terminal. Caller-supplied values
+// take precedence (already-set keys are not overwritten). Ported from
+// upstream fix c2be8cbf.
+func applyNonInteractiveDefaults(env map[string]string) map[string]string {
+	const nonInteractiveEnv = "TERM=xterm-256color\x00EDITOR=false\x00VISUAL=false\x00PAGER=cat\x00GIT_PAGER=cat\x00JJ_EDITOR=false\x00JJ_PAGER=cat"
+	for _, kv := range strings.Split(nonInteractiveEnv, "\x00") {
+		k, v, _ := strings.Cut(kv, "=")
+		if _, has := env[k]; !has {
+			if env == nil {
+				env = make(map[string]string)
+			}
+			env[k] = v
+		}
+	}
+	return env
+}
+
 func mergeEnv(parent []string, overrides map[string]string) []string {
+	overrides = applyNonInteractiveDefaults(overrides)
 	if len(overrides) == 0 {
 		return parent
 	}
