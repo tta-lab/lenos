@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/tta-lab/temenos/client"
@@ -141,6 +142,20 @@ func (s SandboxRunner) Run(ctx context.Context, bash string, env map[string]stri
 // Explicit map keys win on collision so callers can override LENOS_SESSION_ID
 // or any inherited variable deterministically.
 func mergeEnv(parent []string, overrides map[string]string) []string {
+	// Non-interactive shell defaults — prevent commands from spawning editors,
+	// pagers, or other interactive TUI programs that would hang on a
+	// nonexistent terminal. Ported from upstream fix c2be8cbf (not in local
+	// clone — shallow at v0.71.0).
+	const nonInteractiveEnv = "TERM=xterm-256color\x00EDITOR=false\x00VISUAL=false\x00PAGER=cat\x00GIT_PAGER=cat\x00JJ_EDITOR=false\x00JJ_PAGER=cat"
+	for _, kv := range strings.Split(nonInteractiveEnv, "\x00") {
+		k, v, _ := strings.Cut(kv, "=")
+		if _, has := overrides[k]; !has {
+			if overrides == nil {
+				overrides = make(map[string]string)
+			}
+			overrides[k] = v
+		}
+	}
 	if len(overrides) == 0 {
 		return parent
 	}

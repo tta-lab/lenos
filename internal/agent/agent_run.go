@@ -340,9 +340,11 @@ runLoopReentry:
 	}
 
 	if runErr != nil {
-		// Loop already persisted partial work; surface a user-facing finish
-		// on the most-recent assistant message so the UI shows actionable
-		// guidance (e.g. "Copilot model not enabled").
+		// Release activeRequests before surfacing the error so
+		// IsSessionBusy returns false. Ported from upstream 9d346688.
+		cancel()
+		a.activeRequests.Del(call.SessionID)
+
 		a.attachErrorFinish(ctx, call.SessionID, runErr, primaryModel.Model.Model())
 
 		if newCall, ok := a.tryReenter(call, cancel); ok {
@@ -351,6 +353,12 @@ runLoopReentry:
 		}
 		return runErr
 	}
+
+	// Release activeRequests before publishing TypeAgentFinished so
+	// IsSessionBusy returns false when the subscriber processes the event.
+	// Ported from upstream 9d346688.
+	cancel()
+	a.activeRequests.Del(call.SessionID)
 
 	if a.notify != nil {
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{

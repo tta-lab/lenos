@@ -107,7 +107,28 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	currentSession.CompletionTokens = totalUsage.OutputTokens
 	currentSession.PromptTokens = 0
 	_, err = a.sessions.Save(genCtx, currentSession)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Release the active request before processing queued messages so that
+	// Run() does not see the session as busy. Ported from upstream 61f49b23.
+	a.activeRequests.Del(sessionID)
+	cancel()
+
+	// Process any messages that were queued while summarizing.
+	// Ported from upstream 61f49b23.
+	queuedCalls, ok := a.messageQueue.Take(sessionID)
+	if !ok || len(queuedCalls) == 0 {
+		return nil
+	}
+	first := queuedCalls[0]
+	// Re-queue remaining if any.
+	if len(queuedCalls) > 1 {
+		a.messageQueue.Set(sessionID, queuedCalls[1:])
+	}
+	_ = a.Run(ctx, first)
+	return nil
 }
 
 type summaryStreamResult struct {
