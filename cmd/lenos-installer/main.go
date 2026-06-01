@@ -54,7 +54,7 @@ type model struct {
 }
 
 func (m model) Init() tea.Cmd {
-	return m.spinner.Tick
+	return tea.Batch(m.spinner.Tick, installToolCmd(m.binDir, tools[0]))
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
