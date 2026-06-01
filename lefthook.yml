@@ -9,6 +9,18 @@ pre-commit:
       glob: "*.go"
       run: goimports -w {staged_files}
       stage_fixed: true
+    goreleaser-yml:
+      glob: ".goreleaser.yml"
+      run: >-
+        bash -c '
+          pro_keys=$(yq -r ".metadata | keys | .[]" .goreleaser.yml);
+          for key in license homepage description full_description maintainers commit_author; do
+            if echo "$pro_keys" | grep -qxF "$key"; then
+              echo "ERROR: metadata.$key is GoReleaser Pro only (since v2.1). Remove it.";
+              exit 1;
+            fi;
+          done
+        '
 
 pre-push:
   parallel: true
