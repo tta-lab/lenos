@@ -346,9 +346,10 @@ func TestModelInfoShowsCacheHitRateWithOneDecimal(t *testing.T) {
 	}
 	ui := newTestUIWithConfig(t, cfg)
 	ui.session = &session.Session{
-		PromptTokens:        100,
+		PromptTokens:        20,
+		CacheMissTokens:     70,
 		CacheReadTokens:     40,
-		CacheCreationTokens: 10,
+		CacheCreationTokens: 30,
 	}
 	ui.com.Workspace = &testWorkspace{
 		cfg:        cfg,

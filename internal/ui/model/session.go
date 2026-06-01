@@ -159,7 +159,10 @@ func cacheHitPercentage(sess *session.Session) *float64 {
 	if sess == nil {
 		return nil
 	}
-	denominator := sess.PromptTokens + sess.CacheCreationTokens
+	if sess.CacheReadTokens+sess.CacheCreationTokens == 0 {
+		return nil
+	}
+	denominator := sess.CacheMissTokens + sess.CacheReadTokens
 	if denominator <= 0 {
 		return nil
 	}

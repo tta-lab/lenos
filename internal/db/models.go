@@ -44,10 +44,11 @@ type Session struct {
 	MessageCount        int64          `json:"message_count"`
 	PromptTokens        int64          `json:"prompt_tokens"`
 	CompletionTokens    int64          `json:"completion_tokens"`
-	CacheCreationTokens int64          `json:"cache_creation_tokens"`
-	CacheReadTokens     int64          `json:"cache_read_tokens"`
 	Cost                float64        `json:"cost"`
 	UpdatedAt           int64          `json:"updated_at"`
 	CreatedAt           int64          `json:"created_at"`
 	SummaryMessageID    sql.NullString `json:"summary_message_id"`
+	CacheCreationTokens int64          `json:"cache_creation_tokens"`
+	CacheReadTokens     int64          `json:"cache_read_tokens"`
+	CacheMissTokens     int64          `json:"cache_miss_tokens"`
 }
