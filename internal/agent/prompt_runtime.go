@@ -11,13 +11,13 @@ var alertPrefix = lenosbash.RuntimeTag + " ALERT:"
 
 // rePromptEmpty is the next-observation text after an empty/whitespace emit.
 func rePromptEmpty() string {
-	return lenosbash.RuntimeLine("your last response was empty. emit Markdown prose, a bash block, or `exit` to end the turn.")
+	return lenosbash.RuntimeLine("your last response was empty. emit Markdown prose, a run block, or `exit` to end the turn.")
 }
 
 // rePromptInvalidBash is the next-observation text after the shell parser
-// rejected the bash block.
+// rejected the run block.
 func rePromptInvalidBash(parseErr string) string {
-	return lenosbash.RuntimeBlock(fmt.Sprintf(`your last bash block was not valid bash. the shell parser said:
+	return lenosbash.RuntimeBlock(fmt.Sprintf(`your last run block was not valid bash. the shell parser said:
   %s
 
 Fix the bash quoting. "unexpected
@@ -50,7 +50,7 @@ or break it into smaller steps.`, secs))
 // rePromptCmdNotFound is the next-observation text after `bash -c <emit>`
 // exited with 127 (command not found). Fires both for legit-missing-tool
 // scenarios (model expected a binary that is not installed) AND for
-// malformed bash blocks where the first word is not a real command.
+// malformed run blocks where the first word is not a real command.
 //
 // The re-prompt text covers both interpretations so the model can
 // self-diagnose: probe with `command -v <X>` if the binary was expected,
@@ -62,7 +62,7 @@ if `+"`%s`"+` is a real binary you expected:
   command -v %s     # builtin probe — returns 1 (not 127) if missing
 then either install it, or pick an alternative.
 
-If you were trying to talk to the human, put that Markdown prose outside bash blocks.
+If you were trying to talk to the human, put that Markdown prose outside run blocks.
 If you were trying to run a command, fix the command name or use an installed
 alternative.`, firstWord, firstWord, firstWord))
 }

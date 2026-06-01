@@ -1662,7 +1662,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				// y / c / Y / C: copy selection. If the user has a mouse-drag
 				// highlight, copy that range; otherwise copy the focused block's
 				// raw source (the verbatim text — what the user
-				// expects when they hit y on a bash block).
+				// expects when they hit y on a run block).
 				cmds = append(cmds, m.copyChatMessage())
 			case key.Matches(msg, m.keyMap.Chat.End):
 				if cmd := m.chat.ScrollToBottomAndAnimate(); cmd != nil {

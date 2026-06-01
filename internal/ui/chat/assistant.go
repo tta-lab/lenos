@@ -37,7 +37,7 @@ type AssistantMessageItem struct {
 	thinkingBoxHeight int // Tracks the rendered thinking box height for click detection.
 }
 
-// assistantContent holds the parsed display parts of a Lenos Bash content string.
+// assistantContent holds the parsed display parts of a Lenos Run content string.
 type assistantContent struct {
 	markdown       string
 	commandPreview string
@@ -145,14 +145,14 @@ func (a *AssistantMessageItem) renderMessageContent(width int) string {
 	return strings.Join(messageParts, "\n")
 }
 
-// parseContent extracts display parts from Lenos Bash content.
-// For valid Lenos Bash it returns markdown prose and a command preview from the
-// first parsed bash block. When the parse is incomplete (unclosed tag during
+// parseContent extracts display parts from Lenos Run content.
+// For valid Lenos Run it returns markdown prose and a command preview from the
+// first parsed run block. When the parse is incomplete (unclosed tag during
 // streaming), prose and in-progress bash are returned for progressive rendering.
 func (a *AssistantMessageItem) parseContent(content string) assistantContent {
 	parsed, diag := lenosbash.Parse(content)
 	if diag != nil && !diag.Incomplete {
-		// Not valid Lenos Bash — fall back to bash-emit preview.
+		// Not valid Lenos Run — fall back to bash-emit preview.
 		return assistantContent{
 			commandPreview: bashEmitPreview(content, 0),
 		}

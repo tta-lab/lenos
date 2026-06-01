@@ -15,26 +15,26 @@ we should stop to fight with the model and back to xml tag protocol
 ....
 
 
-<bash>
+<run>
 git commit -m..
-</bash>
+</run>
 
 ** edge case 1
 
 ...
 
-<bash>
+<run>
 cat <<'EOF' | src edit main.go
 ===BEFORE===
-<bash>
+<run>
 hello
-</bash>
+</run>
 ===AFTER===
-<bash>
+<run>
 world
-</bash>
+</run>
 EOF
-</bash>
+</run>
 
 
 *** solution
@@ -43,19 +43,19 @@ this is easy to be fix if we add a stack based parser
 ** edge case 2
 ...
 
-<bash>
+<run>
 cat <<'EOF' | src edit main.go
 ===BEFORE===
-<bash>
+<run>
 hello
-</bash>
+</run>
 ===AFTER===
-<bash>
+<run>
 world
-</bash>
+</run>
 EOF
-</bash>
-</bash>
+</run>
+</run>
 
 there is one extra bash, but since the stack is already empty, we ignore that token
 

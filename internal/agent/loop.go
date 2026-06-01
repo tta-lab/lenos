@@ -59,7 +59,7 @@ const (
 	stopShouldSummarize
 )
 
-// runLoop drives one turn: stream → parse → execute bash blocks → repeat.
+// runLoop drives one turn: stream → parse → execute run blocks → repeat.
 func runLoop(ctx context.Context, deps loopDeps, history []fantasy.Message, prompt string) (stopReason, error) {
 	return runLoopWithPrompts(ctx, deps, history, []turnPrompt{{Text: prompt}})
 }
@@ -136,7 +136,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			msgs = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
-		// Execute parsed bash blocks: prose-only ends the turn.
+		// Execute parsed run blocks: prose-only ends the turn.
 		if len(parsed.Bash) == 0 {
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
@@ -144,7 +144,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			}
 			return stopEndTurn, nil
 		}
-		// Execute the single bash block.
+		// Execute the single run block.
 		bashCmd := parsed.Bash[0]
 		if strings.TrimSpace(bashCmd) == "" {
 			msgs = drainAndAppend(ctx, deps, msgs)

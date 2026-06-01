@@ -14,7 +14,7 @@ features can be skipped — they'd hit dead code or cause conflicts.
 
 Upstream Crush v0.55.0 used XML `<tool>` blocks dispatching native Go tools
 (read/write/edit/search/grep/bash). Lenos replaced with bash-first: everything
-goes through `<bash>` blocks + bash commands.
+goes through `<run>` blocks + bash commands.
 
 Skip: all tool-call layer commits in v0.74.
 

@@ -363,7 +363,7 @@ func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 
 	results := messagesByRole(ms, message.Result)
 	require.Len(t, results, 1)
-	assert.Contains(t, results[0].Content().Text, lenosbash.RuntimeTag+"\nyour last bash block was not valid bash")
+	assert.Contains(t, results[0].Content().Text, lenosbash.RuntimeTag+"\nyour last run block was not valid bash")
 
 	// Assistant has FinishReasonToolUse for invalid-bash branch.
 	assistants := assistantsByOrder(ms)
@@ -1053,11 +1053,11 @@ func TestRunLoop_CmdNotFoundInBashBlockRePrompts(t *testing.T) {
 	require.Len(t, results, 1)
 	obs := results[0].CommandContent().Output
 	assert.Contains(t, obs, "`hello`")
-	assert.Contains(t, obs, "outside bash blocks")
+	assert.Contains(t, obs, "outside run blocks")
 }
 
 // TestRunLoop_CmdNotFound_RePromptIncludesBashBlockGuidance tests that the
-// rePromptCmdNotFound template points prose back outside bash blocks.
+// rePromptCmdNotFound template points prose back outside run blocks.
 func TestRunLoop_CmdNotFound_RePromptIncludesBashBlockGuidance(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{lenosbash.BashBlock("notarealcmd"), "exit"}}
@@ -1076,7 +1076,7 @@ func TestRunLoop_CmdNotFound_RePromptIncludesBashBlockGuidance(t *testing.T) {
 	assert.NotNil(t, results[0].CommandContent().ExitCode)
 	assert.Equal(t, 1, *results[0].CommandContent().ExitCode)
 	obs := results[0].CommandContent().Output
-	assert.Contains(t, obs, "outside bash blocks")
+	assert.Contains(t, obs, "outside run blocks")
 
 	users := messagesByRole(ms, message.User)
 	assert.Empty(t, users, "cmd-not-found must NOT persist a separate User message")
@@ -1189,7 +1189,7 @@ func TestRunLoop_GrepNoMatch_NoRePrompt(t *testing.T) {
 // where the result envelope is silently dropped from the model's context.
 //
 // Note: natural-language emits like "The PR already exists..." now receive a
-// prose-only end-turn path; this test uses an explicit bash block so it
+// prose-only end-turn path; this test uses an explicit run block so it
 // exercises the post-exec stderr-scan path.
 func TestRunLoop_ProseThenCommand_ModelSeesEnvelopeAndRePrompt(t *testing.T) {
 	t.Parallel()
@@ -1315,7 +1315,7 @@ func TestRunLoop_BashBlockExecutesLowercaseCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Exec ran — lowercase first word is fine.
-	assert.Equal(t, []string{"ls -la\n"}, runner.bash, "bash block must reach exec")
+	assert.Equal(t, []string{"ls -la\n"}, runner.bash, "run block must reach exec")
 }
 
 func TestRunLoop_ToolCallTextWithoutBashTagsStopsAsProse(t *testing.T) {
@@ -1349,7 +1349,7 @@ func TestRunLoop_ToolCallInsideBashBlockInvalidBashDoesNotExecute(t *testing.T) 
 	_, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 
-	assert.Empty(t, runner.bash, "tool-call-shaped bash block must not execute")
+	assert.Empty(t, runner.bash, "tool-call-shaped run block must not execute")
 	results := messagesByRole(ms, message.Result)
 	require.Len(t, results, 1)
 	assert.Contains(t, results[0].Content().Text, "not valid bash")

@@ -87,7 +87,7 @@ The coder turn dispatches on `RuntimeOverrides.ActiveTier`:
 `agent_session.go` all use `a.primaryModel.Get()`.
 `Summarize()` also uses `a.primaryModel.Get()` so compact uses the same
 active tier/provider/model as the current session.
-Compact summarization keeps the normal tagged-bash system prompt as the first
+Compact summarization keeps the normal tagged-run system prompt as the first
 message and appends the compact instruction as the final user message. This
 keeps the shared prompt prefix cacheable.
 
@@ -133,19 +133,19 @@ current session.
 - **CGO disabled**: builds with `CGO_ENABLED=0` and
   `GOEXPERIMENT=greenteagc`.
 
-### Lenos Bash Storage Invariant
+### Lenos Run Storage Invariant
 
-Assistant messages in the database should preserve the full tagged-bash
+Assistant messages in the database should preserve the full tagged-run
 response the agent emitted, after any runtime auto-repair. For example, if
 the model emits plain reader-facing prose and the runtime repairs it to a
-bash block, store the repaired response as the assistant message. This keeps
+run block, store the repaired response as the assistant message. This keeps
 future model history full of valid protocol examples and teaches the
 protocol through its own prior turns.
 
 Published message bodies are display data parsed from the stored assistant
 emit. Assistant prose/markdown bodies belong on assistant rows only; do not
 duplicate them onto result rows (result rows carry command output). Synthetic mixed
-emits must store the raw tagged-bash response as assistant history while
+emits must store the raw tagged-run response as assistant history while
 executing only the cleaned bash. When changing response rendering, preserve
 the existing TUI prose renderer semantics; storage role changes should not
 make markdown look raw or change row alignment. See `internal/ui/AGENTS.md`

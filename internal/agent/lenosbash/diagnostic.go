@@ -24,7 +24,7 @@ func RenderDiagnostic(source string, diag Diagnostic) string {
 	rendered := renderedDiagnostic(source, diag)
 	var b strings.Builder
 	b.WriteString(RuntimeTag)
-	b.WriteString("\ninvalid Lenos Bash\n\n")
+	b.WriteString("\ninvalid Lenos Run\n\n")
 	b.WriteString("error: ")
 	b.WriteString(rendered.Message)
 	b.WriteString("\n")
@@ -101,7 +101,7 @@ func writeHelpRewrite(b *strings.Builder, diag renderedDiagnosticView) {
 func diagnosticLabel(diag Diagnostic) string {
 	switch {
 	case diag.Kind == "tag_unclosed" && strings.Contains(diag.Message, BashStartTag):
-		return "unclosed bash tag"
+		return "unclosed run tag"
 	default:
 		return "invalid syntax"
 	}
@@ -112,7 +112,7 @@ func diagnosticHelp(diag Diagnostic) string {
 	case "tag_unclosed":
 		return "add a matching closing tag"
 	default:
-		return "use bash tags for commands or plain text for prose"
+		return "use run tags for commands or plain text for prose"
 	}
 }
 

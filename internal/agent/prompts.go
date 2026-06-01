@@ -75,7 +75,7 @@ func SystemPrompt(
 	b.WriteString(base)
 	b.WriteString("\n")
 	if pairWith := strings.TrimSpace(store.Overrides().PairWith); pairWith != "" {
-		b.WriteString("When you need to message " + pairWith + ", use the available shell command for messaging from inside a bash block.\n\n")
+		b.WriteString("When you need to message " + pairWith + ", use the available shell command for messaging from inside a run block.\n\n")
 	}
 	b.WriteString(gitSection)
 	b.WriteString("\n\n")
