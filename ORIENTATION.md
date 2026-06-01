@@ -2,7 +2,7 @@
 
 ## Goal
 
-Render Lenos Run assistant emits as user-facing display parts without changing
+Render Lenos Bash assistant emits as user-facing display parts without changing
 the raw assistant message stored in history or sent back to the model.
 
 Example raw assistant message:
@@ -20,7 +20,7 @@ Target TUI display:
 1. Markdown/prose component: `Let me read this file.`
 2. Bash command component: `cat main.go`
 
-The raw assistant `TextContent.Text` must remain the original Lenos Run text.
+The raw assistant `TextContent.Text` must remain the original Lenos Bash text.
 Provider history should still see the raw message through `message.ToAIMessage`.
 
 ## Current State
@@ -38,7 +38,7 @@ The runtime already preserves raw assistant emits:
 
 ## Recommended Design
 
-Add a UI-only display projection for assistant Lenos Run emits.
+Add a UI-only display projection for assistant Lenos Bash emits.
 
 The projection should parse `message.Content().Text` with
 `lenosbash.Parse` inside the TUI render layer. It should return ordered display
@@ -75,7 +75,7 @@ Suggested files:
 
 ## Render Rules
 
-For an assistant message that parses as Lenos Run:
+For an assistant message that parses as Lenos Bash:
 
 - Message blocks render as assistant markdown, joined with blank lines.
 - Bash renders after the message blocks as one command preview.
@@ -84,7 +84,7 @@ For an assistant message that parses as Lenos Run:
 - Never show raw `m`, quote delimiters, or message-block targets in normal
   chat display.
 
-For invalid parse or content that is not Lenos Run:
+For invalid parse or content that is not Lenos Bash:
 
 - Keep the existing fallback: show the one-line bash preview.
 - This preserves useful debug behavior for invalid emits and legacy sessions.
