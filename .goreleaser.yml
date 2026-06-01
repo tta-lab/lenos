@@ -64,7 +64,6 @@ archives:
       {{- if eq .Arch "amd64" }}x86_64
       {{- else }}{{ .Arch }}{{ end }}
     files:
-      - scripts/install.sh
       - completions/*
       - manpages/*
       - LICENSE*

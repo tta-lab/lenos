@@ -206,15 +206,21 @@ func installTool(binDir string, t tool) error {
 		}
 
 		dst := filepath.Join(binDir, t.Binary)
-		f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+		part := dst + ".part"
+		f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {
 			return fmt.Errorf("write %s: %w", t.Name, err)
 		}
 		if _, err := io.Copy(f, tr); err != nil {
 			f.Close()
+			os.Remove(part)
 			return fmt.Errorf("extract %s: %w", t.Name, err)
 		}
 		f.Close()
+		if err := os.Rename(part, dst); err != nil {
+			os.Remove(part)
+			return fmt.Errorf("install %s: %w", t.Name, err)
+		}
 		return nil
 	}
 
