@@ -127,7 +127,9 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	if len(queuedCalls) > 1 {
 		a.messageQueue.Set(sessionID, queuedCalls[1:])
 	}
-	_ = a.Run(ctx, first)
+	if err := a.Run(ctx, first); err != nil {
+		return fmt.Errorf("summarize: failed to process queued message: %w", err)
+	}
 	return nil
 }
 
