@@ -5,6 +5,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -91,22 +92,22 @@ func (m model) View() tea.View {
 	}
 
 	for _, name := range m.installed {
-		b.WriteString(fmt.Sprintf("  %s %s\n",
+		fmt.Fprintf(&b, "  %s %s\n",
 			lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#50fa7b")).
 				Render("✓"),
 			name,
-		))
+		)
 	}
 
 	if !m.done {
-		b.WriteString(fmt.Sprintf("  %s %s\n", m.spinner.View(), m.statusMsg))
+		fmt.Fprintf(&b, "  %s %s\n", m.spinner.View(), m.statusMsg)
 	} else {
-		b.WriteString(fmt.Sprintf("\n  %s\n",
+		fmt.Fprintf(&b, "\n  %s\n",
 			lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#f1fa8c")).
 				Render("Done. Run `lenos` to get started."),
-		))
+		)
 	}
 
 	return tea.NewView(b.String())
@@ -146,8 +147,10 @@ func (m *model) run() error {
 	return nil
 }
 
-type installedMsg struct{ name string }
-type errMsg struct{ err error }
+type (
+	installedMsg struct{ name string }
+	errMsg       struct{ err error }
+)
 
 func installToolCmd(binDir string, t tool) tea.Cmd {
 	return func() tea.Msg {
@@ -159,12 +162,16 @@ func installToolCmd(binDir string, t tool) tea.Cmd {
 }
 
 func installTool(binDir string, t tool) error {
-	url := fmt.Sprintf(
+	downloadURL := fmt.Sprintf(
 		"https://github.com/%s/%s/releases/latest/download/%s_%s_%s.tar.gz",
 		githubOrg, t.Repo, t.Binary, titleOS(), arch(),
 	)
 
-	resp, err := httpClient().Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return fmt.Errorf("build request %s: %w", t.Name, err)
+	}
+	resp, err := httpClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", t.Name, err)
 	}

@@ -56,4 +56,4 @@ completions/crush.*sh
 .prettierignore
 .task
 scripts/__pycache__
-lenos-installer
+/lenos-installer
