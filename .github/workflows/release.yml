@@ -7,6 +7,9 @@ on:
     tags:
       - v*.*.*
 
+permissions:
+  contents: write
+
 concurrency:
   group: goreleaser
   cancel-in-progress: true
