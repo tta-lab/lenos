@@ -277,7 +277,7 @@ func setupLaunchd() {
 
 	fmt.Println("  → Setting up temenos daemon (launchd)...")
 	// Run `temenos daemon install` which handles plist creation and bootstrapping.
-	cmd := exec.Command(temenosBin, "daemon", "install")
+	cmd := exec.CommandContext(context.Background(), temenosBin, "daemon", "install")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
