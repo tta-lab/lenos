@@ -31,9 +31,7 @@ chore(upstream): port <hash> — <upstream commit title>
 ### Audit before porting
 
 ```bash
-ttal jump crush
-git show <hash> --stat -p
-ttal jump lenos
+git -C $(ttal jump crush) show <hash> --stat -p
 ```
 
 ### Pre-merge verification

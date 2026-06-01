@@ -44,9 +44,8 @@ Before porting, **always** audit the upstream commit directly from
 the Crush source-of-truth checkout:
 
 ```bash
-ttal jump crush                    # jump to Crush reference clone
-git show <upstream-hash> --stat -p # verify the commit exists
-ttal jump lenos                    # jump back to Lenos worktree
+# tt jump crush prints the filesystem path; use -C to run git there
+git -C $(ttal jump crush) show <upstream-hash> --stat -p
 ```
 
 Confirm:
@@ -206,4 +205,4 @@ When reviewing an upstream tracking PR, check:
 - [ ] No leaked `CRUSH_` prefixes (must be `LENOS_`)
 - [ ] Tests pass
 - [ ] Docs updated (v0.74-*.md, README.md)
-- [ ] Upstream diff audited via \`ttal jump crush; git show <hash>\` (see §1.3)
+- [ ] Upstream diff audited via \`git -C $(ttal jump crush) show <hash> --stat -p\` (see §1.3)
