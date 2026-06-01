@@ -54,19 +54,46 @@ builds:
       - arm64
     ldflags:
       - -s -w
+  - id: lenos-installer
+    main: ./cmd/lenos-installer
+    binary: lenos-installer
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
 
 archives:
-  - formats: [tar.gz]
+  - id: lenos
+    formats: [tar.gz]
+    builds:
+      - lenos
+      - narrate
     name_template: >-
       lenos_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else }}{{ .Arch }}{{ end }}
     files:
+      - scripts/install.sh
       - completions/*
       - manpages/*
       - LICENSE*
       - README*
+  - id: lenos-installer
+    formats: [tar.gz]
+    builds:
+      - lenos-installer
+    name_template: >-
+      lenos-installer_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
 
 checksum:
   name_template: checksums.txt
