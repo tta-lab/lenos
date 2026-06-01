@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
+	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/message"
@@ -137,6 +139,7 @@ type testWorkspace struct {
 	gitWorktree    bool
 	workingDir     string
 	modifiedFiles  []workspace.ModifiedFile
+	jobs           []agent.BackgroundJob
 	listModifiedFn func() ([]workspace.ModifiedFile, error)
 }
 
@@ -168,6 +171,10 @@ func (w *testWorkspace) ListModifiedFiles(ctx context.Context) ([]workspace.Modi
 		return w.listModifiedFn()
 	}
 	return w.modifiedFiles, nil
+}
+
+func (w *testWorkspace) AgentActiveBackgroundJobs(string) []agent.BackgroundJob {
+	return w.jobs
 }
 
 func (w *testWorkspace) SetActiveModel(modelType config.SelectedModelType, model config.SelectedModel) {
@@ -330,6 +337,38 @@ func TestModifiedFilesInfo(t *testing.T) {
 
 		got := ui.modifiedFilesInfo(40, 10, false)
 		require.NotEqual(t, "", got)
+	})
+}
+
+func TestBackgroundJobsInfo(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns empty when no jobs are active", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithConfig(t, nil)
+		ui.session = &session.Session{ID: "session-1"}
+
+		got := ui.backgroundJobsInfo(40, 10)
+
+		require.Equal(t, "", got)
+	})
+
+	t.Run("returns active job commands", func(t *testing.T) {
+		t.Parallel()
+		ui := newTestUIWithConfig(t, nil)
+		ui.session = &session.Session{ID: "session-1"}
+		ui.com.Workspace = &testWorkspace{
+			jobs: []agent.BackgroundJob{
+				{ID: "job-1", Command: "go test ./..."},
+				{ID: "job-2", Command: "task lint"},
+			},
+		}
+
+		got := ansi.Strip(ui.backgroundJobsInfo(40, 10))
+
+		require.Contains(t, got, "Background Jobs")
+		require.Contains(t, got, "go test ./...")
+		require.Contains(t, got, "task lint")
 	})
 }
 

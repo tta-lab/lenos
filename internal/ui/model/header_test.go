@@ -157,7 +157,7 @@ func TestRenderHeaderDetailsCollapsedUsesBaseDirBranchAndJobCount(t *testing.T) 
 	assert.NotContains(t, got, "go test ./...")
 }
 
-func TestRenderHeaderDetailsOpenUsesFullPathCacheBranchAndJobDetails(t *testing.T) {
+func TestRenderHeaderDetailsOpenUsesBranchAndJobCount(t *testing.T) {
 	t.Parallel()
 
 	sty := styles.DefaultStyles()
@@ -186,5 +186,7 @@ func TestRenderHeaderDetailsOpenUsesFullPathCacheBranchAndJobDetails(t *testing.
 	assert.NotContains(t, got, "/home/neil/code/projects/GuionAI/flick-backend")
 	assert.Contains(t, got, "feat/header")
 	assert.NotContains(t, got, "cache")
-	assert.Contains(t, got, "jobs 2: go test ./..., task lint")
+	assert.Contains(t, got, "2 jobs")
+	assert.NotContains(t, got, "go test ./...")
+	assert.NotContains(t, got, "task lint")
 }

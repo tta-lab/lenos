@@ -2945,14 +2945,23 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	} else if pathSection != "" {
 		filesSection = pathSection
 	}
+	jobsSection := m.backgroundJobsInfo(sectionWidth, maxItemsPerSection)
 	todoSection := m.todoListInfo(sectionWidth)
+	rightSection := jobsSection
+	if todoSection != "" {
+		if rightSection == "" {
+			rightSection = todoSection
+		} else {
+			rightSection = lipgloss.JoinVertical(lipgloss.Left, jobsSection, "", todoSection)
+		}
+	}
 
 	sections := filesSection
-	if todoSection != "" {
+	if rightSection != "" {
 		if sections == "" {
-			sections = todoSection
+			sections = rightSection
 		} else {
-			sections = lipgloss.JoinHorizontal(lipgloss.Top, filesSection, "  ", todoSection)
+			sections = lipgloss.JoinHorizontal(lipgloss.Top, filesSection, "  ", rightSection)
 		}
 	}
 	uv.NewStyledString(

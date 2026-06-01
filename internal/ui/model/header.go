@@ -149,7 +149,7 @@ func renderHeaderDetails(
 
 	jobs := com.Workspace.AgentActiveBackgroundJobs(sess.ID)
 	if len(jobs) > 0 {
-		parts = append(parts, t.HalfMuted.Render(formatBackgroundJobsSegment(jobs, detailsOpen)))
+		parts = append(parts, t.HalfMuted.Render(formatBackgroundJobsSegment(jobs)))
 	}
 
 	if seg := formatTodoSegment(t, todos); seg != "" {
@@ -184,19 +184,11 @@ func formatHeaderWorkingDir(workingDir string, detailsOpen bool) string {
 	return workingDir
 }
 
-func formatBackgroundJobsSegment(jobs []agent.BackgroundJob, detailsOpen bool) string {
-	if !detailsOpen {
-		if len(jobs) == 1 {
-			return "1 job"
-		}
-		return fmt.Sprintf("%d jobs", len(jobs))
+func formatBackgroundJobsSegment(jobs []agent.BackgroundJob) string {
+	if len(jobs) == 1 {
+		return "1 job"
 	}
-
-	commands := make([]string, 0, len(jobs))
-	for _, job := range jobs {
-		commands = append(commands, job.Command)
-	}
-	return fmt.Sprintf("jobs %d: %s", len(jobs), strings.Join(commands, ", "))
+	return fmt.Sprintf("%d jobs", len(jobs))
 }
 
 // formatTodoSegment formats the `TODO done/total` segment shown in the
