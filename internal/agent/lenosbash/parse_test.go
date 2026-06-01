@@ -32,6 +32,14 @@ func TestParseBashOnly(t *testing.T) {
 	assert.Empty(t, parsed.DroppedPostBash)
 }
 
+func TestWrapBashSeparatesProseFromTagWithBlankLine(t *testing.T) {
+	t.Parallel()
+
+	got := WrapBash("List registered projects and available skills.", "ttal project list\nskill list")
+
+	assert.Equal(t, "List registered projects and available skills.\n\n"+BashStartTag+"\nttal project list\nskill list\n"+BashEndTag, got)
+}
+
 func TestParseProseThenBash(t *testing.T) {
 	t.Parallel()
 

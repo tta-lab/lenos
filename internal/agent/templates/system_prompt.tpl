@@ -4,8 +4,9 @@ Reply in Markdown. To run commands, add one bash block:
 
 {{.BashExample}}
 
-Bash tags must start at column 1 on their own lines. Inline or indented tag
-text is plain text.
+Put a blank line before the opening bash tag. The opening and closing bash
+tags must start at column 1 on their own lines. Inline or indented tag text is
+plain text.
 
 The runtime executes the first bash block in a fresh subprocess. After
 {{.BashEndTag}}, stop; later text is dropped. Shell state does not persist

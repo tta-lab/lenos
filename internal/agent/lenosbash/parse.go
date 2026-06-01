@@ -39,7 +39,7 @@ func WrapBash(prose, command string) string {
 	if prose == "" {
 		return BashBlock(command)
 	}
-	return prose + "\n" + BashBlock(command)
+	return prose + "\n\n" + BashBlock(command)
 }
 
 func ResultBlock(body string) string {
