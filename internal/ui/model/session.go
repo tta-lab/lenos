@@ -10,7 +10,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
+	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
@@ -143,6 +145,67 @@ func truncatePath(t *styles.Styles, path string, maxWidth int) string {
 	return t.Files.Path.Render(strings.Join(truncated, "/"))
 }
 
+func (m *UI) pathInfo(width int) string {
+	path := m.com.Workspace.WorkingDir()
+	if path == "" {
+		return ""
+	}
+
+	t := m.com.Styles
+	title := t.Subtle.Render("Path")
+	body := t.Muted.Render(path)
+	return lipgloss.NewStyle().Width(width).Render(title + "\n\n" + body)
+}
+
+func (m *UI) backgroundJobsInfo(width, maxItems int) string {
+	if m.session == nil || m.session.ID == "" {
+		return ""
+	}
+
+	jobs := m.com.Workspace.AgentActiveBackgroundJobs(m.session.ID)
+	if len(jobs) == 0 {
+		return ""
+	}
+
+	t := m.com.Styles
+	title := t.Subtle.Render("Background Jobs")
+	body := backgroundJobList(t, jobs, width, maxItems)
+	return lipgloss.NewStyle().Width(width).Render(title + "\n\n" + body)
+}
+
+func backgroundJobList(t *styles.Styles, jobs []agent.BackgroundJob, width, maxItems int) string {
+	if maxItems <= 0 || len(jobs) == 0 {
+		return ""
+	}
+
+	var lines []string
+	for i := 0; i < len(jobs) && i < maxItems; i++ {
+		job := jobs[i]
+		command := t.Files.Path.Render(ansi.Truncate(job.Command, max(0, width), "…"))
+		lines = append(lines, command)
+	}
+	if len(jobs) > maxItems {
+		remaining := len(jobs) - maxItems
+		lines = append(lines, t.Subtle.Render(fmt.Sprintf("…and %d more", remaining)))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+func cacheHitPercentage(sess *session.Session) *float64 {
+	if sess == nil {
+		return nil
+	}
+	if sess.CacheReadTokens+sess.CacheCreationTokens == 0 {
+		return nil
+	}
+	denominator := sess.CacheMissTokens + sess.CacheReadTokens
+	if denominator <= 0 {
+		return nil
+	}
+	percentage := float64(sess.CacheReadTokens) / float64(denominator) * 100
+	return &percentage
+}
+
 // waitNextTWTick returns a command that waits for the next ticker tick and
 // emits a twPollMsg. Guards against a nil ticker (poller not started — non-TW
 // workers).
@@ -264,6 +327,7 @@ func (m *UI) modelInfo(width int) string {
 			ContextUsed:  m.session.CompletionTokens + m.session.PromptTokens,
 			Cost:         m.session.Cost,
 			ModelContext: model.CatwalkCfg.ContextWindow,
+			CacheHitPct:  cacheHitPercentage(m.session),
 		}
 	}
 	var modelName string

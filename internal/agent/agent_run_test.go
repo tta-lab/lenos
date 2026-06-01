@@ -413,20 +413,40 @@ func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 	})
 
 	usage := fantasy.Usage{
-		InputTokens:  1000,
-		OutputTokens: 500,
+		InputTokens:         1000,
+		OutputTokens:        500,
+		CacheCreationTokens: 100,
+		CacheReadTokens:     200,
 	}
 
 	updated, ok := agent.saveSessionUsage(t.Context(), sess.ID, usage, nil, "save failed")
 	require.True(t, ok, "saveSessionUsage should succeed")
-	assert.Equal(t, int64(1000), updated.PromptTokens, "PromptTokens should reflect InputTokens")
+	assert.Equal(t, int64(1200), updated.PromptTokens, "PromptTokens should reflect current prompt input including cache reads")
 	assert.Equal(t, int64(500), updated.CompletionTokens, "CompletionTokens should reflect OutputTokens")
+	assert.Equal(t, int64(1100), updated.CacheMissTokens)
+	assert.Equal(t, int64(100), updated.CacheCreationTokens)
+	assert.Equal(t, int64(200), updated.CacheReadTokens)
 	assert.Greater(t, updated.Cost, 0.0, "Cost should be non-zero")
+
+	updated, ok = agent.saveSessionUsage(t.Context(), sess.ID, fantasy.Usage{
+		InputTokens:     10,
+		OutputTokens:    5,
+		CacheReadTokens: 90,
+	}, nil, "save failed")
+	require.True(t, ok, "saveSessionUsage should succeed")
+	assert.Equal(t, int64(100), updated.PromptTokens, "PromptTokens should remain current-context usage")
+	assert.Equal(t, int64(5), updated.CompletionTokens, "CompletionTokens should remain current-context usage")
+	assert.Equal(t, int64(1110), updated.CacheMissTokens)
+	assert.Equal(t, int64(100), updated.CacheCreationTokens)
+	assert.Equal(t, int64(290), updated.CacheReadTokens)
 
 	persisted, err := env.sessions.Get(t.Context(), sess.ID)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1000), persisted.PromptTokens)
-	assert.Equal(t, int64(500), persisted.CompletionTokens)
+	assert.Equal(t, int64(100), persisted.PromptTokens)
+	assert.Equal(t, int64(5), persisted.CompletionTokens)
+	assert.Equal(t, int64(1110), persisted.CacheMissTokens)
+	assert.Equal(t, int64(100), persisted.CacheCreationTokens)
+	assert.Equal(t, int64(290), persisted.CacheReadTokens)
 }
 
 func TestRun_BusySession_QueuesPrompt(t *testing.T) {

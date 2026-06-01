@@ -289,7 +289,7 @@ func (t *testSessionService) Create(_ context.Context, _ string) (session.Sessio
 	return session.Session{}, nil
 }
 
-func (t *testSessionService) UpdateTitleAndUsage(_ context.Context, _, _ string, _, _ int64, _ float64) error {
+func (t *testSessionService) UpdateTitleAndUsage(_ context.Context, _, _ string, _, _ int64, _, _, _ int64, _ float64) error {
 	return nil
 }
 

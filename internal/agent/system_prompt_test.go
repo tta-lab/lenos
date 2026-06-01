@@ -75,6 +75,8 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, lenosbash.BashBlock("go test ./..."))
+	assert.Contains(t, got, "Put a blank line before the opening bash tag.")
+	assert.Contains(t, got, "tags must start at column 1")
 }
 
 func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {

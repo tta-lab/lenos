@@ -34,6 +34,7 @@ type ModelContextInfo struct {
 	ContextUsed  int64
 	ModelContext int64
 	Cost         float64
+	CacheHitPct  *float64
 }
 
 // ModelInfo renders model information including name, provider, reasoning
@@ -72,7 +73,7 @@ func ModelInfo(t *styles.Styles, modelName, providerName, reasoningInfo string, 
 	}
 
 	if context != nil {
-		formattedInfo := formatTokensAndCost(t, context.ContextUsed, context.ModelContext, context.Cost)
+		formattedInfo := formatTokensAndCost(t, context.ContextUsed, context.ModelContext, context.Cost, context.CacheHitPct)
 		parts = append(parts, lipgloss.NewStyle().PaddingLeft(2).Render(formattedInfo))
 	}
 
@@ -83,7 +84,7 @@ func ModelInfo(t *styles.Styles, modelName, providerName, reasoningInfo string, 
 
 // formatTokensAndCost formats token usage and cost with appropriate units
 // (K/M) and percentage of context window.
-func formatTokensAndCost(t *styles.Styles, tokens, contextWindow int64, cost float64) string {
+func formatTokensAndCost(t *styles.Styles, tokens, contextWindow int64, cost float64, cacheHitPct *float64) string {
 	var formattedTokens string
 	switch {
 	case tokens >= 1_000_000:
@@ -110,6 +111,11 @@ func formatTokensAndCost(t *styles.Styles, tokens, contextWindow int64, cost flo
 	formattedTokens = fmt.Sprintf("%s %s", formattedPercentage, formattedTokens)
 	if percentage > 80 {
 		formattedTokens = fmt.Sprintf("%s %s", styles.DiagnosticWarningIcon, formattedTokens)
+	}
+
+	if cacheHitPct != nil {
+		cache := t.Muted.Render(fmt.Sprintf("cache %.1f%%", *cacheHitPct))
+		return fmt.Sprintf("%s %s %s", formattedTokens, formattedCost, cache)
 	}
 
 	return fmt.Sprintf("%s %s", formattedTokens, formattedCost)

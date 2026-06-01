@@ -129,7 +129,7 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []Runtime
 	if len(runtimeContext.ContextFiles) > 0 {
 		var readCmd strings.Builder
 		readCmd.WriteString("Read key instructions.")
-		readCmd.WriteString("\n")
+		readCmd.WriteString("\n\n")
 		readCmd.WriteString(lenosbash.BashStartTag)
 		for _, file := range runtimeContext.ContextFiles {
 			readCmd.WriteString("\ncat ")

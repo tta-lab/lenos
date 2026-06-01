@@ -1,12 +1,14 @@
 package model
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
+	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
 	"github.com/tta-lab/lenos/internal/session"
@@ -55,6 +57,9 @@ func TestFormatTodoSegment(t *testing.T) {
 type headerWorkspace struct {
 	testWorkspace
 	agentModel workspace.AgentModel
+	workingDir string
+	branch     string
+	jobs       []agent.BackgroundJob
 }
 
 func (w *headerWorkspace) AgentIsReady() bool {
@@ -63,6 +68,21 @@ func (w *headerWorkspace) AgentIsReady() bool {
 
 func (w *headerWorkspace) AgentModel() workspace.AgentModel {
 	return w.agentModel
+}
+
+func (w headerWorkspace) WorkingDir() string {
+	if w.workingDir != "" {
+		return w.workingDir
+	}
+	return w.testWorkspace.WorkingDir()
+}
+
+func (w headerWorkspace) CurrentBranch(context.Context) string {
+	return w.branch
+}
+
+func (w headerWorkspace) AgentActiveBackgroundJobs(string) []agent.BackgroundJob {
+	return w.jobs
 }
 
 func TestRenderHeaderDetailsUsesActiveAgentContextWindow(t *testing.T) {
@@ -108,4 +128,65 @@ func TestRenderHeaderDetailsUsesActiveAgentContextWindow(t *testing.T) {
 
 	assert.Contains(t, got, "21%")
 	assert.NotContains(t, got, "84%")
+}
+
+func TestRenderHeaderDetailsCollapsedUsesBaseDirBranchAndJobCount(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.DefaultStyles()
+	com := &common.Common{
+		Workspace: &headerWorkspace{
+			workingDir: "/home/neil/code/projects/GuionAI/flick-backend",
+			branch:     "feat/header",
+			jobs: []agent.BackgroundJob{
+				{ID: "1", Command: "go test ./..."},
+				{ID: "2", Command: "task lint"},
+			},
+		},
+		Styles: &sty,
+	}
+	sess := &session.Session{ID: "session-1"}
+
+	got := ansi.Strip(renderHeaderDetails(com, sess, false, 120, nil, nil))
+
+	assert.Contains(t, got, "flick-backend")
+	assert.NotContains(t, got, "~/c/p/G/flick-backend")
+	assert.NotContains(t, got, "/home/neil/code/projects/GuionAI/flick-backend")
+	assert.Contains(t, got, "feat/header")
+	assert.Contains(t, got, "2 jobs")
+	assert.NotContains(t, got, "go test ./...")
+}
+
+func TestRenderHeaderDetailsOpenUsesBranchAndJobCount(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.DefaultStyles()
+	com := &common.Common{
+		Workspace: &headerWorkspace{
+			workingDir: "/home/neil/code/projects/GuionAI/flick-backend",
+			branch:     "feat/header",
+			jobs: []agent.BackgroundJob{
+				{ID: "1", Command: "go test ./..."},
+				{ID: "2", Command: "task lint"},
+			},
+		},
+		Styles: &sty,
+	}
+	sess := &session.Session{
+		ID:                  "session-1",
+		PromptTokens:        100,
+		CacheReadTokens:     40,
+		CacheCreationTokens: 10,
+		CompletionTokens:    5,
+	}
+
+	got := ansi.Strip(renderHeaderDetails(com, sess, true, 180, nil, nil))
+
+	assert.Contains(t, got, "flick-backend")
+	assert.NotContains(t, got, "/home/neil/code/projects/GuionAI/flick-backend")
+	assert.Contains(t, got, "feat/header")
+	assert.NotContains(t, got, "cache")
+	assert.Contains(t, got, "2 jobs")
+	assert.NotContains(t, got, "go test ./...")
+	assert.NotContains(t, got, "task lint")
 }

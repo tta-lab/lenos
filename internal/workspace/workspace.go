@@ -61,6 +61,7 @@ type Workspace interface {
 
 	// Git
 	IsGitWorktree(ctx context.Context) bool
+	CurrentBranch(ctx context.Context) string
 	ListModifiedFiles(ctx context.Context) ([]ModifiedFile, error)
 
 	// Config (read-only data)

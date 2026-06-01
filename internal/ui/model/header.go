@@ -1,13 +1,15 @@
 package model
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/tta-lab/lenos/internal/fsext"
+	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	"github.com/tta-lab/lenos/internal/ui/styles"
@@ -141,6 +143,15 @@ func renderHeaderDetails(
 		parts = append(parts, formattedPercentage)
 	}
 
+	if branch := com.Workspace.CurrentBranch(context.Background()); branch != "" {
+		parts = append(parts, t.HalfMuted.Render(branch))
+	}
+
+	jobs := com.Workspace.AgentActiveBackgroundJobs(sess.ID)
+	if len(jobs) > 0 {
+		parts = append(parts, t.HalfMuted.Render(formatBackgroundJobsSegment(jobs)))
+	}
+
 	if seg := formatTodoSegment(t, todos); seg != "" {
 		parts = append(parts, seg)
 	}
@@ -156,12 +167,28 @@ func renderHeaderDetails(
 	metadata := strings.Join(parts, dot)
 	metadata = dot + metadata
 
-	const dirTrimLimit = 4
-	cwd := fsext.DirTrim(fsext.PrettyPath(com.Workspace.WorkingDir()), dirTrimLimit)
+	cwd := formatHeaderWorkingDir(com.Workspace.WorkingDir(), false)
 	cwd = t.Header.WorkingDir.Render(cwd)
 
 	result := cwd + metadata
 	return ansi.Truncate(result, max(0, availWidth), "…")
+}
+
+func formatHeaderWorkingDir(workingDir string, detailsOpen bool) string {
+	if detailsOpen {
+		return workingDir
+	}
+	if base := filepath.Base(workingDir); base != "." && base != string(filepath.Separator) {
+		return base
+	}
+	return workingDir
+}
+
+func formatBackgroundJobsSegment(jobs []agent.BackgroundJob) string {
+	if len(jobs) == 1 {
+		return "1 job"
+	}
+	return fmt.Sprintf("%d jobs", len(jobs))
 }
 
 // formatTodoSegment formats the `TODO done/total` segment shown in the
