@@ -143,6 +143,30 @@ func truncatePath(t *styles.Styles, path string, maxWidth int) string {
 	return t.Files.Path.Render(strings.Join(truncated, "/"))
 }
 
+func (m *UI) pathInfo(width int) string {
+	path := m.com.Workspace.WorkingDir()
+	if path == "" {
+		return ""
+	}
+
+	t := m.com.Styles
+	title := t.Subtle.Render("Path")
+	body := t.Muted.Render(path)
+	return lipgloss.NewStyle().Width(width).Render(title + "\n\n" + body)
+}
+
+func cacheHitPercentage(sess *session.Session) *float64 {
+	if sess == nil {
+		return nil
+	}
+	denominator := sess.PromptTokens + sess.CacheCreationTokens
+	if denominator <= 0 {
+		return nil
+	}
+	percentage := float64(sess.CacheReadTokens) / float64(denominator) * 100
+	return &percentage
+}
+
 // waitNextTWTick returns a command that waits for the next ticker tick and
 // emits a twPollMsg. Guards against a nil ticker (poller not started — non-TW
 // workers).
@@ -264,6 +288,7 @@ func (m *UI) modelInfo(width int) string {
 			ContextUsed:  m.session.CompletionTokens + m.session.PromptTokens,
 			Cost:         m.session.Cost,
 			ModelContext: model.CatwalkCfg.ContextWindow,
+			CacheHitPct:  cacheHitPercentage(m.session),
 		}
 	}
 	var modelName string

@@ -334,6 +334,10 @@ func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage
 		s.Cost += cost
 	}
 
+	if usage.InputTokens+usage.OutputTokens+usage.CacheCreationTokens+usage.CacheReadTokens == 0 {
+		return
+	}
+
 	s.CompletionTokens = usage.OutputTokens
 	s.PromptTokens = usage.InputTokens + usage.CacheReadTokens
 	s.CacheCreationTokens = usage.CacheCreationTokens

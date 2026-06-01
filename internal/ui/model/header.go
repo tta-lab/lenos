@@ -143,11 +143,6 @@ func renderHeaderDetails(
 		parts = append(parts, formattedPercentage)
 	}
 
-	if detailsOpen && sess.PromptTokens+sess.CacheCreationTokens > 0 {
-		cachePercentage := float64(sess.CacheReadTokens) / float64(sess.PromptTokens+sess.CacheCreationTokens) * 100
-		parts = append(parts, t.Header.Percentage.Render(fmt.Sprintf("cache %d%%", int(cachePercentage))))
-	}
-
 	if branch := com.Workspace.CurrentBranch(context.Background()); branch != "" {
 		parts = append(parts, t.HalfMuted.Render(branch))
 	}
@@ -172,7 +167,7 @@ func renderHeaderDetails(
 	metadata := strings.Join(parts, dot)
 	metadata = dot + metadata
 
-	cwd := formatHeaderWorkingDir(com.Workspace.WorkingDir(), detailsOpen)
+	cwd := formatHeaderWorkingDir(com.Workspace.WorkingDir(), false)
 	cwd = t.Header.WorkingDir.Render(cwd)
 
 	result := cwd + metadata

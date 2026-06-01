@@ -182,8 +182,9 @@ func TestRenderHeaderDetailsOpenUsesFullPathCacheBranchAndJobDetails(t *testing.
 
 	got := ansi.Strip(renderHeaderDetails(com, sess, true, 180, nil, nil))
 
-	assert.Contains(t, got, "/home/neil/code/projects/GuionAI/flick-backend")
+	assert.Contains(t, got, "flick-backend")
+	assert.NotContains(t, got, "/home/neil/code/projects/GuionAI/flick-backend")
 	assert.Contains(t, got, "feat/header")
-	assert.Contains(t, got, "cache 36%")
+	assert.NotContains(t, got, "cache")
 	assert.Contains(t, got, "jobs 2: go test ./..., task lint")
 }

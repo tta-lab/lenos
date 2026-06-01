@@ -135,6 +135,7 @@ type testWorkspace struct {
 	agentReady     bool
 	agentModel     workspace.AgentModel
 	gitWorktree    bool
+	workingDir     string
 	modifiedFiles  []workspace.ModifiedFile
 	listModifiedFn func() ([]workspace.ModifiedFile, error)
 }
@@ -144,6 +145,9 @@ func (w *testWorkspace) Config() *config.Config {
 }
 
 func (w *testWorkspace) WorkingDir() string {
+	if w.workingDir != "" {
+		return w.workingDir
+	}
 	return "/tmp"
 }
 
@@ -327,6 +331,55 @@ func TestModifiedFilesInfo(t *testing.T) {
 		got := ui.modifiedFilesInfo(40, 10, false)
 		require.NotEqual(t, "", got)
 	})
+}
+
+func TestModelInfoShowsCacheHitRateWithOneDecimal(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
+			"codex": {
+				ID:   "codex",
+				Name: "Codex",
+			},
+		}),
+	}
+	ui := newTestUIWithConfig(t, cfg)
+	ui.session = &session.Session{
+		PromptTokens:        100,
+		CacheReadTokens:     40,
+		CacheCreationTokens: 10,
+	}
+	ui.com.Workspace = &testWorkspace{
+		cfg:        cfg,
+		agentReady: true,
+		agentModel: workspace.AgentModel{
+			CatwalkCfg: catwalk.Model{
+				Name:          "GPT-5.5",
+				ContextWindow: 1_000,
+			},
+			ModelCfg: config.SelectedModel{
+				Provider: "codex",
+			},
+		},
+	}
+
+	got := ui.modelInfo(120)
+
+	require.Contains(t, got, "cache 36.4%")
+}
+
+func TestPathInfoUsesFullWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	ui := newTestUIWithConfig(t, nil)
+	ui.com.Workspace = &testWorkspace{
+		workingDir: "/home/neil/code/projects/GuionAI/flick-backend",
+	}
+
+	got := ui.pathInfo(80)
+
+	require.Contains(t, got, "/home/neil/code/projects/GuionAI/flick-backend")
 }
 
 func TestGitPollingIntegration(t *testing.T) {

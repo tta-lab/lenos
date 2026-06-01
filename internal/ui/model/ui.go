@@ -2938,7 +2938,13 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	sectionWidth := min(maxSectionWidth, width/3-2) // account for 2 spaces
 	maxItemsPerSection := remainingHeight - 3       // Account for section title and spacing
 
+	pathSection := m.pathInfo(sectionWidth)
 	filesSection := m.modifiedFilesInfo(sectionWidth, maxItemsPerSection, false)
+	if pathSection != "" && filesSection != "" {
+		filesSection = lipgloss.JoinVertical(lipgloss.Left, pathSection, "", filesSection)
+	} else if pathSection != "" {
+		filesSection = pathSection
+	}
 	todoSection := m.todoListInfo(sectionWidth)
 
 	sections := filesSection
