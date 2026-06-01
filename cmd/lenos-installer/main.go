@@ -299,12 +299,18 @@ func writeDefaultConfigs() {
 
 	// Temenos config.
 	temeDir := filepath.Join(home, ".config", "temenos")
-	os.MkdirAll(temeDir, 0o755)
-	writeIfNew(filepath.Join(temeDir, "config.toml"), temenosConfigTOML())
+	if err := os.MkdirAll(temeDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "  ⚠ Cannot create %s: %v\n", temeDir, err)
+	} else {
+		writeIfNew(filepath.Join(temeDir, "config.toml"), temenosConfigTOML())
+	}
 
 	// Lenos config.json.
 	lenosDir := filepath.Join(home, ".lenos")
-	os.MkdirAll(lenosDir, 0o755)
+	if err := os.MkdirAll(lenosDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "  ⚠ Cannot create %s: %v\n", lenosDir, err)
+		return
+	}
 
 	lenosCfg := map[string]any{
 		"hooks": map[string]any{
@@ -323,7 +329,11 @@ func writeDefaultConfigs() {
 	}
 	cfgPath := filepath.Join(lenosDir, "config.json")
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-		data, _ := json.MarshalIndent(lenosCfg, "", "  ")
+		data, err := json.MarshalIndent(lenosCfg, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ Failed to generate lenos config: %v\n", err)
+			return
+		}
 		os.WriteFile(cfgPath, data, 0o644)
 	}
 }
