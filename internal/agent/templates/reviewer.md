@@ -25,9 +25,13 @@ yourself:
 
 ```
 git rev-parse --abbrev-ref HEAD
-MERGE_BASE=$(git merge-base HEAD origin/main) && echo "merge-base: $MERGE_BASE" && git diff --stat $MERGE_BASE..HEAD
+DEFAULT_BRANCH=$(git rev-parse --abbrev-ref origin/HEAD)
+MERGE_BASE=$(git merge-base HEAD $DEFAULT_BRANCH) && echo "merge-base: $MERGE_BASE" && git diff --stat $MERGE_BASE..HEAD
 git log --oneline $MERGE_BASE..HEAD
 ```
+
+If `git rev-parse --abbrev-ref origin/HEAD` fails (no remote default), fall
+back to `main` or `master`, state the assumption, and continue.
 
 If `git merge-base` fails (no common ancestor), stop and report the error.
 
