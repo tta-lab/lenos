@@ -444,11 +444,6 @@ func (app *App) Subscribe(program *tea.Program) {
 	}
 }
 
-// SandboxClientConnected returns true if the sandbox client is initialized.
-func (app *App) SandboxClientConnected() bool {
-	return true
-}
-
 // Shutdown performs a graceful shutdown of the application.
 func (app *App) Shutdown() {
 	start := time.Now()

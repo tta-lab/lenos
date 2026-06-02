@@ -196,16 +196,8 @@
         },
         "sandbox": {
           "type": "boolean",
-          "description": "Enable sandbox isolation for command execution via temenos",
+          "description": "Enable sandbox isolation for command execution via temenos SDK",
           "default": true
-        },
-        "sandbox_endpoint": {
-          "type": "string",
-          "description": "temenos daemon address (unix socket path or http URL); empty resolves via TEMENOS_LISTEN_ADDR/TEMENOS_SOCKET_PATH/env then default socket",
-          "examples": [
-            "/tmp/temenos.sock",
-            "http://127.0.0.1:8081"
-          ]
         },
         "disable_notifications": {
           "type": "boolean",
