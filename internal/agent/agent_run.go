@@ -476,7 +476,7 @@ func (a *sessionAgent) getOrCreateBackgroundRunner(sessionID string) *Background
 		}
 		return br
 	}
-	br := NewBackgroundRunner(sessionID, a.enqueueBackgroundJobResult(sessionID))
+	br := NewBackgroundRunner(a.enqueueBackgroundJobResult(sessionID))
 	br.onIdle = func() {
 		a.bgRunnersMu.Lock()
 		a.bgRunners.Del(sessionID)

@@ -396,17 +396,44 @@ func (a *sessionAgent) ClearQueue(sessionID string) {
 }
 
 func (a *sessionAgent) ActiveBackgroundJobs(sessionID string) []BackgroundJob {
-	return nil
+	a.bgRunnersMu.Lock()
+	br, ok := a.bgRunners.Get(sessionID)
+	a.bgRunnersMu.Unlock()
+	if !ok || br == nil {
+		return nil
+	}
+	return br.ListActive()
 }
 
 func (a *sessionAgent) KillBackgroundJob(ctx context.Context, sessionID, jobID string) error {
-	return nil
+	a.bgRunnersMu.Lock()
+	br, ok := a.bgRunners.Get(sessionID)
+	a.bgRunnersMu.Unlock()
+	if !ok || br == nil {
+		return fmt.Errorf("no background jobs for session %s", sessionID)
+	}
+	return br.KillJob(jobID)
 }
 
 func (a *sessionAgent) StopBackgroundJobs(sessionID string) {
+	a.bgRunnersMu.Lock()
+	br, ok := a.bgRunners.Get(sessionID)
+	if ok && br != nil {
+		br.StopAll()
+		a.bgRunners.Del(sessionID)
+	}
+	a.bgRunnersMu.Unlock()
 }
 
 func (a *sessionAgent) CancelAll() {
+	// Cancel running background jobs.
+	a.bgRunnersMu.Lock()
+	for sessionID, br := range a.bgRunners.Seq2() {
+		br.StopAll()
+		a.bgRunners.Del(sessionID)
+	}
+	a.bgRunnersMu.Unlock()
+
 	if !a.IsBusy() {
 		return
 	}

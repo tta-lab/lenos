@@ -26,20 +26,19 @@ type backgroundJob struct {
 // completes, it calls the enqueue callback so the session agent can inject
 // a runtime notification into the model stream.
 type BackgroundRunner struct {
-	mu        sync.Mutex
-	active    map[string]*backgroundJob
-	enqueue   func(msg string)
-	sessionID string
-	onIdle    func()
+	mu       sync.Mutex
+	active   map[string]*backgroundJob
+	enqueue  func(msg string)
+	onIdle   func()
+	onIdleMu sync.Mutex
 }
 
 // NewBackgroundRunner creates a dormant runner. Track must be called to
 // register jobs; the runner is passive — goroutines call back when done.
-func NewBackgroundRunner(sessionID string, enqueue func(msg string)) *BackgroundRunner {
+func NewBackgroundRunner(enqueue func(msg string)) *BackgroundRunner {
 	return &BackgroundRunner{
-		active:    make(map[string]*backgroundJob),
-		enqueue:   enqueue,
-		sessionID: sessionID,
+		active:  make(map[string]*backgroundJob),
+		enqueue: enqueue,
 	}
 }
 
@@ -71,8 +70,14 @@ func (r *BackgroundRunner) Track(jobID, command string, cancel context.CancelFun
 			r.formatAndEnqueueCompleted(jobID, command, result.stdout, result.stderr, result.exitCode, result.err)
 		}
 
-		if idle && r.onIdle != nil {
-			r.onIdle()
+		if idle {
+			r.onIdleMu.Lock()
+			f := r.onIdle
+			r.onIdle = nil
+			r.onIdleMu.Unlock()
+			if f != nil {
+				f()
+			}
 		}
 	}()
 }
