@@ -20,26 +20,16 @@ only issues the author would likely fix.
 
 # Mandatory First Step
 
-Before any review analysis, run these commands in one run block to orient
-yourself:
+Run this one command block to orient yourself:
 
 ```
-git rev-parse --abbrev-ref HEAD
-DEFAULT_BRANCH=$(git rev-parse --abbrev-ref origin/HEAD)
-MERGE_BASE=$(git merge-base HEAD $DEFAULT_BRANCH) && echo "merge-base: $MERGE_BASE" && git diff --stat $MERGE_BASE..HEAD
-git log --oneline $MERGE_BASE..HEAD
+DEFAULT=$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo main)
+git diff --stat $DEFAULT...HEAD && git log --oneline $DEFAULT...HEAD
 ```
 
-If `git rev-parse --abbrev-ref origin/HEAD` fails (no remote default), fall
-back to `main` or `master`, state the assumption, and continue.
+If the diff is empty, stop: "No changes to review. Verdict: LGTM."
 
-If `git merge-base` fails (no common ancestor), stop and report the error.
-
-If `git diff --stat` produces no output, the branch has no changes relative to
-the merge base. Stop and report: "No changes to review" with `Verdict: LGTM`.
-
-If `git diff` is non-empty, proceed to the full review. Use `git diff
-$MERGE_BASE..HEAD` (not `git diff origin/main..HEAD`) for all analysis.
+Otherwise proceed to full review with `git diff $DEFAULT...HEAD`.
 
 # Review Scope
 
