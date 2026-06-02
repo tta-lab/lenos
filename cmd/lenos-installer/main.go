@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -30,9 +29,7 @@ var (
 
 	tools = []tool{
 		{Name: "Lenos", Repo: "lenos", Binary: "lenos", ConfigKind: "json"},
-		{Name: "Temenos", Repo: "temenos", Binary: "temenos", ConfigKind: "toml"},
 		{Name: "Organon", Repo: "organon", Binary: "organon", Binaries: []string{"src", "web", "skill"}, ConfigKind: "toml"},
-		{Name: "Einai", Repo: "einai", Binary: "einai", ConfigKind: "toml"},
 	}
 )
 
@@ -288,31 +285,6 @@ func main() {
 	fmt.Printf("  export PATH=\"%s:$PATH\"\n\n", binDir)
 
 	writeDefaultConfigs()
-	setupLaunchd()
-}
-
-func setupLaunchd() {
-	if runtime.GOOS != "darwin" {
-		return
-	}
-
-	temenosBin, err := exec.LookPath("temenos")
-	if err != nil {
-		fmt.Println("  ⚠ temenos not in PATH — skipping daemon setup.")
-		return
-	}
-
-	fmt.Println("  → Setting up temenos daemon (launchd)...")
-	// Run `temenos daemon install` which handles plist creation and bootstrapping.
-	cmd := exec.CommandContext(context.Background(), temenosBin, "daemon", "install")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("  ⚠ temenos daemon setup: %v\n", err)
-		fmt.Println("  Run `temenos daemon install` manually to set up the daemon.")
-	} else {
-		fmt.Println("  ✓ Temenos daemon installed and started.")
-	}
 }
 
 func writeDefaultConfigs() {
