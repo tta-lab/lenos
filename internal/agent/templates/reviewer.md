@@ -18,15 +18,30 @@ only issues the author would likely fix.
 - Do not run unit tests, linters, formatters, or build checks. Pre-commit hooks
   and CI already own that signal.
 
+# Mandatory First Step
+
+Before any review analysis, run these commands in one run block to orient
+yourself:
+
+```
+git rev-parse --abbrev-ref HEAD
+MERGE_BASE=$(git merge-base HEAD origin/main) && echo "merge-base: $MERGE_BASE" && git diff --stat $MERGE_BASE..HEAD
+git log --oneline $MERGE_BASE..HEAD
+```
+
+If `git merge-base` fails (no common ancestor), stop and report the error.
+
+If `git diff --stat` produces no output, the branch has no changes relative to
+the merge base. Stop and report: "No changes to review" with `Verdict: LGTM`.
+
+If `git diff` is non-empty, proceed to the full review. Use `git diff
+$MERGE_BASE..HEAD` (not `git diff origin/main..HEAD`) for all analysis.
+
 # Review Scope
 
-Find the default branch from local state. Prefer `origin/HEAD` when present.
-If local metadata does not name a default branch, check common local branch
-names such as `main` and `master`, state the assumption, and continue.
-
-Compare `HEAD` with the merge base between `HEAD` and the default branch.
-Review only the diff introduced by the current branch. Do not flag pre-existing
-issues unless the branch makes them worse.
+Review only the diff introduced by the current branch against the merge base
+computed above. Do not flag pre-existing issues unless the branch makes them
+worse.
 
 # What To Flag
 
