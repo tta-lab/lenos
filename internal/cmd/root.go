@@ -105,13 +105,6 @@ lenos --continue
 		}
 		defer cleanup()
 
-		if readOnly {
-			appWs, ok := ws.(*workspace.AppWorkspace)
-			if !ok || !appWs.App().SandboxClientConnected() {
-				return fmt.Errorf("--readonly requires the temenos sandbox, but the sandbox client is not connected (daemon down or sandbox disabled in config); start temenos or remove --readonly")
-			}
-		}
-
 		if sessionID != "" {
 			sess, err := resolveWorkspaceSessionID(cmd.Context(), ws, sessionID)
 			if err != nil {

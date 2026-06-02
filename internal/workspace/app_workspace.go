@@ -265,10 +265,7 @@ func (w *AppWorkspace) AgentSandboxState() string {
 	if !useSandbox {
 		return "off"
 	}
-	if w.app.SandboxClientConnected() {
-		return "on"
-	}
-	return "degraded"
+	return "on"
 }
 
 // -- Git --

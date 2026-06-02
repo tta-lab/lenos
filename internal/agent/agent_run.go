@@ -469,26 +469,34 @@ func (a *sessionAgent) getOrCreateBackgroundRunner(sessionID string) *Background
 	a.bgRunnersMu.Lock()
 	defer a.bgRunnersMu.Unlock()
 	if br, ok := a.bgRunners.Get(sessionID); ok && br != nil {
-		br.onIdle = func() {
+		setOnIdle(br, func() {
 			a.bgRunnersMu.Lock()
 			a.bgRunners.Del(sessionID)
 			a.bgRunnersMu.Unlock()
-		}
+		})
 		return br
 	}
 	br := NewBackgroundRunner(a.enqueueBackgroundJobResult(sessionID))
-	br.onIdle = func() {
+	setOnIdle(br, func() {
 		a.bgRunnersMu.Lock()
 		a.bgRunners.Del(sessionID)
 		a.bgRunnersMu.Unlock()
-	}
+	})
 	a.bgRunners.Set(sessionID, br)
 	return br
 }
 
+// setOnIdle writes the onIdle callback under onIdleMu to prevent races
+// with the background goroutine in Track that reads it.
+func setOnIdle(br *BackgroundRunner, f func()) {
+	br.onIdleMu.Lock()
+	br.onIdle = f
+	br.onIdleMu.Unlock()
+}
+
 func (a *sessionAgent) cleanupBackgroundRunner(sessionID string, br *BackgroundRunner) {
 	if br.ActiveCount() > 0 {
-		br.onIdle = nil
+		setOnIdle(br, nil)
 		a.bgRunners.Set(sessionID, br)
 		return
 	}
