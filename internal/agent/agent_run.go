@@ -167,12 +167,8 @@ func errorFinishFor(runErr error, model string) (reason message.FinishReason, ti
 // On fallback to LocalRunner it logs a clear warning so the operator sees the
 // security implication (subprocess inherits parent env including secrets).
 func resolveRunner(call SessionAgentCall) Runner {
-	if call.Sandbox && call.SandboxClient != nil {
-		return SandboxRunner{Client: call.SandboxClient, SessionID: call.SessionID}
-	}
-	if call.Sandbox && call.SandboxClient == nil {
-		slog.Warn("sandbox requested but client is nil; falling back to LocalRunner — bash subprocess inherits parent env including secrets",
-			"session_id", call.SessionID)
+	if call.Sandbox {
+		return &SandboxedRunner{}
 	}
 	return LocalRunner{}
 }
@@ -201,12 +197,6 @@ runLoopReentry:
 		return fmt.Errorf("failed to get session: %w", err)
 	}
 	runner := resolveRunner(call)
-
-	// Start background job watcher for sandbox sessions.
-	var jobWatcher *JobWatcher
-	if call.Sandbox && call.SandboxClient != nil {
-		jobWatcher = a.getOrCreateJobWatcher(call)
-	}
 
 	primaryModel := a.primaryModel.Get()
 	compactedBeforeRun := false
@@ -320,7 +310,6 @@ runLoopReentry:
 			}
 			return turnPromptsForCall(combineQueuedCalls(queued))
 		},
-		jobWatcher: jobWatcher,
 	}
 
 	stop, runErr := runLoopWithPrompts(streamCtx, deps, history, turnPrompts)
@@ -430,62 +419,6 @@ func (a *sessionAgent) persistVisibleTurnPrompts(ctx context.Context, sessionID 
 		}
 	}
 	return nil
-}
-
-func (a *sessionAgent) enqueueBackgroundJobResult(ctx context.Context, call SessionAgentCall, msg string) {
-	runtimeCall := call
-	runtimeCall.Prompt = msg
-	runtimeCall.runtimePrompt = true
-	runtimeCall.turnPrompts = nil
-	if a.IsSessionBusy(call.SessionID) {
-		existing, ok := a.messageQueue.Get(call.SessionID)
-		if !ok {
-			existing = []SessionAgentCall{}
-		}
-		existing = append(existing, runtimeCall)
-		a.messageQueue.Set(call.SessionID, existing)
-		return
-	}
-	go func() {
-		if err := a.Run(context.Background(), runtimeCall); err != nil {
-			slog.Warn("background job result: run failed", "session_id", call.SessionID, "error", err)
-		}
-	}()
-}
-
-func (a *sessionAgent) getOrCreateJobWatcher(call SessionAgentCall) *JobWatcher {
-	a.jobWatchersMu.Lock()
-	defer a.jobWatchersMu.Unlock()
-
-	if managed, ok := a.jobWatchers.Get(call.SessionID); ok && managed != nil {
-		return managed.watcher
-	}
-
-	watcherCtx, cancel := context.WithCancel(context.Background())
-	watcher := NewJobWatcher(call.SandboxClient, call.SessionID, func(msg string) {
-		a.enqueueBackgroundJobResult(watcherCtx, call, msg)
-	})
-	watcher.onIdle = func() {
-		a.stopIdleBackgroundJobs(call.SessionID, watcher)
-	}
-	a.jobWatchers.Set(call.SessionID, &sessionJobWatcher{
-		watcher: watcher,
-		cancel:  cancel,
-	})
-	go watcher.Run(watcherCtx)
-	return watcher
-}
-
-func (a *sessionAgent) stopIdleBackgroundJobs(sessionID string, watcher *JobWatcher) {
-	a.jobWatchersMu.Lock()
-	defer a.jobWatchersMu.Unlock()
-
-	managed, ok := a.jobWatchers.Get(sessionID)
-	if !ok || managed == nil || managed.watcher != watcher || watcher.ActiveCount() > 0 {
-		return
-	}
-	a.jobWatchers.Del(sessionID)
-	managed.cancel()
 }
 
 // combineQueuedCalls collapses N queued calls into one re-entry call.

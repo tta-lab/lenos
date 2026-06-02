@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tta-lab/temenos/client"
 )
 
 func TestLocalRunner_Success(t *testing.T) {
@@ -105,7 +104,7 @@ func TestLocalRunner_AllowedPathsFirstAsCwd(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
 	res := LocalRunner{}.Run(context.Background(), `pwd`, nil,
-		[]client.AllowedPath{{Path: tmp}})
+		[]AllowedPath{{Path: tmp}})
 	require.NoError(t, res.Err)
 	require.Equal(t, 0, res.ExitCode)
 	// macOS resolves /var to /private/var; trim either prefix for the check.

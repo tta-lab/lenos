@@ -396,40 +396,17 @@ func (a *sessionAgent) ClearQueue(sessionID string) {
 }
 
 func (a *sessionAgent) ActiveBackgroundJobs(sessionID string) []BackgroundJob {
-	managed, ok := a.jobWatchers.Get(sessionID)
-	if !ok || managed == nil {
-		return nil
-	}
-	return managed.watcher.ListActive()
+	return nil
 }
 
 func (a *sessionAgent) KillBackgroundJob(ctx context.Context, sessionID, jobID string) error {
-	managed, ok := a.jobWatchers.Get(sessionID)
-	if !ok || managed == nil {
-		return fmt.Errorf("no background jobs for session %s", sessionID)
-	}
-	return managed.watcher.KillJob(ctx, jobID)
+	return nil
 }
 
 func (a *sessionAgent) StopBackgroundJobs(sessionID string) {
-	a.stopBackgroundJobs(sessionID)
-}
-
-func (a *sessionAgent) stopBackgroundJobs(sessionID string) {
-	a.jobWatchersMu.Lock()
-	defer a.jobWatchersMu.Unlock()
-
-	managed, ok := a.jobWatchers.Take(sessionID)
-	if !ok || managed == nil {
-		return
-	}
-	managed.cancel()
 }
 
 func (a *sessionAgent) CancelAll() {
-	for sessionID := range a.jobWatchers.Seq2() {
-		a.stopBackgroundJobs(sessionID)
-	}
 	if !a.IsBusy() {
 		return
 	}

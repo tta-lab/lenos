@@ -339,11 +339,9 @@ func writeIfNew(path, content string) {
 
 func temenosConfigTOML() string {
 	return `# Temenos sandbox configuration.
-# Temenos starts a background daemon that runs all lenos commands
-# inside a sandbox. Edit this file to change which paths the sandbox
-# can read and write, or to adjust the daemon port.
+# Lenos links the temenos sandbox SDK directly (no daemon, no socket).
+# Edit this file to change which paths the sandbox can read and write.
 
-mcp_port = 9783
 
 # Environment variables the sandbox passes through.
 allow_env = [
