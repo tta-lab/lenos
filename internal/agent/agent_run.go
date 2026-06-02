@@ -166,9 +166,9 @@ func errorFinishFor(runErr error, model string) (reason message.FinishReason, ti
 // resolveRunner picks LocalRunner or SandboxRunner from the call context.
 // On fallback to LocalRunner it logs a clear warning so the operator sees the
 // security implication (subprocess inherits parent env including secrets).
-func resolveRunner(call SessionAgentCall) Runner {
+func resolveRunner(call SessionAgentCall, bg *BackgroundRunner) Runner {
 	if call.Sandbox {
-		return &SandboxedRunner{}
+		return &SandboxedRunner{bg: bg}
 	}
 	return LocalRunner{}
 }
@@ -196,7 +196,10 @@ runLoopReentry:
 	if err != nil {
 		return fmt.Errorf("failed to get session: %w", err)
 	}
-	runner := resolveRunner(call)
+	bgRunner := a.getOrCreateBackgroundRunner(call.SessionID)
+	defer a.cleanupBackgroundRunner(call.SessionID, bgRunner)
+
+	runner := resolveRunner(call, bgRunner)
 
 	primaryModel := a.primaryModel.Get()
 	compactedBeforeRun := false
@@ -285,6 +288,7 @@ runLoopReentry:
 		sysPrompt:    a.systemPrompt.Get(),
 		env:          call.Env,
 		paths:        call.AllowedPaths,
+		bgRunner:     bgRunner,
 		postStepHook: postStepHook,
 		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
 			s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
@@ -459,4 +463,59 @@ func (a *sessionAgent) tryReenter(call SessionAgentCall, cancel context.CancelFu
 		return call, false
 	}
 	return combineQueuedCalls(queued), true
+}
+
+func (a *sessionAgent) getOrCreateBackgroundRunner(sessionID string) *BackgroundRunner {
+	a.bgRunnersMu.Lock()
+	defer a.bgRunnersMu.Unlock()
+	if br, ok := a.bgRunners.Get(sessionID); ok && br != nil {
+		br.onIdle = func() {
+			a.bgRunnersMu.Lock()
+			a.bgRunners.Del(sessionID)
+			a.bgRunnersMu.Unlock()
+		}
+		return br
+	}
+	br := NewBackgroundRunner(sessionID, a.enqueueBackgroundJobResult(sessionID))
+	br.onIdle = func() {
+		a.bgRunnersMu.Lock()
+		a.bgRunners.Del(sessionID)
+		a.bgRunnersMu.Unlock()
+	}
+	a.bgRunners.Set(sessionID, br)
+	return br
+}
+
+func (a *sessionAgent) cleanupBackgroundRunner(sessionID string, br *BackgroundRunner) {
+	if br.ActiveCount() > 0 {
+		br.onIdle = nil
+		a.bgRunners.Set(sessionID, br)
+		return
+	}
+	a.bgRunnersMu.Lock()
+	if current, ok := a.bgRunners.Get(sessionID); ok && current == br {
+		a.bgRunners.Del(sessionID)
+	}
+	a.bgRunnersMu.Unlock()
+}
+
+func (a *sessionAgent) enqueueBackgroundJobResult(sessionID string) func(msg string) {
+	return func(msg string) {
+		runtimeCall := SessionAgentCall{
+			SessionID:     sessionID,
+			Prompt:        msg,
+			runtimePrompt: true,
+		}
+		if a.IsSessionBusy(sessionID) {
+			existing, _ := a.messageQueue.Get(sessionID)
+			existing = append(existing, runtimeCall)
+			a.messageQueue.Set(sessionID, existing)
+			return
+		}
+		go func() {
+			if err := a.Run(context.Background(), runtimeCall); err != nil {
+				slog.Warn("background job result: run failed", "session_id", sessionID, "error", err)
+			}
+		}()
+	}
 }

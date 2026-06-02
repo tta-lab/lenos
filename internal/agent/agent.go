@@ -160,6 +160,8 @@ type sessionAgent struct {
 
 	messageQueue    *csync.Map[string, []SessionAgentCall]
 	activeRequests  *csync.Map[string, context.CancelFunc]
+	bgRunners       *csync.Map[string, *BackgroundRunner]
+	bgRunnersMu     sync.Mutex
 	sessionUpdateMu sync.Mutex
 	hookRunner      hooks.Runner
 	taskExporter    taskTitleExporter
@@ -195,6 +197,7 @@ func NewSessionAgent(
 		notify:               opts.Notify,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
+		bgRunners:            csync.NewMap[string, *BackgroundRunner](),
 		hookRunner:           opts.HookRunner,
 		taskExporter:         exportTaskForTitle,
 	}

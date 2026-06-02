@@ -20,7 +20,7 @@ const DefaultPerCmdTimeout = 120 * time.Second
 // defaultAutoBackgroundAfter is the threshold in seconds before a temenos
 // command is detached into a background job. Commands completing faster
 // return synchronously.
-const defaultAutoBackgroundAfter = 15
+const defaultAutoBackgroundAfter = 30
 
 // ExecResult is the outcome of running one agent emit through a Runner.
 //
@@ -109,6 +109,7 @@ func (LocalRunner) Run(ctx context.Context, bash string, env map[string]string, 
 type SandboxedRunner struct {
 	sbx sandbox.Sandbox
 	cfg *sandbox.Config
+	bg  *BackgroundRunner
 }
 
 func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []AllowedPath) ExecResult {
@@ -146,16 +147,73 @@ func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]s
 		WorkingDir: workDir,
 	}
 
-	stdout, stderr, exitCode, err := s.sbx.Exec(ctx, bash, execCfg)
-	dur := time.Since(start)
-	if err != nil {
-		return ExecResult{Stdout: []byte(stdout), Stderr: []byte(stderr), ExitCode: exitCode, Duration: dur, Err: err}
+	// Spawn execution in a goroutine; wait up to the auto-background threshold.
+	// If it completes in time, return synchronously. Otherwise, hand off to
+	// BackgroundRunner and return Background: true.
+	type execOut struct {
+		stdout, stderr string
+		exitCode       int
+		err            error
 	}
-	return ExecResult{
-		Stdout:   []byte(stdout),
-		Stderr:   []byte(stderr),
-		ExitCode: exitCode,
-		Duration: dur,
+	done := make(chan execOut, 1)
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	go func() {
+		stdout, stderr, exitCode, err := s.sbx.Exec(bgCtx, bash, execCfg)
+		done <- execOut{stdout, stderr, exitCode, err}
+	}()
+
+	autoBgTimer := time.NewTimer(time.Duration(defaultAutoBackgroundAfter) * time.Second)
+	select {
+	case out := <-done:
+		autoBgTimer.Stop()
+		bgCancel()
+		dur := time.Since(start)
+		if out.err != nil {
+			return ExecResult{Stdout: []byte(out.stdout), Stderr: []byte(out.stderr), ExitCode: out.exitCode, Duration: dur, Err: out.err}
+		}
+		return ExecResult{
+			Stdout:   []byte(out.stdout),
+			Stderr:   []byte(out.stderr),
+			ExitCode: out.exitCode,
+			Duration: dur,
+		}
+	case <-autoBgTimer.C:
+		// Command still running — hand to BackgroundRunner if available.
+		if s.bg == nil {
+			// No runner; wait for completion.
+			out := <-done
+			bgCancel()
+			dur := time.Since(start)
+			if out.err != nil {
+				return ExecResult{Stdout: []byte(out.stdout), Stderr: []byte(out.stderr), ExitCode: out.exitCode, Duration: dur, Err: out.err}
+			}
+			return ExecResult{
+				Stdout:   []byte(out.stdout),
+				Stderr:   []byte(out.stderr),
+				ExitCode: out.exitCode,
+				Duration: dur,
+			}
+		}
+
+		jobID := newJobID()
+		resultCh := make(chan backgroundResult, 1)
+		go func() {
+			out := <-done
+			bgCancel()
+			resultCh <- backgroundResult{
+				stdout:   out.stdout,
+				stderr:   out.stderr,
+				exitCode: out.exitCode,
+				err:      out.err,
+			}
+			close(resultCh)
+		}()
+		s.bg.Track(jobID, bash, bgCancel, resultCh)
+		return ExecResult{
+			JobID:      jobID,
+			Background: true,
+			Duration:   time.Since(start),
+		}
 	}
 }
 

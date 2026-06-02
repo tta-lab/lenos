@@ -44,6 +44,7 @@ type loopDeps struct {
 	onUsage                   func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 	shouldSummarizeBeforeStep func(stepIdx int) bool
 	postStepHook              func(stepIdx int, u fantasy.Usage)
+	bgRunner                  *BackgroundRunner
 }
 
 // stopReason explains why runLoop returned.
@@ -182,6 +183,26 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			return stopError, fmt.Errorf("create result row: %w", createErr)
 		}
 		res := deps.runner.Run(ctx, bashCmd, deps.env, deps.paths)
+		if res.Background {
+			obs := fmt.Sprintf(
+				"background job started (job_id: %s)",
+				res.JobID,
+			)
+			obs = lenosbash.RuntimeBlock(obs)
+			resultMsg.Parts = []message.ContentPart{message.CommandContent{
+				Command: bashCmd, Pending: false, Observation: obs,
+			}}
+			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
+				slog.Warn("loop: persist background job result row", "error", updateErr)
+			}
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			msgs = append(msgs,
+				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				fantasy.NewUserMessage(obs),
+			)
+			msgs = drainAndAppend(ctx, deps, msgs)
+			continue
+		}
 		if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 			abandonPending(ctx, deps.messages, &resultMsg)
 			return stopCanceled, ctx.Err()
