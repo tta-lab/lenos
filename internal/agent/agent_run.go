@@ -196,7 +196,7 @@ runLoopReentry:
 	if err != nil {
 		return fmt.Errorf("failed to get session: %w", err)
 	}
-	bgRunner := a.getOrCreateBackgroundRunner(call.SessionID)
+	bgRunner := a.getOrCreateBackgroundRunner(call)
 	defer a.cleanupBackgroundRunner(call.SessionID, bgRunner)
 
 	runner := resolveRunner(call, bgRunner)
@@ -465,24 +465,19 @@ func (a *sessionAgent) tryReenter(call SessionAgentCall, cancel context.CancelFu
 	return combineQueuedCalls(queued), true
 }
 
-func (a *sessionAgent) getOrCreateBackgroundRunner(sessionID string) *BackgroundRunner {
+func (a *sessionAgent) getOrCreateBackgroundRunner(call SessionAgentCall) *BackgroundRunner {
 	a.bgRunnersMu.Lock()
 	defer a.bgRunnersMu.Unlock()
-	if br, ok := a.bgRunners.Get(sessionID); ok && br != nil {
-		setOnIdle(br, func() {
-			a.bgRunnersMu.Lock()
-			a.bgRunners.Del(sessionID)
-			a.bgRunnersMu.Unlock()
-		})
+	if br, ok := a.bgRunners.Get(call.SessionID); ok && br != nil {
 		return br
 	}
-	br := NewBackgroundRunner(a.enqueueBackgroundJobResult(sessionID))
+	br := NewBackgroundRunner(a.enqueueBackgroundJobResult(call))
 	setOnIdle(br, func() {
 		a.bgRunnersMu.Lock()
-		a.bgRunners.Del(sessionID)
+		a.bgRunners.Del(call.SessionID)
 		a.bgRunnersMu.Unlock()
 	})
-	a.bgRunners.Set(sessionID, br)
+	a.bgRunners.Set(call.SessionID, br)
 	return br
 }
 
@@ -496,7 +491,6 @@ func setOnIdle(br *BackgroundRunner, f func()) {
 
 func (a *sessionAgent) cleanupBackgroundRunner(sessionID string, br *BackgroundRunner) {
 	if br.ActiveCount() > 0 {
-		setOnIdle(br, nil)
 		a.bgRunners.Set(sessionID, br)
 		return
 	}
@@ -507,22 +501,26 @@ func (a *sessionAgent) cleanupBackgroundRunner(sessionID string, br *BackgroundR
 	a.bgRunnersMu.Unlock()
 }
 
-func (a *sessionAgent) enqueueBackgroundJobResult(sessionID string) func(msg string) {
+func (a *sessionAgent) enqueueBackgroundJobResult(call SessionAgentCall) func(msg string) {
 	return func(msg string) {
 		runtimeCall := SessionAgentCall{
-			SessionID:     sessionID,
-			Prompt:        msg,
-			runtimePrompt: true,
+			SessionID:       call.SessionID,
+			Prompt:          msg,
+			runtimePrompt:   true,
+			ProviderOptions: call.ProviderOptions,
+			Sandbox:         call.Sandbox,
+			Env:             call.Env,
+			AllowedPaths:    call.AllowedPaths,
 		}
-		if a.IsSessionBusy(sessionID) {
-			existing, _ := a.messageQueue.Get(sessionID)
+		if a.IsSessionBusy(call.SessionID) {
+			existing, _ := a.messageQueue.Get(call.SessionID)
 			existing = append(existing, runtimeCall)
-			a.messageQueue.Set(sessionID, existing)
+			a.messageQueue.Set(call.SessionID, existing)
 			return
 		}
 		go func() {
 			if err := a.Run(context.Background(), runtimeCall); err != nil {
-				slog.Warn("background job result: run failed", "session_id", sessionID, "error", err)
+				slog.Warn("background job result: run failed", "session_id", call.SessionID, "error", err)
 			}
 		}()
 	}

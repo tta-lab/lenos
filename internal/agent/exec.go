@@ -136,6 +136,7 @@ func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]s
 		workDir = allowedPaths[0].Path
 	}
 
+	env = applyNonInteractiveDefaults(env)
 	envSlice := make([]string, 0, len(env))
 	for k, v := range env {
 		envSlice = append(envSlice, k+"="+v)
