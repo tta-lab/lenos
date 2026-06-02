@@ -17,10 +17,10 @@ import (
 // temenos sandbox default. Agents can override via bash-native `timeout 30m`.
 const DefaultPerCmdTimeout = 120 * time.Second
 
-// defaultAutoBackgroundAfter is the threshold in seconds before a temenos
+// defaultAutoBackgroundAfter is the threshold in seconds before a sandbox
 // command is detached into a background job. Commands completing faster
 // return synchronously.
-const defaultAutoBackgroundAfter = 30
+const defaultAutoBackgroundAfter = 15
 
 // ExecResult is the outcome of running one agent emit through a Runner.
 //
