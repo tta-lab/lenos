@@ -16,8 +16,6 @@ import (
 	"charm.land/fantasy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tta-lab/temenos/client"
-
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
@@ -191,7 +189,7 @@ func TestRun_PersistsRuntimeContextCommandsBeforeUserPrompt(t *testing.T) {
 	err = agent.Run(t.Context(), SessionAgentCall{
 		SessionID: sess.ID,
 		Prompt:    "user prompt",
-		AllowedPaths: []client.AllowedPath{
+		AllowedPaths: []AllowedPath{
 			{Path: env.workingDir},
 		},
 		ContextCommands: []RuntimeContextCommand{{
@@ -307,7 +305,7 @@ func TestRun_GeneratesTaskTitleWhenRuntimeContextInjected(t *testing.T) {
 		SessionID: sess.ID,
 		Prompt:    "user prompt",
 		TaskID:    "25620b89",
-		AllowedPaths: []client.AllowedPath{
+		AllowedPaths: []AllowedPath{
 			{Path: env.workingDir},
 		},
 		ContextCommands: []RuntimeContextCommand{{
@@ -355,7 +353,7 @@ func TestRun_RefreshesTaskTitleOnExistingSession(t *testing.T) {
 		SessionID: sess.ID,
 		Prompt:    "user prompt",
 		TaskID:    "25620b89",
-		AllowedPaths: []client.AllowedPath{
+		AllowedPaths: []AllowedPath{
 			{Path: env.workingDir},
 		},
 	})
@@ -728,54 +726,6 @@ func TestRun_RuntimePromptFeedsModelWithoutPersistingUserMessage(t *testing.T) {
 		require.NotEqual(t, message.User, msg.Role, "runtime prompt must not render as a user chat row")
 	}
 	require.Len(t, model.Captured(), 1)
-	require.Equal(t, "background job completed", fantasyMessageText(model.Captured()[0][1]))
-}
-
-func TestEnqueueBackgroundJobResultStartsIdleAgentTurn(t *testing.T) {
-	t.Parallel()
-	env := testEnv(t)
-	sess, err := env.sessions.Create(t.Context(), "idle runtime prompt")
-	require.NoError(t, err)
-
-	inner := &scriptedModel{emits: []string{"exit"}}
-	model := &streamCapturingModel{inner: inner}
-	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
-
-	agent.enqueueBackgroundJobResult(t.Context(), SessionAgentCall{
-		SessionID: sess.ID,
-	}, "background job completed")
-
-	require.Eventually(t, func() bool {
-		return len(model.Captured()) == 1
-	}, time.Second, 10*time.Millisecond)
-
-	msgs, err := env.messages.List(t.Context(), sess.ID)
-	require.NoError(t, err)
-	for _, msg := range msgs {
-		require.NotEqual(t, message.User, msg.Role, "idle background result must not render as a user chat row")
-	}
-	require.Equal(t, "background job completed", fantasyMessageText(model.Captured()[0][1]))
-}
-
-func TestEnqueueBackgroundJobResultIgnoresCanceledWatcherContext(t *testing.T) {
-	t.Parallel()
-	env := testEnv(t)
-	sess, err := env.sessions.Create(t.Context(), "canceled watcher context")
-	require.NoError(t, err)
-
-	inner := &scriptedModel{emits: []string{"exit"}}
-	model := &streamCapturingModel{inner: inner}
-	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
-	watcherCtx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	agent.enqueueBackgroundJobResult(watcherCtx, SessionAgentCall{
-		SessionID: sess.ID,
-	}, "background job completed")
-
-	require.Eventually(t, func() bool {
-		return len(model.Captured()) == 1
-	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, "background job completed", fantasyMessageText(model.Captured()[0][1]))
 }
 

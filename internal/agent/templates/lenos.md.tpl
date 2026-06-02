@@ -30,23 +30,17 @@ ask you to run a command; use a run block only for commands.
 ## Background Jobs
 
 When a sandboxed command exceeds the auto-background threshold (15s), it
-is detached into a background job. You receive:
+is detached into a background job. The runtime injects an observation
+indicating the job is running, with the job ID.
 
-{{.RuntimeExample}}
+You can continue working while the job runs. When it finishes, the runtime
+injects an async notification containing the full stdout, stderr, and
+exit code. If the job is killed, the runtime injects a killed notification.
 
-You can continue working while the job runs. When it finishes, you receive
-an async notification with the full result:
-
-{{.RuntimeExample}}
-
-{{.ResultExample}}
-
-If the job is killed:
-
-{{.RuntimeExample}}
-
-The runtime watches background jobs and sends completion or killed
-notifications automatically.
+Runtime notifications are injected by the system, NEVER emitted by you.
+You do NOT fabricate background job completion or killed messages — you
+wait for the runtime to inject them. When you receive one, acknowledge it
+in your next response naturally (e.g., "the background job finished").
 
 # Memory Instructions
 

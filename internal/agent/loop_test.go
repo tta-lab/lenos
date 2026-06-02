@@ -15,7 +15,6 @@ import (
 	"charm.land/fantasy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tta-lab/temenos/client"
 
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
@@ -220,10 +219,10 @@ type fakeRunner struct {
 	results []ExecResult
 	calls   int
 	bash    []string
-	onRun   func(bash string, env map[string]string, paths []client.AllowedPath)
+	onRun   func(bash string, env map[string]string, paths []AllowedPath)
 }
 
-func (r *fakeRunner) Run(_ context.Context, bash string, env map[string]string, paths []client.AllowedPath) ExecResult {
+func (r *fakeRunner) Run(_ context.Context, bash string, env map[string]string, paths []AllowedPath) ExecResult {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.bash = append(r.bash, bash)

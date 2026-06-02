@@ -18,7 +18,6 @@ import (
 
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/temenos/client"
 )
 
 const (
@@ -41,11 +40,11 @@ type loopDeps struct {
 	sessionID                 string
 	sysPrompt                 string
 	env                       map[string]string
-	paths                     []client.AllowedPath
+	paths                     []AllowedPath
 	onUsage                   func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 	shouldSummarizeBeforeStep func(stepIdx int) bool
 	postStepHook              func(stepIdx int, u fantasy.Usage)
-	jobWatcher                *JobWatcher
+	bgRunner                  *BackgroundRunner
 }
 
 // stopReason explains why runLoop returned.
@@ -185,9 +184,6 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		}
 		res := deps.runner.Run(ctx, bashCmd, deps.env, deps.paths)
 		if res.Background {
-			if deps.jobWatcher != nil {
-				deps.jobWatcher.AddJob(res.JobID, bashCmd)
-			}
 			obs := fmt.Sprintf(
 				"background job started (job_id: %s)",
 				res.JobID,

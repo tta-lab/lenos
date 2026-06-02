@@ -33,7 +33,6 @@ import (
 	"github.com/tta-lab/lenos/internal/ui/styles"
 	"github.com/tta-lab/lenos/internal/update"
 	"github.com/tta-lab/lenos/internal/version"
-	"github.com/tta-lab/temenos/client"
 )
 
 // UpdateAvailableMsg is sent when a new version is available.
@@ -48,8 +47,7 @@ type App struct {
 	Messages         message.Service
 	AgentCoordinator agent.Coordinator
 
-	config        *config.ConfigStore
-	sandboxClient *client.Client
+	config *config.ConfigStore
 
 	serviceEventsWG *sync.WaitGroup
 	eventsCtx       context.Context
@@ -398,19 +396,14 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 	if coderAgentCfg.ID == "" {
 		return fmt.Errorf("coder agent configuration is missing")
 	}
-	sandboxClient, err := initSandboxClient(ctx, app.config.Config().Options)
-	if err != nil {
-		return fmt.Errorf("init sandbox client: %w", err)
-	}
-	app.sandboxClient = sandboxClient
 	// Coordinator constructs per-session MdRecorders internally; no app-level recorder needed.
+	var err error
 	app.AgentCoordinator, err = agent.NewCoordinator(
 		ctx,
 		app.config,
 		app.Sessions,
 		app.Messages,
 		app.agentNotifications,
-		sandboxClient,
 	)
 	if err != nil {
 		slog.Error("Failed to create coder agent", "err", err)
@@ -449,11 +442,6 @@ func (app *App) Subscribe(program *tea.Program) {
 			program.Send(msg)
 		}
 	}
-}
-
-// SandboxClientConnected returns true if the sandbox client is initialized.
-func (app *App) SandboxClientConnected() bool {
-	return app.sandboxClient != nil
 }
 
 // Shutdown performs a graceful shutdown of the application.

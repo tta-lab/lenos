@@ -4,19 +4,20 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/tta-lab/temenos/client"
+	"github.com/tta-lab/temenos/sandbox"
 )
 
 // DefaultPerCmdTimeout caps a single bash subprocess. Matches the pre-existing
 // temenos sandbox default. Agents can override via bash-native `timeout 30m`.
 const DefaultPerCmdTimeout = 120 * time.Second
 
-// defaultAutoBackgroundAfter is the threshold in seconds before a temenos
+// defaultAutoBackgroundAfter is the threshold in seconds before a sandbox
 // command is detached into a background job. Commands completing faster
 // return synchronously.
 const defaultAutoBackgroundAfter = 15
@@ -40,7 +41,7 @@ type ExecResult struct {
 // Runner abstracts the execution backend (local subprocess or temenos sandbox).
 // The single method keeps the interface trivial; tests can pass a fake.
 type Runner interface {
-	Run(ctx context.Context, bash string, env map[string]string, allowedPaths []client.AllowedPath) ExecResult
+	Run(ctx context.Context, bash string, env map[string]string, allowedPaths []AllowedPath) ExecResult
 }
 
 // LocalRunner runs commands via /bin/bash -c on the host.
@@ -57,7 +58,7 @@ type Runner interface {
 // actual sandboxing.
 type LocalRunner struct{}
 
-func (LocalRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []client.AllowedPath) ExecResult {
+func (LocalRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []AllowedPath) ExecResult {
 	start := time.Now()
 	runCtx, cancel := context.WithTimeout(ctx, DefaultPerCmdTimeout)
 	defer cancel()
@@ -101,40 +102,121 @@ func (LocalRunner) Run(ctx context.Context, bash string, env map[string]string, 
 	return res
 }
 
-// SandboxRunner runs commands in a temenos sandbox. Stdout/stderr are returned
-// as separate buffers; ExitCode is the subprocess exit; Err is a runner-level
-// failure (daemon unreachable, marshal error).
-type SandboxRunner struct {
-	Client    *client.Client
-	SessionID string
+// SandboxedRunner runs commands via the temenos sandbox SDK directly — no
+// daemon or socket. On first use it loads ~/.config/temenos/config.toml
+// and builds a reusable Sandbox. On darwin, Exec generates seatbelt profiles
+// and calls sandbox-exec. On linux, it uses bubblewrap namespace isolation.
+type SandboxedRunner struct {
+	sbx sandbox.Sandbox
+	cfg *sandbox.Config
+	bg  *BackgroundRunner
 }
 
-func (s SandboxRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []client.AllowedPath) ExecResult {
+func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []AllowedPath) ExecResult {
 	start := time.Now()
-	resp, err := s.Client.Run(ctx, client.RunRequest{
-		Command:             bash,
-		Env:                 applyNonInteractiveDefaults(env),
-		AllowedPaths:        allowedPaths,
-		Timeout:             int(DefaultPerCmdTimeout / time.Second),
-		CallerID:            s.SessionID,
-		AutoBackgroundAfter: defaultAutoBackgroundAfter,
-	})
-	dur := time.Since(start)
-	if err != nil {
-		return ExecResult{ExitCode: -1, Duration: dur, Err: err}
-	}
-	if resp.JobID != "" {
-		return ExecResult{
-			JobID:      resp.JobID,
-			Background: true,
-			Duration:   dur,
+	if s.sbx == nil {
+		var err error
+		s.cfg, s.sbx, err = sandbox.LoadConfig("")
+		if err != nil {
+			return ExecResult{ExitCode: -1, Duration: time.Since(start), Err: fmt.Errorf("load temenos config: %w", err)}
 		}
 	}
-	return ExecResult{
-		Stdout:   []byte(resp.Stdout),
-		Stderr:   []byte(resp.Stderr),
-		ExitCode: resp.ExitCode,
-		Duration: dur,
+
+	mounts := s.cfg.BaselineMounts()
+	for _, p := range allowedPaths {
+		mounts = append(mounts, sandbox.Mount{
+			Source:   p.Path,
+			Target:   p.Path,
+			ReadOnly: p.ReadOnly,
+		})
+	}
+
+	workDir := "/tmp"
+	if len(allowedPaths) > 0 {
+		workDir = allowedPaths[0].Path
+	}
+
+	env = applyNonInteractiveDefaults(env)
+	envSlice := make([]string, 0, len(env))
+	for k, v := range env {
+		envSlice = append(envSlice, k+"="+v)
+	}
+
+	execCfg := &sandbox.ExecConfig{
+		Env:        envSlice,
+		MountDirs:  mounts,
+		WorkingDir: workDir,
+	}
+
+	// Spawn execution in a goroutine; wait up to the auto-background threshold.
+	// If it completes in time, return synchronously. Otherwise, hand off to
+	// BackgroundRunner and return Background: true.
+	type execOut struct {
+		stdout, stderr string
+		exitCode       int
+		err            error
+	}
+	done := make(chan execOut, 1)
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	go func() {
+		stdout, stderr, exitCode, err := s.sbx.Exec(bgCtx, bash, execCfg)
+		done <- execOut{stdout, stderr, exitCode, err}
+	}()
+
+	autoBgTimer := time.NewTimer(time.Duration(defaultAutoBackgroundAfter) * time.Second)
+	select {
+	case out := <-done:
+		autoBgTimer.Stop()
+		bgCancel()
+		dur := time.Since(start)
+		if out.err != nil {
+			return ExecResult{Stdout: []byte(out.stdout), Stderr: []byte(out.stderr), ExitCode: out.exitCode, Duration: dur, Err: out.err}
+		}
+		return ExecResult{
+			Stdout:   []byte(out.stdout),
+			Stderr:   []byte(out.stderr),
+			ExitCode: out.exitCode,
+			Duration: dur,
+		}
+	case <-autoBgTimer.C:
+		// Command still running — hand to BackgroundRunner if available.
+		if s.bg == nil {
+			// No runner; wait for completion.
+			out := <-done
+			bgCancel()
+			dur := time.Since(start)
+			if out.err != nil {
+				return ExecResult{Stdout: []byte(out.stdout), Stderr: []byte(out.stderr), ExitCode: out.exitCode, Duration: dur, Err: out.err}
+			}
+			return ExecResult{
+				Stdout:   []byte(out.stdout),
+				Stderr:   []byte(out.stderr),
+				ExitCode: out.exitCode,
+				Duration: dur,
+			}
+		}
+
+		jobID := newJobID()
+		resultCh := make(chan backgroundResult, 1)
+		go func() {
+			out := <-done
+			killed := bgCtx.Err() != nil
+			bgCancel()
+			resultCh <- backgroundResult{
+				stdout:   out.stdout,
+				stderr:   out.stderr,
+				exitCode: out.exitCode,
+				err:      out.err,
+				killed:   killed,
+			}
+			close(resultCh)
+		}()
+		s.bg.Track(jobID, bash, bgCancel, resultCh)
+		return ExecResult{
+			JobID:      jobID,
+			Background: true,
+			Duration:   time.Since(start),
+		}
 	}
 }
 

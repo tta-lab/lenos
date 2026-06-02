@@ -17,7 +17,6 @@ import (
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/temenos/client"
 )
 
 // stubAgent implements SessionAgent for testing without a real coordinator setup.
@@ -376,8 +375,7 @@ func TestIsUnauthorized(t *testing.T) {
 
 // _newCoordinatorSignatureLock is a compile-time guard.
 var _newCoordinatorSignatureLock = func() {
-	var sc *client.Client
-	_, _ = NewCoordinator(context.TODO(), nil, nil, nil, nil, sc)
+	_, _ = NewCoordinator(context.TODO(), nil, nil, nil, nil)
 }
 
 // TestBuildCall_AccessModeFromOverrides verifies that RuntimeOverrides.ReadOnly

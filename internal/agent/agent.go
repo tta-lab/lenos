@@ -14,8 +14,6 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
-	"github.com/tta-lab/temenos/client"
-
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/csync"
@@ -71,11 +69,9 @@ type SessionAgentCall struct {
 	// PairWith is retained for callers that need a default external recipient.
 	PairWith string
 
-	// Sandbox controls runner selection. When true and SandboxClient is set
-	// the loop runs each emit through temenos; otherwise it falls back to
-	// LocalRunner with a clear warning.
-	Sandbox       bool
-	SandboxClient *client.Client
+	// Sandbox controls runner selection. When true, the loop uses SandboxedRunner
+	// which calls the temenos sandbox SDK directly (no daemon or socket).
+	Sandbox bool
 
 	// Env is the explicit environment overlay for each subprocess. The
 	// coordinator sets session context for the agent loop
@@ -85,7 +81,7 @@ type SessionAgentCall struct {
 
 	// AllowedPaths is the read/write bound for the runner. The first entry
 	// also becomes the subprocess working directory.
-	AllowedPaths []client.AllowedPath
+	AllowedPaths []AllowedPath
 
 	// TaskID is the resolved ttal task ID for task-backed sessions. Empty
 	// means the session is not task-backed and title refresh is skipped.
@@ -164,16 +160,11 @@ type sessionAgent struct {
 
 	messageQueue    *csync.Map[string, []SessionAgentCall]
 	activeRequests  *csync.Map[string, context.CancelFunc]
-	jobWatchers     *csync.Map[string, *sessionJobWatcher]
-	jobWatchersMu   sync.Mutex
+	bgRunners       *csync.Map[string, *BackgroundRunner]
+	bgRunnersMu     sync.Mutex
 	sessionUpdateMu sync.Mutex
 	hookRunner      hooks.Runner
 	taskExporter    taskTitleExporter
-}
-
-type sessionJobWatcher struct {
-	watcher *JobWatcher
-	cancel  context.CancelFunc
 }
 
 type SessionAgentOptions struct {
@@ -206,7 +197,7 @@ func NewSessionAgent(
 		notify:               opts.Notify,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
-		jobWatchers:          csync.NewMap[string, *sessionJobWatcher](),
+		bgRunners:            csync.NewMap[string, *BackgroundRunner](),
 		hookRunner:           opts.HookRunner,
 		taskExporter:         exportTaskForTitle,
 	}

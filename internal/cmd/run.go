@@ -98,9 +98,6 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
 		}
 
 		appWs := ws.(*workspace.AppWorkspace)
-		if readOnly && !appWs.App().SandboxClientConnected() {
-			return fmt.Errorf("--readonly requires the temenos sandbox, but the sandbox client is not connected (daemon down or sandbox disabled in config); start temenos or remove --readonly")
-		}
 
 		if verbose {
 			slog.SetDefault(slog.New(log.New(os.Stderr)))

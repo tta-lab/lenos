@@ -29,7 +29,6 @@ import (
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
-	"github.com/tta-lab/temenos/client"
 	"golang.org/x/sync/errgroup"
 
 	"charm.land/fantasy/providers/anthropic"
@@ -80,14 +79,13 @@ type Coordinator interface {
 }
 
 type coordinator struct {
-	cfg           *config.ConfigStore
-	sessions      session.Service
-	messages      message.Service
-	notify        pubsub.Publisher[notify.Notification]
-	sandboxClient *client.Client
-	currentAgent  SessionAgent
-	systemPrompt  string
-	readyWg       errgroup.Group
+	cfg          *config.ConfigStore
+	sessions     session.Service
+	messages     message.Service
+	notify       pubsub.Publisher[notify.Notification]
+	currentAgent SessionAgent
+	systemPrompt string
+	readyWg      errgroup.Group
 
 	dataDir string
 }
@@ -98,7 +96,6 @@ func NewCoordinator(
 	sessions session.Service,
 	messages message.Service,
 	notify pubsub.Publisher[notify.Notification],
-	sandboxClient *client.Client,
 ) (Coordinator, error) {
 	absDataDir, err := filepath.Abs(cfg.Config().Options.DataDirectory)
 	if err != nil {
@@ -106,12 +103,11 @@ func NewCoordinator(
 	}
 
 	c := &coordinator{
-		cfg:           cfg,
-		sessions:      sessions,
-		messages:      messages,
-		notify:        notify,
-		sandboxClient: sandboxClient,
-		dataDir:       absDataDir,
+		cfg:      cfg,
+		sessions: sessions,
+		messages: messages,
+		notify:   notify,
+		dataDir:  absDataDir,
 	}
 
 	large, small, err := c.buildAgentModels(ctx, false)
@@ -239,11 +235,6 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 	runtimeContext := prompt.LoadRuntimeContext(ctx, c.cfg, getCoderContextPaths(c.cfg))
 
 	useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
-	// sandboxClient is wired at startup by app.initSandboxClient. When nil,
-	// resolveRunner falls back to LocalRunner with a per-call warning
-	// (see agent_run.go). The app-side three-state policy (default/explicit/
-	// disabled) decides whether nil here is acceptable.
-	sandboxClient := c.sandboxClient
 
 	access := AccessModeRW
 	if c.cfg.Overrides().ReadOnly {
@@ -256,7 +247,6 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		ProviderOptions: getProviderOptions(model, providerCfg),
 		PairWith:        c.cfg.Overrides().PairWith,
 		Sandbox:         useSandbox,
-		SandboxClient:   sandboxClient,
 		Env:             sandboxEnv,
 		AllowedPaths:    BuildAllowedPaths(ctx, cwd, access),
 		TaskID:          taskwarrior.ResolveTaskID(cwd),

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,7 +11,6 @@ import (
 	"github.com/tta-lab/lenos/internal/event"
 	"github.com/tta-lab/lenos/internal/ui/common"
 	ui "github.com/tta-lab/lenos/internal/ui/model"
-	"github.com/tta-lab/lenos/internal/workspace"
 )
 
 const reviewTriggerPrompt = `Review the current branch against the default branch.
@@ -41,11 +39,6 @@ lenos review -m gpt-5
 			return err
 		}
 		defer cleanup()
-
-		appWs, ok := ws.(*workspace.AppWorkspace)
-		if !ok || !appWs.App().SandboxClientConnected() {
-			return fmt.Errorf("lenos review requires the temenos sandbox, but the sandbox client is not connected (daemon down or sandbox disabled in config)")
-		}
 
 		event.AppInitialized()
 

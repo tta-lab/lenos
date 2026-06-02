@@ -6,9 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/tta-lab/temenos/client"
 )
+
+// AllowedPath describes a filesystem path the sandbox can access.
+type AllowedPath struct {
+	Path     string
+	ReadOnly bool
+}
 
 // AccessMode represents the filesystem access mode for the working directory inside the temenos sandbox.
 type AccessMode string
@@ -31,19 +35,19 @@ const sessionsDirSubpath = ".lenos/sessions"
 // need to append to <cwd>/.lenos/sessions/<session-id>.md throughout the agent
 // loop; without this carve-out, --readonly would block the agent's own session log writes.
 // Runtime init is responsible for creating the directory before any agent run.
-func BuildAllowedPaths(ctx context.Context, cwd string, access AccessMode) []client.AllowedPath {
+func BuildAllowedPaths(ctx context.Context, cwd string, access AccessMode) []AllowedPath {
 	readOnly := access != AccessModeRW
-	paths := []client.AllowedPath{{Path: cwd, ReadOnly: readOnly}}
+	paths := []AllowedPath{{Path: cwd, ReadOnly: readOnly}}
 
 	gitDir := resolveGitCommonDir(ctx, cwd)
 	if gitDir != "" && gitDir != cwd+"/.git" {
-		paths = append(paths, client.AllowedPath{Path: gitDir, ReadOnly: false})
+		paths = append(paths, AllowedPath{Path: gitDir, ReadOnly: false})
 	}
 
 	// Always carve out cwd/.lenos/sessions as RW. Runtime init owns creation of
 	// the directory; this function only declares the carve-out path.
 	sessionsDir := filepath.Join(cwd, sessionsDirSubpath)
-	paths = append(paths, client.AllowedPath{Path: sessionsDir, ReadOnly: false})
+	paths = append(paths, AllowedPath{Path: sessionsDir, ReadOnly: false})
 
 	return paths
 }
