@@ -20,12 +20,9 @@ only issues the author would likely fix.
 
 # Mandatory First Step
 
-Run this one command block to orient yourself:
+Run this one-liner to orient yourself, then review the output:
 
-```
-DEFAULT=$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo main)
-git diff --stat $DEFAULT...HEAD && git log --oneline $DEFAULT...HEAD
-```
+DEFAULT=$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo main); git diff --stat $DEFAULT...HEAD && git log --oneline $DEFAULT...HEAD
 
 If the diff is empty, stop: "No changes to review. Verdict: LGTM."
 
