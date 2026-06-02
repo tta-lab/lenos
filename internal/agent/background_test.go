@@ -10,9 +10,9 @@ import (
 )
 
 func TestBackgroundRunner_TrackCompletion(t *testing.T) {
-	var received string
+	receivedCh := make(chan string, 1)
 	br := NewBackgroundRunner(func(msg string) {
-		received = msg
+		receivedCh <- msg
 	})
 
 	resultCh := make(chan backgroundResult, 1)
@@ -24,10 +24,7 @@ func TestBackgroundRunner_TrackCompletion(t *testing.T) {
 		exitCode: 0,
 	}
 
-	// Wait for the Track goroutine to fire the enqueue callback.
-	for i := 0; i < 50 && received == ""; i++ {
-		time.Sleep(10 * time.Millisecond)
-	}
+	received := <-receivedCh
 	require.NotEmpty(t, received, "enqueue callback should have fired")
 	assert.Contains(t, received, "background job completed")
 	assert.Contains(t, received, "abc123")
@@ -38,9 +35,9 @@ func TestBackgroundRunner_TrackCompletion(t *testing.T) {
 }
 
 func TestBackgroundRunner_TrackKilled(t *testing.T) {
-	var received string
+	receivedCh := make(chan string, 1)
 	br := NewBackgroundRunner(func(msg string) {
-		received = msg
+		receivedCh <- msg
 	})
 
 	resultCh := make(chan backgroundResult, 1)
@@ -52,9 +49,7 @@ func TestBackgroundRunner_TrackKilled(t *testing.T) {
 		killed:   true,
 	}
 
-	for i := 0; i < 50 && received == ""; i++ {
-		time.Sleep(10 * time.Millisecond)
-	}
+	received := <-receivedCh
 	require.NotEmpty(t, received, "enqueue callback should have fired")
 	assert.Contains(t, received, "background job killed")
 	assert.Contains(t, received, "xyz789")
@@ -77,6 +72,9 @@ func TestBackgroundRunner_KillJobCancelsContext(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("context should have been canceled by KillJob")
 	}
+
+	// Close the channel to unblock the Track goroutine.
+	close(resultCh)
 }
 
 func TestBackgroundRunner_KillJobUnknown(t *testing.T) {
@@ -105,10 +103,10 @@ func TestBackgroundRunner_StopAll(t *testing.T) {
 }
 
 func TestBackgroundRunner_OnIdle(t *testing.T) {
-	var idleCalled bool
+	idleCh := make(chan struct{}, 1)
 	br := NewBackgroundRunner(nil)
 	setOnIdle(br, func() {
-		idleCalled = true
+		idleCh <- struct{}{}
 	})
 
 	resultCh := make(chan backgroundResult, 1)
@@ -116,10 +114,12 @@ func TestBackgroundRunner_OnIdle(t *testing.T) {
 
 	resultCh <- backgroundResult{exitCode: 0}
 
-	for i := 0; i < 50 && !idleCalled; i++ {
-		time.Sleep(10 * time.Millisecond)
+	select {
+	case <-idleCh:
+		// onIdle fired
+	case <-time.After(time.Second):
+		t.Fatal("onIdle should fire when last job completes")
 	}
-	assert.True(t, idleCalled, "onIdle should fire when last job completes")
 }
 
 func TestBackgroundRunner_OnIdleSetToNil(t *testing.T) {

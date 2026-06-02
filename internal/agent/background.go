@@ -60,9 +60,25 @@ func (r *BackgroundRunner) Track(jobID, command string, cancel context.CancelFun
 		}
 
 		r.mu.Lock()
+		_, stillActive := r.active[jobID]
 		delete(r.active, jobID)
 		idle := len(r.active) == 0
 		r.mu.Unlock()
+
+		// If the job was already removed by StopAll or KillJob, skip
+		// enqueue: the runner no longer owns this job.
+		if !stillActive {
+			if idle {
+				r.onIdleMu.Lock()
+				f := r.onIdle
+				r.onIdle = nil
+				r.onIdleMu.Unlock()
+				if f != nil {
+					f()
+				}
+			}
+			return
+		}
 
 		if result.killed {
 			r.formatAndEnqueueKilled(jobID, command, result.exitCode)
@@ -117,10 +133,15 @@ func (r *BackgroundRunner) ListActive() []BackgroundJob {
 	return jobs
 }
 
-// KillJob cancels the context of a running background job.
+// KillJob cancels the context of a running background job and removes it
+// from tracking. The goroutine will still see the result on resultCh but
+// skip enqueue (stillActive will be false).
 func (r *BackgroundRunner) KillJob(jobID string) error {
 	r.mu.Lock()
 	job, ok := r.active[jobID]
+	if ok {
+		delete(r.active, jobID)
+	}
 	r.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("background job %s is not active", jobID)
@@ -129,16 +150,20 @@ func (r *BackgroundRunner) KillJob(jobID string) error {
 	return nil
 }
 
-// StopAll cancels all running background jobs.
+// StopAll cancels and removes all running background jobs.
 func (r *BackgroundRunner) StopAll() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, job := range r.active {
+	for id, job := range r.active {
 		job.cancel()
+		delete(r.active, id)
 	}
 }
 
 func (r *BackgroundRunner) formatAndEnqueueCompleted(jobID, command, stdout, stderr string, exitCode int, runErr error) {
+	if r.enqueue == nil {
+		return
+	}
 	if runErr != nil {
 		result := lenosbash.ResultBlock(fmt.Sprintf(
 			"job_id: %s\ncommand: %s\nerror: %v",
@@ -157,6 +182,9 @@ func (r *BackgroundRunner) formatAndEnqueueCompleted(jobID, command, stdout, std
 }
 
 func (r *BackgroundRunner) formatAndEnqueueKilled(jobID, command string, exitCode int) {
+	if r.enqueue == nil {
+		return
+	}
 	result := lenosbash.ResultBlock(fmt.Sprintf(
 		"job_id: %s\ncommand: %s\nexit_code: %d",
 		jobID, command, exitCode,
