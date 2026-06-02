@@ -31,7 +31,7 @@ var (
 	tools = []tool{
 		{Name: "Lenos", Repo: "lenos", Binary: "lenos", ConfigKind: "json"},
 		{Name: "Temenos", Repo: "temenos", Binary: "temenos", ConfigKind: "toml"},
-		{Name: "Organon", Repo: "organon", Binary: "organon", ConfigKind: "toml"},
+		{Name: "Organon", Repo: "organon", Binary: "organon", Binaries: []string{"src", "web", "skill"}, ConfigKind: "toml"},
 		{Name: "Einai", Repo: "einai", Binary: "einai", ConfigKind: "toml"},
 	}
 )
@@ -40,6 +40,7 @@ type tool struct {
 	Name       string
 	Repo       string
 	Binary     string
+	Binaries   []string // multiple binaries to extract from one archive (e.g. organon)
 	ConfigKind string
 }
 
@@ -190,7 +191,18 @@ func installTool(binDir string, t tool) error {
 	}
 	defer gzr.Close()
 
+	// Determine which binaries to extract.
+	want := t.Binaries
+	if len(want) == 0 {
+		want = []string{t.Binary}
+	}
+	wantSet := make(map[string]bool, len(want))
+	for _, b := range want {
+		wantSet[b] = true
+	}
+
 	tr := tar.NewReader(gzr)
+	found := make(map[string]bool)
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -201,11 +213,11 @@ func installTool(binDir string, t tool) error {
 		}
 
 		base := filepath.Base(hdr.Name)
-		if base != t.Binary {
+		if !wantSet[base] {
 			continue
 		}
 
-		dst := filepath.Join(binDir, t.Binary)
+		dst := filepath.Join(binDir, base)
 		part := dst + ".part"
 		f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {
@@ -221,10 +233,19 @@ func installTool(binDir string, t tool) error {
 			os.Remove(part)
 			return fmt.Errorf("install %s: %w", t.Name, err)
 		}
-		return nil
+		found[base] = true
+
+		if len(found) == len(want) {
+			return nil
+		}
 	}
 
-	return fmt.Errorf("binary %s not found in archive", t.Binary)
+	for _, b := range want {
+		if !found[b] {
+			return fmt.Errorf("binary %s not found in %s archive", b, t.Name)
+		}
+	}
+	return nil
 }
 
 func titleOS() string {
