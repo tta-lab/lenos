@@ -133,15 +133,12 @@ func (r *BackgroundRunner) ListActive() []BackgroundJob {
 	return jobs
 }
 
-// KillJob cancels the context of a running background job and removes it
-// from tracking. The goroutine will still see the result on resultCh but
-// skip enqueue (stillActive will be false).
+// KillJob cancels the context of a running background job. The goroutine
+// will detect the cancellation, set killed=true on the result, and the
+// Track watcher will enqueue a killed notification.
 func (r *BackgroundRunner) KillJob(jobID string) error {
 	r.mu.Lock()
 	job, ok := r.active[jobID]
-	if ok {
-		delete(r.active, jobID)
-	}
 	r.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("background job %s is not active", jobID)

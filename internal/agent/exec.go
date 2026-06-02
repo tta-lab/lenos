@@ -199,12 +199,14 @@ func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]s
 		resultCh := make(chan backgroundResult, 1)
 		go func() {
 			out := <-done
+			killed := bgCtx.Err() != nil
 			bgCancel()
 			resultCh <- backgroundResult{
 				stdout:   out.stdout,
 				stderr:   out.stderr,
 				exitCode: out.exitCode,
 				err:      out.err,
+				killed:   killed,
 			}
 			close(resultCh)
 		}()
