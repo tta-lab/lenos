@@ -308,6 +308,47 @@ func TestRunLoop_ExecThenExit(t *testing.T) {
 	assert.Len(t, resultsByOrder(ms), 1)
 }
 
+func TestRunLoop_PlainExitInRunBlockEndsTurn(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{lenosbash.BashBlock("exit")}}
+	runner := &fakeRunner{}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "end turn")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+
+	// Runner should NOT have been called.
+	assert.Empty(t, runner.bash)
+
+	// One assistant row, finished EndTurn.
+	assistants := assistantsByOrder(ms)
+	require.Len(t, assistants, 1)
+	assert.Equal(t, message.FinishReasonEndTurn, assistants[0].FinishReason())
+}
+
+// TestRunLoop_ExitWithOtherCommandsDoesNotEndTurn ensures that
+// "ls && exit" still executes as a normal command and does not end
+// the turn prematurely.
+func TestRunLoop_ExitWithOtherCommandsDoesNotEndTurn(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{lenosbash.BashBlock("echo hi && exit"), "Done."}}
+	runner := &fakeRunner{results: []ExecResult{
+		{Stdout: []byte("hi\n"), ExitCode: 0, Duration: time.Millisecond},
+	}}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+
+	stop, err := runLoop(context.Background(), deps, nil, "run and exit")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+
+	// Runner should have been called with the full bash command.
+	assert.Equal(t, []string{"echo hi && exit\n"}, runner.bash)
+	assert.Len(t, resultsByOrder(ms), 1)
+}
+
 func TestRunLoop_RetriesRetryableStreamEOFAndClearsPartialEmit(t *testing.T) {
 	t.Parallel()
 	model := &retryableErrorThenSuccessModel{

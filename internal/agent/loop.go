@@ -162,6 +162,14 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			msgs = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
+		// Plain exit in a run block ends the turn, same as prose-only.
+		if strings.TrimSpace(bashCmd) == lenosbash.ExitCommand {
+			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
+			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
+				slog.Warn("loop: persist exit finish", "error", updateErr)
+			}
+			return stopEndTurn, nil
+		}
 		if cls, aux := classify(bashCmd); cls == classifyInvalidBash {
 			obs := rePromptInvalidBash(aux)
 			msgs = append(msgs,
@@ -184,9 +192,10 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		}
 		res := deps.runner.Run(ctx, bashCmd, deps.env, deps.paths)
 		if res.Background {
+			exitBlock := lenosbash.BashBlock(lenosbash.ExitCommand)
 			obs := fmt.Sprintf(
-				"background job started (job_id: %s)",
-				res.JobID,
+				"background job started (job_id: %s).\nYou can continue working while the job runs; use %s to end the turn when ready.",
+				res.JobID, exitBlock,
 			)
 			obs = lenosbash.RuntimeBlock(obs)
 			resultMsg.Parts = []message.ContentPart{message.CommandContent{
