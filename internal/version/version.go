@@ -19,7 +19,7 @@ func init() {
 		return
 	}
 	mainVersion := info.Main.Version
-	if mainVersion != "" && mainVersion != "(devel)" {
+	if Version == "devel" && mainVersion != "" && mainVersion != "(devel)" {
 		Version = mainVersion
 	}
 }
