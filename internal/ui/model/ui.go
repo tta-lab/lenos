@@ -2131,7 +2131,9 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 	}
 
 	// Add app margins
-	appRect, helpRect := layout.SplitVertical(area, layout.Fixed(area.Dy()-helpHeight))
+	appRects := layout.Vertical(layout.Len(area.Dy()-helpHeight), layout.Fill(1)).Split(area)
+	appRect := appRects[0]
+	helpRect := appRects[1]
 	appRect.Min.Y += 1
 	appRect.Max.Y -= 1
 	helpRect.Min.Y -= 1
@@ -2160,7 +2162,9 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		// ------
 		// help
 
-		headerRect, mainRect := layout.SplitVertical(appRect, layout.Fixed(landingHeaderHeight))
+		hdrRects := layout.Vertical(layout.Len(landingHeaderHeight), layout.Fill(1)).Split(appRect)
+		headerRect := hdrRects[0]
+		mainRect := hdrRects[1]
 		uiLayout.header = headerRect
 		uiLayout.main = mainRect
 
@@ -2174,8 +2178,12 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		// editor
 		// ------
 		// help
-		headerRect, mainRect := layout.SplitVertical(appRect, layout.Fixed(landingHeaderHeight))
-		mainRect, editorRect := layout.SplitVertical(mainRect, layout.Fixed(mainRect.Dy()-editorHeight))
+		hdrRects := layout.Vertical(layout.Len(landingHeaderHeight), layout.Fill(1)).Split(appRect)
+		headerRect := hdrRects[0]
+		remainingRect := hdrRects[1]
+		bodyRects := layout.Vertical(layout.Len(remainingRect.Dy()-editorHeight), layout.Fill(1)).Split(remainingRect)
+		mainRect := bodyRects[0]
+		editorRect := bodyRects[1]
 		// Remove extra padding from editor (but keep it for header and main)
 		editorRect.Min.X -= 1
 		editorRect.Max.X += 1
@@ -2194,20 +2202,27 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		// ------
 		// help
 		const compactHeaderHeight = 1
-		headerRect, mainRect := layout.SplitVertical(appRect, layout.Fixed(compactHeaderHeight))
+		hdrRects := layout.Vertical(layout.Len(compactHeaderHeight), layout.Fill(1)).Split(appRect)
+		headerRect := hdrRects[0]
+		mainRect := hdrRects[1]
 		detailsHeight := min(sessionDetailsMaxHeight, area.Dy()-1) // One row for the header
-		sessionDetailsArea, _ := layout.SplitVertical(appRect, layout.Fixed(detailsHeight))
+		detailRects := layout.Vertical(layout.Len(detailsHeight), layout.Fill(1)).Split(appRect)
+		sessionDetailsArea := detailRects[0]
 		uiLayout.sessionDetails = sessionDetailsArea
 		uiLayout.sessionDetails.Min.Y += compactHeaderHeight // adjust for header
 		// Add one line gap between header and main content
 		mainRect.Min.Y += 1
-		mainRect, editorRect := layout.SplitVertical(mainRect, layout.Fixed(mainRect.Dy()-editorHeight))
+		bodyRects := layout.Vertical(layout.Len(mainRect.Dy()-editorHeight), layout.Fill(1)).Split(mainRect)
+		mainRect = bodyRects[0]
+		editorRect := bodyRects[1]
 		mainRect.Max.X -= 1 // Add padding right
 		uiLayout.header = headerRect
 		pillsHeight := m.pillsAreaHeight()
 		if pillsHeight > 0 {
 			pillsHeight = min(pillsHeight, mainRect.Dy())
-			chatRect, pillsRect := layout.SplitVertical(mainRect, layout.Fixed(mainRect.Dy()-pillsHeight))
+			pillRects := layout.Vertical(layout.Len(mainRect.Dy()-pillsHeight), layout.Fill(1)).Split(mainRect)
+			chatRect := pillRects[0]
+			pillsRect := pillRects[1]
 			uiLayout.main = chatRect
 			uiLayout.pills = pillsRect
 		} else {
