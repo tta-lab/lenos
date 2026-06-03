@@ -10,6 +10,10 @@ const (
 	ResultEndTag   = "</result>"
 	RuntimeTag     = "<runtime>"
 	RuntimeEndTag  = "</runtime>"
+
+	// ExitCommand is the bash command that ends a turn when used as the
+	// sole content of a run block.
+	ExitCommand = "exit"
 )
 
 type Parsed struct {
