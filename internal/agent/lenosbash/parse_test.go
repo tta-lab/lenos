@@ -168,29 +168,33 @@ func TestParseXmlLookingTextIsPlainMarkdown(t *testing.T) {
 	assert.Equal(t, source, parsed.Prose)
 }
 
-func TestParseInlineBashTagsArePlainMarkdown(t *testing.T) {
+func TestParseInlineRunTagsParsesBash(t *testing.T) {
 	t.Parallel()
 
 	source := "This PR switches to " + BashStartTag + "/" + BashEndTag + " tags."
 	parsed, diag := Parse(source)
 
 	require.Nil(t, diag)
-	assert.Empty(t, parsed.Bash)
-	assert.Equal(t, source, parsed.Prose)
+	assert.Equal(t, "This PR switches to ", parsed.Prose)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "/", parsed.Bash[0])
+	// Text after closing tag is dropped.
+	assert.Equal(t, "This PR switches to "+BashStartTag+"/"+BashEndTag, parsed.Accepted)
 }
 
-func TestParseIndentedBashTagsArePlainMarkdown(t *testing.T) {
+func TestParseIndentedRunTagOpensBash(t *testing.T) {
 	t.Parallel()
 
 	source := "  " + BashStartTag + "\nls\n" + BashEndTag
 	parsed, diag := Parse(source)
 
 	require.Nil(t, diag)
-	assert.Empty(t, parsed.Bash)
-	assert.Equal(t, "  "+BashStartTag+"\nls\n", parsed.Prose)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "ls\n", parsed.Bash[0])
+	assert.Equal(t, "  "+BashStartTag+"\nls\n"+BashEndTag, parsed.Accepted)
 }
 
-func TestParseLineMiddleEndTagInsideBashIsPlainText(t *testing.T) {
+func TestParseLineMiddleEndTagClosesBlock(t *testing.T) {
 	t.Parallel()
 
 	source := BashStartTag + "\necho " + BashEndTag + "\n" + BashEndTag
@@ -198,7 +202,7 @@ func TestParseLineMiddleEndTagInsideBashIsPlainText(t *testing.T) {
 
 	require.Nil(t, diag)
 	require.Len(t, parsed.Bash, 1)
-	assert.Equal(t, "echo "+BashEndTag+"\n", parsed.Bash[0])
+	assert.Equal(t, "echo ", parsed.Bash[0])
 }
 
 func TestParseUnclosedTagReturnsPartialProseAndBash(t *testing.T) {
@@ -239,4 +243,17 @@ func TestParseUnclosedTagNoProse(t *testing.T) {
 	assert.Empty(t, parsed.Prose)
 	require.Len(t, parsed.Bash, 1)
 	assert.Equal(t, "cat main.go\n", parsed.Bash[0])
+}
+
+func TestParseInlineRunTagWithColumnOneClose(t *testing.T) {
+	t.Parallel()
+
+	source := "  ls\n" + BashStartTag + "echo hi\n" + BashEndTag
+	parsed, diag := Parse(source)
+
+	require.Nil(t, diag)
+	require.Len(t, parsed.Bash, 1)
+	assert.Equal(t, "echo hi\n", parsed.Bash[0])
+	assert.Equal(t, "  ls\n"+BashStartTag+"echo hi\n"+BashEndTag, parsed.Accepted)
+	assert.Equal(t, "  ls\n", parsed.Prose)
 }
