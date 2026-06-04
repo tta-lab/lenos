@@ -192,8 +192,55 @@ func TestConfig_configureProvidersMergesKnownModelPricingIntoOverride(t *testing
 	require.Equal(t, 0.27, pc.Models[0].CostPer1MIn)
 	require.Equal(t, 0.85, pc.Models[0].CostPer1MOut)
 	require.Equal(t, 0.07, pc.Models[0].CostPer1MInCached)
-	require.Equal(t, int64(128000), pc.Models[0].ContextWindow)
-	require.Equal(t, int64(8192), pc.Models[0].DefaultMaxTokens)
+}
+
+func TestConfig_configureProvidersDoesNotMergeKnownModelCapabilitiesIntoOverride(t *testing.T) {
+	knownProviders := []catwalk.Provider{
+		{
+			ID:          "openai",
+			APIKey:      "$OPENAI_API_KEY",
+			APIEndpoint: "https://api.openai.com/v1",
+			Models: []catwalk.Model{{
+				ID:                     "reasoning-model",
+				Name:                   "Reasoning Model",
+				CanReason:              true,
+				ReasoningLevels:        []string{"low", "medium", "high"},
+				DefaultReasoningEffort: "medium",
+				SupportsImages:         true,
+			}},
+		},
+	}
+
+	cfg := &Config{
+		Providers: csync.NewMap[string, ProviderConfig](),
+	}
+	cfg.Providers.Set("openai", ProviderConfig{
+		APIKey:  "xyz",
+		BaseURL: "https://api.openai.com/v1",
+		Models: []catwalk.Model{{
+			ID:             "reasoning-model",
+			Name:           "No Reasoning",
+			CanReason:      false,
+			SupportsImages: false,
+		}},
+	})
+	cfg.setDefaults("/tmp", "")
+
+	env := env.NewFromMap(map[string]string{
+		"OPENAI_API_KEY": "test-key",
+	})
+	resolver := NewEnvironmentVariableResolver(env)
+	err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
+	require.NoError(t, err)
+
+	pc, ok := cfg.Providers.Get("openai")
+	require.True(t, ok)
+	require.Len(t, pc.Models, 1)
+	require.Equal(t, "No Reasoning", pc.Models[0].Name)
+	require.False(t, pc.Models[0].CanReason)
+	require.Empty(t, pc.Models[0].ReasoningLevels)
+	require.Empty(t, pc.Models[0].DefaultReasoningEffort)
+	require.False(t, pc.Models[0].SupportsImages)
 }
 
 func TestConfig_configureProvidersWithNewProvider(t *testing.T) {
