@@ -475,7 +475,7 @@ func TestSaveSessionUsage_PricesUncachedInputAndOutput(t *testing.T) {
 	require.InDelta(t, 0.003, updated.Cost, 0.0000001)
 }
 
-func TestSaveSessionUsage_PricesCacheReadWithInputCachedRate(t *testing.T) {
+func TestSaveSessionUsage_PricesCacheReadWithOutputCachedRate(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
 
@@ -490,7 +490,7 @@ func TestSaveSessionUsage_PricesCacheReadWithInputCachedRate(t *testing.T) {
 			CostPer1MIn:        2,
 			CostPer1MOut:       10,
 			CostPer1MInCached:  0.5,
-			CostPer1MOutCached: 0,
+			CostPer1MOutCached: 0.25,
 		},
 	}
 	agent.largeModel.Set(model)
@@ -503,7 +503,7 @@ func TestSaveSessionUsage_PricesCacheReadWithInputCachedRate(t *testing.T) {
 	}, nil, "save failed")
 	require.True(t, ok)
 
-	require.InDelta(t, 0.004, updated.Cost, 0.0000001)
+	require.InDelta(t, 0.0035, updated.Cost, 0.0000001)
 }
 
 func TestSaveSessionUsage_PricesCacheCreationWithInputCachedRate(t *testing.T) {
@@ -1326,7 +1326,7 @@ func TestAgent_Summarize_AddsUsageToRunSummary(t *testing.T) {
 			CostPer1MIn:        2,
 			CostPer1MOut:       10,
 			CostPer1MInCached:  0.5,
-			CostPer1MOutCached: 99,
+			CostPer1MOutCached: 0.25,
 		},
 		ModelCfg: config.SelectedModel{Provider: "config-provider", Model: "config-model"},
 	}
@@ -1349,7 +1349,7 @@ func TestAgent_Summarize_AddsUsageToRunSummary(t *testing.T) {
 	require.Equal(t, int64(200), summary.InputCacheHitTokens)
 	require.Equal(t, int64(1100), summary.InputCacheMissTokens)
 	require.Equal(t, int64(50), summary.OutputTokens)
-	require.InDelta(t, 0.00265, summary.CostUSD, 0.0000001)
+	require.InDelta(t, 0.0026, summary.CostUSD, 0.0000001)
 }
 
 func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t *testing.T) {

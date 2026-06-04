@@ -327,7 +327,7 @@ func usageCost(model Model, usage fantasy.Usage, overrideCost *float64) float64 
 
 	modelConfig := model.CatwalkCfg
 	return modelConfig.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
-		modelConfig.CostPer1MInCached/1e6*float64(usage.CacheReadTokens) +
+		modelConfig.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
 		modelConfig.CostPer1MIn/1e6*float64(usage.InputTokens) +
 		modelConfig.CostPer1MOut/1e6*float64(usage.OutputTokens)
 }
