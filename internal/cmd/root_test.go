@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tta-lab/lenos/internal/config"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,6 +65,24 @@ func TestResolveAgentFile_CoderFallsBackToEmbedded(t *testing.T) {
 	}
 	if path != "" {
 		t.Errorf("expected empty path for embedded fallback, got: %s", path)
+	}
+}
+
+func TestResolveWorkspaceAgent_DefaultUsesEmbeddedCoderEvenWhenCoderFileExists(t *testing.T) {
+	td := t.TempDir()
+	if err := os.WriteFile(filepath.Join(td, "coder.md"), []byte("# Claude Coder"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agentName, path, err := resolveWorkspaceAgent("", []string{td})
+	if err != nil {
+		t.Fatalf("expected no error for default coder fallback, got: %v", err)
+	}
+	if agentName != config.AgentCoder {
+		t.Errorf("expected default agent %q, got %q", config.AgentCoder, agentName)
+	}
+	if path != "" {
+		t.Errorf("expected empty path for embedded default coder, got: %s", path)
 	}
 }
 
