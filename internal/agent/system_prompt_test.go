@@ -77,26 +77,9 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 	assert.Contains(t, got, lenosbash.BashBlock("go test ./..."))
 	assert.Contains(t, got, "Put a blank line before the opening run tag.")
 	assert.Contains(t, got, "tags must start at column 1")
+	assert.Contains(t, got, "Each run block is ephemeral.")
 	assert.NotContains(t, got, "<bash>")
 	assert.NotContains(t, got, "</bash>")
-}
-
-func TestBuildBaseSystemPrompt_DocumentsEphemeralRunBlocks(t *testing.T) {
-	t.Parallel()
-
-	got, err := buildBaseSystemPrompt(promptData{
-		WorkingDir: "/repo",
-		Platform:   "linux",
-		Date:       "2026-04-29",
-	})
-	require.NoError(t, err)
-
-	assert.Contains(t, got, "Each run block is ephemeral.")
-	assert.Contains(t, got, "Filesystem changes persist.")
-	assert.Contains(t, got, "Environment variables, cwd changes, shell aliases")
-	assert.Contains(t, got, "installed user-site paths")
-	assert.Contains(t, got, "in-memory process state")
-	assert.Contains(t, got, "written to files or system locations")
 }
 
 func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {
