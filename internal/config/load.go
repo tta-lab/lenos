@@ -176,6 +176,13 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 						continue
 					}
 					seen[model.ID] = true
+					for _, knownModel := range p.Models {
+						if knownModel.ID != model.ID {
+							continue
+						}
+						model = mergeKnownModelDefaults(model, knownModel)
+						break
+					}
 					if model.Name == "" {
 						model.Name = model.ID
 					}
@@ -358,6 +365,61 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 	}
 
 	return nil
+}
+
+func mergeKnownModelDefaults(model, known catwalk.Model) catwalk.Model {
+	if model.Name == "" {
+		model.Name = known.Name
+	}
+	if model.CostPer1MIn == 0 {
+		model.CostPer1MIn = known.CostPer1MIn
+	}
+	if model.CostPer1MOut == 0 {
+		model.CostPer1MOut = known.CostPer1MOut
+	}
+	if model.CostPer1MInCached == 0 {
+		model.CostPer1MInCached = known.CostPer1MInCached
+	}
+	if model.CostPer1MOutCached == 0 {
+		model.CostPer1MOutCached = known.CostPer1MOutCached
+	}
+	if model.ContextWindow == 0 {
+		model.ContextWindow = known.ContextWindow
+	}
+	if model.DefaultMaxTokens == 0 {
+		model.DefaultMaxTokens = known.DefaultMaxTokens
+	}
+	if !model.CanReason {
+		model.CanReason = known.CanReason
+	}
+	if len(model.ReasoningLevels) == 0 {
+		model.ReasoningLevels = known.ReasoningLevels
+	}
+	if model.DefaultReasoningEffort == "" {
+		model.DefaultReasoningEffort = known.DefaultReasoningEffort
+	}
+	if !model.SupportsImages {
+		model.SupportsImages = known.SupportsImages
+	}
+	if model.Options.Temperature == nil {
+		model.Options.Temperature = known.Options.Temperature
+	}
+	if model.Options.TopP == nil {
+		model.Options.TopP = known.Options.TopP
+	}
+	if model.Options.TopK == nil {
+		model.Options.TopK = known.Options.TopK
+	}
+	if model.Options.FrequencyPenalty == nil {
+		model.Options.FrequencyPenalty = known.Options.FrequencyPenalty
+	}
+	if model.Options.PresencePenalty == nil {
+		model.Options.PresencePenalty = known.Options.PresencePenalty
+	}
+	if model.Options.ProviderOptions == nil && known.Options.ProviderOptions != nil {
+		model.Options.ProviderOptions = maps.Clone(known.Options.ProviderOptions)
+	}
+	return model
 }
 
 func (c *Config) setDefaults(workingDir, dataDir string) {

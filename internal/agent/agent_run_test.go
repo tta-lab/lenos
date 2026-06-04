@@ -1294,6 +1294,64 @@ func TestAgent_Summarize_UsesPrimaryModelAndConfigIDs(t *testing.T) {
 	require.Equal(t, smallModel, agent.primaryModel.Get().Model, "primary should still be small after Summarize")
 }
 
+func TestAgent_Summarize_AddsUsageToRunSummary(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	sess, err := env.sessions.Create(t.Context(), "summarize usage summary")
+	require.NoError(t, err)
+
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "hello world"}},
+	})
+	require.NoError(t, err)
+
+	model := &scriptedModel{
+		emits: []string{"summary"},
+		usages: []fantasy.Usage{{
+			InputTokens:         1000,
+			OutputTokens:        50,
+			CacheCreationTokens: 100,
+			CacheReadTokens:     200,
+		}},
+		modelID:  "summary-model",
+		provider: "summary-provider",
+	}
+	primary := Model{
+		Model: model,
+		CatwalkCfg: catwalk.Model{
+			ContextWindow:      200000,
+			DefaultMaxTokens:   1024,
+			CostPer1MIn:        2,
+			CostPer1MOut:       10,
+			CostPer1MInCached:  0.5,
+			CostPer1MOutCached: 99,
+		},
+		ModelCfg: config.SelectedModel{Provider: "config-provider", Model: "config-model"},
+	}
+	agent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:   primary,
+		SmallModel:   primary,
+		PrimaryModel: primary,
+		SystemPrompt: "sys",
+		Sessions:     env.sessions,
+		Messages:     env.messages,
+	}).(*sessionAgent)
+
+	summary := NewRunUsageSummary(sess.ID, time.Now())
+	ctx := ContextWithRunUsageSummary(t.Context(), summary)
+	err = agent.Summarize(ctx, sess.ID, fantasy.ProviderOptions{})
+	require.NoError(t, err)
+
+	require.Equal(t, int64(1200), summary.InputTokens)
+	require.Equal(t, int64(1000), summary.RawInputTokens)
+	require.Equal(t, int64(200), summary.InputCacheHitTokens)
+	require.Equal(t, int64(1100), summary.InputCacheMissTokens)
+	require.Equal(t, int64(50), summary.OutputTokens)
+	require.InDelta(t, 0.00265, summary.CostUSD, 0.0000001)
+}
+
 func TestAgent_Summarize_UsesNormalSystemPromptAndFinalCompactUserInstruction(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)

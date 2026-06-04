@@ -103,6 +103,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 
 	openrouterCost := a.openrouterCost(providerMeta)
 	a.updateSessionUsage(summaryModel, &currentSession, totalUsage, openrouterCost)
+	RunUsageSummaryFromContext(ctx).AddUsage(summaryModel, totalUsage, usageCost(summaryModel, totalUsage, openrouterCost))
 	currentSession.SummaryMessageID = summaryMessage.ID
 	currentSession.CompletionTokens = totalUsage.OutputTokens
 	currentSession.PromptTokens = 0
