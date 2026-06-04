@@ -786,6 +786,33 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 		require.Equal(t, "https://api.custom.com/v1", customProvider.BaseURL)
 	})
 
+	t.Run("custom provider normalizes cache read pricing from input cached pricing", func(t *testing.T) {
+		cfg := &Config{
+			Providers: csync.NewMapFrom(map[string]ProviderConfig{
+				"deepseek-main": {
+					APIKey:  "test-key",
+					BaseURL: "https://api.deepseek.com/v1",
+					Type:    catwalk.TypeOpenAICompat,
+					Models: []catwalk.Model{{
+						ID:                "deepseek-v4-flash",
+						CostPer1MInCached: 0.0028,
+					}},
+				},
+			}),
+		}
+		cfg.setDefaults("/tmp", "")
+
+		env := env.NewFromMap(map[string]string{})
+		resolver := NewEnvironmentVariableResolver(env)
+		err := cfg.configureProviders(testStore(cfg), env, resolver, []catwalk.Provider{})
+		require.NoError(t, err)
+
+		customProvider, exists := cfg.Providers.Get("deepseek-main")
+		require.True(t, exists)
+		require.Len(t, customProvider.Models, 1)
+		require.Equal(t, 0.0028, customProvider.Models[0].CostPer1MOutCached)
+	})
+
 	t.Run("custom anthropic provider is supported", func(t *testing.T) {
 		cfg := &Config{
 			Providers: csync.NewMapFrom(map[string]ProviderConfig{

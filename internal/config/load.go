@@ -158,7 +158,7 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 
 	for _, p := range knownProviders {
 		knownProviderNames[string(p.ID)] = true
-		normalizeKnownProviderPricing(&p)
+		normalizeProviderModelPricing(p.Models)
 		config, configExists := c.Providers.Get(string(p.ID))
 		// if the user configured a known provider we need to allow it to override a couple of parameters
 		if configExists {
@@ -366,6 +366,7 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 			providerConfig.ExtraHeaders[k] = resolved
 		}
 
+		normalizeProviderModelPricing(providerConfig.Models)
 		c.Providers.Set(id, providerConfig)
 	}
 
@@ -376,9 +377,9 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 	return nil
 }
 
-func normalizeKnownProviderPricing(provider *catwalk.Provider) {
-	for i := range provider.Models {
-		model := &provider.Models[i]
+func normalizeProviderModelPricing(models []catwalk.Model) {
+	for i := range models {
+		model := &models[i]
 		if model.CostPer1MOutCached != 0 || model.CostPer1MInCached == 0 {
 			continue
 		}
