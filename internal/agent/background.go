@@ -26,19 +26,25 @@ type backgroundJob struct {
 // completes, it calls the enqueue callback so the session agent can inject
 // a runtime notification into the model stream.
 type BackgroundRunner struct {
-	mu       sync.Mutex
-	active   map[string]*backgroundJob
-	enqueue  func(msg string)
-	onIdle   func()
-	onIdleMu sync.Mutex
+	mu         sync.Mutex
+	active     map[string]*backgroundJob
+	idleCh     chan struct{}
+	idleClosed bool
+	enqueue    func(msg string)
+	onIdle     func()
+	onIdleMu   sync.Mutex
 }
 
 // NewBackgroundRunner creates a dormant runner. Track must be called to
 // register jobs; the runner is passive — goroutines call back when done.
 func NewBackgroundRunner(enqueue func(msg string)) *BackgroundRunner {
+	idleCh := make(chan struct{})
+	close(idleCh)
 	return &BackgroundRunner{
-		active:  make(map[string]*backgroundJob),
-		enqueue: enqueue,
+		active:     make(map[string]*backgroundJob),
+		idleCh:     idleCh,
+		idleClosed: true,
+		enqueue:    enqueue,
 	}
 }
 
@@ -47,6 +53,10 @@ func NewBackgroundRunner(enqueue func(msg string)) *BackgroundRunner {
 // The caller must start the goroutine before calling Track.
 func (r *BackgroundRunner) Track(jobID, command string, cancel context.CancelFunc, resultCh <-chan backgroundResult) {
 	r.mu.Lock()
+	if len(r.active) == 0 {
+		r.idleCh = make(chan struct{})
+		r.idleClosed = false
+	}
 	r.active[jobID] = &backgroundJob{
 		BackgroundJob: BackgroundJob{ID: jobID, Command: command},
 		cancel:        cancel,
@@ -69,13 +79,7 @@ func (r *BackgroundRunner) Track(jobID, command string, cancel context.CancelFun
 		// enqueue: the runner no longer owns this job.
 		if !stillActive {
 			if idle {
-				r.onIdleMu.Lock()
-				f := r.onIdle
-				r.onIdle = nil
-				r.onIdleMu.Unlock()
-				if f != nil {
-					f()
-				}
+				r.finishIdle()
 			}
 			return
 		}
@@ -87,13 +91,7 @@ func (r *BackgroundRunner) Track(jobID, command string, cancel context.CancelFun
 		}
 
 		if idle {
-			r.onIdleMu.Lock()
-			f := r.onIdle
-			r.onIdle = nil
-			r.onIdleMu.Unlock()
-			if f != nil {
-				f()
-			}
+			r.finishIdle()
 		}
 	}()
 }
@@ -111,6 +109,41 @@ func (r *BackgroundRunner) ActiveCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.active)
+}
+
+// WaitIdle blocks until all tracked background jobs finish or ctx is canceled.
+func (r *BackgroundRunner) WaitIdle(ctx context.Context) error {
+	r.mu.Lock()
+	if len(r.active) == 0 {
+		r.mu.Unlock()
+		return nil
+	}
+	idleCh := r.idleCh
+	r.mu.Unlock()
+
+	select {
+	case <-idleCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *BackgroundRunner) finishIdle() {
+	r.mu.Lock()
+	if !r.idleClosed {
+		close(r.idleCh)
+		r.idleClosed = true
+	}
+	r.mu.Unlock()
+
+	r.onIdleMu.Lock()
+	f := r.onIdle
+	r.onIdle = nil
+	r.onIdleMu.Unlock()
+	if f != nil {
+		f()
+	}
 }
 
 // ListActive returns all tracked background jobs sorted by ID.
@@ -151,9 +184,16 @@ func (r *BackgroundRunner) KillJob(jobID string) error {
 func (r *BackgroundRunner) StopAll() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if len(r.active) == 0 {
+		return
+	}
 	for id, job := range r.active {
 		job.cancel()
 		delete(r.active, id)
+	}
+	if !r.idleClosed {
+		close(r.idleCh)
+		r.idleClosed = true
 	}
 }
 

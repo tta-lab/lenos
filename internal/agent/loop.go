@@ -164,6 +164,15 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		}
 		// Plain exit in a run block ends the turn, same as prose-only.
 		if strings.TrimSpace(bashCmd) == lenosbash.ExitCommand {
+			if deps.bgRunner != nil && deps.bgRunner.ActiveCount() > 0 {
+				if waitErr := deps.bgRunner.WaitIdle(ctx); waitErr != nil {
+					return stopError, waitErr
+				}
+				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+				msgs = append(msgs, assistantTextMessage(emit, assistantMsg.ReasoningContent()))
+				msgs = drainAndAppend(ctx, deps, msgs)
+				continue
+			}
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 				slog.Warn("loop: persist exit finish", "error", updateErr)

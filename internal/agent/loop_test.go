@@ -906,6 +906,39 @@ func TestRunLoop_BackgroundJobStartDoesNotTeachManualJobControl(t *testing.T) {
 	assert.NotContains(t, obs, "temenos job log")
 }
 
+func TestRunLoop_ExitWaitsForActiveBackgroundJobResult(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{emits: []string{
+		lenosbash.BashBlock("sleep 20"),
+		lenosbash.BashBlock(lenosbash.ExitCommand),
+		"done",
+	}}
+	resultCh := make(chan backgroundResult, 1)
+	bgRunner := NewBackgroundRunner(nil)
+	runner := &fakeRunner{results: []ExecResult{
+		{Background: true, JobID: "job-123", Duration: time.Second * 16},
+	}}
+	runner.onRun = func(bash string, _ map[string]string, _ []AllowedPath) {
+		bgRunner.Track("job-123", bash, func() {}, resultCh)
+	}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.bgRunner = bgRunner
+
+	go func() {
+		resultCh <- backgroundResult{
+			stdout:   "ok\n",
+			exitCode: 0,
+		}
+	}()
+
+	stop, err := runLoop(context.Background(), deps, nil, "run slow")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+
+	assert.Equal(t, 3, model.calls)
+}
+
 func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{lenosbash.BashBlock("nopebinary"), "exit"}}
