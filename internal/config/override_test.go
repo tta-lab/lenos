@@ -224,15 +224,20 @@ func TestApplyEphemeralModelOverride(t *testing.T) {
 	}
 
 	cases := []struct {
-		name          string
-		modelOverride string
-		useSmallTier  bool
-		wantTier      SelectedModelType
-		wantModel     *SelectedModel
-		wantErr       string
+		name            string
+		modelOverride   string
+		useSmallTier    bool
+		defaultTier     SelectedModelType
+		reasoningEffort string
+		wantTier        SelectedModelType
+		wantModel       *SelectedModel
+		wantErr         string
 	}{
 		{name: "no-op", modelOverride: "", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: ""},
 		{name: "small-tier-only", modelOverride: "", useSmallTier: true, wantTier: SelectedModelTypeSmall, wantModel: nil, wantErr: ""},
+		{name: "review-tier-only", modelOverride: "", useSmallTier: false, defaultTier: SelectedModelTypeReview, wantTier: SelectedModelTypeReview, wantModel: nil, wantErr: ""},
+		{name: "large-reasoning-effort", modelOverride: "", useSmallTier: false, reasoningEffort: "high", wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{ReasoningEffort: "high"}, wantErr: ""},
+		{name: "invalid-reasoning-effort", modelOverride: "", useSmallTier: false, reasoningEffort: "low", wantTier: SelectedModelTypeLarge, wantModel: nil, wantErr: "invalid reasoning effort"},
 		{name: "large-override-name-only", modelOverride: "gpt-4o", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
 		{name: "small-override-with-flag", modelOverride: "gpt-4o", useSmallTier: true, wantTier: SelectedModelTypeSmall, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
 		{name: "provider-prefixed", modelOverride: "openai/gpt-4o", useSmallTier: false, wantTier: SelectedModelTypeLarge, wantModel: &SelectedModel{Provider: "openai", Model: "gpt-4o"}, wantErr: ""},
@@ -256,7 +261,7 @@ func TestApplyEphemeralModelOverride(t *testing.T) {
 				},
 			}
 
-			err := ApplyEphemeralModelOverride(store, tt.modelOverride, tt.useSmallTier)
+			err := ApplyEphemeralModelOverride(store, tt.modelOverride, tt.useSmallTier, tt.defaultTier, tt.reasoningEffort)
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.wantErr)

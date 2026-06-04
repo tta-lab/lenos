@@ -65,4 +65,5 @@ lenos review -m gpt-5
 func init() {
 	reviewCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
 	reviewCmd.Flags().Bool("small-model", false, "Use the small-tier model for this session")
+	reviewCmd.Flags().String("reasoning-effort", "", "Reasoning effort for this session: medium, high, or xhigh")
 }

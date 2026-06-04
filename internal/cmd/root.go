@@ -40,6 +40,7 @@ func init() {
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	rootCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
 	rootCmd.Flags().Bool("small-model", false, "Use the small-tier model for this session")
+	rootCmd.Flags().String("reasoning-effort", "", "Reasoning effort for this session: medium, high, or xhigh")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	rootCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	rootCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
@@ -266,8 +267,13 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 	// Apply ephemeral model overrides from CLI flags.
 	modelOverride, _ := cmd.Flags().GetString("model")
 	useSmallTier, _ := cmd.Flags().GetBool("small-model")
-	if modelOverride != "" || useSmallTier {
-		if err := config.ApplyEphemeralModelOverride(store, modelOverride, useSmallTier); err != nil {
+	reasoningEffort, _ := cmd.Flags().GetString("reasoning-effort")
+	defaultTier := config.SelectedModelTypeLarge
+	if agentName == config.AgentReviewer {
+		defaultTier = config.SelectedModelTypeReview
+	}
+	if modelOverride != "" || useSmallTier || reasoningEffort != "" || defaultTier != config.SelectedModelTypeLarge {
+		if err := config.ApplyEphemeralModelOverride(store, modelOverride, useSmallTier, defaultTier, reasoningEffort); err != nil {
 			return nil, nil, fmt.Errorf("failed to apply model override: %w", err)
 		}
 	}

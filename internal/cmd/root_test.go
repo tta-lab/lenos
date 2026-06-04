@@ -32,6 +32,13 @@ func TestRootCmd_PairWithFlagDeclared(t *testing.T) {
 	require.Equal(t, "", f.DefValue, "--pair-with default must be empty")
 }
 
+func TestRootCmd_ReasoningEffortFlagDeclared(t *testing.T) {
+	f := rootCmd.Flags().Lookup("reasoning-effort")
+	require.NotNil(t, f, "--reasoning-effort flag must be declared on rootCmd")
+	require.Equal(t, "", f.Shorthand, "--reasoning-effort should have no shorthand")
+	require.Equal(t, "", f.DefValue, "--reasoning-effort default must be empty")
+}
+
 func TestRootCmd_PairWithFlagParse(t *testing.T) {
 	err := rootCmd.ParseFlags([]string{"--pair-with", "reviewer"})
 	require.NoError(t, err)
