@@ -319,20 +319,24 @@ func (a *sessionAgent) openrouterCost(metadata fantasy.ProviderMetadata) *float6
 	return &opts.Usage.Cost
 }
 
-func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage fantasy.Usage, overrideCost *float64) {
+func usageCost(model Model, usage fantasy.Usage, overrideCost *float64) float64 {
+	if overrideCost != nil {
+		return *overrideCost
+	}
+
 	modelConfig := model.CatwalkCfg
-	cost := modelConfig.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
-		modelConfig.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
+	return modelConfig.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
+		modelConfig.CostPer1MInCached/1e6*float64(usage.CacheReadTokens) +
 		modelConfig.CostPer1MIn/1e6*float64(usage.InputTokens) +
 		modelConfig.CostPer1MOut/1e6*float64(usage.OutputTokens)
+}
+
+func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage fantasy.Usage, overrideCost *float64) {
+	cost := usageCost(model, usage, overrideCost)
 
 	a.eventTokensUsed(s.ID, model, usage, cost)
 
-	if overrideCost != nil {
-		s.Cost += *overrideCost
-	} else {
-		s.Cost += cost
-	}
+	s.Cost += cost
 
 	if usage.InputTokens+usage.OutputTokens+usage.CacheCreationTokens+usage.CacheReadTokens == 0 {
 		return

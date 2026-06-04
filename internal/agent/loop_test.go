@@ -729,7 +729,7 @@ func TestRunLoop_PostStepHookCalledPerStep(t *testing.T) {
 	}}
 	rec := &recordingRecorder{}
 	deps, _ := newDeps(t, model, runner, rec)
-	deps.postStepHook = func(stepIdx int, u fantasy.Usage) {
+	deps.postStepHook = func(stepIdx int, u fantasy.Usage, _ fantasy.ProviderMetadata) {
 		mu.Lock()
 		defer mu.Unlock()
 		steps = append(steps, stepIdx)
@@ -764,7 +764,7 @@ func TestRunLoop_PostStepHookFiresBeforeOnUsage(t *testing.T) {
 	}}
 	rec := &recordingRecorder{}
 	deps, _ := newDeps(t, model, runner, rec)
-	deps.postStepHook = func(stepIdx int, u fantasy.Usage) {
+	deps.postStepHook = func(stepIdx int, u fantasy.Usage, _ fantasy.ProviderMetadata) {
 		hookSteps = append(hookSteps, stepIdx)
 	}
 	deps.onUsage = func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) {
@@ -789,7 +789,7 @@ func TestRunLoop_PostStepHookExecutesBeforePreStepAutoCompact(t *testing.T) {
 	}}
 	rec := &recordingRecorder{}
 	deps, _ := newDeps(t, model, runner, rec)
-	deps.postStepHook = func(int, fantasy.Usage) {
+	deps.postStepHook = func(int, fantasy.Usage, fantasy.ProviderMetadata) {
 		hookCalled = true
 	}
 	deps.onUsage = func(int, fantasy.Usage, fantasy.ProviderMetadata) {

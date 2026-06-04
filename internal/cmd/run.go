@@ -55,6 +55,7 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
 			verbose, _   = cmd.Flags().GetBool("verbose")
 			sessionID, _ = cmd.Flags().GetString("session")
 			useLast, _   = cmd.Flags().GetBool("continue")
+			usageJSON, _ = cmd.Flags().GetString("usage-json")
 		)
 
 		// Cancel on SIGINT or SIGTERM.
@@ -103,7 +104,7 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
 			slog.SetDefault(slog.New(log.New(os.Stderr)))
 		}
 
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, quiet || verbose, sessionID, useLast)
+		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, quiet || verbose, sessionID, useLast, usageJSON)
 	},
 }
 
@@ -117,6 +118,7 @@ func init() {
 	runCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")
 	runCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file to inject at startup (repeatable)")
 	runCmd.Flags().String("pair-with", "", "Default target for untargeted message blocks")
+	runCmd.Flags().String("usage-json", "", "Write final usage summary JSON to path")
 	runCmd.Flags().Bool("readonly", false, "Enforce read-only filesystem access on the working directory via the temenos sandbox; agent cannot create or modify files in cwd.")
 	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
 }

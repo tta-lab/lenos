@@ -447,6 +447,92 @@ func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 	assert.Equal(t, int64(290), persisted.CacheReadTokens)
 }
 
+func TestSaveSessionUsage_PricesUncachedInputAndOutput(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	sess, err := env.sessions.Create(t.Context(), "uncached cost")
+	require.NoError(t, err)
+
+	lm := &mockLanguageModel{}
+	agent := testSessionAgent(env, lm, lm, "sys").(*sessionAgent)
+	model := Model{
+		Model: lm,
+		CatwalkCfg: catwalk.Model{
+			CostPer1MIn:  2,
+			CostPer1MOut: 10,
+		},
+	}
+	agent.largeModel.Set(model)
+	agent.primaryModel.Set(model)
+
+	updated, ok := agent.saveSessionUsage(t.Context(), sess.ID, fantasy.Usage{
+		InputTokens:  1000,
+		OutputTokens: 100,
+	}, nil, "save failed")
+	require.True(t, ok)
+
+	require.InDelta(t, 0.003, updated.Cost, 0.0000001)
+}
+
+func TestSaveSessionUsage_PricesCacheReadWithInputCachedRate(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	sess, err := env.sessions.Create(t.Context(), "cache read cost")
+	require.NoError(t, err)
+
+	lm := &mockLanguageModel{}
+	agent := testSessionAgent(env, lm, lm, "sys").(*sessionAgent)
+	model := Model{
+		Model: lm,
+		CatwalkCfg: catwalk.Model{
+			CostPer1MIn:        2,
+			CostPer1MOut:       10,
+			CostPer1MInCached:  0.5,
+			CostPer1MOutCached: 0,
+		},
+	}
+	agent.largeModel.Set(model)
+	agent.primaryModel.Set(model)
+
+	updated, ok := agent.saveSessionUsage(t.Context(), sess.ID, fantasy.Usage{
+		InputTokens:     1000,
+		OutputTokens:    100,
+		CacheReadTokens: 2000,
+	}, nil, "save failed")
+	require.True(t, ok)
+
+	require.InDelta(t, 0.004, updated.Cost, 0.0000001)
+}
+
+func TestSaveSessionUsage_PricesCacheCreationWithInputCachedRate(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+
+	sess, err := env.sessions.Create(t.Context(), "cache creation cost")
+	require.NoError(t, err)
+
+	lm := &mockLanguageModel{}
+	agent := testSessionAgent(env, lm, lm, "sys").(*sessionAgent)
+	model := Model{
+		Model: lm,
+		CatwalkCfg: catwalk.Model{
+			CostPer1MInCached:  0.5,
+			CostPer1MOutCached: 99,
+		},
+	}
+	agent.largeModel.Set(model)
+	agent.primaryModel.Set(model)
+
+	updated, ok := agent.saveSessionUsage(t.Context(), sess.ID, fantasy.Usage{
+		CacheCreationTokens: 2000,
+	}, nil, "save failed")
+	require.True(t, ok)
+
+	require.InDelta(t, 0.001, updated.Cost, 0.0000001)
+}
+
 func TestRun_BusySession_QueuesPrompt(t *testing.T) {
 	t.Parallel()
 

@@ -244,6 +244,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 	return SessionAgentCall{
 		SessionID:       sessionID,
 		Prompt:          userPrompt,
+		usageSummary:    RunUsageSummaryFromContext(ctx),
 		ProviderOptions: getProviderOptions(model, providerCfg),
 		PairWith:        c.cfg.Overrides().PairWith,
 		Sandbox:         useSandbox,

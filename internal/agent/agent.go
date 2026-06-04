@@ -60,6 +60,7 @@ type SessionAgentCall struct {
 	// the model without persisting a user-visible chat row.
 	runtimePrompt bool
 	turnPrompts   []turnPrompt
+	usageSummary  *RunUsageSummary
 
 	// ProviderOptions are the per-provider streaming options merged from
 	// catwalk + provider config + model config (anthropic thinking, openai

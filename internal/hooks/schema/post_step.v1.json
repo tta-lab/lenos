@@ -20,6 +20,7 @@
     "reasoning_tokens": {"type": "integer", "minimum": 0},
     "cache_creation_tokens": {"type": "integer", "minimum": 0},
     "cache_read_tokens": {"type": "integer", "minimum": 0},
+    "cost_usd": {"type": "number", "minimum": 0},
     "context_used_pct": {"type": "number", "minimum": 0, "maximum": 100},
     "context_remaining_pct": {"type": "number", "minimum": 0, "maximum": 100},
     "timestamp": {"type": "string", "format": "date-time"}

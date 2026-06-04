@@ -167,11 +167,12 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 
 // RunNonInteractive runs the application in non-interactive mode with the
 // given prompt, printing to stdout.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt string, hideSpinner bool, continueSessionID string, useLast bool) error {
+func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt string, hideSpinner bool, continueSessionID string, useLast bool, usageSummaryPath string) error {
 	slog.Info("Running in non-interactive mode")
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	startedAt := time.Now()
 
 	var (
 		spinner   *format.Spinner
@@ -235,6 +236,18 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt 
 		slog.Info("Created session for non-interactive run", "session_id", sess.ID)
 	}
 
+	usageSummary := agent.NewRunUsageSummary(sess.ID, startedAt)
+	if usageSummaryPath != "" {
+		ctx = agent.ContextWithRunUsageSummary(ctx, usageSummary)
+	}
+	finishUsageSummary := func() error {
+		if usageSummaryPath == "" {
+			return nil
+		}
+		usageSummary.Finish(time.Now())
+		return agent.WriteRunUsageSummaryFile(usageSummaryPath, usageSummary)
+	}
+
 	// Automatically approve all permission requests for this non-interactive
 	// session.
 	_ = sess.ID // sess.ID available if permission system is re-enabled
@@ -279,14 +292,16 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt 
 		select {
 		case result := <-done:
 			stopSpinner()
+			usageErr := finishUsageSummary()
 			if result.err != nil {
 				if errors.Is(result.err, context.Canceled) || errors.Is(result.err, agent.ErrRequestCancelled) {
 					slog.Debug("Non-interactive: agent processing cancelled", "session_id", sess.ID)
-					return nil
+					return usageErr
 				}
-				return fmt.Errorf("agent processing failed: %w", result.err)
+				runErr := fmt.Errorf("agent processing failed: %w", result.err)
+				return errors.Join(runErr, usageErr)
 			}
-			return nil
+			return usageErr
 
 		case event := <-messageEvents:
 			msg := event.Payload
@@ -317,7 +332,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt 
 
 		case <-ctx.Done():
 			stopSpinner()
-			return ctx.Err()
+			return errors.Join(ctx.Err(), finishUsageSummary())
 		}
 	}
 }

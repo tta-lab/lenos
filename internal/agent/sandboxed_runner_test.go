@@ -21,6 +21,15 @@ func hasSandbox(t *testing.T) bool {
 	return sbx.IsAvailable()
 }
 
+func setAutoBackgroundAfterForTest(t *testing.T, d time.Duration) {
+	t.Helper()
+	prev := defaultAutoBackgroundAfter
+	defaultAutoBackgroundAfter = d
+	t.Cleanup(func() {
+		defaultAutoBackgroundAfter = prev
+	})
+}
+
 func TestSandboxedRunner_SynchronousCompletion(t *testing.T) {
 	if !hasSandbox(t) {
 		t.Skip("sandbox not available")
@@ -80,6 +89,7 @@ func TestSandboxedRunner_AutoBackground(t *testing.T) {
 	if !hasSandbox(t) {
 		t.Skip("sandbox not available")
 	}
+	setAutoBackgroundAfterForTest(t, 20*time.Millisecond)
 
 	// Use a BackgroundRunner that captures the enqueued message.
 	var bgMsg string
@@ -90,8 +100,8 @@ func TestSandboxedRunner_AutoBackground(t *testing.T) {
 	runner := &SandboxedRunner{bg: bg}
 	res := runner.Run(
 		context.Background(),
-		// Sleep beyond the auto-background threshold to trigger background handoff.
-		"sleep 60",
+		// Loop beyond the auto-background threshold to trigger background handoff.
+		"while true; do :; done",
 		map[string]string{"PATH": "/usr/bin:/bin"},
 		[]AllowedPath{{Path: t.TempDir()}},
 	)
@@ -117,24 +127,25 @@ func TestSandboxedRunner_NoBackgroundRunner_WaitsForCompletion(t *testing.T) {
 	if !hasSandbox(t) {
 		t.Skip("sandbox not available")
 	}
+	setAutoBackgroundAfterForTest(t, time.Nanosecond)
 
 	// No BackgroundRunner — the runner should wait for the command to finish,
 	// not return Background: true.
 	runner := &SandboxedRunner{bg: nil}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Use a command that exceeds the auto-background threshold but completes.
 	res := runner.Run(
 		ctx,
-		// 35s total: exceeds 30s auto-bg threshold but completes before ctx timeout.
-		"sleep 35",
+		"i=0; while [ $i -lt 200000 ]; do i=$((i+1)); done; echo done",
 		map[string]string{"PATH": "/usr/bin:/bin"},
 		[]AllowedPath{{Path: t.TempDir()}},
 	)
 
 	require.NoError(t, res.Err)
 	assert.False(t, res.Background, "without BackgroundRunner, should wait synchronously")
+	assert.Contains(t, string(res.Stdout), "done")
 	assert.NotZero(t, res.Duration)
 }
 
@@ -150,14 +161,14 @@ func TestSandboxedRunner_ContextCancel(t *testing.T) {
 	// Cancel the context before the command finishes.
 	done := make(chan struct{})
 	go func() {
-		time.Sleep(5 * time.Second)
+		time.Sleep(50 * time.Millisecond)
 		cancel()
 		close(done)
 	}()
 
 	res := runner.Run(
 		ctx,
-		"sleep 60",
+		"while true; do :; done",
 		map[string]string{"PATH": "/usr/bin:/bin"},
 		[]AllowedPath{{Path: t.TempDir()}},
 	)

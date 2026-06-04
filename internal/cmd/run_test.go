@@ -13,6 +13,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringArrayP("context-file", "f", nil, "")
 	cmd.Flags().Bool("readonly", false, "")
 	cmd.Flags().String("pair-with", "", "")
+	cmd.Flags().String("usage-json", "", "")
 	return cmd
 }
 
@@ -80,6 +81,20 @@ func TestRunCmd_PairWithFlagDeclared(t *testing.T) {
 	require.NotNil(t, f, "--pair-with flag must be declared on runCmd")
 	require.Equal(t, "", f.Shorthand, "--pair-with should have no shorthand")
 	require.Equal(t, "", f.DefValue, "--pair-with default must be empty")
+}
+
+func TestRunCmd_UsageJSONFlagDeclared(t *testing.T) {
+	f := runCmd.Flags().Lookup("usage-json")
+	require.NotNil(t, f, "--usage-json flag must be declared on runCmd")
+}
+
+func TestRunCmd_UsageJSONFlagParse(t *testing.T) {
+	cmd := newRunCmd()
+	err := cmd.ParseFlags([]string{"--usage-json", "/tmp/usage.json"})
+	require.NoError(t, err)
+	value, err := cmd.Flags().GetString("usage-json")
+	require.NoError(t, err)
+	require.Equal(t, "/tmp/usage.json", value)
 }
 
 func TestRunCmd_PairWithFlagParse(t *testing.T) {
