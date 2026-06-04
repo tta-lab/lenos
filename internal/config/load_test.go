@@ -154,13 +154,14 @@ func TestConfig_configureProvidersMergesKnownModelPricingIntoOverride(t *testing
 			APIKey:      "$DEEPSEEK_API_KEY",
 			APIEndpoint: "https://api.deepseek.com/v1",
 			Models: []catwalk.Model{{
-				ID:                "deepseek-v4-flash",
-				Name:              "DeepSeek V4 Flash",
-				CostPer1MIn:       0.27,
-				CostPer1MOut:      0.85,
-				CostPer1MInCached: 0.07,
-				ContextWindow:     128000,
-				DefaultMaxTokens:  8192,
+				ID:                 "deepseek-v4-flash",
+				Name:               "DeepSeek V4 Flash",
+				CostPer1MIn:        0.27,
+				CostPer1MOut:       0.85,
+				CostPer1MInCached:  0.07,
+				CostPer1MOutCached: 0.03,
+				ContextWindow:      128000,
+				DefaultMaxTokens:   8192,
 			}},
 		},
 	}
@@ -192,6 +193,42 @@ func TestConfig_configureProvidersMergesKnownModelPricingIntoOverride(t *testing
 	require.Equal(t, 0.27, pc.Models[0].CostPer1MIn)
 	require.Equal(t, 0.85, pc.Models[0].CostPer1MOut)
 	require.Equal(t, 0.07, pc.Models[0].CostPer1MInCached)
+	require.Equal(t, 0.03, pc.Models[0].CostPer1MOutCached)
+}
+
+func TestConfig_configureProvidersNormalizesDeepSeekCacheReadPricing(t *testing.T) {
+	knownProviders := []catwalk.Provider{
+		{
+			ID:          catwalk.InferenceProviderDeepSeek,
+			APIKey:      "$DEEPSEEK_API_KEY",
+			APIEndpoint: "https://api.deepseek.com/v1",
+			Models: []catwalk.Model{
+				{
+					ID:                "deepseek-v4-flash",
+					CostPer1MInCached: 0.0028,
+				},
+				{
+					ID:                "deepseek-v4-pro",
+					CostPer1MInCached: 0.003625,
+				},
+			},
+		},
+	}
+
+	cfg := &Config{}
+	cfg.setDefaults("/tmp", "")
+	env := env.NewFromMap(map[string]string{
+		"DEEPSEEK_API_KEY": "test-key",
+	})
+	resolver := NewEnvironmentVariableResolver(env)
+	err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
+	require.NoError(t, err)
+
+	pc, ok := cfg.Providers.Get("deepseek")
+	require.True(t, ok)
+	require.Len(t, pc.Models, 2)
+	require.Equal(t, 0.0028, pc.Models[0].CostPer1MOutCached)
+	require.Equal(t, 0.003625, pc.Models[1].CostPer1MOutCached)
 }
 
 func TestConfig_configureProvidersDoesNotMergeKnownModelCapabilitiesIntoOverride(t *testing.T) {

@@ -158,6 +158,7 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 
 	for _, p := range knownProviders {
 		knownProviderNames[string(p.ID)] = true
+		normalizeKnownProviderPricing(&p)
 		config, configExists := c.Providers.Get(string(p.ID))
 		// if the user configured a known provider we need to allow it to override a couple of parameters
 		if configExists {
@@ -184,7 +185,7 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 						model, mergedPricing = mergeKnownModelPricing(model, knownModel)
 						if mergedPricing {
 							slog.Warn(
-								"Merged catalog pricing into known-provider model override",
+								"Zero pricing fields in known-provider model override are treated as missing; merged catalog pricing",
 								"provider", p.ID,
 								"model", model.ID,
 							)
@@ -373,6 +374,19 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 	}
 
 	return nil
+}
+
+func normalizeKnownProviderPricing(provider *catwalk.Provider) {
+	if provider.ID != catwalk.InferenceProviderDeepSeek {
+		return
+	}
+	for i := range provider.Models {
+		model := &provider.Models[i]
+		if model.CostPer1MOutCached != 0 || model.CostPer1MInCached == 0 {
+			continue
+		}
+		model.CostPer1MOutCached = model.CostPer1MInCached
+	}
 }
 
 func mergeKnownModelPricing(model, known catwalk.Model) (catwalk.Model, bool) {
