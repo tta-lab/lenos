@@ -14,32 +14,52 @@ import (
 // useSmallTier and optionally overrides the active tier's model.
 // If modelOverride is empty, only the active tier is set (no model mutation).
 // This is the single override path for both `lenos` and `lenos run`.
-func ApplyEphemeralModelOverride(store *ConfigStore, modelOverride string, useSmallTier bool) error {
-	activeTier := SelectedModelTypeLarge
+func ApplyEphemeralModelOverride(store *ConfigStore, modelOverride string, useSmallTier bool, defaultTier SelectedModelType, reasoningEffort string) error {
+	activeTier := defaultTier
+	if activeTier == "" {
+		activeTier = SelectedModelTypeLarge
+	}
 	if useSmallTier {
 		activeTier = SelectedModelTypeSmall
 	}
 	store.Overrides().ActiveTier = activeTier
 
-	if modelOverride == "" {
+	if reasoningEffort != "" {
+		switch reasoningEffort {
+		case "medium", "high", "xhigh":
+		default:
+			return fmt.Errorf("invalid reasoning effort %q: must be medium, high, or xhigh", reasoningEffort)
+		}
+	}
+
+	if modelOverride != "" {
+		providers := store.config.Providers.Copy()
+		matches, err := findModels(providers, modelOverride)
+		if err != nil {
+			return err
+		}
+		found, err := validateMatches(matches, modelOverride, string(activeTier))
+		if err != nil {
+			return err
+		}
+
+		slog.Info("Overriding model for session", "tier", activeTier, "provider", found.Provider, "model", found.ModelID)
+		store.config.Models[activeTier] = SelectedModel{
+			Provider: found.Provider,
+			Model:    found.ModelID,
+		}
+	}
+
+	if reasoningEffort == "" {
 		return nil
 	}
 
-	providers := store.config.Providers.Copy()
-	matches, err := findModels(providers, modelOverride)
-	if err != nil {
-		return err
+	model, ok := store.config.Models[activeTier]
+	if !ok || model.Model == "" {
+		return nil
 	}
-	found, err := validateMatches(matches, modelOverride, string(activeTier))
-	if err != nil {
-		return err
-	}
-
-	slog.Info("Overriding model for session", "tier", activeTier, "provider", found.Provider, "model", found.ModelID)
-	store.config.Models[activeTier] = SelectedModel{
-		Provider: found.Provider,
-		Model:    found.ModelID,
-	}
+	model.ReasoningEffort = reasoningEffort
+	store.config.Models[activeTier] = model
 	return nil
 }
 

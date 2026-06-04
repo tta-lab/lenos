@@ -45,14 +45,16 @@ import (
 
 // Coordinator errors.
 var (
-	errCoderAgentNotConfigured         = errors.New("coder agent not configured")
-	errModelProviderNotConfigured      = errors.New("model provider not configured")
-	errLargeModelNotSelected           = errors.New("large model not selected")
-	errSmallModelNotSelected           = errors.New("small model not selected")
-	errLargeModelProviderNotConfigured = errors.New("large model provider not configured")
-	errSmallModelProviderNotConfigured = errors.New("small model provider not configured")
-	errLargeModelNotFound              = errors.New("large model not found in provider config")
-	errSmallModelNotFound              = errors.New("small model not found in provider config")
+	errCoderAgentNotConfigured          = errors.New("coder agent not configured")
+	errModelProviderNotConfigured       = errors.New("model provider not configured")
+	errLargeModelNotSelected            = errors.New("large model not selected")
+	errSmallModelNotSelected            = errors.New("small model not selected")
+	errLargeModelProviderNotConfigured  = errors.New("large model provider not configured")
+	errSmallModelProviderNotConfigured  = errors.New("small model provider not configured")
+	errReviewModelProviderNotConfigured = errors.New("review model provider not configured")
+	errLargeModelNotFound               = errors.New("large model not found in provider config")
+	errSmallModelNotFound               = errors.New("small model not found in provider config")
+	errReviewModelNotFound              = errors.New("review model not found in provider config")
 )
 
 type Coordinator interface {
@@ -120,10 +122,18 @@ func NewCoordinator(
 		hookRunner = hooks.ShellRunner{Command: h.PostStep}
 	}
 
-	// Resolve primary model based on RuntimeOverrides.ActiveTier.
 	primary := large
-	if c.cfg.Overrides().ActiveTier == config.SelectedModelTypeSmall {
+	switch c.cfg.Overrides().ActiveTier {
+	case config.SelectedModelTypeSmall:
 		primary = small
+	case config.SelectedModelTypeReview:
+		reviewCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeReview]
+		if ok && reviewCfg.Model != "" {
+			primary, err = c.buildSelectedModel(ctx, reviewCfg, false, errReviewModelProviderNotConfigured, errReviewModelNotFound)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	c.currentAgent = NewSessionAgent(SessionAgentOptions{
@@ -502,6 +512,45 @@ func (c *coordinator) buildAgentModels(ctx context.Context, isSubAgent bool) (Mo
 		}, nil
 }
 
+func (c *coordinator) buildSelectedModel(ctx context.Context, modelCfg config.SelectedModel, isSubAgent bool, providerNotConfiguredErr, modelNotFoundErr error) (Model, error) {
+	providerCfg, ok := c.cfg.Config().Providers.Get(modelCfg.Provider)
+	if !ok {
+		return Model{}, providerNotConfiguredErr
+	}
+
+	provider, err := c.buildProvider(providerCfg, modelCfg, isSubAgent)
+	if err != nil {
+		return Model{}, err
+	}
+
+	var catwalkModel *catwalk.Model
+	for _, m := range providerCfg.Models {
+		if m.ID == modelCfg.Model {
+			catwalkModel = &m
+		}
+	}
+
+	if catwalkModel == nil {
+		return Model{}, modelNotFoundErr
+	}
+
+	modelID := modelCfg.Model
+	if modelCfg.Provider == openrouter.Name && isExactoSupported(modelID) {
+		modelID += ":exacto"
+	}
+
+	languageModel, err := provider.LanguageModel(ctx, modelID)
+	if err != nil {
+		return Model{}, err
+	}
+
+	return Model{
+		Model:      languageModel,
+		CatwalkCfg: *catwalkModel,
+		ModelCfg:   modelCfg,
+	}, nil
+}
+
 func (c *coordinator) buildAnthropicProvider(baseURL, apiKey string, headers map[string]string, providerID string) (fantasy.Provider, error) {
 	var opts []anthropic.Option
 
@@ -826,10 +875,18 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// Resolve primary based on RuntimeOverrides.ActiveTier.
 	primary := large
-	if c.cfg.Overrides().ActiveTier == config.SelectedModelTypeSmall {
+	switch c.cfg.Overrides().ActiveTier {
+	case config.SelectedModelTypeSmall:
 		primary = small
+	case config.SelectedModelTypeReview:
+		reviewCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeReview]
+		if ok && reviewCfg.Model != "" {
+			primary, err = c.buildSelectedModel(ctx, reviewCfg, false, errReviewModelProviderNotConfigured, errReviewModelNotFound)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	c.currentAgent.SetModels(large, small, primary)
 

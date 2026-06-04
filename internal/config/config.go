@@ -53,8 +53,9 @@ func (s SelectedModelType) String() string {
 }
 
 const (
-	SelectedModelTypeLarge SelectedModelType = "large"
-	SelectedModelTypeSmall SelectedModelType = "small"
+	SelectedModelTypeLarge  SelectedModelType = "large"
+	SelectedModelTypeSmall  SelectedModelType = "small"
+	SelectedModelTypeReview SelectedModelType = "review"
 )
 
 const (
@@ -287,7 +288,7 @@ func (t ToolGrep) GetTimeout() time.Duration {
 type Config struct {
 	Schema string `json:"$schema,omitempty"`
 
-	// We currently only support large/small as values here.
+	// Model configurations for each tier.
 	Models map[SelectedModelType]SelectedModel `json:"models,omitempty" jsonschema:"description=Model configurations for different model types,example={\"large\":{\"model\":\"gpt-4o\",\"provider\":\"openai\"}}"`
 
 	// Recently used models stored in the data directory config.

@@ -113,6 +113,7 @@ func init() {
 	runCmd.Flags().BoolP("verbose", "v", false, "Show logs")
 	runCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
 	runCmd.Flags().Bool("small-model", false, "Use the small-tier model for this session")
+	runCmd.Flags().String("reasoning-effort", "", "Reasoning effort for this session: medium, high, or xhigh")
 	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	runCmd.Flags().StringP("agent", "a", "", "Agent identity file name (e.g. coder) to inject as context")

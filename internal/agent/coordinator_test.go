@@ -373,6 +373,27 @@ func TestIsUnauthorized(t *testing.T) {
 	}
 }
 
+func TestBuildSelectedModel_ReviewErrorsNameReviewTier(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	cfg, err := config.Init(tmp, "", false)
+	require.NoError(t, err)
+
+	c := &coordinator{cfg: cfg}
+	_, err = c.buildSelectedModel(context.Background(), config.SelectedModel{
+		Provider: "missing-provider",
+		Model:    "review-model",
+	}, false, errReviewModelProviderNotConfigured, errReviewModelNotFound)
+
+	require.ErrorIs(t, err, errReviewModelProviderNotConfigured)
+	require.Contains(t, err.Error(), "review model provider not configured")
+}
+
 // _newCoordinatorSignatureLock is a compile-time guard.
 var _newCoordinatorSignatureLock = func() {
 	_, _ = NewCoordinator(context.TODO(), nil, nil, nil, nil)

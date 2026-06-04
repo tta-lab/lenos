@@ -14,7 +14,16 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().Bool("readonly", false, "")
 	cmd.Flags().String("pair-with", "", "")
 	cmd.Flags().String("usage-json", "", "")
+	cmd.Flags().String("reasoning-effort", "", "")
 	return cmd
+}
+
+func TestRunCmd_ReasoningEffortFlagDeclared(t *testing.T) {
+	cmd := newRunCmd()
+	f := cmd.Flags().Lookup("reasoning-effort")
+	require.NotNil(t, f, "--reasoning-effort flag must be declared on runCmd")
+	require.Equal(t, "", f.Shorthand, "--reasoning-effort should have no shorthand")
+	require.Equal(t, "", f.DefValue, "--reasoning-effort default must be empty")
 }
 
 func TestRunCmd_AgentFlagDeclared(t *testing.T) {
