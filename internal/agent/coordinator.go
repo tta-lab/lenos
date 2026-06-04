@@ -509,6 +509,7 @@ func (c *coordinator) buildAgentModels(ctx context.Context, isSubAgent bool) (Mo
 			ModelCfg:   smallModelCfg,
 		}, nil
 }
+
 func (c *coordinator) buildSelectedModel(ctx context.Context, modelCfg config.SelectedModel, isSubAgent bool, providerNotConfiguredErr, modelNotFoundErr error) (Model, error) {
 	providerCfg, ok := c.cfg.Config().Providers.Get(modelCfg.Provider)
 	if !ok {
