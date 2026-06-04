@@ -11,6 +11,10 @@ plain text.
 The runtime executes the first run block in a fresh subprocess. After
 {{.BashEndTag}}, stop; later text is dropped. Shell state does not persist
 across responses. Without a run block, the turn ends after Markdown is shown.
+Each run block is ephemeral. Filesystem changes persist.
+Environment variables, cwd changes, shell aliases, installed user-site paths, and
+in-memory process state should not be assumed to carry between run blocks
+unless written to files or system locations.
 
 Use normal bash: `&&`, `||`, `;`, `|`, loops, subshells, and heredocs. When a
 command fails, the runtime shows the result and continues the loop. Use `exit`
