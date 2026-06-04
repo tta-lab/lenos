@@ -54,7 +54,10 @@ func ApplyEphemeralModelOverride(store *ConfigStore, modelOverride string, useSm
 		return nil
 	}
 
-	model := store.config.Models[activeTier]
+	model, ok := store.config.Models[activeTier]
+	if !ok || model.Model == "" {
+		return nil
+	}
 	model.ReasoningEffort = reasoningEffort
 	store.config.Models[activeTier] = model
 	return nil

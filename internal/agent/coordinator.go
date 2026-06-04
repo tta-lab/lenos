@@ -45,14 +45,16 @@ import (
 
 // Coordinator errors.
 var (
-	errCoderAgentNotConfigured         = errors.New("coder agent not configured")
-	errModelProviderNotConfigured      = errors.New("model provider not configured")
-	errLargeModelNotSelected           = errors.New("large model not selected")
-	errSmallModelNotSelected           = errors.New("small model not selected")
-	errLargeModelProviderNotConfigured = errors.New("large model provider not configured")
-	errSmallModelProviderNotConfigured = errors.New("small model provider not configured")
-	errLargeModelNotFound              = errors.New("large model not found in provider config")
-	errSmallModelNotFound              = errors.New("small model not found in provider config")
+	errCoderAgentNotConfigured          = errors.New("coder agent not configured")
+	errModelProviderNotConfigured       = errors.New("model provider not configured")
+	errLargeModelNotSelected            = errors.New("large model not selected")
+	errSmallModelNotSelected            = errors.New("small model not selected")
+	errLargeModelProviderNotConfigured  = errors.New("large model provider not configured")
+	errSmallModelProviderNotConfigured  = errors.New("small model provider not configured")
+	errReviewModelProviderNotConfigured = errors.New("review model provider not configured")
+	errLargeModelNotFound               = errors.New("large model not found in provider config")
+	errSmallModelNotFound               = errors.New("small model not found in provider config")
+	errReviewModelNotFound              = errors.New("review model not found in provider config")
 )
 
 type Coordinator interface {
@@ -126,8 +128,8 @@ func NewCoordinator(
 		primary = small
 	case config.SelectedModelTypeReview:
 		reviewCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeReview]
-		if ok {
-			primary, err = c.buildSelectedModel(ctx, reviewCfg, false, errLargeModelProviderNotConfigured, errLargeModelNotFound)
+		if ok && reviewCfg.Model != "" {
+			primary, err = c.buildSelectedModel(ctx, reviewCfg, false, errReviewModelProviderNotConfigured, errReviewModelNotFound)
 			if err != nil {
 				return nil, err
 			}
@@ -879,8 +881,8 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 		primary = small
 	case config.SelectedModelTypeReview:
 		reviewCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeReview]
-		if ok {
-			primary, err = c.buildSelectedModel(ctx, reviewCfg, false, errLargeModelProviderNotConfigured, errLargeModelNotFound)
+		if ok && reviewCfg.Model != "" {
+			primary, err = c.buildSelectedModel(ctx, reviewCfg, false, errReviewModelProviderNotConfigured, errReviewModelNotFound)
 			if err != nil {
 				return err
 			}
