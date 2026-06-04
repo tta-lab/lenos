@@ -77,6 +77,7 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 	assert.Contains(t, got, lenosbash.BashBlock("go test ./..."))
 	assert.Contains(t, got, "Put a blank line before the opening run tag.")
 	assert.Contains(t, got, "tags must start at column 1")
+	assert.Contains(t, got, "Each run block is ephemeral.")
 	assert.NotContains(t, got, "<bash>")
 	assert.NotContains(t, got, "</bash>")
 }
