@@ -196,7 +196,7 @@ func TestConfig_configureProvidersMergesKnownModelPricingIntoOverride(t *testing
 	require.Equal(t, 0.03, pc.Models[0].CostPer1MOutCached)
 }
 
-func TestConfig_configureProvidersNormalizesDeepSeekCacheReadPricing(t *testing.T) {
+func TestConfig_configureProvidersNormalizesCacheReadPricingFromInputCachedPricing(t *testing.T) {
 	knownProviders := []catwalk.Provider{
 		{
 			ID:          catwalk.InferenceProviderDeepSeek,
@@ -213,12 +213,28 @@ func TestConfig_configureProvidersNormalizesDeepSeekCacheReadPricing(t *testing.
 				},
 			},
 		},
+		{
+			ID:          catwalk.InferenceProviderOpenAI,
+			APIKey:      "$OPENAI_API_KEY",
+			APIEndpoint: "https://api.openai.com/v1",
+			Models: []catwalk.Model{
+				{
+					ID:                "gpt-5.4",
+					CostPer1MInCached: 0.25,
+				},
+				{
+					ID:                "gpt-5.5",
+					CostPer1MInCached: 0.5,
+				},
+			},
+		},
 	}
 
 	cfg := &Config{}
 	cfg.setDefaults("/tmp", "")
 	env := env.NewFromMap(map[string]string{
 		"DEEPSEEK_API_KEY": "test-key",
+		"OPENAI_API_KEY":   "test-key",
 	})
 	resolver := NewEnvironmentVariableResolver(env)
 	err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
@@ -229,6 +245,12 @@ func TestConfig_configureProvidersNormalizesDeepSeekCacheReadPricing(t *testing.
 	require.Len(t, pc.Models, 2)
 	require.Equal(t, 0.0028, pc.Models[0].CostPer1MOutCached)
 	require.Equal(t, 0.003625, pc.Models[1].CostPer1MOutCached)
+
+	pc, ok = cfg.Providers.Get("openai")
+	require.True(t, ok)
+	require.Len(t, pc.Models, 2)
+	require.Equal(t, 0.25, pc.Models[0].CostPer1MOutCached)
+	require.Equal(t, 0.5, pc.Models[1].CostPer1MOutCached)
 }
 
 func TestConfig_configureProvidersDoesNotMergeKnownModelCapabilitiesIntoOverride(t *testing.T) {

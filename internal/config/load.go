@@ -377,9 +377,6 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 }
 
 func normalizeKnownProviderPricing(provider *catwalk.Provider) {
-	if provider.ID != catwalk.InferenceProviderDeepSeek {
-		return
-	}
 	for i := range provider.Models {
 		model := &provider.Models[i]
 		if model.CostPer1MOutCached != 0 || model.CostPer1MInCached == 0 {
