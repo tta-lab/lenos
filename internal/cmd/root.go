@@ -227,11 +227,7 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 
 	cfg := store.Config()
 
-	// Default agent identity to "coder" when none specified via --agent.
-	if agentName == "" {
-		agentName = config.AgentCoder
-	}
-	agentContextFile, resolveErr := resolveAgentFile(agentName, cfg.Options.AgentPaths)
+	agentName, agentContextFile, resolveErr := resolveWorkspaceAgent(agentName, cfg.Options.AgentPaths)
 	if resolveErr != nil {
 		return nil, nil, resolveErr
 	}
@@ -372,6 +368,17 @@ func ResolveCwd(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("failed to get current working directory: %v", err)
 	}
 	return cwd, nil
+}
+
+func resolveWorkspaceAgent(agentName string, agentPaths []string) (string, string, error) {
+	if agentName == "" {
+		return config.AgentCoder, "", nil
+	}
+	agentContextFile, err := resolveAgentFile(agentName, agentPaths)
+	if err != nil {
+		return "", "", err
+	}
+	return agentName, agentContextFile, nil
 }
 
 // resolveAgentFile searches agent_paths for an agent identity file matching
