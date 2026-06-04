@@ -43,7 +43,7 @@ type loopDeps struct {
 	paths                     []AllowedPath
 	onUsage                   func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 	shouldSummarizeBeforeStep func(stepIdx int) bool
-	postStepHook              func(stepIdx int, u fantasy.Usage)
+	postStepHook              func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 	bgRunner                  *BackgroundRunner
 }
 
@@ -91,7 +91,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			return stopError, streamErr
 		}
 		if deps.postStepHook != nil {
-			deps.postStepHook(step, usage)
+			deps.postStepHook(step, usage, meta)
 		}
 		if deps.onUsage != nil {
 			deps.onUsage(step, usage, meta)

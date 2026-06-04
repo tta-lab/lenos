@@ -24,6 +24,7 @@ type PostStepEvent struct {
 	ReasoningTokens     int     `json:"reasoning_tokens"`      // reasoning/thinking tokens (0 if provider doesn't expose)
 	CacheCreationTokens int     `json:"cache_creation_tokens"` // cache-creation tokens (0 if provider doesn't expose)
 	CacheReadTokens     int     `json:"cache_read_tokens"`     // cache-hit tokens (0 if provider doesn't expose)
+	CostUSD             float64 `json:"cost_usd"`
 	ContextUsedPct      float64 `json:"context_used_pct"`      // (input+output)/context_window * 100
 	ContextRemainingPct float64 `json:"context_remaining_pct"` // 100 - context_used_pct
 	Timestamp           string  `json:"timestamp"`             // RFC3339 UTC
@@ -32,7 +33,12 @@ type PostStepEvent struct {
 // MarshalPostStep builds the envelope from typed inputs. contextWindow=0 → both
 // percentages are 0 (no divide-by-zero). Timestamp is the caller-provided `now`
 // so tests can pin it.
-func MarshalPostStep(stepIdx int, sessionID, modelID string, contextWindow int, u fantasy.Usage, now time.Time) ([]byte, error) {
+func MarshalPostStep(stepIdx int, sessionID, modelID string, contextWindow int, u fantasy.Usage, now time.Time, costUSD ...float64) ([]byte, error) {
+	var cost float64
+	if len(costUSD) > 0 {
+		cost = costUSD[0]
+	}
+
 	var usedPct, remainingPct float64
 	if contextWindow > 0 {
 		usedPct = float64(u.InputTokens+u.OutputTokens) / float64(contextWindow) * 100
@@ -56,6 +62,7 @@ func MarshalPostStep(stepIdx int, sessionID, modelID string, contextWindow int, 
 		ReasoningTokens:     int(u.ReasoningTokens),
 		CacheCreationTokens: int(u.CacheCreationTokens),
 		CacheReadTokens:     int(u.CacheReadTokens),
+		CostUSD:             cost,
 		ContextUsedPct:      usedPct,
 		ContextRemainingPct: remainingPct,
 		Timestamp:           now.UTC().Format(time.RFC3339),

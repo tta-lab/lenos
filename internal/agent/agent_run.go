@@ -256,14 +256,14 @@ runLoopReentry:
 	// postStepHook builds and fires the configured post_step hook, if any.
 	// Runs in a goroutine with hookTimeout deadline; errors are logged at
 	// WARN but never abort the loop.
-	var postStepHook func(stepIdx int, u fantasy.Usage)
+	var postStepHook func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 	if a.hookRunner != nil {
 		runner := a.hookRunner
 		sessionID := call.SessionID
 		modelID := primaryModel.Model.Model()
 		contextWindow := int(primaryModel.CatwalkCfg.ContextWindow)
-		postStepHook = func(stepIdx int, u fantasy.Usage) {
-			payload, err := hooks.MarshalPostStep(stepIdx, sessionID, modelID, contextWindow, u, time.Now())
+		postStepHook = func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) {
+			payload, err := hooks.MarshalPostStep(stepIdx, sessionID, modelID, contextWindow, u, time.Now(), usageCost(primaryModel, u, a.openrouterCost(m)))
 			if err != nil {
 				slog.Warn("post_step: marshal envelope", "session", sessionID, "step", stepIdx, "error", err)
 				return
@@ -291,11 +291,15 @@ runLoopReentry:
 		bgRunner:     bgRunner,
 		postStepHook: postStepHook,
 		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
+			overrideCost := a.openrouterCost(m)
 			s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
 			if !ok {
 				return
 			}
 			currentSession = s
+			if call.usageSummary != nil {
+				call.usageSummary.AddUsage(primaryModel, u, usageCost(primaryModel, u, overrideCost))
+			}
 		},
 		shouldSummarizeBeforeStep: func(step int) bool {
 			if a.disableAutoSummarize {

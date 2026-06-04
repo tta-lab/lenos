@@ -17,10 +17,10 @@ import (
 // temenos sandbox default. Agents can override via bash-native `timeout 30m`.
 const DefaultPerCmdTimeout = 120 * time.Second
 
-// defaultAutoBackgroundAfter is the threshold in seconds before a sandbox
-// command is detached into a background job. Commands completing faster
-// return synchronously.
-const defaultAutoBackgroundAfter = 15
+// defaultAutoBackgroundAfter is the threshold before a sandbox command is
+// detached into a background job. Commands completing faster return
+// synchronously.
+var defaultAutoBackgroundAfter = 15 * time.Second
 
 // ExecResult is the outcome of running one agent emit through a Runner.
 //
@@ -163,10 +163,10 @@ func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]s
 		done <- execOut{stdout, stderr, exitCode, err}
 	}()
 
-	autoBgTimer := time.NewTimer(time.Duration(defaultAutoBackgroundAfter) * time.Second)
+	autoBgTimer := time.NewTimer(defaultAutoBackgroundAfter)
+	defer autoBgTimer.Stop()
 	select {
 	case out := <-done:
-		autoBgTimer.Stop()
 		bgCancel()
 		dur := time.Since(start)
 		if out.err != nil {
@@ -178,21 +178,29 @@ func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]s
 			ExitCode: out.exitCode,
 			Duration: dur,
 		}
+	case <-ctx.Done():
+		bgCancel()
+		return ExecResult{ExitCode: -1, Duration: time.Since(start), Err: ctx.Err()}
 	case <-autoBgTimer.C:
 		// Command still running — hand to BackgroundRunner if available.
 		if s.bg == nil {
 			// No runner; wait for completion.
-			out := <-done
-			bgCancel()
-			dur := time.Since(start)
-			if out.err != nil {
-				return ExecResult{Stdout: []byte(out.stdout), Stderr: []byte(out.stderr), ExitCode: out.exitCode, Duration: dur, Err: out.err}
-			}
-			return ExecResult{
-				Stdout:   []byte(out.stdout),
-				Stderr:   []byte(out.stderr),
-				ExitCode: out.exitCode,
-				Duration: dur,
+			select {
+			case out := <-done:
+				bgCancel()
+				dur := time.Since(start)
+				if out.err != nil {
+					return ExecResult{Stdout: []byte(out.stdout), Stderr: []byte(out.stderr), ExitCode: out.exitCode, Duration: dur, Err: out.err}
+				}
+				return ExecResult{
+					Stdout:   []byte(out.stdout),
+					Stderr:   []byte(out.stderr),
+					ExitCode: out.exitCode,
+					Duration: dur,
+				}
+			case <-ctx.Done():
+				bgCancel()
+				return ExecResult{ExitCode: -1, Duration: time.Since(start), Err: ctx.Err()}
 			}
 		}
 

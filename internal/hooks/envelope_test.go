@@ -65,6 +65,9 @@ func TestMarshalPostStep_RoundTrip(t *testing.T) {
 	if ev.CacheReadTokens != 8200 {
 		t.Fatalf("cache_read_tokens = %d", ev.CacheReadTokens)
 	}
+	if ev.CostUSD != 0 {
+		t.Fatalf("cost_usd = %f", ev.CostUSD)
+	}
 	if diff := ev.ContextUsedPct - 7.472; diff > 0.001 || diff < -0.001 {
 		t.Fatalf("context_used_pct = %f, want 7.472", ev.ContextUsedPct)
 	}
@@ -73,6 +76,25 @@ func TestMarshalPostStep_RoundTrip(t *testing.T) {
 	}
 	if ev.Timestamp != "2026-05-05T08:08:00Z" {
 		t.Fatalf("timestamp = %q", ev.Timestamp)
+	}
+}
+
+func TestMarshalPostStep_IncludesCostUSD(t *testing.T) {
+	now := time.Date(2026, 5, 5, 8, 8, 0, 0, time.UTC)
+	data, err := MarshalPostStep(12, "01HZ-session", "claude-sonnet-4-5", 200000, fantasy.Usage{
+		InputTokens:  1000,
+		OutputTokens: 100,
+	}, now, 0.00123)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if raw["cost_usd"] != 0.00123 {
+		t.Fatalf("cost_usd = %#v", raw["cost_usd"])
 	}
 }
 
@@ -182,7 +204,7 @@ func TestMarshalPostStep_AllFieldsInJSON(t *testing.T) {
 		"version", "event", "step_index", "session_id", "model_id",
 		"context_window", "input_tokens", "output_tokens", "total_tokens",
 		"reasoning_tokens", "cache_creation_tokens", "cache_read_tokens",
-		"context_used_pct", "context_remaining_pct", "timestamp",
+		"cost_usd", "context_used_pct", "context_remaining_pct", "timestamp",
 	}
 	for _, field := range required {
 		if _, ok := raw[field]; !ok {
@@ -250,6 +272,7 @@ const schemaJSON = `{
     "reasoning_tokens": {"type": "integer", "minimum": 0},
     "cache_creation_tokens": {"type": "integer", "minimum": 0},
     "cache_read_tokens": {"type": "integer", "minimum": 0},
+    "cost_usd": {"type": "number", "minimum": 0},
     "context_used_pct": {"type": "number", "minimum": 0, "maximum": 100},
     "context_remaining_pct": {"type": "number", "minimum": 0, "maximum": 100},
     "timestamp": {"type": "string", "format": "date-time"}

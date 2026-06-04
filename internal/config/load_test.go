@@ -147,6 +147,161 @@ func TestConfig_configureProvidersWithOverride(t *testing.T) {
 	require.Equal(t, "Updated", pc.Models[0].Name)
 }
 
+func TestConfig_configureProvidersMergesKnownModelPricingIntoOverride(t *testing.T) {
+	knownProviders := []catwalk.Provider{
+		{
+			ID:          "deepseek",
+			APIKey:      "$DEEPSEEK_API_KEY",
+			APIEndpoint: "https://api.deepseek.com/v1",
+			Models: []catwalk.Model{{
+				ID:                 "deepseek-v4-flash",
+				Name:               "DeepSeek V4 Flash",
+				CostPer1MIn:        0.27,
+				CostPer1MOut:       0.85,
+				CostPer1MInCached:  0.07,
+				CostPer1MOutCached: 0.03,
+				ContextWindow:      128000,
+				DefaultMaxTokens:   8192,
+			}},
+		},
+	}
+
+	cfg := &Config{
+		Providers: csync.NewMap[string, ProviderConfig](),
+	}
+	cfg.Providers.Set("deepseek", ProviderConfig{
+		APIKey:  "xyz",
+		BaseURL: "https://api.deepseek.com/v1",
+		Models: []catwalk.Model{{
+			ID:   "deepseek-v4-flash",
+			Name: "My DeepSeek",
+		}},
+	})
+	cfg.setDefaults("/tmp", "")
+
+	env := env.NewFromMap(map[string]string{
+		"DEEPSEEK_API_KEY": "test-key",
+	})
+	resolver := NewEnvironmentVariableResolver(env)
+	err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
+	require.NoError(t, err)
+
+	pc, ok := cfg.Providers.Get("deepseek")
+	require.True(t, ok)
+	require.Len(t, pc.Models, 1)
+	require.Equal(t, "My DeepSeek", pc.Models[0].Name)
+	require.Equal(t, 0.27, pc.Models[0].CostPer1MIn)
+	require.Equal(t, 0.85, pc.Models[0].CostPer1MOut)
+	require.Equal(t, 0.07, pc.Models[0].CostPer1MInCached)
+	require.Equal(t, 0.03, pc.Models[0].CostPer1MOutCached)
+}
+
+func TestConfig_configureProvidersNormalizesCacheReadPricingFromInputCachedPricing(t *testing.T) {
+	knownProviders := []catwalk.Provider{
+		{
+			ID:          catwalk.InferenceProviderDeepSeek,
+			APIKey:      "$DEEPSEEK_API_KEY",
+			APIEndpoint: "https://api.deepseek.com/v1",
+			Models: []catwalk.Model{
+				{
+					ID:                "deepseek-v4-flash",
+					CostPer1MInCached: 0.0028,
+				},
+				{
+					ID:                "deepseek-v4-pro",
+					CostPer1MInCached: 0.003625,
+				},
+			},
+		},
+		{
+			ID:          catwalk.InferenceProviderOpenAI,
+			APIKey:      "$OPENAI_API_KEY",
+			APIEndpoint: "https://api.openai.com/v1",
+			Models: []catwalk.Model{
+				{
+					ID:                "gpt-5.4",
+					CostPer1MInCached: 0.25,
+				},
+				{
+					ID:                "gpt-5.5",
+					CostPer1MInCached: 0.5,
+				},
+			},
+		},
+	}
+
+	cfg := &Config{}
+	cfg.setDefaults("/tmp", "")
+	env := env.NewFromMap(map[string]string{
+		"DEEPSEEK_API_KEY": "test-key",
+		"OPENAI_API_KEY":   "test-key",
+	})
+	resolver := NewEnvironmentVariableResolver(env)
+	err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
+	require.NoError(t, err)
+
+	pc, ok := cfg.Providers.Get("deepseek")
+	require.True(t, ok)
+	require.Len(t, pc.Models, 2)
+	require.Equal(t, 0.0028, pc.Models[0].CostPer1MOutCached)
+	require.Equal(t, 0.003625, pc.Models[1].CostPer1MOutCached)
+
+	pc, ok = cfg.Providers.Get("openai")
+	require.True(t, ok)
+	require.Len(t, pc.Models, 2)
+	require.Equal(t, 0.25, pc.Models[0].CostPer1MOutCached)
+	require.Equal(t, 0.5, pc.Models[1].CostPer1MOutCached)
+}
+
+func TestConfig_configureProvidersDoesNotMergeKnownModelCapabilitiesIntoOverride(t *testing.T) {
+	knownProviders := []catwalk.Provider{
+		{
+			ID:          "openai",
+			APIKey:      "$OPENAI_API_KEY",
+			APIEndpoint: "https://api.openai.com/v1",
+			Models: []catwalk.Model{{
+				ID:                     "reasoning-model",
+				Name:                   "Reasoning Model",
+				CanReason:              true,
+				ReasoningLevels:        []string{"low", "medium", "high"},
+				DefaultReasoningEffort: "medium",
+				SupportsImages:         true,
+			}},
+		},
+	}
+
+	cfg := &Config{
+		Providers: csync.NewMap[string, ProviderConfig](),
+	}
+	cfg.Providers.Set("openai", ProviderConfig{
+		APIKey:  "xyz",
+		BaseURL: "https://api.openai.com/v1",
+		Models: []catwalk.Model{{
+			ID:             "reasoning-model",
+			Name:           "No Reasoning",
+			CanReason:      false,
+			SupportsImages: false,
+		}},
+	})
+	cfg.setDefaults("/tmp", "")
+
+	env := env.NewFromMap(map[string]string{
+		"OPENAI_API_KEY": "test-key",
+	})
+	resolver := NewEnvironmentVariableResolver(env)
+	err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
+	require.NoError(t, err)
+
+	pc, ok := cfg.Providers.Get("openai")
+	require.True(t, ok)
+	require.Len(t, pc.Models, 1)
+	require.Equal(t, "No Reasoning", pc.Models[0].Name)
+	require.False(t, pc.Models[0].CanReason)
+	require.Empty(t, pc.Models[0].ReasoningLevels)
+	require.Empty(t, pc.Models[0].DefaultReasoningEffort)
+	require.False(t, pc.Models[0].SupportsImages)
+}
+
 func TestConfig_configureProvidersWithNewProvider(t *testing.T) {
 	knownProviders := []catwalk.Provider{
 		{
@@ -629,6 +784,33 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 		require.Equal(t, "custom", customProvider.ID)
 		require.Equal(t, "test-key", customProvider.APIKey)
 		require.Equal(t, "https://api.custom.com/v1", customProvider.BaseURL)
+	})
+
+	t.Run("custom provider normalizes cache read pricing from input cached pricing", func(t *testing.T) {
+		cfg := &Config{
+			Providers: csync.NewMapFrom(map[string]ProviderConfig{
+				"deepseek-main": {
+					APIKey:  "test-key",
+					BaseURL: "https://api.deepseek.com/v1",
+					Type:    catwalk.TypeOpenAICompat,
+					Models: []catwalk.Model{{
+						ID:                "deepseek-v4-flash",
+						CostPer1MInCached: 0.0028,
+					}},
+				},
+			}),
+		}
+		cfg.setDefaults("/tmp", "")
+
+		env := env.NewFromMap(map[string]string{})
+		resolver := NewEnvironmentVariableResolver(env)
+		err := cfg.configureProviders(testStore(cfg), env, resolver, []catwalk.Provider{})
+		require.NoError(t, err)
+
+		customProvider, exists := cfg.Providers.Get("deepseek-main")
+		require.True(t, exists)
+		require.Len(t, customProvider.Models, 1)
+		require.Equal(t, 0.0028, customProvider.Models[0].CostPer1MOutCached)
 	})
 
 	t.Run("custom anthropic provider is supported", func(t *testing.T) {

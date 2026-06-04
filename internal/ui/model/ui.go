@@ -332,6 +332,14 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 	return ui
 }
 
+// ActiveSessionID returns the current session ID, if the UI has one loaded.
+func (m *UI) ActiveSessionID() string {
+	if m == nil || m.session == nil {
+		return ""
+	}
+	return m.session.ID
+}
+
 // Init initializes the UI model.
 func (m *UI) Init() tea.Cmd {
 	var cmds []tea.Cmd
