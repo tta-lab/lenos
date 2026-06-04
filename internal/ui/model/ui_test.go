@@ -184,6 +184,16 @@ func (w *testWorkspace) SetActiveModel(modelType config.SelectedModelType, model
 	w.cfg.Models[modelType] = model
 }
 
+func TestActiveSessionID(t *testing.T) {
+	t.Parallel()
+
+	ui := &UI{}
+	require.Empty(t, ui.ActiveSessionID())
+
+	ui.session = &session.Session{ID: "session-123"}
+	require.Equal(t, "session-123", ui.ActiveSessionID())
+}
+
 func TestEffectiveTodos(t *testing.T) {
 	t.Parallel()
 

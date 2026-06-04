@@ -39,6 +39,17 @@ func TestRootCmd_PairWithFlagParse(t *testing.T) {
 	require.Equal(t, "reviewer", v)
 }
 
+func TestFormatResumeHint(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(
+		t,
+		"To continue this session, run lenos --session session-123",
+		formatResumeHint("session-123"),
+	)
+	require.Empty(t, formatResumeHint(""))
+}
+
 func TestResolveAgentFile_FoundOnDisk(t *testing.T) {
 	td := t.TempDir()
 	agentContent := "# Test Agent\nBody"

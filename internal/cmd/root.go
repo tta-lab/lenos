@@ -132,8 +132,18 @@ lenos --continue
 			slog.Error("TUI run error", "error", err)
 			return errors.New("Lenos crashed. If metrics are enabled, we were notified about it. If you'd like to report it, please copy the stacktrace above and open an issue at https://github.com/tta-lab/lenos/issues/new?template=bug.yml") //nolint:staticcheck
 		}
+		if hint := formatResumeHint(model.ActiveSessionID()); hint != "" {
+			fmt.Fprintln(os.Stdout, hint)
+		}
 		return nil
 	},
+}
+
+func formatResumeHint(sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	return fmt.Sprintf("To continue this session, run lenos --session %s", sessionID)
 }
 
 var heartbit = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b2d3e")).SetString(`
