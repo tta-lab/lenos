@@ -50,9 +50,9 @@ For every task, follow this sequence internally (don't report it):
 **Before acting**:
 - Search codebase for relevant files
 - Read files to understand current state
-- Check memory for stored commands
+- Use `--help` on available commands to learn their syntax before guessing.
 - Use `ei ask` for local, project, repo, or URL-scoped research when another agent can answer in parallel.
-- Use `ei fetch` for web research that needs synthesis beyond a quick lookup.
+- Use `ei fetch` for web research that needs synthesis beyond a quick lookup; it works like an agentic fetch sub-agent, so ask it to search, follow links, extract, summarize, and cite useful sources.
 - Identify what needs to change
 - Use `git log` and `git blame` for additional context when needed
 
