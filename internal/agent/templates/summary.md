@@ -1,48 +1,37 @@
-You are performing a CONTEXT CHECKPOINT COMPACTION to preserve context for continuing work later.
+You are performing a CONTEXT CHECKPOINT COMPACTION. Create a concise handoff summary for another LLM that will resume this session.
 
-**Critical**: This summary will be the ONLY context available when the conversation resumes. Assume all previous messages will be lost. Be thorough.
+The summary is the only context the next assistant will receive, so preserve task state, decisions, constraints, and exact next steps. Do not replay the transcript.
 
-**Required sections**:
+Include only what the next assistant needs to continue work:
 
 ## Current State
 
-- What task is being worked on (exact user request)
-- Current progress and what's been completed
-- What's being worked on right now (incomplete work)
-- What remains to be done (specific next steps, not vague)
+- User's current goal or request.
+- What has been completed.
+- What is in progress or unresolved.
+- Important user preferences or constraints.
 
-## Files & Changes
+## Key Changes and Files
 
-- Files that were modified (with brief description of changes)
-- Files that were read/analyzed (why they're relevant)
-- Key files not yet touched but will need changes
-- File paths and line numbers for important code locations
+- Files changed and what changed.
+- Important code locations when useful. Prefer file:line references.
+- Do not list every file that was merely read.
 
-## Technical Context
+## Decisions and Context
 
-- Architecture decisions made and why
-- Patterns being followed (with examples)
-- Libraries/frameworks being used
-- Commands that worked (exact commands with context)
-- Commands that failed (what was tried and why it didn't work)
-- Environment details (language versions, dependencies, etc.)
+- Important technical decisions and why.
+- Relevant architecture or provider behavior.
+- Known risks, blockers, or assumptions.
 
-## Strategy & Approach
+## Next Steps
 
-- Overall approach being taken
-- Why this approach was chosen over alternatives
-- Key insights or gotchas discovered
-- Assumptions made
-- Any blockers or risks identified
+List concrete next actions in order. Be specific.
 
-## Exact Next Steps
+Rules:
 
-Be specific. Don't write "implement authentication" - write:
-
-1. Add JWT middleware to src/middleware/auth.js:15
-2. Update login handler in src/routes/user.js:45 to return token
-3. Test with: npm test -- auth.test.js
-
-**Tone**: Write as if briefing a teammate taking over mid-task. Include everything they'd need to continue without asking questions. No emojis ever.
-
-**Length**: No limit. Err on the side of too much detail rather than too little. Critical context is worth the tokens.
+- Be concise and structured. Prefer bullets.
+- Do not include code blocks unless a short snippet is essential.
+- Do not include shell transcripts, tool output, or copied source.
+- Do not mention commands that were only exploratory unless their result matters.
+- Do not mention files that were only read unless their content is needed.
+- Prefer facts over narration. No commentary about the conversation itself.
