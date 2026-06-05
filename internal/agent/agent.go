@@ -91,6 +91,14 @@ type SessionAgentCall struct {
 	// ContextCommands are runner-backed context reads persisted before the
 	// first user turn so they replay like normal assistant command/result pairs.
 	ContextCommands []RuntimeContextCommand
+
+	// JournalPath is the absolute path to the per-session journal file. Empty
+	// for non-task sessions (reviewer, sub-agent, chat-only).
+	JournalPath string
+
+	// JournalCheckIntervalTokens is the token interval for injecting
+	// periodic journal self-check reminders. 0 disables.
+	JournalCheckIntervalTokens int
 }
 
 type RuntimeContextCommand struct {

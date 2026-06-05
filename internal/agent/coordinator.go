@@ -251,17 +251,31 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		access = AccessModeRO
 	}
 
+	// Create journal for coder task sessions (not reviewers).
+	var journalPath string
+	if c.cfg.Overrides().AgentName != config.AgentReviewer {
+		if path, err := CreateJournal(cwd, sessionID); err != nil {
+			slog.Warn("Failed to create session journal", "error", err)
+		} else {
+			journalPath = path
+			// Expose journal to the subprocess runner via env var.
+			sandboxEnv["JOURNAL"] = journalPath
+		}
+	}
+
 	return SessionAgentCall{
-		SessionID:       sessionID,
-		Prompt:          userPrompt,
-		usageSummary:    RunUsageSummaryFromContext(ctx),
-		ProviderOptions: getProviderOptions(model, providerCfg),
-		PairWith:        c.cfg.Overrides().PairWith,
-		Sandbox:         useSandbox,
-		Env:             sandboxEnv,
-		AllowedPaths:    BuildAllowedPaths(ctx, cwd, access),
-		TaskID:          taskwarrior.ResolveTaskID(cwd),
-		ContextCommands: buildRuntimeContextCommands(runtimeContext),
+		SessionID:                  sessionID,
+		Prompt:                     userPrompt,
+		usageSummary:               RunUsageSummaryFromContext(ctx),
+		ProviderOptions:            getProviderOptions(model, providerCfg),
+		PairWith:                   c.cfg.Overrides().PairWith,
+		Sandbox:                    useSandbox,
+		Env:                        sandboxEnv,
+		AllowedPaths:               BuildAllowedPaths(ctx, cwd, access),
+		TaskID:                     taskwarrior.ResolveTaskID(cwd),
+		ContextCommands:            buildRuntimeContextCommands(runtimeContext),
+		JournalPath:                journalPath,
+		JournalCheckIntervalTokens: c.cfg.Config().Options.JournalCheckIntervalTokens,
 	}
 }
 

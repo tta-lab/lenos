@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -233,6 +234,18 @@ runLoopReentry:
 	}
 
 	turnPrompts := turnPromptsForCall(call)
+
+	// Inject journal system hint on first turn for task sessions.
+	if isNewSession && call.JournalPath != "" {
+		hint := journalSystemHint(call.JournalPath)
+		turnPrompts = append([]turnPrompt{{Text: hint, Persist: true}}, turnPrompts...)
+
+		// Inject task detection hint when the prompt looks like a task.
+		if isTaskLike(call.Prompt) {
+			taskHint := taskDetectionHint()
+			turnPrompts = append(turnPrompts, turnPrompt{Text: taskHint, Persist: false})
+		}
+	}
 	if err := a.persistVisibleTurnPrompts(ctx, call.SessionID, turnPrompts); err != nil {
 		return err
 	}
@@ -248,6 +261,13 @@ runLoopReentry:
 	a.activeRequests.Set(call.SessionID, cancel)
 	defer cancel()
 	defer a.activeRequests.Del(call.SessionID)
+
+	// If a journal is active, print path at exit so the user knows where it is.
+	if call.JournalPath != "" {
+		defer func() {
+			fmt.Fprintf(os.Stderr, "%s\n", journalExitSummary(call.JournalPath))
+		}()
+	}
 
 	history := buildHistory(msgs)
 	startTime := time.Now()
