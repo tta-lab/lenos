@@ -952,6 +952,68 @@ func TestRunLoop_ExitWaitsForActiveBackgroundJobResult(t *testing.T) {
 	assert.Equal(t, 3, model.calls)
 }
 
+func TestRunLoop_ExitWaitIdleCancellationStopsLoop(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	exitStream := make(chan struct{})
+	jobCanceled := make(chan struct{})
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock("sleep 20"),
+			lenosbash.BashBlock(lenosbash.ExitCommand),
+		},
+		onStream: func(call int) {
+			if call == 1 {
+				close(exitStream)
+			}
+		},
+	}
+	resultCh := make(chan backgroundResult)
+	bgRunner := NewBackgroundRunner(nil)
+	runner := &fakeRunner{results: []ExecResult{
+		{Background: true, JobID: "job-123", Duration: time.Second * 16},
+	}}
+	runner.onRun = func(bash string, _ map[string]string, _ []AllowedPath) {
+		bgRunner.Track("job-123", bash, func() {
+			close(jobCanceled)
+		}, resultCh)
+	}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.bgRunner = bgRunner
+
+	go func() {
+		<-exitStream
+		cancel()
+	}()
+
+	stop, err := runLoop(ctx, deps, nil, "run slow")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, stopError, stop)
+	assert.Equal(t, 2, model.calls)
+
+	bgRunner.StopAll()
+	assert.Equal(t, 0, bgRunner.ActiveCount())
+
+	select {
+	case <-jobCanceled:
+	default:
+		t.Fatal("StopAll should cancel the active background job")
+	}
+
+	idleAfterStopped := make(chan struct{}, 1)
+	setOnIdle(bgRunner, func() {
+		idleAfterStopped <- struct{}{}
+	})
+	resultCh <- backgroundResult{exitCode: 0}
+
+	select {
+	case <-idleAfterStopped:
+	case <-time.After(time.Second):
+		t.Fatal("completed stopped job should finish without double-close panic")
+	}
+}
+
 func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{lenosbash.BashBlock("nopebinary"), "exit"}}
