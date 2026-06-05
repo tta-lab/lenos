@@ -82,6 +82,9 @@ func (m *scriptedModel) Stream(_ context.Context, _ fantasy.Call) (fantasy.Strea
 			return seq, nil
 		}
 	}
+	if m.onStream != nil {
+		m.onStream(m.calls)
+	}
 	out := m.emits[m.calls]
 	var chunks []string
 	if m.calls < len(m.emitChunks) {
@@ -908,12 +911,20 @@ func TestRunLoop_BackgroundJobStartDoesNotTeachManualJobControl(t *testing.T) {
 
 func TestRunLoop_ExitWaitsForActiveBackgroundJobResult(t *testing.T) {
 	t.Parallel()
-	model := &scriptedModel{emits: []string{
-		lenosbash.BashBlock("sleep 20"),
-		lenosbash.BashBlock(lenosbash.ExitCommand),
-		"done",
-	}}
-	resultCh := make(chan backgroundResult, 1)
+	exitStream := make(chan struct{})
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock("sleep 20"),
+			lenosbash.BashBlock(lenosbash.ExitCommand),
+			"done",
+		},
+		onStream: func(call int) {
+			if call == 1 {
+				close(exitStream)
+			}
+		},
+	}
+	resultCh := make(chan backgroundResult)
 	bgRunner := NewBackgroundRunner(nil)
 	runner := &fakeRunner{results: []ExecResult{
 		{Background: true, JobID: "job-123", Duration: time.Second * 16},
@@ -926,6 +937,7 @@ func TestRunLoop_ExitWaitsForActiveBackgroundJobResult(t *testing.T) {
 	deps.bgRunner = bgRunner
 
 	go func() {
+		<-exitStream
 		resultCh <- backgroundResult{
 			stdout:   "ok\n",
 			exitCode: 0,
