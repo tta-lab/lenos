@@ -1,20 +1,16 @@
-VERSION ?= $(shell git describe --long 2>/dev/null || echo "")
-
 CGO_ENABLED ?= 0
 export CGO_ENABLED
 
 GOEXPERIMENT ?= greenteagc
 export GOEXPERIMENT
 
-LDFLAGS = $(if $(VERSION),-ldflags="-X github.com/tta-lab/lenos/internal/version.Version=$(VERSION)",)
-
 .PHONY: build
 build:
-	go build -v $(LDFLAGS) .
+	go build -v .
 
 .PHONY: install
 install:
-	go install $(LDFLAGS) -v .
+	go install .
 
 .PHONY: test
 test:
