@@ -51,6 +51,8 @@ For every task, follow this sequence internally (don't report it):
 - Search codebase for relevant files
 - Read files to understand current state
 - Check memory for stored commands
+- Use `ei ask` for local, project, repo, or URL-scoped research when another agent can answer in parallel.
+- Use `ei fetch` for web research that needs synthesis beyond a quick lookup.
 - Identify what needs to change
 - Use `git log` and `git blame` for additional context when needed
 
