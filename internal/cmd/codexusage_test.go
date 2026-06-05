@@ -15,7 +15,7 @@ import (
 func TestCodexUsageCommandReadsConfigAndPrintsWeeklyUsage(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
-	t.Setenv("LENOS_GLOBAL_CONFIG", dir)
+	t.Setenv("LENOS_GLOBAL_DATA", dir)
 
 	mustWrite(t, configPath, `{
 		"providers": {
@@ -64,7 +64,7 @@ func TestCodexUsageCommandReadsConfigAndPrintsWeeklyUsage(t *testing.T) {
 func TestCodexUsageCommandRejectsMissingProvider(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
-	t.Setenv("LENOS_GLOBAL_CONFIG", dir)
+	t.Setenv("LENOS_GLOBAL_DATA", dir)
 
 	mustWrite(t, configPath, `{"providers":{}}`)
 
@@ -76,7 +76,7 @@ func TestCodexUsageCommandRejectsMissingProvider(t *testing.T) {
 func TestLoadCodexCredentialsParsesOAuth(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
-	t.Setenv("LENOS_GLOBAL_CONFIG", dir)
+	t.Setenv("LENOS_GLOBAL_DATA", dir)
 
 	mustWrite(t, configPath, `{
 		"providers": {
@@ -99,7 +99,7 @@ func TestLoadCodexCredentialsParsesOAuth(t *testing.T) {
 func TestLoadCodexCredentialsFallsBackToAPIKey(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
-	t.Setenv("LENOS_GLOBAL_CONFIG", dir)
+	t.Setenv("LENOS_GLOBAL_DATA", dir)
 
 	mustWrite(t, configPath, `{
 		"providers": {

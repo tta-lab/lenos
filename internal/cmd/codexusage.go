@@ -93,7 +93,7 @@ type lenosOAuthToken struct {
 }
 
 func loadCodexCredentials() (codexCredentials, error) {
-	configPath := config.GlobalConfig()
+	configPath := config.GlobalConfigData()
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return codexCredentials{}, fmt.Errorf("read config: %w — run 'lenos login' first", err)
@@ -109,7 +109,6 @@ func loadCodexCredentials() (codexCredentials, error) {
 		return codexCredentials{}, fmt.Errorf("codex provider not configured — run 'lenos login' to set it up")
 	}
 
-	// Prefer OAuth access token, fall back to API key.
 	accessToken := ""
 	if provider.OAuth != nil && provider.OAuth.AccessToken != "" {
 		accessToken = provider.OAuth.AccessToken
