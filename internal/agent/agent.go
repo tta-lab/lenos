@@ -165,7 +165,12 @@ type sessionAgent struct {
 	sessions             session.Service
 	messages             message.Service
 	disableAutoSummarize bool
-	notify               pubsub.Publisher[notify.Notification]
+	// hasJournal is true when the current run has an active journal.
+	// When set, Summarize() becomes a no-op because the journal replaces
+	// compaction — the agent updates Progress + Verification + Next before
+	// exit and the next session reads the same journal.
+	hasJournal bool
+	notify     pubsub.Publisher[notify.Notification]
 
 	messageQueue    *csync.Map[string, []SessionAgentCall]
 	activeRequests  *csync.Map[string, context.CancelFunc]

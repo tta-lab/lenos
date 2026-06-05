@@ -405,6 +405,11 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "open_external_editor", "Open External Editor", "ctrl+o", ActionExternalEditor{}))
 	}
 
+	// Add open journal command when running with a journal.
+	if journalPath := os.Getenv("JOURNAL"); journalPath != "" {
+		commands = append(commands, NewCommandItem(c.com.Styles, "open_journal", "Open Journal", "", ActionOpenJournal{}))
+	}
+
 	if c.hasTodos || c.hasQueue {
 		var label string
 		switch {

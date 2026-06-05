@@ -52,6 +52,7 @@ type (
 	ActionToggleNotifications         struct{}
 	ActionToggleTransparentBackground struct{}
 	ActionInitializeProject           struct{}
+	ActionOpenJournal                 struct{}
 	ActionCompact                     struct {
 		SessionID string
 	}

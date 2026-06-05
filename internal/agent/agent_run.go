@@ -203,8 +203,13 @@ runLoopReentry:
 	runner := resolveRunner(call, bgRunner)
 
 	primaryModel := a.primaryModel.Get()
+	// With a journal active, auto-compact is replaced by the journal
+	// handoff pattern: agent updates Progress + Next before exit, next
+	// session reads the same journal. Skip both the initial compact and
+	// the mid-loop compact trigger.
+	a.hasJournal = call.JournalPath != ""
 	compactedBeforeRun := false
-	if !a.disableAutoSummarize {
+	if !a.disableAutoSummarize && !a.hasJournal {
 		used := currentSession.PromptTokens + currentSession.CompletionTokens
 		if shouldAutoCompact(int64(primaryModel.CatwalkCfg.ContextWindow), used) {
 			if summarizeErr := a.Summarize(ctx, call.SessionID, call.ProviderOptions); summarizeErr != nil {
@@ -322,7 +327,7 @@ runLoopReentry:
 			}
 		},
 		shouldSummarizeBeforeStep: func(step int) bool {
-			if a.disableAutoSummarize {
+			if a.disableAutoSummarize || a.hasJournal {
 				return false
 			}
 			if step == 0 && compactedBeforeRun {

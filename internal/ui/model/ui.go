@@ -1105,6 +1105,14 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 		cmds = append(cmds, m.openEditor(m.textarea.Value()))
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionOpenJournal:
+		journalPath := os.Getenv("JOURNAL")
+		if journalPath == "" {
+			cmds = append(cmds, util.ReportWarn("No journal found for this session"))
+		} else {
+			cmds = append(cmds, m.openFile(journalPath))
+		}
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionTogglePills:
 		if cmd := m.togglePillsExpanded(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -2268,6 +2276,22 @@ type uiLayout struct {
 
 	// session details is the area for the session details overlay.
 	sessionDetails uv.Rectangle
+}
+
+func (m *UI) openFile(path string) tea.Cmd {
+	cmd, err := editor.Command(
+		"lenos",
+		path,
+	)
+	if err != nil {
+		return util.ReportError(err)
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return nil
+	})
 }
 
 func (m *UI) openEditor(value string) tea.Cmd {
