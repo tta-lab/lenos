@@ -154,6 +154,18 @@ func TestFetchWeeklyUsageHandlesUnauthorized(t *testing.T) {
 	require.Contains(t, err.Error(), "token expired")
 }
 
+func TestFetchWeeklyUsageOmitsNonSuccessBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("<html>large proxy error page</html>"))
+	}))
+	defer server.Close()
+
+	_, err := fetchWeeklyUsage(t.Context(), server.Client(), server.URL, "token", "")
+	require.Error(t, err)
+	require.EqualError(t, err, "codex usage API returned 502")
+}
+
 func TestFormatWeeklyUsageIncludesAllFields(t *testing.T) {
 	refreshAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.Local)
 	usage := weeklyUsage{

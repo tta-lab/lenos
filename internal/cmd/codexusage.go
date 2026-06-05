@@ -134,9 +134,6 @@ func fetchWeeklyUsage(
 	client *http.Client,
 	baseURL, accessToken, accountID string,
 ) (weeklyUsage, error) {
-	if client == nil {
-		client = http.DefaultClient
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/wham/usage", nil)
 	if err != nil {
 		return weeklyUsage{}, fmt.Errorf("create request: %w", err)
@@ -162,7 +159,7 @@ func fetchWeeklyUsage(
 		return weeklyUsage{}, fmt.Errorf("codex token expired or invalid — run 'lenos login' to re-authenticate")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return weeklyUsage{}, fmt.Errorf("codex usage API returned %d: %s", resp.StatusCode, string(body))
+		return weeklyUsage{}, fmt.Errorf("codex usage API returned %d", resp.StatusCode)
 	}
 
 	var decoded usageResponse
