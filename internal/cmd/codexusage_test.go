@@ -155,16 +155,23 @@ func TestFetchWeeklyUsageHandlesUnauthorized(t *testing.T) {
 }
 
 func TestFormatWeeklyUsageIncludesAllFields(t *testing.T) {
+	refreshAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.Local)
 	usage := weeklyUsage{
 		Plan:             "pro",
 		UsedPercent:      42,
 		RemainingPercent: 58,
-		RefreshAt:        mustParseTime("2026-01-01T00:00:00Z"),
+		RefreshAt:        refreshAt,
 	}
 	output := formatWeeklyUsage(usage)
 	require.Contains(t, output, "Plan: pro")
 	require.Contains(t, output, "Weekly usage: 42% used, 58% left")
 	require.Contains(t, output, "Refresh date: 2026-01-01")
+}
+
+func TestRelativeDurationMarksPastTimes(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	past := now.Add(-2 * time.Hour)
+	require.Equal(t, "2h ago", relativeDuration(now, past))
 }
 
 func TestClampPercentBounds(t *testing.T) {
@@ -193,9 +200,4 @@ func mustWrite(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
-}
-
-func mustParseTime(s string) time.Time {
-	t, _ := time.Parse(time.RFC3339, s)
-	return t
 }

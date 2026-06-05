@@ -17,6 +17,8 @@ import (
 
 const defaultCodexBaseURL = "https://chatgpt.com/backend-api"
 
+var codexUsageHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 type codexCredentials struct {
 	AccessToken string
 	AccountID   string
@@ -46,7 +48,7 @@ Requires a configured Codex provider with a valid token (set up via "lenos login
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		usage, err := fetchWeeklyUsage(ctx, http.DefaultClient, baseURL, creds.AccessToken, creds.AccountID)
+		usage, err := fetchWeeklyUsage(ctx, codexUsageHTTPClient, baseURL, creds.AccessToken, creds.AccountID)
 		if err != nil {
 			return err
 		}
@@ -195,20 +197,22 @@ func formatWeeklyUsage(usage weeklyUsage) string {
 
 func relativeDuration(now, target time.Time) string {
 	d := target.Sub(now)
+	suffix := ""
 	if d < 0 {
 		d = -d
+		suffix = " ago"
 	}
 	minutes := int(d.Round(time.Minute) / time.Minute)
 	if minutes < 60 {
-		return fmt.Sprintf("%dmin", minutes)
+		return fmt.Sprintf("%dmin%s", minutes, suffix)
 	}
 	hours := minutes / 60
 	days := hours / 24
 	remainingHours := hours % 24
 	if days > 0 {
-		return fmt.Sprintf("%dd %dh", days, remainingHours)
+		return fmt.Sprintf("%dd %dh%s", days, remainingHours, suffix)
 	}
-	return fmt.Sprintf("%dh", hours)
+	return fmt.Sprintf("%dh%s", hours, suffix)
 }
 
 func clampPercent(value int) int {
