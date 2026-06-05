@@ -1,80 +1,55 @@
-.PHONY: help build install clean reset test fmt lint lint-fix tidy all dev ci check-clean install-hooks
+VERSION ?= $(shell git describe --long 2>/dev/null || echo "")
 
-help:
-	@echo "Available commands:"
-	@echo "  make build         - Build the lenos binary"
-	@echo "  make install       - Install lenos to GOPATH/bin"
-	@echo "  make clean         - Remove built binaries"
-	@echo "  make reset         - Remove binaries"
-	@echo "  make test          - Run tests"
-	@echo "  make fmt           - Format code with gofumpt"
-	@echo "  make lint          - Run golangci-lint"
-	@echo "  make lint-fix     - Fix linting issues"
-	@echo "  make tidy          - Tidy go modules"
-	@echo "  make all           - Format, tidy, lint, and build"
-	@echo "  make ci            - Run all CI checks (lint, test, build)"
-	@echo "  make check-clean   - Check if working directory is clean"
-	@echo "  make install-hooks - Install lefthook git hooks"
+CGO_ENABLED ?= 0
+export CGO_ENABLED
 
+GOEXPERIMENT ?= greenteagc
+export GOEXPERIMENT
+
+LDFLAGS = $(if $(VERSION),-ldflags="-X github.com/tta-lab/lenos/internal/version.Version=$(VERSION)",)
+
+.PHONY: build
 build:
-	@echo "Building lenos..."
-	@go build -o lenos .
-	@echo "✓ Build complete: ./lenos"
+	go build -v $(LDFLAGS) .
 
+.PHONY: install
 install:
-	@echo "Installing lenos..."
-	@go build -o $(shell go env GOPATH)/bin/lenos .
-	@echo "✓ Installed to $(shell go env GOPATH)/bin/lenos"
+	go install $(LDFLAGS) -v .
 
-
-clean:
-	@echo "Cleaning build artifacts..."
-	@rm -f lenos
-	@echo "✓ Cleaned build artifacts"
-
-reset: clean
-	@echo "✓ Reset complete"
-
+.PHONY: test
 test:
-	@echo "Running tests..."
-	@go test ./...
+	go test -race -failfast ./...
 
-tidy:
-	@echo "Tidying go modules..."
-	@go mod tidy
-	@echo "✓ go mod tidy complete"
-
+.PHONY: fmt
 fmt:
-	@echo "Formatting code..."
-	@gofumpt -w .
-	@echo "✓ Code formatted"
+	gofumpt -w .
 
+.PHONY: modernize
+modernize:
+	go run golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@latest -fix -test ./...
+
+.PHONY: dev
+dev:
+	LENOS_PROFILE=true go run .
+
+.PHONY: lint
 lint:
-	@echo "Running golangci-lint..."
-	@golangci-lint run ./...
+	./scripts/check_log_capitalization.sh
+	golangci-lint run --path-mode=abs --config=".golangci.yml" --timeout=5m
 
+.PHONY: lint-fix
 lint-fix:
-	@echo "Running golangci-lint with fixes..."
-	@golangci-lint run ./... --fix
+	golangci-lint run --path-mode=abs --config=".golangci.yml" --timeout=5m --fix
 
-all: fmt tidy lint build
-	@echo "✓ All checks passed and binary built"
+.PHONY: schema
+schema:
+	go run . schema > schema.json
+	@echo "Generated schema.json"
 
-dev: all
-	@echo "✓ Development build complete"
+.PHONY: hyper
+hyper:
+	go generate ./internal/agent/hyper/...
 
-ci: lint test build
-	@echo "✓ CI checks complete"
-
-check-clean:
-	@if [ -n "$$(git status --porcelain)" ]; then \
-		echo "❌ Working directory is not clean"; \
-		git status --short; \
-		exit 1; \
-	else \
-		echo "✓ Working directory is clean"; \
-	fi
-
-install-hooks:
-	@lefthook install
-	@echo "✓ Lefthook hooks installed (pre-commit: gofumpt + goimports, pre-push: golangci-lint)"
+.PHONY: sqlc
+sqlc:
+	sqlc generate
