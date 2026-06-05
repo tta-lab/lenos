@@ -30,6 +30,7 @@ type scriptedModel struct {
 	emitChunks [][]string
 	usages     []fantasy.Usage // optional: per-emit usage override; default Usage{1,1}
 	errOn      []int           // call indices (pre-increment) where Stream yields an error
+	onStream   func(call int)
 	calls      int
 	modelID    string
 	provider   string
@@ -81,6 +82,9 @@ func (m *scriptedModel) Stream(_ context.Context, _ fantasy.Call) (fantasy.Strea
 			})
 			return seq, nil
 		}
+	}
+	if m.onStream != nil {
+		m.onStream(m.calls)
 	}
 	out := m.emits[m.calls]
 	var chunks []string
@@ -904,6 +908,110 @@ func TestRunLoop_BackgroundJobStartDoesNotTeachManualJobControl(t *testing.T) {
 	assert.NotContains(t, obs, "check status")
 	assert.NotContains(t, obs, "temenos job list")
 	assert.NotContains(t, obs, "temenos job log")
+}
+
+func TestRunLoop_ExitWaitsForActiveBackgroundJobResult(t *testing.T) {
+	t.Parallel()
+	exitStream := make(chan struct{})
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock("sleep 20"),
+			lenosbash.BashBlock(lenosbash.ExitCommand),
+			"done",
+		},
+		onStream: func(call int) {
+			if call == 1 {
+				close(exitStream)
+			}
+		},
+	}
+	resultCh := make(chan backgroundResult)
+	bgRunner := NewBackgroundRunner(nil)
+	runner := &fakeRunner{results: []ExecResult{
+		{Background: true, JobID: "job-123", Duration: time.Second * 16},
+	}}
+	runner.onRun = func(bash string, _ map[string]string, _ []AllowedPath) {
+		bgRunner.Track("job-123", bash, func() {}, resultCh)
+	}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.bgRunner = bgRunner
+
+	go func() {
+		<-exitStream
+		resultCh <- backgroundResult{
+			stdout:   "ok\n",
+			exitCode: 0,
+		}
+	}()
+
+	stop, err := runLoop(context.Background(), deps, nil, "run slow")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+
+	assert.Equal(t, 3, model.calls)
+}
+
+func TestRunLoop_ExitWaitIdleCancellationStopsLoop(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	exitStream := make(chan struct{})
+	jobCanceled := make(chan struct{})
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock("sleep 20"),
+			lenosbash.BashBlock(lenosbash.ExitCommand),
+		},
+		onStream: func(call int) {
+			if call == 1 {
+				close(exitStream)
+			}
+		},
+	}
+	resultCh := make(chan backgroundResult)
+	bgRunner := NewBackgroundRunner(nil)
+	runner := &fakeRunner{results: []ExecResult{
+		{Background: true, JobID: "job-123", Duration: time.Second * 16},
+	}}
+	runner.onRun = func(bash string, _ map[string]string, _ []AllowedPath) {
+		bgRunner.Track("job-123", bash, func() {
+			close(jobCanceled)
+		}, resultCh)
+	}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.bgRunner = bgRunner
+
+	go func() {
+		<-exitStream
+		cancel()
+	}()
+
+	stop, err := runLoop(ctx, deps, nil, "run slow")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, stopError, stop)
+	assert.Equal(t, 2, model.calls)
+
+	bgRunner.StopAll()
+	assert.Equal(t, 0, bgRunner.ActiveCount())
+
+	select {
+	case <-jobCanceled:
+	default:
+		t.Fatal("StopAll should cancel the active background job")
+	}
+
+	idleAfterStopped := make(chan struct{}, 1)
+	setOnIdle(bgRunner, func() {
+		idleAfterStopped <- struct{}{}
+	})
+	resultCh <- backgroundResult{exitCode: 0}
+
+	select {
+	case <-idleAfterStopped:
+	case <-time.After(time.Second):
+		t.Fatal("completed stopped job should finish without double-close panic")
+	}
 }
 
 func TestRunLoop_DrainOnCmdNotFound(t *testing.T) {
