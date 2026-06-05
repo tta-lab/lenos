@@ -549,7 +549,7 @@ func buildCompactSummaryPrompt(ctx context.Context, jobID string) string {
 // Kept separate so benchmarks can test formatting without requiring a context.
 func formatSummaryPrompt(todos []session.Todo) string {
 	var sb strings.Builder
-	sb.WriteString("Provide a detailed summary of our conversation above.")
+	sb.WriteString("Create a concise handoff summary of the conversation above.")
 	if len(todos) > 0 {
 		sb.WriteString("\n\n## Current Todo List\n\n")
 		for _, t := range todos {
