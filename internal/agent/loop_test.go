@@ -30,6 +30,7 @@ type scriptedModel struct {
 	emitChunks [][]string
 	usages     []fantasy.Usage // optional: per-emit usage override; default Usage{1,1}
 	errOn      []int           // call indices (pre-increment) where Stream yields an error
+	onStream   func(call int)
 	calls      int
 	modelID    string
 	provider   string
