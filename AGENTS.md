@@ -153,19 +153,19 @@ for chat render rules.
 
 ## Build/Test/Lint Commands
 
-- **Build**: `go build .` or `go run .`
-- **Test**: `task test` or `go test ./...` (run single test:
+- **Build**: `make build` or `go build .`
+- **Test**: `make test` or `go test ./...` (run single test:
   `go test ./internal/llm/prompt -run TestGetContextFromPaths`)
 - **Update Golden Files**: `go test ./... -update` (regenerates `.golden`
   files when test output changes)
   - Update specific package:
     `go test ./internal/agent -update` (in this case,
     we're updating test golden files)
-- **Lint**: `task lint:fix`
-- **Format**: `task fmt` (`gofumpt -w .`)
-- **Modernize**: `task modernize` (runs `modernize` which makes code
+- **Lint**: `make lint-fix`
+- **Format**: `make fmt` (`gofumpt -w .`)
+- **Modernize**: `make modernize` (runs `modernize` which makes code
   simplifications)
-- **Dev**: `task dev` (runs with profiling enabled)
+- **Dev**: `make dev` (runs with profiling enabled)
 
 ## Code Style Guidelines
 
@@ -199,7 +199,7 @@ for chat render rules.
   permissions.
 - **Log messages**: Log messages must start with a capital letter (e.g.,
   "Failed to save session" not "failed to save session").
-  - This is enforced by `task lint:log` which runs as part of `task lint`.
+  - This is enforced by the log capitalization script which runs as part of `make lint`.
 - **Comments**: End comments in periods unless comments are at the end of the
   line.
 
@@ -233,7 +233,7 @@ func TestYourFunction(t *testing.T) {
   - First, try `gofumpt -w .`.
   - If `gofumpt` is not available, use `goimports`.
   - If `goimports` is not available, use `gofmt`.
-  - You can also use `task fmt` to run `gofumpt -w .` on the entire project,
+  - You can also use `make fmt` to run `gofumpt -w .` on the entire project,
     as long as `gofumpt` is on the `PATH`.
 
 ## Comments
