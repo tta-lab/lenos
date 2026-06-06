@@ -123,7 +123,7 @@ func buildLenosWrapper(
 
 func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
-		Command:  lenosbash.WrapBash("List registered projects and available skills.", "ttal project list\nskill list"),
+		Command:  lenosbash.WrapBash("List registered projects and available skills.", "project list\nskill list"),
 		Optional: true,
 	}}
 	if len(runtimeContext.ContextFiles) > 0 {
