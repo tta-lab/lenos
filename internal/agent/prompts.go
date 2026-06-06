@@ -275,6 +275,9 @@ func markdownBashToRunBlocks(section string) string {
 		trimmed := strings.TrimSpace(line)
 		switch {
 		case !inBash && trimmed == "```bash":
+			if b.Len() > 0 && !strings.HasSuffix(b.String(), "\n\n") {
+				b.WriteString("\n")
+			}
 			b.WriteString(lenosbash.BashStartTag)
 			b.WriteString("\n")
 			inBash = true
