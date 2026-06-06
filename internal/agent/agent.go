@@ -26,29 +26,9 @@ import (
 
 const (
 	DefaultSessionName = "Untitled Session"
-
-	// Constants for auto-summarization thresholds.
-	contextWindowBufferRatio       = 0.2
-	recentUserMessagesAfterCompact = 3
-	autoCompactContinuationPrefix  = "The previous session was interrupted because it got too long"
 )
 
-// shouldAutoCompact returns true when the session has approached the
-// auto-summarization threshold. The remaining-token reserve scales with the
-// context window so the summary request still has room for the runtime prompt.
-func shouldAutoCompact(contextWindow, used int64) bool {
-	if contextWindow <= 0 {
-		return false
-	}
-	remaining := contextWindow - used
-	threshold := int64(float64(contextWindow) * contextWindowBufferRatio)
-	return remaining <= threshold
-}
-
 var userAgent = fmt.Sprintf("Lenos/%s (https://github.com/tta-lab/lenos)", version.Version)
-
-//go:embed templates/summary.md
-var summaryPrompt []byte
 
 // SessionAgentCall carries one user-initiated turn through the agent loop.
 // It bundles the session ID, prompt, and per-turn runtime context (provider
@@ -125,7 +105,6 @@ type SessionAgent interface {
 	ActiveBackgroundJobs(sessionID string) []BackgroundJob
 	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
 	StopBackgroundJobs(sessionID string)
-	Summarize(context.Context, string, fantasy.ProviderOptions) error
 	Model() Model
 }
 
@@ -161,15 +140,9 @@ type sessionAgent struct {
 	primaryModel *csync.Value[Model]
 	systemPrompt *csync.Value[string]
 
-	isSubAgent           bool
-	sessions             session.Service
-	messages             message.Service
-	disableAutoSummarize bool
-	// hasJournal is true when the current run has an active journal.
-	// When set, Summarize() becomes a no-op because the journal replaces
-	// compaction — the agent updates Progress + Verification + Next before
-	// exit and the next session reads the same journal.
-	hasJournal bool
+	isSubAgent bool
+	sessions   session.Service
+	messages   message.Service
 	notify     pubsub.Publisher[notify.Notification]
 
 	messageQueue    *csync.Map[string, []SessionAgentCall]
@@ -182,15 +155,14 @@ type sessionAgent struct {
 }
 
 type SessionAgentOptions struct {
-	LargeModel           Model
-	SmallModel           Model
-	PrimaryModel         Model
-	SystemPrompt         string
-	IsSubAgent           bool
-	DisableAutoSummarize bool
-	Sessions             session.Service
-	Messages             message.Service
-	Notify               pubsub.Publisher[notify.Notification]
+	LargeModel   Model
+	SmallModel   Model
+	PrimaryModel Model
+	SystemPrompt string
+	IsSubAgent   bool
+	Sessions     session.Service
+	Messages     message.Service
+	Notify       pubsub.Publisher[notify.Notification]
 	// HookRunner is called after each model step with a JSON envelope on
 	// stdin. Nil-safe: when nil, no post-step hook runs.
 	HookRunner hooks.Runner
@@ -200,19 +172,18 @@ func NewSessionAgent(
 	opts SessionAgentOptions,
 ) SessionAgent {
 	return &sessionAgent{
-		largeModel:           csync.NewValue(opts.LargeModel),
-		smallModel:           csync.NewValue(opts.SmallModel),
-		primaryModel:         csync.NewValue(opts.PrimaryModel),
-		systemPrompt:         csync.NewValue(opts.SystemPrompt),
-		isSubAgent:           opts.IsSubAgent,
-		sessions:             opts.Sessions,
-		messages:             opts.Messages,
-		disableAutoSummarize: opts.DisableAutoSummarize,
-		notify:               opts.Notify,
-		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
-		activeRequests:       csync.NewMap[string, context.CancelFunc](),
-		bgRunners:            csync.NewMap[string, *BackgroundRunner](),
-		hookRunner:           opts.HookRunner,
-		taskExporter:         exportTaskForTitle,
+		largeModel:     csync.NewValue(opts.LargeModel),
+		smallModel:     csync.NewValue(opts.SmallModel),
+		primaryModel:   csync.NewValue(opts.PrimaryModel),
+		systemPrompt:   csync.NewValue(opts.SystemPrompt),
+		isSubAgent:     opts.IsSubAgent,
+		sessions:       opts.Sessions,
+		messages:       opts.Messages,
+		notify:         opts.Notify,
+		messageQueue:   csync.NewMap[string, []SessionAgentCall](),
+		activeRequests: csync.NewMap[string, context.CancelFunc](),
+		bgRunners:      csync.NewMap[string, *BackgroundRunner](),
+		hookRunner:     opts.HookRunner,
+		taskExporter:   exportTaskForTitle,
 	}
 }

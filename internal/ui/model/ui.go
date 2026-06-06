@@ -1078,19 +1078,6 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
-	case dialog.ActionCompact:
-		if m.isAgentBusy() {
-			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before compacting session..."))
-			break
-		}
-		cmds = append(cmds, func() tea.Msg {
-			err := m.com.Workspace.AgentCompact(context.Background(), msg.SessionID)
-			if err != nil {
-				return util.ReportError(err)()
-			}
-			return nil
-		})
-		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionKillBackgroundJob:
 		cmds = append(cmds, dialog.KillBackgroundJobCmd(m.com, msg.SessionID, msg.JobID))
 		m.dialog.CloseDialog(dialog.BackgroundJobsID)

@@ -31,20 +31,19 @@ var ErrStepCap = errors.New("agent: step cap reached")
 
 // loopDeps wires the bash-first loop to its environment.
 type loopDeps struct {
-	model                     Model
-	drainQueue                func() []turnPrompt
-	provOpts                  fantasy.ProviderOptions
-	pairWith                  string
-	messages                  message.Service
-	runner                    Runner
-	sessionID                 string
-	sysPrompt                 string
-	env                       map[string]string
-	paths                     []AllowedPath
-	onUsage                   func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
-	shouldSummarizeBeforeStep func(stepIdx int) bool
-	postStepHook              func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
-	bgRunner                  *BackgroundRunner
+	model        Model
+	drainQueue   func() []turnPrompt
+	provOpts     fantasy.ProviderOptions
+	pairWith     string
+	messages     message.Service
+	runner       Runner
+	sessionID    string
+	sysPrompt    string
+	env          map[string]string
+	paths        []AllowedPath
+	onUsage      func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
+	postStepHook func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
+	bgRunner     *BackgroundRunner
 }
 
 // stopReason explains why runLoop returned.
@@ -55,7 +54,6 @@ const (
 	stopStepCap
 	stopError
 	stopCanceled
-	stopShouldSummarize
 )
 
 // runLoop drives one turn: stream → parse → execute run blocks → repeat.
@@ -71,9 +69,6 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		msgs = append(msgs, fantasy.NewUserMessage(prompt.Text))
 	}
 	for step := 0; step < StepCap; step++ {
-		if deps.shouldSummarizeBeforeStep != nil && deps.shouldSummarizeBeforeStep(step) {
-			return stopShouldSummarize, nil
-		}
 		assistantMsg, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 			Role:     message.Assistant,
 			Parts:    []message.ContentPart{message.TextContent{Text: ""}},

@@ -71,7 +71,6 @@ type Coordinator interface {
 	ActiveBackgroundJobs(sessionID string) []BackgroundJob
 	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
 	StopBackgroundJobs(sessionID string)
-	Summarize(context.Context, string) error
 	Model() Model
 	UpdateModels(ctx context.Context) error
 	// SystemPrompt returns the fully-resolved system prompt currently sent
@@ -137,16 +136,15 @@ func NewCoordinator(
 	}
 
 	c.currentAgent = NewSessionAgent(SessionAgentOptions{
-		LargeModel:           large,
-		SmallModel:           small,
-		PrimaryModel:         primary,
-		SystemPrompt:         "",
-		IsSubAgent:           false,
-		DisableAutoSummarize: cfg.Config().Options.DisableAutoSummarize,
-		Sessions:             sessions,
-		Messages:             messages,
-		Notify:               notify,
-		HookRunner:           hookRunner,
+		LargeModel:   large,
+		SmallModel:   small,
+		PrimaryModel: primary,
+		SystemPrompt: "",
+		IsSubAgent:   false,
+		Sessions:     sessions,
+		Messages:     messages,
+		Notify:       notify,
+		HookRunner:   hookRunner,
 	})
 
 	// Build system prompt: bash-first base + git guidance + lenos.md.tpl
@@ -941,22 +939,6 @@ func (c *coordinator) KillBackgroundJob(ctx context.Context, sessionID, jobID st
 
 func (c *coordinator) StopBackgroundJobs(sessionID string) {
 	c.currentAgent.StopBackgroundJobs(sessionID)
-}
-
-func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
-	model := c.currentAgent.Model()
-	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-	if !ok {
-		return errModelProviderNotConfigured
-	}
-
-	// Refresh OAuth token if expired before summarizing.
-	// Ported from upstream a4020df6 / 8cd4786c.
-	if err := c.maybeRefreshToken(ctx, &model, &providerCfg); err != nil {
-		return err
-	}
-
-	return c.currentAgent.Summarize(ctx, sessionID, getProviderOptions(model, providerCfg))
 }
 
 // maybeRefreshToken refreshes the OAuth token if expired, rebuilds the

@@ -53,10 +53,7 @@ type (
 	ActionToggleTransparentBackground struct{}
 	ActionInitializeProject           struct{}
 	ActionOpenJournal                 struct{}
-	ActionCompact                     struct {
-		SessionID string
-	}
-	ActionKillBackgroundJob struct {
+	ActionKillBackgroundJob           struct {
 		SessionID string
 		JobID     string
 	}

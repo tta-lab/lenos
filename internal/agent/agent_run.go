@@ -203,25 +203,6 @@ runLoopReentry:
 	runner := resolveRunner(call, bgRunner)
 
 	primaryModel := a.primaryModel.Get()
-	// With a journal active, auto-compact is replaced by the journal
-	// handoff pattern: agent updates Progress + Next before exit, next
-	// session reads the same journal. Skip both the initial compact and
-	// the mid-loop compact trigger.
-	a.hasJournal = call.JournalPath != ""
-	compactedBeforeRun := false
-	if !a.disableAutoSummarize && !a.hasJournal {
-		used := currentSession.PromptTokens + currentSession.CompletionTokens
-		if shouldAutoCompact(int64(primaryModel.CatwalkCfg.ContextWindow), used) {
-			if summarizeErr := a.Summarize(ctx, call.SessionID, call.ProviderOptions); summarizeErr != nil {
-				return summarizeErr
-			}
-			compactedBeforeRun = true
-			currentSession, err = a.sessions.Get(ctx, call.SessionID)
-			if err != nil {
-				return fmt.Errorf("failed to get session after compact: %w", err)
-			}
-		}
-	}
 
 	msgs, err := a.getSessionMessages(ctx, currentSession)
 	if err != nil {
@@ -326,16 +307,6 @@ runLoopReentry:
 				call.usageSummary.AddUsage(primaryModel, u, usageCost(primaryModel, u, overrideCost))
 			}
 		},
-		shouldSummarizeBeforeStep: func(step int) bool {
-			if a.disableAutoSummarize || a.hasJournal {
-				return false
-			}
-			if step == 0 && compactedBeforeRun {
-				return false
-			}
-			used := currentSession.PromptTokens + currentSession.CompletionTokens
-			return shouldAutoCompact(int64(primaryModel.CatwalkCfg.ContextWindow), used)
-		},
 		drainQueue: func() []turnPrompt {
 			queued, ok := a.messageQueue.Take(call.SessionID)
 			if !ok || len(queued) == 0 {
@@ -349,17 +320,7 @@ runLoopReentry:
 
 	a.eventPromptResponded(call.SessionID, time.Since(startTime).Truncate(time.Second))
 
-	if runErr == nil && stop == stopShouldSummarize {
-		// Release the runLoop context and remove from activeRequests so Summarize
-		// can use IsSessionBusy guard (Summarize sets its own entry).
-		cancel()
-		a.activeRequests.Del(call.SessionID)
-		if summarizeErr := a.Summarize(ctx, call.SessionID, call.ProviderOptions); summarizeErr != nil {
-			return summarizeErr
-		}
-		call.Prompt = autoCompactContinuationPrompt(call.Prompt)
-		goto runLoopReentry
-	}
+	_ = stop
 
 	if runErr != nil {
 		// Release activeRequests before surfacing the error so
@@ -423,10 +384,6 @@ func (a *sessionAgent) attachErrorFinish(ctx context.Context, sessionID string, 
 		}
 		return
 	}
-}
-
-func autoCompactContinuationPrompt(prompt string) string {
-	return fmt.Sprintf("%s, the initial user request was: `%s`", autoCompactContinuationPrefix, prompt)
 }
 
 func turnPromptsForCall(call SessionAgentCall) []turnPrompt {

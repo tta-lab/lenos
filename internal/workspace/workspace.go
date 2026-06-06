@@ -53,8 +53,6 @@ type Workspace interface {
 	AgentClearQueue(sessionID string)
 	AgentActiveBackgroundJobs(sessionID string) []agent.BackgroundJob
 	AgentKillBackgroundJob(ctx context.Context, sessionID, jobID string) error
-	AgentCompact(ctx context.Context, sessionID string) error
-	AgentSummarize(ctx context.Context, sessionID string) error
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel

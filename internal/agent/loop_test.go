@@ -783,37 +783,6 @@ func TestRunLoop_PostStepHookFiresBeforeOnUsage(t *testing.T) {
 	require.Len(t, usageSteps, 2, "onUsage: both steps")
 }
 
-func TestRunLoop_PostStepHookExecutesBeforePreStepAutoCompact(t *testing.T) {
-	t.Parallel()
-	var hookCalled bool
-	var usageCalled bool
-	model := &scriptedModel{emits: []string{lenosbash.BashBlock("echo ok")}}
-	runner := &fakeRunner{results: []ExecResult{
-		{Stdout: []byte("ok\n"), ExitCode: 0, Duration: time.Millisecond},
-	}}
-	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, runner, rec)
-	deps.postStepHook = func(int, fantasy.Usage, fantasy.ProviderMetadata) {
-		hookCalled = true
-	}
-	deps.onUsage = func(int, fantasy.Usage, fantasy.ProviderMetadata) {
-		usageCalled = true
-	}
-	deps.shouldSummarizeBeforeStep = func(stepIdx int) bool {
-		return stepIdx > 0
-	}
-
-	stop, err := runLoop(context.Background(), deps, nil, "go")
-	require.NoError(t, err)
-	assert.Equal(t, stopShouldSummarize, stop)
-	if !hookCalled {
-		t.Fatal("postStepHook was not called before pre-step compact")
-	}
-	if !usageCalled {
-		t.Fatal("onUsage was not called before pre-step compact")
-	}
-}
-
 func TestRunLoop_PostStepHookNil(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"exit"}}
@@ -1044,35 +1013,6 @@ func (m *errorStreamModel) StreamObject(context.Context, fantasy.ObjectCall) (fa
 }
 
 var _ fantasy.LanguageModel = (*errorStreamModel)(nil)
-
-func TestRunLoop_PreStepCompactReturnsShouldSummarize(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{lenosbash.BashBlock("echo a"), lenosbash.BashBlock("echo b")}}
-	runner := &fakeRunner{results: []ExecResult{
-		{Stdout: []byte("a\n"), ExitCode: 0, Duration: time.Millisecond},
-	}}
-	rec := &recordingRecorder{}
-	deps, ms := newDeps(t, model, runner, rec)
-	var calls int
-	deps.onUsage = func(_ int, _ fantasy.Usage, _ fantasy.ProviderMetadata) {
-		calls++
-	}
-	deps.shouldSummarizeBeforeStep = func(stepIdx int) bool {
-		return stepIdx > 0 && calls >= 1
-	}
-
-	stop, err := runLoop(context.Background(), deps, nil, "do work")
-	require.NoError(t, err)
-	assert.Equal(t, stopShouldSummarize, stop)
-	assert.Equal(t, 1, calls, "onUsage should fire for the completed emit before compact")
-
-	assistants := assistantsByOrder(ms)
-	require.NotEmpty(t, assistants)
-	assert.Equal(t, message.FinishReasonToolUse, assistants[len(assistants)-1].FinishReason())
-
-	results := resultsByOrder(ms)
-	require.Len(t, results, 1, "pre-step compact should happen after the completed bash result")
-}
 
 // TestRunLoop_CmdNotFound_PassesStderrToken verifies that when bash prints
 // "command not found" in stderr the loop invokes rePromptCmdNotFound with
