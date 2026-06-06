@@ -77,11 +77,11 @@ runLoopReentry:
 	// Inject journal guidance on the first session turn. The prompt, not Go
 	// code, decides whether the current user request is task-like.
 	if isNewSession && currentSession.SummaryMessageID == "" && call.JournalPath != "" {
-		turnPrompts = append([]turnPrompt{{
+		turnPrompts = append(turnPrompts, turnPrompt{
 			Text:    taskDetectionHint(),
 			Persist: true,
 			Role:    message.Runtime,
-		}}, turnPrompts...)
+		})
 	}
 	if err := a.persistVisibleTurnPrompts(ctx, call.SessionID, turnPrompts); err != nil {
 		return err

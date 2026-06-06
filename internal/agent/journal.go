@@ -48,15 +48,17 @@ func CreateJournal(workingDir, sessionID string) (string, error) {
 
 // taskDetectionHint returns the runtime hint for task detection.
 func taskDetectionHint() string {
-	return `You have a session journal. Decide whether the current user request is a task.
-
-If it is already a task, fill the journal through Plan before editing,
-creating, or modifying files. Treat the journal as the source of truth for task
-state.
-
-If this is chat, Q&A, or clarification without a concrete task, do not fill the
-journal yet. When a later user request becomes a task, fill the journal through
-Plan before editing files.`
+	return "You have a session journal. Decide whether the current user request is a task.\n\n" +
+		"The journal helps you achieve the target by making the task state explicit:\n" +
+		"goal, constraints, plan, risks, failed paths, verification, and next action.\n" +
+		"It is your durable working memory and handoff record when context is lost.\n\n" +
+		"If the request is already a task, fill the journal through Plan before editing,\n" +
+		"creating, or modifying files. Use `ei ask` or `ei fetch` if another agent can\n" +
+		"help you gather context for a better journal. Treat the journal as the source\n" +
+		"of truth for task state.\n\n" +
+		"If this is chat, Q&A, or clarification without a concrete task, do not fill the\n" +
+		"journal yet. When a later user request becomes a task, fill the journal through\n" +
+		"Plan before editing files."
 }
 
 // periodicCheckHint returns a self-check reminder.

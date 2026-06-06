@@ -812,6 +812,37 @@ func TestRun_RuntimePromptFeedsModelWithoutPersistingUserMessage(t *testing.T) {
 	require.Equal(t, message.RuntimeText("background job completed"), fantasyMessageText(model.Captured()[0][1]))
 }
 
+func TestRun_JournalHintFollowsFirstUserPrompt(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "journal hint")
+	require.NoError(t, err)
+
+	inner := &scriptedModel{emits: []string{"exit"}}
+	model := &streamCapturingModel{inner: inner}
+	agent := testSessionAgent(env, model, model, "sys").(*sessionAgent)
+
+	err = agent.Run(t.Context(), SessionAgentCall{
+		SessionID:   sess.ID,
+		Prompt:      "implement the thing",
+		JournalPath: filepath.Join(t.TempDir(), "journal.md"),
+	})
+	require.NoError(t, err)
+
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(msgs), 2)
+	require.Equal(t, message.User, msgs[0].Role)
+	require.Equal(t, "implement the thing", msgs[0].Content().Text)
+	require.Equal(t, message.Runtime, msgs[1].Role)
+	require.Contains(t, msgs[1].Content().Text, "session journal")
+
+	require.Len(t, model.Captured(), 1)
+	require.GreaterOrEqual(t, len(model.Captured()[0]), 3)
+	require.Equal(t, "implement the thing", fantasyMessageText(model.Captured()[0][1]))
+	require.Contains(t, fantasyMessageText(model.Captured()[0][2]), "session journal")
+}
+
 func TestRun_PostLoopDrainAllQueued(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
