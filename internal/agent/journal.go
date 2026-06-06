@@ -12,9 +12,6 @@ import (
 //go:embed templates/journal.md
 var journalTemplate []byte
 
-//go:embed templates/compact_context.md
-var compactContextPrompt string
-
 const journalsDirName = ".lenos/journals"
 
 // JournalDir returns the path to the journals directory under the working
@@ -74,7 +71,9 @@ func periodicCheckHint() string {
 // compactHandoffHint returns a prompt asking the agent to update the journal
 // for handoff.
 func compactHandoffHint() string {
-	return compactContextPrompt
+	return `The user requested "Compact Session". Update your journal for handoff: fill Progress, Decisions, Failed Paths, Verification, Reflection, Next. If done, mark Deliverables complete.
+
+After this turn, the context window will be compacted.`
 }
 
 // autoCompactHint returns a prompt asking the agent to update the journal
@@ -82,5 +81,5 @@ func compactHandoffHint() string {
 func autoCompactHint() string {
 	return `Your context window is filling up. Update your journal for handoff: fill Progress, Decisions, Failed Paths, Verification, Reflection, Next. If done, mark Deliverables complete.
 
-After this turn, the context window will be compacted to make room. When you resume, run ` + "`lenos messages --tail 3`" + ` to recover recent user messages.`
+After this turn, the context window will be compacted to make room.`
 }

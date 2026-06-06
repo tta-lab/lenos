@@ -35,6 +35,9 @@ var coderRuntimeContextPromptTmpl []byte
 //go:embed templates/reviewer_context.md
 var reviewerRuntimeContextPromptTmpl []byte
 
+//go:embed templates/compact_context.md
+var compactRuntimeContextPromptTmpl []byte
+
 // SystemPrompt builds the full system prompt by concatenating:
 //  1. The bash-first base prompt (env, output protocol, available commands).
 //  2. cmd-git.tpl (git repo guidance with attribution).
@@ -155,6 +158,15 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, templates
 			Command:  command,
 			Optional: i == 0,
 		})
+	}
+	return commands
+}
+
+func appendCompactRuntimeContextCommand(commands []RuntimeContextCommand) []RuntimeContextCommand {
+	compactCommands := buildRuntimeContextCommands(prompt.RuntimeContext{}, compactRuntimeContextPromptTmpl)
+	for _, command := range compactCommands {
+		command.Optional = false
+		commands = append(commands, command)
 	}
 	return commands
 }
