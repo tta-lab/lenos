@@ -318,14 +318,15 @@ runLoopReentry:
 						cumulative += u.InputTokens
 						cur := cumulative / int64(interval)
 						if cur > prev {
-							a.injectRuntimePrompt(call, periodicCheckHint(), false)
+							a.injectRuntimePrompt(call, periodicCheckHint())
 						}
 					}
 					if !autoCompactDone {
 						totalUsed := currentSession.PromptTokens + currentSession.CompletionTokens
 						if ctxWin := primaryModel.CatwalkCfg.ContextWindow; ctxWin > 0 && totalUsed >= int64(ctxWin)*80/100 {
 							autoCompactDone = true
-							a.injectRuntimePrompt(call, autoCompactHint(), true)
+							call.MarkCompactBoundary = true
+							a.injectRuntimePrompt(call, autoCompactHint())
 						}
 					}
 				}
@@ -539,12 +540,12 @@ func (a *sessionAgent) cleanupBackgroundRunner(sessionID string, br *BackgroundR
 	a.bgRunnersMu.Unlock()
 }
 
-func (a *sessionAgent) injectRuntimePrompt(call SessionAgentCall, msg string, markCompactBoundary bool) {
+func (a *sessionAgent) injectRuntimePrompt(call SessionAgentCall, msg string) {
 	runtimeCall := SessionAgentCall{
 		SessionID:           call.SessionID,
 		Prompt:              msg,
 		runtimePrompt:       true,
-		MarkCompactBoundary: markCompactBoundary,
+		MarkCompactBoundary: call.MarkCompactBoundary,
 		ProviderOptions:     call.ProviderOptions,
 		Sandbox:             call.Sandbox,
 		Env:                 call.Env,
