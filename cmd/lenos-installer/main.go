@@ -1,4 +1,4 @@
-// Package main provides the lenos-installer: an interactive macOS terminal
+// Package main provides the lenos-installer: an interactive terminal
 // installer for Lenos and its ecosystem tools (temenos, organon, einai).
 package main
 
@@ -29,7 +29,7 @@ var (
 
 	tools = []tool{
 		{Name: "Lenos", Repo: "lenos", Binary: "lenos", ConfigKind: "json"},
-		{Name: "Organon", Repo: "organon", Binary: "organon", Binaries: []string{"src", "web", "skill"}, ConfigKind: "toml"},
+		{Name: "Organon", Repo: "organon", Binary: "organon", Binaries: []string{"src", "web", "skill", "project"}, ConfigKind: "toml"},
 	}
 )
 
@@ -249,6 +249,8 @@ func titleOS() string {
 	switch runtime.GOOS {
 	case "darwin":
 		return "Darwin"
+	case "linux":
+		return "Linux"
 	default:
 		return runtime.GOOS
 	}

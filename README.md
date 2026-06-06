@@ -1,95 +1,94 @@
 # Lenos
 
-**A terminal-first AI assistant and interactive runtime for the [ttal](https://github.com/tta-lab) ecosystem.**
+Lenos is a terminal AI coding assistant for the
+[ttal](https://github.com/tta-lab) ecosystem.
 
-Lenos is a bash-only interactive shell for ttal agents — multi-model, session-based, built on the Charm ecosystem. It runs directly in your terminal and gives AI agents the tools to read, write, and execute code in a sandboxed environment.
-
-## Features
-
-- **Multi-model support** — Anthropic, OpenAI, Gemini, AWS Bedrock, GitHub Copilot, Hyper, and more
-- **Session-based conversations** — persistent, resumable AI sessions per project
-- **Agent skills** — composable skill system for customizing agent behavior
-- **Charm ecosystem** — built on Charmbracelet's terminal UI libraries
-- **ttal native** — designed for the ttal agent runtime and temenos sandbox
-
-## Screenshots
+It runs agents in a real shell, keeps sessions resumable, and uses a built-in
+sandbox so the model can work in a constrained environment on macOS and Linux.
+The current design is tuned for low token use and high prompt-cache hit rates:
+compact runtime context, bash-first turns, and stable prompt prefixes. In daily
+use with DeepSeek V4 Pro, recent cache hit rates have been in the 98-99% range.
 
 ![Lenos coder running in ttal](docs/screenshots/Lenos-coder-ttal.png)
 
-## Installation
+## Install
 
-```bash
-go install github.com/tta-lab/lenos@latest
+```sh
+curl -fsSL https://github.com/tta-lab/lenos/releases/latest/download/install.sh | sh
 ```
 
-Or download a pre-built binary from the [releases page](https://github.com/tta-lab/lenos/releases).
+The installer supports macOS and Linux on x86_64 and arm64. It installs Lenos
+to `~/.local/bin` and also installs the Organon CLIs that Lenos prompts use:
+`src`, `web`, `skill`, and `project`.
 
-### Homebrew (via ttal tap)
+Add `~/.local/bin` to your `PATH` if needed:
 
-```bash
-brew install tta-lab/ttal/lenos
+```sh
+export PATH="$HOME/.local/bin:$PATH"
 ```
+
+## What Lenos Provides
+
+- **Built-in sandbox**: command execution is constrained by the Temenos sandbox
+  SDK without a separate daemon.
+- **Bash-first agent loop**: the model emits shell work, Lenos executes it, and
+  the next turn sees the real result.
+- **High cache locality**: runtime context is injected as stable command/result
+  history instead of large changing prose blocks.
+- **Session storage**: SQLite-backed sessions can be resumed, continued, and
+  compacted.
+- **Multi-provider models**: Anthropic, OpenAI, Gemini, Bedrock, Copilot,
+  Hyper, MiniMax, Vercel, DeepSeek-compatible routes, and other configured
+  providers.
+- **Agent skills**: local `SKILL.md` directories extend agent behavior without
+  changing Lenos itself.
+- **ttal-native workflow**: built for worker sessions, PR flow, and the wider
+  ttal toolchain.
 
 ## Usage
 
-```bash
-# Run interactively
+```sh
+# Start the TUI in the current project.
 lenos
 
-# Run non-interactively
-lenos run "Summarize the changes in this PR"
+# Run one prompt non-interactively.
+lenos run "Summarize the current branch"
 
-# Pipe content in
-cat README.md | lenos run "Make this more concise"
+# Pipe content into a run.
+git diff --cached | lenos run "Review this staged diff"
 
-# Continue the most recent session
+# Continue the most recent session.
 lenos --continue
 
-# Use a custom data directory
-lenos --data-dir /path/to/custom/.lenos
+# Use a model for this session only.
+lenos -m deepseek-v4-pro
 
-# Run with an explicit model override (ephemeral, no config write)
-lenos -m gpt-4o
-lenos run -m claude-sonnet-4
-
-# Use the small-tier model (flag alone selects tier — no value)
+# Use the configured small-tier model.
 lenos --small-model
-lenos run --small-model
 
-# Combine: small tier with a specific model override
-lenos --small-model -m haiku-3.5
+# Select the small tier and override its model for this session only.
+lenos --small-model -m claude-haiku-3.5
 
-# Persist a default model (writes to ~/.local/share/lenos/config.json)
-lenos config set-model large gpt-4o
+# Persist preferred models.
+lenos config set-model large deepseek-v4-pro
 lenos config set-model small claude-haiku-3.5
 ```
 
-### Migration Notes (Breaking Changes)
-
-- **`--yolo` flag removed**: No replacement. All permission prompts now obey
-  the temenos sandbox or the per-tool default. If `--yolo` behavior is
-  desired, run lenos under temenos with `--readonly` disabled.
-- **`permissions.allowed_tools` config field removed**: The `permissions`
-  block is no longer recognized in `config.json`. All tool permissions are
-  now managed by the temenos sandbox.
-- **`lenos run --small-model haiku` syntax broken**: The `--small-model` flag
-  was previously a String (taking a model ID). It is now a Bool — the flag
-  alone selects the small tier. To use a specific small-tier model with an
-  override, combine: `lenos run --small-model -m haiku`. Existing scripts
-  must update.
+CLI model flags are ephemeral. They do not write `config.json` and do not leak
+into future sessions. Use `lenos config set-model` when you want persistence.
 
 ## Configuration
 
-Lenos looks for a `config.json` file in the following locations (highest priority first):
+Lenos reads configuration from these locations, highest priority first:
 
-1. `.lenos/config.json` (workspace config — project-specific overrides)
-2. `$XDG_DATA_HOME/lenos/config.json` or `~/.local/share/lenos/config.json` (global data)
-3. `$XDG_CONFIG_HOME/lenos/config.json` or `~/.config/lenos/config.json` (global config)
+1. `.lenos/config.json`
+2. `$XDG_DATA_HOME/lenos/config.json` or `~/.local/share/lenos/config.json`
+3. `$XDG_CONFIG_HOME/lenos/config.json` or `~/.config/lenos/config.json`
 
-See the [JSON schema](schema.json) for all available options.
-See [hooks documentation](docs/hooks.md) for post-step lifecycle hooks configuration.
+See [schema.json](schema.json) for all options and
+[docs/hooks.md](docs/hooks.md) for lifecycle hooks.
 
-### Environment Variables
+Common environment variables:
 
 | Variable | Description |
 |---|---|
@@ -102,33 +101,55 @@ See [hooks documentation](docs/hooks.md) for post-step lifecycle hooks configura
 | `LENOS_DISABLE_METRICS` | Disable telemetry |
 | `LENOS_PROFILE` | Enable pprof profiling |
 
-## Agent Skills
+## Skills
 
-Agent skills extend what Lenos can do. Place skills in:
+Agent skills live in either global or project-local directories:
 
-- `~/.config/lenos/skills/` (global)
-- `.lenos/skills/` (project-local)
+- `~/.config/lenos/skills/`
+- `.lenos/skills/`
 
-Each skill is a directory containing a `SKILL.md` file.
+Each skill is a directory with a `SKILL.md` file. The installer provides the
+`skill` CLI for finding and managing skill content.
+
+## Sandbox
+
+Lenos links the Temenos sandbox SDK directly. The installer writes a starter
+Temenos config at `~/.config/temenos/config.toml` and a starter Lenos config at
+`~/.lenos/config.json` when those files do not already exist.
+
+The old `--yolo` and `permissions.allowed_tools` paths are gone. Execution
+policy now belongs to the sandbox configuration and the runtime's tool rules.
+
+## Development
+
+```sh
+make build
+make test
+make fmt
+make lint-fix
+```
+
+Single-package tests use normal Go commands:
+
+```sh
+go test ./internal/agent -run TestName
+```
 
 ## License
 
-Lenos is licensed under the [Functional Source License, Version 1.1, MIT Future License](LICENSE.md).
+Lenos is licensed under the
+[Functional Source License, Version 1.1, MIT Future License](LICENSE.md).
 
-## Lineage & Attribution
+## Lineage
 
-Lenos is a fork of [Crush](https://github.com/charmbracelet/crush) by [Charmbracelet](https://charm.sh), originally created by [Kujtim Hoxha](https://github.com/kujtimiihoxha) and the Charmbracelet team.
+Lenos is a fork of [Crush](https://github.com/charmbracelet/crush) by
+[Charmbracelet](https://charm.sh), originally created by
+[Kujtim Hoxha](https://github.com/kujtimiihoxha) and the Charmbracelet team.
 
-The original Crush project provided the foundation for Lenos: the terminal UI, multi-model architecture, and agent skill system. We are grateful to the original authors for their work.
+Major changes from upstream Crush include the `github.com/tta-lab/lenos` module
+path, the `lenos` binary name, `.lenos` data directories, `LENOS_*`
+environment variables, ttal runtime integration, sandboxed command execution,
+runtime context templates, session compaction, and the release installer above.
 
-**Changes from upstream Crush:**
-- Module path: `github.com/charmbracelet/crush` → `github.com/tta-lab/lenos`
-- Binary name: `crush` → `lenos`
-- Data directory: `.crush/` → `.lenos/`
-- Config files: `crush.json` → `config.json`
-- Environment variables: `CRUSH_*` → `LENOS_*`
-- Ignore file: `.crushignore` → `.lenosignore`
-- Context files: `crush.md` → `lenos.md`
-- Distributed via ttal homebrew tap instead of Charmbracelet channels
-
-The FSL-1.1-MIT license terms are preserved. Original Charmbracelet and Kujtim Hoxha copyrights are retained in [LICENSE.md](LICENSE.md).
+The FSL-1.1-MIT license terms are preserved. Original Charmbracelet and Kujtim
+Hoxha copyrights are retained in [LICENSE.md](LICENSE.md).
