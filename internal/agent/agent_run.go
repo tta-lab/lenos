@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"sync"
 	"time"
 
@@ -92,13 +91,6 @@ runLoopReentry:
 	a.activeRequests.Set(call.SessionID, cancel)
 	defer cancel()
 	defer a.activeRequests.Del(call.SessionID)
-
-	// If a journal is active, print path at exit so the user knows where it is.
-	if call.JournalPath != "" {
-		defer func() {
-			fmt.Fprintf(os.Stderr, "%s\n", journalExitSummary(call.JournalPath))
-		}()
-	}
 
 	history := buildHistory(msgs)
 	startTime := time.Now()

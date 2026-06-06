@@ -78,8 +78,3 @@ func autoCompactHint() string {
 
 After this turn, the context window will be compacted to make room. When you resume, run ` + "`lenos messages --tail 3`" + ` to recover recent user messages.`
 }
-
-// journalExitSummary builds the exit message showing the journal path.
-func journalExitSummary(journalPath string) string {
-	return fmt.Sprintf("Journal: %s", journalPath)
-}
