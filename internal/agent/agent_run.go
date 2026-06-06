@@ -15,7 +15,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/tta-lab/lenos/internal/agent/hyper"
-	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/hooks"
 	"github.com/tta-lab/lenos/internal/message"
@@ -35,99 +34,6 @@ func buildHistory(msgs []message.Message) []fantasy.Message {
 }
 
 const queuedPromptSep = "\n\n"
-
-func (a *sessionAgent) persistRuntimeContextCommands(ctx context.Context, call SessionAgentCall, runner Runner) error {
-	for _, cmd := range call.ContextCommands {
-		if strings.TrimSpace(cmd.Command) == "" {
-			continue
-		}
-		if err := a.persistSyntheticCommandResult(ctx, call, runner, cmd); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call SessionAgentCall, runner Runner, cmd RuntimeContextCommand) error {
-	if handled, err := a.persistSyntheticProse(ctx, call, cmd.Command); handled || err != nil {
-		return err
-	}
-
-	commandForBash := cmd.Command
-	if parsed, diag := lenosbash.Parse(cmd.Command); diag == nil && len(parsed.Bash) > 0 {
-		commandForBash = parsed.Bash[0]
-	}
-
-	res := runner.Run(ctx, commandForBash, call.Env, call.AllowedPaths)
-	if cmd.Optional && (res.Err != nil || res.ExitCode != 0 || strings.TrimSpace(string(res.Stdout)) == "") {
-		return nil
-	}
-
-	assistantMsg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
-		Role: message.Assistant,
-		Parts: []message.ContentPart{
-			message.TextContent{Text: cmd.Command},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("create synthetic context command: %w", err)
-	}
-
-	resultMsg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
-		Role:  message.Result,
-		Parts: []message.ContentPart{message.CommandContent{Command: commandForBash, Pending: true}},
-	})
-	if err != nil {
-		return fmt.Errorf("create synthetic context pending result: %w", err)
-	}
-
-	exitCode := res.ExitCode
-	stderr := res.Stderr
-	if res.Err != nil && len(res.Stdout) == 0 && len(stderr) == 0 {
-		stderr = []byte(res.Err.Error())
-	}
-	envelope := formatResultForModel(commandForBash, string(res.Stdout), string(stderr), res.ExitCode)
-	body := lenosbash.ResultBody(envelope)
-	resultMsg.Parts = []message.ContentPart{message.CommandContent{
-		Command:     commandForBash,
-		Output:      string(combine(res.Stdout, stderr)),
-		ExitCode:    &exitCode,
-		Pending:     false,
-		Observation: body,
-	}}
-	if err := a.messages.Update(ctx, resultMsg); err != nil {
-		return fmt.Errorf("update synthetic context result: %w", err)
-	}
-	markStepFinished(ctx, a.loopDepsForSynthetic(call.SessionID), &assistantMsg, message.FinishReasonToolUse)
-	return nil
-}
-
-func (a *sessionAgent) persistSyntheticProse(ctx context.Context, call SessionAgentCall, command string) (bool, error) {
-	parsed, diag := lenosbash.Parse(command)
-	if diag != nil {
-		return false, nil
-	}
-	if strings.TrimSpace(parsed.Prose) == "" || len(parsed.Bash) > 0 {
-		return false, nil
-	}
-	model := a.primaryModel.Get()
-	if _, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
-		Role:     message.Assistant,
-		Parts:    []message.ContentPart{message.TextContent{Text: command}},
-		Model:    model.messageModelID(),
-		Provider: model.messageProviderID(),
-	}); err != nil {
-		return true, fmt.Errorf("create synthetic prose: %w", err)
-	}
-	return true, nil
-}
-
-func (a *sessionAgent) loopDepsForSynthetic(sessionID string) loopDeps {
-	return loopDeps{
-		messages:  a.messages,
-		sessionID: sessionID,
-	}
-}
 
 // hookTimeout is the per-invocation deadline for post_step hooks. Var (not
 // const) so tests can shrink it via export_test.go.
