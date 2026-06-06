@@ -46,7 +46,9 @@ func (a *sessionAgent) persistVisibleTurnPrompts(ctx context.Context, sessionID 
 }
 
 // combineQueuedCalls collapses N queued calls into one re-entry call.
-// Prompts join with "\n\n"; runtime fields take from the FIRST queued call.
+// Prompts join with "\n\n"; per-prompt roles are preserved in turnPrompts.
+// runtimePrompt is cleared because turnPrompts becomes the role SSOT for the
+// combined call.
 // MarkCompactBoundary is ORed across all calls so compaction is never lost.
 // Caller must check len(calls) > 0 before invoking.
 func combineQueuedCalls(calls []SessionAgentCall) SessionAgentCall {
