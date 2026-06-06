@@ -3,12 +3,17 @@
 Lenos is a terminal AI coding assistant for the
 [ttal](https://github.com/tta-lab) ecosystem.
 
-It runs agents in a real shell, keeps sessions resumable, and uses a built-in
-sandbox so the model can work in a constrained environment on macOS and Linux.
-The current design is tuned for low token use and high prompt-cache hit rates:
-compact runtime context, Markdown replies with simple `<run>` blocks for bash
-calls, and stable prompt prefixes. In daily use with DeepSeek V4 Pro, recent
-cache hit rates have been in the 98-99% range.
+It runs agents in a real shell because bash is all you need. File edits happen
+through CLIs such as `src`; web lookup happens through `web`; skills are found
+and read through `skill`; project context comes from `project`. Lenos keeps the
+model-facing protocol small: Markdown for prose, `<run>` blocks for bash calls,
+and a built-in sandbox around execution.
+
+That simplicity is the point. Compared with native tool-call protocols, the
+run protocol avoids provider-specific JSON schemas and typically cuts tool
+protocol tokens by 40%-60%. Stable prompt prefixes, compact runtime context,
+and the session journal make high cache hit rates easy; in daily use with
+DeepSeek V4 Pro, recent cache hit rates have been in the 98-99% range.
 
 ![Lenos coder running in ttal](docs/screenshots/Lenos-coder-ttal.png)
 
@@ -35,10 +40,16 @@ export PATH="$HOME/.local/bin:$PATH"
 - **Simple run protocol**: the model replies in Markdown and wraps shell work
   in `<run>` blocks. Lenos executes those blocks and feeds the real result back
   into the next turn.
+- **CLI-native tools**: code editing, web lookup, skill discovery, and project
+  lookup are regular shell commands, not hidden adapter APIs.
 - **High cache locality**: runtime context is injected as stable command/result
   history instead of large changing prose blocks.
-- **Session storage**: SQLite-backed sessions can be resumed, continued, and
-  compacted.
+- **Agent journal**: task sessions maintain a journal the agent can read after
+  compaction, preserving continuity without dragging full history forward.
+- **Background jobs**: long-running shell commands can keep running while the
+  session stays responsive, with job results fed back into the agent.
+- **Session storage**: SQLite-backed sessions can be resumed, continued,
+  compacted, and reviewed.
 - **Multi-provider models**: Anthropic, OpenAI, Gemini, Bedrock, Copilot,
   Hyper, MiniMax, Vercel, DeepSeek-compatible routes, and other configured
   providers.
