@@ -31,6 +31,9 @@ var initializePromptTmpl []byte
 //go:embed templates/general_context.md
 var generalRuntimeContextPromptTmpl []byte
 
+//go:embed templates/context_files_context.md
+var contextFilesRuntimeContextPromptTmpl []byte
+
 //go:embed templates/coder_context.md
 var coderRuntimeContextPromptTmpl []byte
 

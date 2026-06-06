@@ -288,6 +288,7 @@ func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeConte
 			runtimeContext,
 			config.AgentCoder,
 			generalRuntimeContextPromptTmpl,
+			contextFilesRuntimeContextPromptTmpl,
 			coderRuntimeContextPromptTmpl,
 			reviewerRuntimeContextPromptTmpl,
 		)
@@ -296,6 +297,7 @@ func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeConte
 			runtimeContext,
 			config.AgentReviewer,
 			generalRuntimeContextPromptTmpl,
+			contextFilesRuntimeContextPromptTmpl,
 			coderRuntimeContextPromptTmpl,
 			reviewerRuntimeContextPromptTmpl,
 		)

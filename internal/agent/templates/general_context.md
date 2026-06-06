@@ -7,13 +7,3 @@ List registered projects and available skills.
 project list
 skill list
 ```
-
-{{if .ContextFiles}}---
-order: 20
----
-
-Read key instructions.
-```bash
-{{range .ContextFiles}}cat {{shellQuote .Path}}
-{{end}}```
-{{end}}
