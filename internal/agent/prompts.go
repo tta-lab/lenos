@@ -5,7 +5,10 @@ import (
 	_ "embed"
 	"os"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
@@ -24,6 +27,21 @@ var embeddedReviewerMd []byte
 
 //go:embed templates/initialize.md.tpl
 var initializePromptTmpl []byte
+
+//go:embed templates/general_context.md
+var generalRuntimeContextPromptTmpl []byte
+
+//go:embed templates/context_files_context.md
+var contextFilesRuntimeContextPromptTmpl []byte
+
+//go:embed templates/coder_context.md
+var coderRuntimeContextPromptTmpl []byte
+
+//go:embed templates/reviewer_context.md
+var reviewerRuntimeContextPromptTmpl []byte
+
+//go:embed templates/compact_context.md
+var compactRuntimeContextPromptTmpl []byte
 
 // SystemPrompt builds the full system prompt by concatenating:
 //  1. The bash-first base prompt (env, output protocol, available commands).
@@ -121,9 +139,144 @@ func buildLenosWrapper(
 	return p.Build(ctx, provider, model, store)
 }
 
-func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+type runtimeContextTemplateData struct {
+	ContextFiles []prompt.ContextFile
+}
+
+type runtimeContextTemplateMeta struct {
+	Order    int
+	Agent    string
+	Optional bool
+	Content  string
+}
+
+func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, agentName string, templates ...[]byte) []RuntimeContextCommand {
+	data := runtimeContextTemplateData{
+		ContextFiles: runtimeContext.ContextFiles,
+	}
+	rendered, err := renderRuntimeContextTemplates(data, agentName, templates...)
+	if err != nil {
+		return fallbackRuntimeContextCommands(runtimeContext)
+	}
+
+	commands := make([]RuntimeContextCommand, 0, len(rendered))
+	for _, section := range rendered {
+		command := markdownBashToRunBlocks(section.Content)
+		if strings.TrimSpace(command) == "" {
+			continue
+		}
+		commands = append(commands, RuntimeContextCommand{
+			Command:  command,
+			Optional: section.Optional,
+		})
+	}
+	return commands
+}
+
+func appendCompactRuntimeContextCommand(commands []RuntimeContextCommand) []RuntimeContextCommand {
+	compactCommands := buildRuntimeContextCommands(prompt.RuntimeContext{}, config.AgentCoder, compactRuntimeContextPromptTmpl)
+	return append(commands, compactCommands...)
+}
+
+func renderRuntimeContextTemplates(data runtimeContextTemplateData, agentName string, templates ...[]byte) ([]runtimeContextTemplateMeta, error) {
+	contexts := make([]runtimeContextTemplateMeta, 0, len(templates))
+	for _, tmpl := range templates {
+		rendered, err := renderRuntimeContextTemplate(data, string(tmpl))
+		if err != nil {
+			return nil, err
+		}
+		ctxTmpl := parseRuntimeContextSection(rendered)
+		if ctxTmpl.Agent != "" && ctxTmpl.Agent != agentName {
+			continue
+		}
+		if strings.TrimSpace(ctxTmpl.Content) == "" {
+			continue
+		}
+		contexts = append(contexts, ctxTmpl)
+	}
+	slices.SortStableFunc(contexts, func(a, b runtimeContextTemplateMeta) int {
+		return a.Order - b.Order
+	})
+	return contexts, nil
+}
+
+func parseRuntimeContextSection(section string) runtimeContextTemplateMeta {
+	meta := runtimeContextTemplateMeta{
+		Content: section,
+	}
+	body := meta.Content
+	if !strings.HasPrefix(body, "---\n") {
+		return meta
+	}
+	rest := body[4:]
+	end := strings.Index(rest, "\n---\n")
+	if end < 0 {
+		return meta
+	}
+	for _, line := range strings.Split(rest[:end], "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		switch key {
+		case "order":
+			if n, err := strconv.Atoi(value); err == nil {
+				meta.Order = n
+			}
+		case "agent":
+			meta.Agent = value
+		case "optional":
+			meta.Optional = value == "true"
+		}
+	}
+	meta.Content = rest[end+5:]
+	return meta
+}
+
+func renderRuntimeContextTemplate(data runtimeContextTemplateData, tmpl string) (string, error) {
+	t, err := template.New("context").Funcs(template.FuncMap{
+		"shellQuote": shellQuote,
+	}).Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	if err := t.Execute(&b, data); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
+func markdownBashToRunBlocks(section string) string {
+	var b strings.Builder
+	inBash := false
+	for _, line := range strings.Split(section, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case !inBash && trimmed == "```bash":
+			if b.Len() > 0 && !strings.HasSuffix(b.String(), "\n\n") {
+				b.WriteString("\n")
+			}
+			b.WriteString(lenosbash.BashStartTag)
+			b.WriteString("\n")
+			inBash = true
+		case inBash && trimmed == "```":
+			b.WriteString(lenosbash.BashEndTag)
+			b.WriteString("\n")
+			inBash = false
+		default:
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func fallbackRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
-		Command:  lenosbash.WrapBash("List registered projects and available skills.", "ttal project list\nskill list"),
+		Command:  lenosbash.WrapBash("List registered projects and available skills.", "project list\nskill list"),
 		Optional: true,
 	}}
 	if len(runtimeContext.ContextFiles) > 0 {

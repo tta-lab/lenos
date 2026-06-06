@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/ui/common"
@@ -354,9 +355,8 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "switch_model", "Switch Model", "ctrl+l", ActionOpenDialog{ModelsID}),
 	}
 
-	// Only show compact command if there's an active session
+	// Only show background jobs if there's an active session
 	if c.hasSession {
-		commands = append(commands, NewCommandItem(c.com.Styles, "compact", "Compact Session", "", ActionCompact{SessionID: c.sessionID}))
 		commands = append(commands, NewCommandItem(c.com.Styles, "background_jobs", "Background Jobs", "", ActionOpenDialog{DialogID: BackgroundJobsID}))
 	}
 
@@ -405,6 +405,13 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "open_external_editor", "Open External Editor", "ctrl+o", ActionExternalEditor{}))
 	}
 
+	// Add compact session command when the active session has a journal.
+	if c.hasSession && journalExists(c.com.Workspace.WorkingDir(), c.sessionID) {
+		commands = append(commands, NewCommandItem(c.com.Styles, "compact_handoff", "Compact Session", "", ActionCompactSession{}))
+	}
+
+	commands = append(commands, NewCommandItem(c.com.Styles, "open_journal", "Open Journal", "", ActionOpenJournal{}))
+
 	if c.hasTodos || c.hasQueue {
 		var label string
 		switch {
@@ -444,6 +451,14 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	)
 
 	return commands
+}
+
+func journalExists(workingDir, sessionID string) bool {
+	if workingDir == "" || sessionID == "" {
+		return false
+	}
+	_, err := os.Stat(agent.JournalPath(workingDir, sessionID))
+	return err == nil
 }
 
 // SetCustomCommands sets the custom commands and refreshes the view if user commands are currently displayed.

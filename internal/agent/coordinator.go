@@ -71,13 +71,15 @@ type Coordinator interface {
 	ActiveBackgroundJobs(sessionID string) []BackgroundJob
 	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
 	StopBackgroundJobs(sessionID string)
-	Summarize(context.Context, string) error
 	Model() Model
 	UpdateModels(ctx context.Context) error
 	// SystemPrompt returns the fully-resolved system prompt currently sent
 	// to the model on every turn. Useful for `lenos system-prompt` and
 	// debugging "the model isn't following the protocol" issues.
 	SystemPrompt() string
+	// CompactSession sends a journal handoff hint to the agent and marks the
+	// response as a compaction boundary so the next turn starts fresh.
+	CompactSession(ctx context.Context, sessionID string) error
 }
 
 type coordinator struct {
@@ -137,16 +139,15 @@ func NewCoordinator(
 	}
 
 	c.currentAgent = NewSessionAgent(SessionAgentOptions{
-		LargeModel:           large,
-		SmallModel:           small,
-		PrimaryModel:         primary,
-		SystemPrompt:         "",
-		IsSubAgent:           false,
-		DisableAutoSummarize: cfg.Config().Options.DisableAutoSummarize,
-		Sessions:             sessions,
-		Messages:             messages,
-		Notify:               notify,
-		HookRunner:           hookRunner,
+		LargeModel:   large,
+		SmallModel:   small,
+		PrimaryModel: primary,
+		SystemPrompt: "",
+		IsSubAgent:   false,
+		Sessions:     sessions,
+		Messages:     messages,
+		Notify:       notify,
+		HookRunner:   hookRunner,
 	})
 
 	// Build system prompt: bash-first base + git guidance + lenos.md.tpl
@@ -251,17 +252,67 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		access = AccessModeRO
 	}
 
+	// Create journal for native coder sessions only.
+	var journalPath string
+	if isNativeCoderAgent(c.cfg) {
+		if path, err := CreateJournal(cwd, sessionID); err != nil {
+			slog.Warn("Failed to create session journal", "error", err)
+		} else {
+			journalPath = path
+			// Expose journal to the subprocess runner via env var.
+			sandboxEnv["LENOS_JOURNAL"] = journalPath
+			sandboxEnv["LENOS_SESSION_ID"] = sessionID
+		}
+	}
+
 	return SessionAgentCall{
-		SessionID:       sessionID,
-		Prompt:          userPrompt,
-		usageSummary:    RunUsageSummaryFromContext(ctx),
-		ProviderOptions: getProviderOptions(model, providerCfg),
-		PairWith:        c.cfg.Overrides().PairWith,
-		Sandbox:         useSandbox,
-		Env:             sandboxEnv,
-		AllowedPaths:    BuildAllowedPaths(ctx, cwd, access),
-		TaskID:          taskwarrior.ResolveTaskID(cwd),
-		ContextCommands: buildRuntimeContextCommands(runtimeContext),
+		SessionID:                  sessionID,
+		Prompt:                     userPrompt,
+		usageSummary:               RunUsageSummaryFromContext(ctx),
+		ProviderOptions:            getProviderOptions(model, providerCfg),
+		PairWith:                   c.cfg.Overrides().PairWith,
+		Sandbox:                    useSandbox,
+		Env:                        sandboxEnv,
+		AllowedPaths:               BuildAllowedPaths(ctx, cwd, access),
+		TaskID:                     taskwarrior.ResolveTaskID(cwd),
+		ContextCommands:            buildRuntimeContextCommandsForAgent(c.cfg, runtimeContext),
+		JournalPath:                journalPath,
+		JournalCheckIntervalTokens: c.cfg.Config().Options.JournalCheckIntervalTokens,
+	}
+}
+
+func isNativeCoderAgent(store *config.ConfigStore) bool {
+	switch store.Overrides().AgentName {
+	case "", config.AgentCoder:
+		return true
+	default:
+		return false
+	}
+}
+
+func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+	if isNativeCoderAgent(store) {
+		return buildRuntimeContextCommands(
+			runtimeContext,
+			config.AgentCoder,
+			generalRuntimeContextPromptTmpl,
+			contextFilesRuntimeContextPromptTmpl,
+			coderRuntimeContextPromptTmpl,
+			reviewerRuntimeContextPromptTmpl,
+		)
+	}
+	switch store.Overrides().AgentName {
+	case config.AgentReviewer:
+		return buildRuntimeContextCommands(
+			runtimeContext,
+			config.AgentReviewer,
+			generalRuntimeContextPromptTmpl,
+			contextFilesRuntimeContextPromptTmpl,
+			coderRuntimeContextPromptTmpl,
+			reviewerRuntimeContextPromptTmpl,
+		)
+	default:
+		return nil
 	}
 }
 
@@ -929,22 +980,6 @@ func (c *coordinator) StopBackgroundJobs(sessionID string) {
 	c.currentAgent.StopBackgroundJobs(sessionID)
 }
 
-func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
-	model := c.currentAgent.Model()
-	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-	if !ok {
-		return errModelProviderNotConfigured
-	}
-
-	// Refresh OAuth token if expired before summarizing.
-	// Ported from upstream a4020df6 / 8cd4786c.
-	if err := c.maybeRefreshToken(ctx, &model, &providerCfg); err != nil {
-		return err
-	}
-
-	return c.currentAgent.Summarize(ctx, sessionID, getProviderOptions(model, providerCfg))
-}
-
 // maybeRefreshToken refreshes the OAuth token if expired, rebuilds the
 // provider, and updates the local model/providerCfg references. Returns nil
 // if no refresh was needed.
@@ -1018,4 +1053,21 @@ func agentNameOr(name string) string {
 		return name
 	}
 	return "lenos"
+}
+
+// CompactSession sends a journal handoff hint to the agent and marks the
+// response as a compaction boundary, giving the next turn a fresh context window.
+func (c *coordinator) CompactSession(ctx context.Context, sessionID string) error {
+	if err := c.readyWg.Wait(); err != nil {
+		return err
+	}
+	model := c.currentAgent.Model()
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+	if !ok {
+		return errModelProviderNotConfigured
+	}
+	call := c.buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg)
+	call.runtimePrompt = true
+	call.MarkCompactBoundary = true
+	return c.currentAgent.CompactSession(ctx, call)
 }

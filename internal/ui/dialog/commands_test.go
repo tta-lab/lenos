@@ -13,38 +13,16 @@ import (
 
 type commandTestWorkspace struct {
 	workspace.Workspace
-	cfg *config.Config
+	cfg        *config.Config
+	workingDir string
 }
 
 func (w commandTestWorkspace) Config() *config.Config {
 	return w.cfg
 }
 
-func TestDefaultCommandsIncludesManualCompact(t *testing.T) {
-	t.Parallel()
-
-	sty := styles.DefaultStyles()
-	cmds, err := NewCommands(&common.Common{
-		Workspace: commandTestWorkspace{cfg: &config.Config{
-			Models:    map[config.SelectedModelType]config.SelectedModel{},
-			Providers: csync.NewMap[string, config.ProviderConfig](),
-			Agents:    map[string]config.Agent{},
-		}},
-		Styles: &sty,
-	}, "session-id", true, false, false, nil)
-	require.NoError(t, err)
-
-	var compact *CommandItem
-	for _, item := range cmds.defaultCommands() {
-		if item.ID() == "compact" {
-			compact = item
-			break
-		}
-	}
-	require.NotNil(t, compact, "active sessions should expose a manual compact command")
-	require.Equal(t, "Compact Session", compact.title)
-	_, ok := compact.Action().(ActionCompact)
-	require.True(t, ok, "compact command should dispatch ActionCompact")
+func (w commandTestWorkspace) WorkingDir() string {
+	return w.workingDir
 }
 
 func TestDefaultCommandsIncludesBackgroundJobsForActiveSession(t *testing.T) {
@@ -52,11 +30,14 @@ func TestDefaultCommandsIncludesBackgroundJobsForActiveSession(t *testing.T) {
 
 	sty := styles.DefaultStyles()
 	cmds, err := NewCommands(&common.Common{
-		Workspace: commandTestWorkspace{cfg: &config.Config{
-			Models:    map[config.SelectedModelType]config.SelectedModel{},
-			Providers: csync.NewMap[string, config.ProviderConfig](),
-			Agents:    map[string]config.Agent{},
-		}},
+		Workspace: commandTestWorkspace{
+			cfg: &config.Config{
+				Models:    map[config.SelectedModelType]config.SelectedModel{},
+				Providers: csync.NewMap[string, config.ProviderConfig](),
+				Agents:    map[string]config.Agent{},
+			},
+			workingDir: t.TempDir(),
+		},
 		Styles: &sty,
 	}, "session-id", true, false, false, nil)
 	require.NoError(t, err)

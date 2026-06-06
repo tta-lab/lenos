@@ -3,258 +3,44 @@ package agent
 import (
 	"cmp"
 	"context"
-	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
 	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/bedrock"
 	"charm.land/fantasy/providers/openrouter"
-	"charm.land/fantasy/providers/vercel"
 
-	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/lenos/internal/taskwarrior"
 )
-
-func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fantasy.ProviderOptions) error {
-	if a.IsSessionBusy(sessionID) {
-		return ErrSessionBusy
-	}
-
-	// Copy mutable fields under lock to avoid races with SetModels.
-	summaryModel := a.primaryModel.Get()
-	systemPrompt := a.systemPrompt.Get()
-
-	currentSession, err := a.sessions.Get(ctx, sessionID)
-	if err != nil {
-		return fmt.Errorf("failed to get session: %w", err)
-	}
-	msgs, err := a.getSessionMessages(ctx, currentSession)
-	if err != nil {
-		return err
-	}
-	if len(msgs) == 0 {
-		// Nothing to summarize.
-		return nil
-	}
-
-	genCtx, cancel := context.WithCancel(ctx)
-	a.activeRequests.Set(sessionID, cancel)
-	defer a.activeRequests.Del(sessionID)
-	defer cancel()
-
-	summaryMessage, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
-		Role:             message.Assistant,
-		Model:            summaryModel.messageModelID(),
-		Provider:         summaryModel.messageProviderID(),
-		IsSummaryMessage: true,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Build history as text-only fantasy.Messages (no tool-call/result parts).
-	history := make([]fantasy.Message, 0, len(msgs))
-	for _, m := range msgs {
-		history = append(history, m.ToAIMessage()...)
-	}
-
-	// Build prompt: normal system prompt + history + final compact request.
-	prompt := fantasy.Prompt{fantasy.NewSystemMessage(systemPrompt)}
-	prompt = append(prompt, history...)
-	prompt = append(prompt, fantasy.NewUserMessage(buildCompactSummaryPrompt(ctx, taskwarrior.ResolveTaskIDFromCwd())))
-
-	baseline := summaryMessage.Clone()
-	streamResult, err := retryModelStream(genCtx,
-		func() (summaryStreamResult, error) {
-			return streamSummaryAttempt(genCtx, summaryModel.Model, prompt, opts, a.messages, &summaryMessage)
-		},
-		func() {
-			resetMessageForStreamRetry(genCtx, a.messages, &summaryMessage, baseline, "summary: reset message for stream retry")
-		},
-	)
-	if err != nil {
-		deleteErr := a.messages.Delete(ctx, summaryMessage.ID)
-		if errors.Is(err, context.Canceled) {
-			return deleteErr
-		}
-		return errors.Join(err, deleteErr)
-	}
-
-	totalUsage := streamResult.usage
-	providerMeta := streamResult.meta
-	summaryMessage = streamResult.message
-	normalizeSummaryMarkdown(&summaryMessage)
-
-	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
-	if err := a.messages.Update(genCtx, summaryMessage); err != nil {
-		return err
-	}
-
-	openrouterCost := a.openrouterCost(providerMeta)
-	a.updateSessionUsage(summaryModel, &currentSession, totalUsage, openrouterCost)
-	RunUsageSummaryFromContext(ctx).AddUsage(summaryModel, totalUsage, usageCost(summaryModel, totalUsage, openrouterCost))
-	currentSession.SummaryMessageID = summaryMessage.ID
-	currentSession.CompletionTokens = totalUsage.OutputTokens
-	currentSession.PromptTokens = 0
-	_, err = a.sessions.Save(genCtx, currentSession)
-	if err != nil {
-		return err
-	}
-
-	// Release the active request before processing queued messages so that
-	// Run() does not see the session as busy. Ported from upstream 61f49b23.
-	a.activeRequests.Del(sessionID)
-	cancel()
-
-	// Process any messages that were queued while summarizing.
-	// Ported from upstream 61f49b23.
-	queuedCalls, ok := a.messageQueue.Take(sessionID)
-	if !ok || len(queuedCalls) == 0 {
-		return nil
-	}
-	first := queuedCalls[0]
-	// Re-queue remaining if any.
-	if len(queuedCalls) > 1 {
-		a.messageQueue.Set(sessionID, queuedCalls[1:])
-	}
-	if err := a.Run(ctx, first); err != nil {
-		return fmt.Errorf("summarize: failed to process queued message: %w", err)
-	}
-	return nil
-}
-
-type summaryStreamResult struct {
-	message message.Message
-	usage   fantasy.Usage
-	meta    fantasy.ProviderMetadata
-}
-
-func streamSummaryAttempt(
-	ctx context.Context,
-	model fantasy.LanguageModel,
-	prompt fantasy.Prompt,
-	opts fantasy.ProviderOptions,
-	messages message.Service,
-	summaryMessage *message.Message,
-) (summaryStreamResult, error) {
-	stream, err := model.Stream(ctx, fantasy.Call{
-		Prompt:          prompt,
-		ProviderOptions: opts,
-		UserAgent:       userAgent,
-	})
-	if err != nil {
-		return summaryStreamResult{message: *summaryMessage}, err
-	}
-
-	var totalUsage fantasy.Usage
-	var providerMeta fantasy.ProviderMetadata
-	for part := range stream {
-		switch part.Type {
-		case fantasy.StreamPartTypeTextDelta:
-			summaryMessage.AppendContent(part.Delta)
-			if err := messages.Update(ctx, *summaryMessage); err != nil {
-				slog.Warn("failed to persist summary text delta", "err", err)
-			}
-		case fantasy.StreamPartTypeReasoningDelta:
-			summaryMessage.AppendReasoningContent(part.Delta)
-			if err := messages.Update(ctx, *summaryMessage); err != nil {
-				slog.Warn("failed to persist summary reasoning delta", "err", err)
-			}
-		case fantasy.StreamPartTypeReasoningEnd:
-			if anthropicData, ok := part.ProviderMetadata["anthropic"]; ok {
-				if sig, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && sig.Signature != "" {
-					summaryMessage.AppendReasoningSignature(sig.Signature)
-				}
-			}
-			summaryMessage.FinishThinking()
-			if err := messages.Update(ctx, *summaryMessage); err != nil {
-				slog.Warn("failed to persist summary reasoning end", "err", err)
-			}
-		case fantasy.StreamPartTypeFinish:
-			totalUsage = part.Usage
-			providerMeta = part.ProviderMetadata
-		case fantasy.StreamPartTypeError:
-			return summaryStreamResult{message: *summaryMessage, usage: totalUsage, meta: providerMeta}, part.Error
-		}
-	}
-
-	return summaryStreamResult{message: *summaryMessage, usage: totalUsage, meta: providerMeta}, nil
-}
-
-func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
-	if t, _ := strconv.ParseBool(os.Getenv("LENOS_DISABLE_ANTHROPIC_CACHE")); t {
-		return fantasy.ProviderOptions{}
-	}
-	return fantasy.ProviderOptions{
-		anthropic.Name: &anthropic.ProviderCacheControlOptions{
-			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
-		},
-		bedrock.Name: &anthropic.ProviderCacheControlOptions{
-			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
-		},
-		vercel.Name: &anthropic.ProviderCacheControlOptions{
-			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
-		},
-	}
-}
 
 func (a *sessionAgent) getSessionMessages(ctx context.Context, s session.Session) ([]message.Message, error) {
 	msgs, err := a.messages.List(ctx, s.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list messages: %w", err)
+		return nil, err
 	}
-
+	// If a compaction boundary exists, only load messages after it.
+	// This gives the agent a fresh context window after Compact Session.
 	if s.SummaryMessageID != "" {
-		summaryMsgIndex := -1
-		for i, msg := range msgs {
-			if msg.ID == s.SummaryMessageID {
-				summaryMsgIndex = i
-				break
+		found := false
+		trimmed := make([]message.Message, 0, len(msgs))
+		for _, m := range msgs {
+			if m.ID == s.SummaryMessageID {
+				found = true
+				continue // skip the summary message itself
+			}
+			if found {
+				trimmed = append(trimmed, m)
 			}
 		}
-		if summaryMsgIndex != -1 {
-			summaryMsg := msgs[summaryMsgIndex]
-			summaryMsg.Role = message.User
-
-			compacted := make([]message.Message, 0, 1+recentUserMessagesAfterCompact+len(msgs[summaryMsgIndex+1:]))
-			compacted = append(compacted, summaryMsg)
-			compacted = append(compacted, recentUserMessages(msgs[:summaryMsgIndex], recentUserMessagesAfterCompact)...)
-			compacted = append(compacted, msgs[summaryMsgIndex+1:]...)
-			msgs = compacted
+		if found {
+			return trimmed, nil
 		}
 	}
 	return msgs, nil
-}
-
-func recentUserMessages(msgs []message.Message, limit int) []message.Message {
-	if limit <= 0 {
-		return nil
-	}
-	recent := make([]message.Message, 0, limit)
-	for i := len(msgs) - 1; i >= 0 && len(recent) < limit; i-- {
-		if msgs[i].Role != message.User {
-			continue
-		}
-		if strings.HasPrefix(strings.TrimSpace(msgs[i].Content().Text), autoCompactContinuationPrefix) {
-			continue
-		}
-		recent = append(recent, msgs[i])
-	}
-	for i, j := 0, len(recent)-1; i < j; i, j = i+1, j-1 {
-		recent[i], recent[j] = recent[j], recent[i]
-	}
-	return recent
 }
 
 type taskTitleExporter func(context.Context, string) ([]byte, error)
@@ -378,12 +164,6 @@ func (a *sessionAgent) Cancel(sessionID string) {
 	// The defer in processRequest will clean up the entry.
 	if cancel, ok := a.activeRequests.Get(sessionID); ok && cancel != nil {
 		slog.Debug("Request cancellation initiated", "session_id", sessionID)
-		cancel()
-	}
-
-	// Also check for summarize requests.
-	if cancel, ok := a.activeRequests.Get(sessionID + "-summarize"); ok && cancel != nil {
-		slog.Debug("Summarize cancellation initiated", "session_id", sessionID)
 		cancel()
 	}
 
@@ -517,59 +297,7 @@ func (a *sessionAgent) Model() Model {
 	return a.primaryModel.Get()
 }
 
-func summaryInstructionsPrompt() string {
-	return strings.TrimRight(string(summaryPrompt), "\n")
-}
-
-func summaryOutputProtocolPrompt() string {
-	return `Output protocol:
-
-Emit only the summary Markdown. Do not emit Markdown fences, JSON, XML,
-comments, or any text before or after the summary.
-`
-}
-
-func normalizeSummaryMarkdown(summaryMessage *message.Message) {
-	parsed, diag := lenosbash.Parse(summaryMessage.Content().Text)
-	if diag != nil || len(parsed.Bash) > 0 || strings.TrimSpace(parsed.Prose) == "" {
-		return
-	}
-	replaceAssistantText(summaryMessage, parsed.Prose)
-}
-
-func buildCompactSummaryPrompt(ctx context.Context, jobID string) string {
-	return strings.Join([]string{
-		summaryInstructionsPrompt(),
-		buildSummaryPrompt(ctx, jobID),
-		summaryOutputProtocolPrompt(),
-	}, "\n\n")
-}
-
-// formatSummaryPrompt formats the session summarization prompt from a todo list.
-// Kept separate so benchmarks can test formatting without requiring a context.
-func formatSummaryPrompt(todos []session.Todo) string {
-	var sb strings.Builder
-	sb.WriteString("Create a concise handoff summary of the conversation above.")
-	if len(todos) > 0 {
-		sb.WriteString("\n\n## Current Todo List\n\n")
-		for _, t := range todos {
-			fmt.Fprintf(&sb, "- [%s] %s\n", t.Status, t.Content)
-		}
-		sb.WriteString("\nInclude these tasks and their statuses in your summary. ")
-		sb.WriteString("Instruct the resuming assistant to use `task <uuid> done` to mark completed subtasks.")
-	}
-	return sb.String()
-}
-
-// buildSummaryPrompt fetches subtasks from taskwarrior and builds the summarization prompt.
-func buildSummaryPrompt(ctx context.Context, jobID string) string {
-	if jobID == "" {
-		return formatSummaryPrompt(nil)
-	}
-	todos, err := taskwarrior.PollSubtasks(ctx, jobID)
-	if err != nil {
-		slog.Warn("Failed to poll TW subtasks for summary", "jobID", jobID, "err", err)
-		return formatSummaryPrompt(nil)
-	}
-	return formatSummaryPrompt(todos)
+func (a *sessionAgent) CompactSession(ctx context.Context, call SessionAgentCall) error {
+	call.MarkCompactBoundary = true
+	return a.Run(ctx, call)
 }

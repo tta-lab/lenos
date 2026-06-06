@@ -14,7 +14,7 @@ install:
 
 .PHONY: test
 test:
-	go test -race -failfast ./...
+	CGO_ENABLED=1 gotestsum --format testname -- -race -failfast ./...
 
 .PHONY: fmt
 fmt:

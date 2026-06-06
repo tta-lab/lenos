@@ -126,12 +126,45 @@ current session.
 - **Context files**: Lenos reads AGENTS.md, LENOS.md, CLAUDE.md, GEMINI.md
   (and `.local` variants) from the working directory for project-specific
   instructions.
+- **Runtime context templates**: `internal/agent/templates/*_context.md`
+  define synthetic startup responses. They are Markdown Go templates, split
+  into multiple synthetic assistant responses with `---`. Fenced `bash` code
+  blocks are converted to `<run>` blocks before persistence and execution. Use
+  these templates to seed agent startup state, not identity prompts.
 - **Persistence**: SQLite + sqlc. All queries live in `internal/db/sql/`,
   generated code in `internal/db/`. Migrations in `internal/db/migrations/`.
 - **Pub/sub**: `internal/pubsub` for decoupled communication between agent,
   UI, and services.
 - **CGO disabled**: builds with `CGO_ENABLED=0` and
   `GOEXPERIMENT=greenteagc`.
+
+### Runtime Context Template Design
+
+Runtime context templates are the SSOT for what synthetic commands an agent
+sees when a new context window starts. They are rendered by
+`internal/agent/prompts.go`, selected by `internal/agent/coordinator.go`, and
+persisted by `internal/agent/context.go` as assistant/result rows before the
+user turn is loaded into model history.
+
+- `general_context.md`: shared startup context such as project/skill discovery
+  and project instruction file reads.
+- `coder_context.md`: native coder startup context, including the session
+  journal read through `$LENOS_JOURNAL`.
+- `reviewer_context.md`: reviewer startup context, including local-only branch
+  diff/log orientation.
+- `compact_context.md`: extra synthetic context appended after a compact
+  boundary, such as `lenos messages --tail 3`.
+
+Synthetic context injection must happen only when the effective model history
+is empty: the first session turn, or the first turn after a compact boundary.
+Do not inject these commands on every user turn. Compact handoff prompts are
+runtime prompts, not user messages; after the handoff turn, the next fresh
+window receives `compact_context.md` as the final synthetic response.
+
+Keep identity prompts (`coder.md`, `reviewer.md`) focused on role, rules, and
+output standards. Put startup shell orientation in `*_context.md` templates so
+the agent sees real command/result history instead of prose telling it what it
+should have run.
 
 ### Lenos Run Storage Invariant
 

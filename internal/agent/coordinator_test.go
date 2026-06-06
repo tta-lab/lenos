@@ -259,14 +259,11 @@ func TestBuildCall_NoLongerInjectsLenosEnvVars(t *testing.T) {
 
 	call := c.buildCall(context.Background(), "sess-123", "hi", Model{}, config.ProviderConfig{})
 
-	// buildCall copies all OS env vars (including any inherited LENOS_SESSION_ID
-	// from the parent process), so checking key presence won't work. Instead
-	// verify the coordinator no longer sets its OWN value "sess-123" — if the
-	// key exists from the OS env, its value will differ.
+	// buildCall copies all OS env vars and also explicitly sets
+	// LENOS_SESSION_ID so subprocess tools can find the session.
 	v, ok := call.Env["LENOS_SESSION_ID"]
-	if ok {
-		assert.NotEqual(t, "sess-123", v, "coordinator must not set LENOS_SESSION_ID to session ID")
-	}
+	assert.True(t, ok, "coordinator must set LENOS_SESSION_ID")
+	assert.Equal(t, "sess-123", v, "LENOS_SESSION_ID must match session ID")
 	_, hasDataDir := call.Env["LENOS_DATA_DIR"]
 	assert.False(t, hasDataDir, "LENOS_DATA_DIR no longer exported")
 }
@@ -469,14 +466,46 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 	}
 	require.Len(t, call.ContextCommands, 3)
 	assert.Equal(t, RuntimeContextCommand{
-		Command:  lenosbash.WrapBash("List registered projects and available skills.", "ttal project list\nskill list"),
+		Command:  lenosbash.WrapBash("List registered projects and available skills.", "project list\nskill list"),
 		Optional: true,
 	}, call.ContextCommands[0])
 	assert.Equal(t, lenosbash.WrapBash("Read key instructions.", "cat "+shellQuote(contextFile)), call.ContextCommands[1].Command)
-	assert.Equal(t, "\nReady.\n\nLets rock and roll.\n", call.ContextCommands[2].Command)
+	assert.Equal(t, lenosbash.WrapBash("Read the session journal.", "cat $LENOS_JOURNAL"), call.ContextCommands[2].Command)
 	assert.NotContains(t, strings.Join([]string{
 		call.ContextCommands[0].Command,
 		call.ContextCommands[1].Command,
 		call.ContextCommands[2].Command,
 	}, "\n"), "# read")
+}
+
+func TestBuildCall_ReviewerContextExcludesCoderContext(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	cfg, err := config.Init(tmp, "", false)
+	require.NoError(t, err)
+	cfg.Overrides().AgentName = config.AgentReviewer
+
+	c := &coordinator{
+		cfg:          cfg,
+		dataDir:      cfg.WorkingDir(),
+		currentAgent: &stubAgent{modelName: "test-model"},
+	}
+	call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
+
+	joined := strings.Join(commandTexts(call.ContextCommands), "\n")
+	assert.Contains(t, joined, "Inspect local review state.")
+	assert.NotContains(t, joined, "Read the session journal.")
+	assert.NotContains(t, joined, "cat $LENOS_JOURNAL")
+}
+
+func commandTexts(commands []RuntimeContextCommand) []string {
+	out := make([]string, 0, len(commands))
+	for _, command := range commands {
+		out = append(out, command.Command)
+	}
+	return out
 }

@@ -48,7 +48,9 @@ func (c *runTestCoordinator) StopBackgroundJobs(string)                         
 func (c *runTestCoordinator) Summarize(context.Context, string) error                 { return nil }
 func (c *runTestCoordinator) Model() agent.Model                                      { return agent.Model{} }
 func (c *runTestCoordinator) UpdateModels(context.Context) error                      { return nil }
-func (c *runTestCoordinator) SystemPrompt() string                                    { return "" }
+func (c *runTestCoordinator) CompactSession(context.Context, string) error            { return c.err }
+
+func (c *runTestCoordinator) SystemPrompt() string { return "" }
 
 type noopMessageService struct{}
 

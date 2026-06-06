@@ -474,6 +474,9 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 		}
 	}
 	c.Options.InitializeAs = cmp.Or(c.Options.InitializeAs, defaultInitializeAs)
+	if c.Options.JournalCheckIntervalTokens == 0 {
+		c.Options.JournalCheckIntervalTokens = 30000
+	}
 }
 
 func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (largeModel SelectedModel, smallModel SelectedModel, err error) {

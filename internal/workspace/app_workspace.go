@@ -158,17 +158,6 @@ func (w *AppWorkspace) AgentKillBackgroundJob(ctx context.Context, sessionID, jo
 	return w.app.AgentCoordinator.KillBackgroundJob(ctx, sessionID, jobID)
 }
 
-func (w *AppWorkspace) AgentCompact(ctx context.Context, sessionID string) error {
-	return w.AgentSummarize(ctx, sessionID)
-}
-
-func (w *AppWorkspace) AgentSummarize(ctx context.Context, sessionID string) error {
-	if w.app.AgentCoordinator == nil {
-		return errors.New("agent coordinator not initialized")
-	}
-	return w.app.AgentCoordinator.Summarize(ctx, sessionID)
-}
-
 func (w *AppWorkspace) UpdateAgentModel(ctx context.Context) error {
 	return w.app.UpdateAgentModel(ctx)
 }
@@ -363,3 +352,7 @@ func untrackedFiles(ctx context.Context, dir string) ([]ModifiedFile, error) {
 
 // Compile-time check that AppWorkspace implements Workspace.
 var _ Workspace = (*AppWorkspace)(nil)
+
+func (w *AppWorkspace) AgentCompactSession(ctx context.Context, sessionID string) error {
+	return w.app.AgentCoordinator.CompactSession(ctx, sessionID)
+}

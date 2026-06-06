@@ -268,7 +268,7 @@ func cannedDrainer(rounds ...[]string) func() []turnPrompt {
 		}
 		out := make([]turnPrompt, len(rounds[i]))
 		for j, prompt := range rounds[i] {
-			out[j] = turnPrompt{Text: prompt, Persist: true}
+			out[j] = turnPrompt{Text: prompt, Persist: true, Role: message.User}
 		}
 		i++
 		return out
@@ -382,8 +382,8 @@ func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
 
-	// Observation persisted as Result row.
-	results := messagesByRole(ms, message.Result)
+	// Observation persisted as Runtime row.
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.True(t, strings.HasPrefix(results[0].Content().Text, lenosbash.RuntimeLine("your last response was empty")))
 
@@ -405,7 +405,7 @@ func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
 
-	results := messagesByRole(ms, message.Result)
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.Contains(t, results[0].Content().Text, lenosbash.RuntimeTag+"\nyour last run block was not valid bash")
 
@@ -783,37 +783,6 @@ func TestRunLoop_PostStepHookFiresBeforeOnUsage(t *testing.T) {
 	require.Len(t, usageSteps, 2, "onUsage: both steps")
 }
 
-func TestRunLoop_PostStepHookExecutesBeforePreStepAutoCompact(t *testing.T) {
-	t.Parallel()
-	var hookCalled bool
-	var usageCalled bool
-	model := &scriptedModel{emits: []string{lenosbash.BashBlock("echo ok")}}
-	runner := &fakeRunner{results: []ExecResult{
-		{Stdout: []byte("ok\n"), ExitCode: 0, Duration: time.Millisecond},
-	}}
-	rec := &recordingRecorder{}
-	deps, _ := newDeps(t, model, runner, rec)
-	deps.postStepHook = func(int, fantasy.Usage, fantasy.ProviderMetadata) {
-		hookCalled = true
-	}
-	deps.onUsage = func(int, fantasy.Usage, fantasy.ProviderMetadata) {
-		usageCalled = true
-	}
-	deps.shouldSummarizeBeforeStep = func(stepIdx int) bool {
-		return stepIdx > 0
-	}
-
-	stop, err := runLoop(context.Background(), deps, nil, "go")
-	require.NoError(t, err)
-	assert.Equal(t, stopShouldSummarize, stop)
-	if !hookCalled {
-		t.Fatal("postStepHook was not called before pre-step compact")
-	}
-	if !usageCalled {
-		t.Fatal("onUsage was not called before pre-step compact")
-	}
-}
-
 func TestRunLoop_PostStepHookNil(t *testing.T) {
 	t.Parallel()
 	model := &scriptedModel{emits: []string{"exit"}}
@@ -835,8 +804,8 @@ func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "noop")
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
-	// Re-prompt is a Result, drained prompt is a User message.
-	results := messagesByRole(ms, message.Result)
+	// Re-prompt is a Runtime, drained prompt is a User message.
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.True(t, strings.HasPrefix(results[0].Content().Text, lenosbash.RuntimeTag))
 	users := messagesByRole(ms, message.User)
@@ -853,8 +822,8 @@ func TestRunLoop_DrainOnBanned(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
-	// Re-prompt is a Result, drained prompt is a User message.
-	results := messagesByRole(ms, message.Result)
+	// Re-prompt is a Runtime, drained prompt is a User message.
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.Contains(t, results[0].Content().Text, lenosbash.RuntimeTag)
 	users := messagesByRole(ms, message.User)
@@ -1045,35 +1014,6 @@ func (m *errorStreamModel) StreamObject(context.Context, fantasy.ObjectCall) (fa
 
 var _ fantasy.LanguageModel = (*errorStreamModel)(nil)
 
-func TestRunLoop_PreStepCompactReturnsShouldSummarize(t *testing.T) {
-	t.Parallel()
-	model := &scriptedModel{emits: []string{lenosbash.BashBlock("echo a"), lenosbash.BashBlock("echo b")}}
-	runner := &fakeRunner{results: []ExecResult{
-		{Stdout: []byte("a\n"), ExitCode: 0, Duration: time.Millisecond},
-	}}
-	rec := &recordingRecorder{}
-	deps, ms := newDeps(t, model, runner, rec)
-	var calls int
-	deps.onUsage = func(_ int, _ fantasy.Usage, _ fantasy.ProviderMetadata) {
-		calls++
-	}
-	deps.shouldSummarizeBeforeStep = func(stepIdx int) bool {
-		return stepIdx > 0 && calls >= 1
-	}
-
-	stop, err := runLoop(context.Background(), deps, nil, "do work")
-	require.NoError(t, err)
-	assert.Equal(t, stopShouldSummarize, stop)
-	assert.Equal(t, 1, calls, "onUsage should fire for the completed emit before compact")
-
-	assistants := assistantsByOrder(ms)
-	require.NotEmpty(t, assistants)
-	assert.Equal(t, message.FinishReasonToolUse, assistants[len(assistants)-1].FinishReason())
-
-	results := resultsByOrder(ms)
-	require.Len(t, results, 1, "pre-step compact should happen after the completed bash result")
-}
-
 // TestRunLoop_CmdNotFound_PassesStderrToken verifies that when bash prints
 // "command not found" in stderr the loop invokes rePromptCmdNotFound with
 // the token captured from stderr. The re-prompt must contain the word.
@@ -1197,7 +1137,7 @@ func TestRunLoop_CmdNotFoundInBashBlockRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
 
-	results := messagesByRole(ms, message.Result)
+	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
 	obs := results[0].CommandContent().Output
 	assert.Contains(t, obs, "`hello`")
@@ -1498,7 +1438,7 @@ func TestRunLoop_ToolCallInsideBashBlockInvalidBashDoesNotExecute(t *testing.T) 
 	require.NoError(t, err)
 
 	assert.Empty(t, runner.bash, "tool-call-shaped run block must not execute")
-	results := messagesByRole(ms, message.Result)
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.Contains(t, results[0].Content().Text, "not valid bash")
 }

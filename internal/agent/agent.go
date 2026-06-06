@@ -26,29 +26,9 @@ import (
 
 const (
 	DefaultSessionName = "Untitled Session"
-
-	// Constants for auto-summarization thresholds.
-	contextWindowBufferRatio       = 0.2
-	recentUserMessagesAfterCompact = 3
-	autoCompactContinuationPrefix  = "The previous session was interrupted because it got too long"
 )
 
-// shouldAutoCompact returns true when the session has approached the
-// auto-summarization threshold. The remaining-token reserve scales with the
-// context window so the summary request still has room for the runtime prompt.
-func shouldAutoCompact(contextWindow, used int64) bool {
-	if contextWindow <= 0 {
-		return false
-	}
-	remaining := contextWindow - used
-	threshold := int64(float64(contextWindow) * contextWindowBufferRatio)
-	return remaining <= threshold
-}
-
 var userAgent = fmt.Sprintf("Lenos/%s (https://github.com/tta-lab/lenos)", version.Version)
-
-//go:embed templates/summary.md
-var summaryPrompt []byte
 
 // SessionAgentCall carries one user-initiated turn through the agent loop.
 // It bundles the session ID, prompt, and per-turn runtime context (provider
@@ -56,8 +36,8 @@ var summaryPrompt []byte
 type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
-	// runtimePrompt marks Prompt as runtime feedback that should be sent to
-	// the model without persisting a user-visible chat row.
+	// runtimePrompt marks Prompt as runtime feedback persisted as a runtime
+	// message, not as a user-visible chat row.
 	runtimePrompt bool
 	turnPrompts   []turnPrompt
 	usageSummary  *RunUsageSummary
@@ -91,6 +71,19 @@ type SessionAgentCall struct {
 	// ContextCommands are runner-backed context reads persisted before the
 	// first user turn so they replay like normal assistant command/result pairs.
 	ContextCommands []RuntimeContextCommand
+
+	// JournalPath is the absolute path to the per-session journal file. Empty
+	// for non-task sessions (reviewer, sub-agent, chat-only).
+	JournalPath string
+
+	// JournalCheckIntervalTokens is the token interval for injecting
+	// periodic journal self-check reminders. 0 disables.
+	JournalCheckIntervalTokens int
+
+	// MarkCompactBoundary marks the assistant response from this call as a
+	// compaction boundary. After this turn, only messages after the boundary
+	// are loaded into the context window, giving the agent a fresh start.
+	MarkCompactBoundary bool
 }
 
 type RuntimeContextCommand struct {
@@ -101,6 +94,7 @@ type RuntimeContextCommand struct {
 type turnPrompt struct {
 	Text    string
 	Persist bool
+	Role    message.MessageRole
 }
 
 type SessionAgent interface {
@@ -117,8 +111,10 @@ type SessionAgent interface {
 	ActiveBackgroundJobs(sessionID string) []BackgroundJob
 	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
 	StopBackgroundJobs(sessionID string)
-	Summarize(context.Context, string, fantasy.ProviderOptions) error
 	Model() Model
+	// CompactSession sends a journal handoff prompt and marks the assistant
+	// response as a compaction boundary so subsequent turns start fresh.
+	CompactSession(ctx context.Context, call SessionAgentCall) error
 }
 
 type Model struct {
@@ -153,11 +149,10 @@ type sessionAgent struct {
 	primaryModel *csync.Value[Model]
 	systemPrompt *csync.Value[string]
 
-	isSubAgent           bool
-	sessions             session.Service
-	messages             message.Service
-	disableAutoSummarize bool
-	notify               pubsub.Publisher[notify.Notification]
+	isSubAgent bool
+	sessions   session.Service
+	messages   message.Service
+	notify     pubsub.Publisher[notify.Notification]
 
 	messageQueue    *csync.Map[string, []SessionAgentCall]
 	activeRequests  *csync.Map[string, context.CancelFunc]
@@ -169,15 +164,14 @@ type sessionAgent struct {
 }
 
 type SessionAgentOptions struct {
-	LargeModel           Model
-	SmallModel           Model
-	PrimaryModel         Model
-	SystemPrompt         string
-	IsSubAgent           bool
-	DisableAutoSummarize bool
-	Sessions             session.Service
-	Messages             message.Service
-	Notify               pubsub.Publisher[notify.Notification]
+	LargeModel   Model
+	SmallModel   Model
+	PrimaryModel Model
+	SystemPrompt string
+	IsSubAgent   bool
+	Sessions     session.Service
+	Messages     message.Service
+	Notify       pubsub.Publisher[notify.Notification]
 	// HookRunner is called after each model step with a JSON envelope on
 	// stdin. Nil-safe: when nil, no post-step hook runs.
 	HookRunner hooks.Runner
@@ -187,19 +181,18 @@ func NewSessionAgent(
 	opts SessionAgentOptions,
 ) SessionAgent {
 	return &sessionAgent{
-		largeModel:           csync.NewValue(opts.LargeModel),
-		smallModel:           csync.NewValue(opts.SmallModel),
-		primaryModel:         csync.NewValue(opts.PrimaryModel),
-		systemPrompt:         csync.NewValue(opts.SystemPrompt),
-		isSubAgent:           opts.IsSubAgent,
-		sessions:             opts.Sessions,
-		messages:             opts.Messages,
-		disableAutoSummarize: opts.DisableAutoSummarize,
-		notify:               opts.Notify,
-		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
-		activeRequests:       csync.NewMap[string, context.CancelFunc](),
-		bgRunners:            csync.NewMap[string, *BackgroundRunner](),
-		hookRunner:           opts.HookRunner,
-		taskExporter:         exportTaskForTitle,
+		largeModel:     csync.NewValue(opts.LargeModel),
+		smallModel:     csync.NewValue(opts.SmallModel),
+		primaryModel:   csync.NewValue(opts.PrimaryModel),
+		systemPrompt:   csync.NewValue(opts.SystemPrompt),
+		isSubAgent:     opts.IsSubAgent,
+		sessions:       opts.Sessions,
+		messages:       opts.Messages,
+		notify:         opts.Notify,
+		messageQueue:   csync.NewMap[string, []SessionAgentCall](),
+		activeRequests: csync.NewMap[string, context.CancelFunc](),
+		bgRunners:      csync.NewMap[string, *BackgroundRunner](),
+		hookRunner:     opts.HookRunner,
+		taskExporter:   exportTaskForTitle,
 	}
 }

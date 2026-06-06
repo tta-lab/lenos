@@ -30,6 +30,7 @@ import (
 	"github.com/charmbracelet/ultraviolet/layout"
 	"github.com/charmbracelet/ultraviolet/screen"
 	"github.com/charmbracelet/x/editor"
+	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/config"
@@ -929,7 +930,7 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 				}
 			}
 		}
-	case message.Result:
+	case message.Result, message.Runtime:
 		if m.chat.MessageItem(msg.ID) != nil {
 			return nil
 		}
@@ -1078,19 +1079,6 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
-	case dialog.ActionCompact:
-		if m.isAgentBusy() {
-			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before compacting session..."))
-			break
-		}
-		cmds = append(cmds, func() tea.Msg {
-			err := m.com.Workspace.AgentCompact(context.Background(), msg.SessionID)
-			if err != nil {
-				return util.ReportError(err)()
-			}
-			return nil
-		})
-		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionKillBackgroundJob:
 		cmds = append(cmds, dialog.KillBackgroundJobCmd(m.com, msg.SessionID, msg.JobID))
 		m.dialog.CloseDialog(dialog.BackgroundJobsID)
@@ -1104,6 +1092,37 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			break
 		}
 		cmds = append(cmds, m.openEditor(m.textarea.Value()))
+		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionCompactSession:
+		if m.isAgentBusy() {
+			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before compacting..."))
+			m.dialog.CloseDialog(dialog.CommandsID)
+			break
+		}
+		if !m.hasSession() {
+			cmds = append(cmds, util.ReportWarn("No active session"))
+			m.dialog.CloseDialog(dialog.CommandsID)
+			break
+		}
+		cmds = append(cmds, func() tea.Msg {
+			if err := m.com.Workspace.AgentCompactSession(context.Background(), m.session.ID); err != nil {
+				return util.InfoMsg{Type: util.InfoTypeError, Msg: fmt.Sprintf("Compact session failed: %v", err)}
+			}
+			return nil
+		})
+		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionOpenJournal:
+		if !m.hasSession() {
+			cmds = append(cmds, util.ReportWarn("No active session"))
+			m.dialog.CloseDialog(dialog.CommandsID)
+			break
+		}
+		journalPath := agent.JournalPath(m.com.Workspace.WorkingDir(), m.session.ID)
+		if _, err := os.Stat(journalPath); err != nil {
+			cmds = append(cmds, util.ReportWarn("No journal found for this session"))
+		} else {
+			cmds = append(cmds, m.openFile(journalPath))
+		}
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionTogglePills:
 		if cmd := m.togglePillsExpanded(); cmd != nil {
@@ -2268,6 +2287,22 @@ type uiLayout struct {
 
 	// session details is the area for the session details overlay.
 	sessionDetails uv.Rectangle
+}
+
+func (m *UI) openFile(path string) tea.Cmd {
+	cmd, err := editor.Command(
+		"lenos",
+		path,
+	)
+	if err != nil {
+		return util.ReportError(err)
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return nil
+	})
 }
 
 func (m *UI) openEditor(value string) tea.Cmd {

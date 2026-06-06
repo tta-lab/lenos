@@ -125,6 +125,9 @@ func processContextPath(p string, store *config.ConfigStore) []ContextFile {
 	fullPath := resolveContextPath(p, store)
 	info, err := os.Stat(fullPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return contexts
+		}
 		slog.Warn("Failed to stat context path", "path", fullPath, "error", err)
 		return contexts
 	}
@@ -200,6 +203,9 @@ func LoadRuntimeContext(_ context.Context, store *config.ConfigStore, extraConte
 		resolved := resolveContextPath(pth, store)
 		info, err := os.Stat(resolved)
 		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			slog.Warn("Failed to stat context path", "path", resolved, "error", err)
 			continue
 		}
