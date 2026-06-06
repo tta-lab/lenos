@@ -6,8 +6,9 @@ Lenos is a terminal AI coding assistant for the
 It runs agents in a real shell, keeps sessions resumable, and uses a built-in
 sandbox so the model can work in a constrained environment on macOS and Linux.
 The current design is tuned for low token use and high prompt-cache hit rates:
-compact runtime context, bash-first turns, and stable prompt prefixes. In daily
-use with DeepSeek V4 Pro, recent cache hit rates have been in the 98-99% range.
+compact runtime context, Markdown replies with simple `<run>` blocks for bash
+calls, and stable prompt prefixes. In daily use with DeepSeek V4 Pro, recent
+cache hit rates have been in the 98-99% range.
 
 ![Lenos coder running in ttal](docs/screenshots/Lenos-coder-ttal.png)
 
@@ -31,8 +32,9 @@ export PATH="$HOME/.local/bin:$PATH"
 
 - **Built-in sandbox**: command execution is constrained by the Temenos sandbox
   SDK without a separate daemon.
-- **Bash-first agent loop**: the model emits shell work, Lenos executes it, and
-  the next turn sees the real result.
+- **Simple run protocol**: the model replies in Markdown and wraps shell work
+  in `<run>` blocks. Lenos executes those blocks and feeds the real result back
+  into the next turn.
 - **High cache locality**: runtime context is injected as stable command/result
   history instead of large changing prose blocks.
 - **Session storage**: SQLite-backed sessions can be resumed, continued, and
