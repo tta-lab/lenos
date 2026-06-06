@@ -382,8 +382,8 @@ func TestRunLoop_EmptyEmitRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
 
-	// Observation persisted as Result row.
-	results := messagesByRole(ms, message.Result)
+	// Observation persisted as Runtime row.
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.True(t, strings.HasPrefix(results[0].Content().Text, lenosbash.RuntimeLine("your last response was empty")))
 
@@ -405,7 +405,7 @@ func TestRunLoop_InvalidBashRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
 
-	results := messagesByRole(ms, message.Result)
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.Contains(t, results[0].Content().Text, lenosbash.RuntimeTag+"\nyour last run block was not valid bash")
 
@@ -804,8 +804,8 @@ func TestRunLoop_DrainOnEmptyEmit(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "noop")
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
-	// Re-prompt is a Result, drained prompt is a User message.
-	results := messagesByRole(ms, message.Result)
+	// Re-prompt is a Runtime, drained prompt is a User message.
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.True(t, strings.HasPrefix(results[0].Content().Text, lenosbash.RuntimeTag))
 	users := messagesByRole(ms, message.User)
@@ -822,8 +822,8 @@ func TestRunLoop_DrainOnBanned(t *testing.T) {
 	stop, err := runLoop(context.Background(), deps, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
-	// Re-prompt is a Result, drained prompt is a User message.
-	results := messagesByRole(ms, message.Result)
+	// Re-prompt is a Runtime, drained prompt is a User message.
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.Contains(t, results[0].Content().Text, lenosbash.RuntimeTag)
 	users := messagesByRole(ms, message.User)
@@ -1137,7 +1137,7 @@ func TestRunLoop_CmdNotFoundInBashBlockRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
 
-	results := messagesByRole(ms, message.Result)
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	obs := results[0].CommandContent().Output
 	assert.Contains(t, obs, "`hello`")
