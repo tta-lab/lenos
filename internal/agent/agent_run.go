@@ -59,7 +59,7 @@ runLoopReentry:
 		return fmt.Errorf("failed to get session messages: %w", err)
 	}
 	isNewSession := len(msgs) == 0
-	if len(call.ContextCommands) > 0 {
+	if isNewSession && len(call.ContextCommands) > 0 {
 		if err := a.persistRuntimeContextCommands(ctx, call, runner); err != nil {
 			return err
 		}
