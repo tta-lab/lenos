@@ -125,8 +125,15 @@ func buildLenosWrapper(
 	return p.Build(ctx, provider, model, store)
 }
 
+type runtimeContextTemplateData struct {
+	ContextFiles []prompt.ContextFile
+}
+
 func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
-	rendered, err := renderRuntimeContextTemplate(runtimeContext)
+	data := runtimeContextTemplateData{
+		ContextFiles: runtimeContext.ContextFiles,
+	}
+	rendered, err := renderRuntimeContextTemplate(data)
 	if err != nil {
 		return fallbackRuntimeContextCommands(runtimeContext)
 	}
@@ -146,7 +153,7 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []Runtime
 	return commands
 }
 
-func renderRuntimeContextTemplate(runtimeContext prompt.RuntimeContext) (string, error) {
+func renderRuntimeContextTemplate(data runtimeContextTemplateData) (string, error) {
 	t, err := template.New("context").Funcs(template.FuncMap{
 		"shellQuote": shellQuote,
 	}).Parse(string(runtimeContextPromptTmpl))
@@ -154,7 +161,7 @@ func renderRuntimeContextTemplate(runtimeContext prompt.RuntimeContext) (string,
 		return "", err
 	}
 	var b strings.Builder
-	if err := t.Execute(&b, runtimeContext); err != nil {
+	if err := t.Execute(&b, data); err != nil {
 		return "", err
 	}
 	return b.String(), nil

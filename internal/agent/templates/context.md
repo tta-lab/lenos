@@ -10,9 +10,11 @@ skill list
 ```bash
 {{range .ContextFiles}}cat {{shellQuote .Path}}
 {{end}}```
+{{end}}
+
 ---
 
-{{end}}
-Ready.
-
-Lets rock and roll.
+Read the session journal.
+```bash
+cat $LENOS_JOURNAL
+```

@@ -15,7 +15,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/tta-lab/lenos/internal/agent/hyper"
-	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/hooks"
 	"github.com/tta-lab/lenos/internal/message"
@@ -116,12 +115,6 @@ runLoopReentry:
 		return fmt.Errorf("failed to get session messages: %w", err)
 	}
 	isNewSession := len(msgs) == 0
-	if isNewSession && call.JournalPath != "" {
-		call.ContextCommands = append(call.ContextCommands, RuntimeContextCommand{
-			Command:  lenosbash.WrapBash("Read the session journal.", "cat "+shellQuote(call.JournalPath)),
-			Optional: false,
-		})
-	}
 	if len(call.ContextCommands) > 0 {
 		if err := a.persistRuntimeContextCommands(ctx, call, runner); err != nil {
 			return err

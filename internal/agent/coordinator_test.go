@@ -470,7 +470,7 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 		Optional: true,
 	}, call.ContextCommands[0])
 	assert.Equal(t, lenosbash.WrapBash("Read key instructions.", "cat "+shellQuote(contextFile)), call.ContextCommands[1].Command)
-	assert.Equal(t, "Ready.\n\nLets rock and roll.", call.ContextCommands[2].Command)
+	assert.Equal(t, lenosbash.WrapBash("Read the session journal.", "cat $LENOS_JOURNAL"), call.ContextCommands[2].Command)
 	assert.NotContains(t, strings.Join([]string{
 		call.ContextCommands[0].Command,
 		call.ContextCommands[1].Command,
