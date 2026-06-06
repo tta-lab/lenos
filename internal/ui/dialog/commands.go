@@ -409,10 +409,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "compact_handoff", "Compact Session", "", ActionCompactSession{}))
 	}
 
-	// Add open journal command when running with a journal.
-	if journalPath := os.Getenv("LENOS_JOURNAL"); journalPath != "" {
-		commands = append(commands, NewCommandItem(c.com.Styles, "open_journal", "Open Journal", "", ActionOpenJournal{}))
-	}
+	commands = append(commands, NewCommandItem(c.com.Styles, "open_journal", "Open Journal", "", ActionOpenJournal{}))
 
 	if c.hasTodos || c.hasQueue {
 		var label string

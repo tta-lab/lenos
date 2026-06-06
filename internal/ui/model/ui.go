@@ -30,6 +30,7 @@ import (
 	"github.com/charmbracelet/ultraviolet/layout"
 	"github.com/charmbracelet/ultraviolet/screen"
 	"github.com/charmbracelet/x/editor"
+	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/agent/notify"
 	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/config"
@@ -1111,8 +1112,13 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		})
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionOpenJournal:
-		journalPath := os.Getenv("LENOS_JOURNAL")
-		if journalPath == "" {
+		if !m.hasSession() {
+			cmds = append(cmds, util.ReportWarn("No active session"))
+			m.dialog.CloseDialog(dialog.CommandsID)
+			break
+		}
+		journalPath := filepath.Join(agent.JournalDir(m.com.Workspace.WorkingDir()), m.session.ID+".md")
+		if _, err := os.Stat(journalPath); err != nil {
 			cmds = append(cmds, util.ReportWarn("No journal found for this session"))
 		} else {
 			cmds = append(cmds, m.openFile(journalPath))
