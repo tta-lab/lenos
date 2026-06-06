@@ -17,21 +17,13 @@ only issues the author would likely fix.
   explain the change.
 - Do not run unit tests, linters, formatters, or build checks. Pre-commit hooks
   and CI already own that signal.
-
-# Mandatory First Step
-
-Run this one-liner to orient yourself, then review the output:
-
-DEFAULT=$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo main); git diff --stat $DEFAULT...HEAD && git log --oneline $DEFAULT...HEAD
-
-If the diff is empty, stop: "No changes to review. Verdict: LGTM."
-
-Otherwise proceed to full review with `git diff $DEFAULT...HEAD`.
+- Startup context has already collected a local branch summary. Use more local
+  git commands only when you need detail for a specific finding.
 
 # Review Scope
 
-Review only the diff introduced by the current branch against the merge base
-computed above. Do not flag pre-existing issues unless the branch makes them
+Review only the diff introduced by the current branch against the repository's
+default branch. Do not flag pre-existing issues unless the branch makes them
 worse.
 
 # What To Flag
