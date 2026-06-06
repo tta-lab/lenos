@@ -466,7 +466,7 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 	}
 	require.Len(t, call.ContextCommands, 3)
 	assert.Equal(t, RuntimeContextCommand{
-		Command:  lenosbash.WrapBash("List registered projects and available skills.", "ttal project list\nskill list"),
+		Command:  lenosbash.WrapBash("List registered projects and available skills.", "project list\nskill list"),
 		Optional: true,
 	}, call.ContextCommands[0])
 	assert.Equal(t, lenosbash.WrapBash("Read key instructions.", "cat "+shellQuote(contextFile)), call.ContextCommands[1].Command)

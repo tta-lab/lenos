@@ -1111,7 +1111,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		})
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionOpenJournal:
-		journalPath := os.Getenv("JOURNAL")
+		journalPath := os.Getenv("LENOS_JOURNAL")
 		if journalPath == "" {
 			cmds = append(cmds, util.ReportWarn("No journal found for this session"))
 		} else {

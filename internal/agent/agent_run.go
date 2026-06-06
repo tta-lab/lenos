@@ -212,7 +212,7 @@ runLoopReentry:
 	freshContext := isNewSession || currentSession.SummaryMessageID != ""
 	if freshContext && call.JournalPath != "" {
 		call.ContextCommands = append(call.ContextCommands, RuntimeContextCommand{
-			Command:  "cat ${JOURNAL:-" + call.JournalPath + "}",
+			Command:  "cat ${LENOS_JOURNAL:-" + call.JournalPath + "}",
 			Optional: false,
 		})
 	}

@@ -260,7 +260,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		} else {
 			journalPath = path
 			// Expose journal to the subprocess runner via env var.
-			sandboxEnv["JOURNAL"] = journalPath
+			sandboxEnv["LENOS_JOURNAL"] = journalPath
 			sandboxEnv["LENOS_SESSION_ID"] = sessionID
 		}
 	}
