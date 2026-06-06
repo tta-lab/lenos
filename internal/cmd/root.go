@@ -22,6 +22,7 @@ import (
 
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/app"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/db"
@@ -133,7 +134,11 @@ lenos --continue
 			slog.Error("TUI run error", "error", err)
 			return errors.New("Lenos crashed. If metrics are enabled, we were notified about it. If you'd like to report it, please copy the stacktrace above and open an issue at https://github.com/tta-lab/lenos/issues/new?template=bug.yml") //nolint:staticcheck
 		}
-		if hint := formatResumeHint(model.ActiveSessionID()); hint != "" {
+		activeSessionID := model.ActiveSessionID()
+		if hint := formatResumeHint(activeSessionID); hint != "" {
+			fmt.Fprintln(os.Stdout, hint)
+		}
+		if hint := formatJournalHint(ws.WorkingDir(), activeSessionID); hint != "" {
 			fmt.Fprintln(os.Stdout, hint)
 		}
 		return nil
@@ -145,6 +150,17 @@ func formatResumeHint(sessionID string) string {
 		return ""
 	}
 	return fmt.Sprintf("To continue this session, run lenos --session %s", sessionID)
+}
+
+func formatJournalHint(workingDir, sessionID string) string {
+	if workingDir == "" || sessionID == "" {
+		return ""
+	}
+	path := filepath.Join(agent.JournalDir(workingDir), sessionID+".md")
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return fmt.Sprintf("Journal: %s", path)
 }
 
 var heartbit = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b2d3e")).SetString(`
