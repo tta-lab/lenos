@@ -5,6 +5,8 @@ import (
 	_ "embed"
 	"os"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -138,57 +140,107 @@ type runtimeContextTemplateData struct {
 	ContextFiles []prompt.ContextFile
 }
 
-func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, templates ...[]byte) []RuntimeContextCommand {
+type runtimeContextTemplateMeta struct {
+	Order    int
+	Agent    string
+	Optional bool
+	Content  string
+}
+
+func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, agentName string, templates ...[]byte) []RuntimeContextCommand {
 	data := runtimeContextTemplateData{
 		ContextFiles: runtimeContext.ContextFiles,
 	}
-	rendered, err := renderRuntimeContextTemplates(data, templates...)
+	rendered, err := renderRuntimeContextTemplates(data, agentName, templates...)
 	if err != nil {
 		return fallbackRuntimeContextCommands(runtimeContext)
 	}
 
-	sections := splitRuntimeContextSections(rendered)
-	commands := make([]RuntimeContextCommand, 0, len(sections))
-	for i, section := range sections {
-		command := markdownBashToRunBlocks(section)
+	commands := make([]RuntimeContextCommand, 0, len(rendered))
+	for _, section := range rendered {
+		command := markdownBashToRunBlocks(section.Content)
 		if strings.TrimSpace(command) == "" {
 			continue
 		}
 		commands = append(commands, RuntimeContextCommand{
 			Command:  command,
-			Optional: i == 0,
+			Optional: section.Optional,
 		})
 	}
 	return commands
 }
 
 func appendCompactRuntimeContextCommand(commands []RuntimeContextCommand) []RuntimeContextCommand {
-	compactCommands := buildRuntimeContextCommands(prompt.RuntimeContext{}, compactRuntimeContextPromptTmpl)
+	compactCommands := buildRuntimeContextCommands(prompt.RuntimeContext{}, config.AgentCoder, compactRuntimeContextPromptTmpl)
 	for _, command := range compactCommands {
-		command.Optional = false
 		commands = append(commands, command)
 	}
 	return commands
 }
 
-func renderRuntimeContextTemplates(data runtimeContextTemplateData, templates ...[]byte) (string, error) {
-	var rendered []string
+func renderRuntimeContextTemplates(data runtimeContextTemplateData, agentName string, templates ...[]byte) ([]runtimeContextTemplateMeta, error) {
+	contexts := make([]runtimeContextTemplateMeta, 0, len(templates))
 	for _, tmpl := range templates {
-		section, err := renderRuntimeContextTemplate(data, tmpl)
+		rendered, err := renderRuntimeContextTemplate(data, string(tmpl))
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		if strings.TrimSpace(section) != "" {
-			rendered = append(rendered, section)
+		for _, splitSection := range splitRuntimeContextSections(rendered) {
+			ctxTmpl := parseRuntimeContextSection(splitSection)
+			if ctxTmpl.Agent != "" && ctxTmpl.Agent != agentName {
+				continue
+			}
+			if strings.TrimSpace(ctxTmpl.Content) == "" {
+				continue
+			}
+			contexts = append(contexts, ctxTmpl)
 		}
 	}
-	return strings.Join(rendered, "\n\n---\n\n"), nil
+	slices.SortStableFunc(contexts, func(a, b runtimeContextTemplateMeta) int {
+		return a.Order - b.Order
+	})
+	return contexts, nil
 }
 
-func renderRuntimeContextTemplate(data runtimeContextTemplateData, tmpl []byte) (string, error) {
+func parseRuntimeContextSection(section string) runtimeContextTemplateMeta {
+	meta := runtimeContextTemplateMeta{
+		Content: section,
+	}
+	body := meta.Content
+	if !strings.HasPrefix(body, "---\n") {
+		return meta
+	}
+	rest := body[4:]
+	end := strings.Index(rest, "\n---\n")
+	if end < 0 {
+		return meta
+	}
+	for _, line := range strings.Split(rest[:end], "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		switch key {
+		case "order":
+			if n, err := strconv.Atoi(value); err == nil {
+				meta.Order = n
+			}
+		case "agent":
+			meta.Agent = value
+		case "optional":
+			meta.Optional = value == "true"
+		}
+	}
+	meta.Content = rest[end+5:]
+	return meta
+}
+
+func renderRuntimeContextTemplate(data runtimeContextTemplateData, tmpl string) (string, error) {
 	t, err := template.New("context").Funcs(template.FuncMap{
 		"shellQuote": shellQuote,
-	}).Parse(string(tmpl))
+	}).Parse(tmpl)
 	if err != nil {
 		return "", err
 	}

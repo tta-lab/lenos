@@ -1,3 +1,7 @@
+---
+order: 30
+agent: reviewer
+---
 Inspect local review state.
 ```bash
 # Each Lenos run block is ephemeral; variables set here will not exist in

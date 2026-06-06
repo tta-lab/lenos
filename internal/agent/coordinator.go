@@ -284,9 +284,21 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	switch store.Overrides().AgentName {
 	case "", config.AgentCoder:
-		return buildRuntimeContextCommands(runtimeContext, generalRuntimeContextPromptTmpl, coderRuntimeContextPromptTmpl)
+		return buildRuntimeContextCommands(
+			runtimeContext,
+			config.AgentCoder,
+			generalRuntimeContextPromptTmpl,
+			coderRuntimeContextPromptTmpl,
+			reviewerRuntimeContextPromptTmpl,
+		)
 	case config.AgentReviewer:
-		return buildRuntimeContextCommands(runtimeContext, generalRuntimeContextPromptTmpl, reviewerRuntimeContextPromptTmpl)
+		return buildRuntimeContextCommands(
+			runtimeContext,
+			config.AgentReviewer,
+			generalRuntimeContextPromptTmpl,
+			coderRuntimeContextPromptTmpl,
+			reviewerRuntimeContextPromptTmpl,
+		)
 	default:
 		return nil
 	}
