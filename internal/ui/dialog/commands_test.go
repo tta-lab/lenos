@@ -13,11 +13,16 @@ import (
 
 type commandTestWorkspace struct {
 	workspace.Workspace
-	cfg *config.Config
+	cfg        *config.Config
+	workingDir string
 }
 
 func (w commandTestWorkspace) Config() *config.Config {
 	return w.cfg
+}
+
+func (w commandTestWorkspace) WorkingDir() string {
+	return w.workingDir
 }
 
 func TestDefaultCommandsIncludesBackgroundJobsForActiveSession(t *testing.T) {
@@ -25,11 +30,14 @@ func TestDefaultCommandsIncludesBackgroundJobsForActiveSession(t *testing.T) {
 
 	sty := styles.DefaultStyles()
 	cmds, err := NewCommands(&common.Common{
-		Workspace: commandTestWorkspace{cfg: &config.Config{
-			Models:    map[config.SelectedModelType]config.SelectedModel{},
-			Providers: csync.NewMap[string, config.ProviderConfig](),
-			Agents:    map[string]config.Agent{},
-		}},
+		Workspace: commandTestWorkspace{
+			cfg: &config.Config{
+				Models:    map[config.SelectedModelType]config.SelectedModel{},
+				Providers: csync.NewMap[string, config.ProviderConfig](),
+				Agents:    map[string]config.Agent{},
+			},
+			workingDir: t.TempDir(),
+		},
 		Styles: &sty,
 	}, "session-id", true, false, false, nil)
 	require.NoError(t, err)
