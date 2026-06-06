@@ -1,74 +1,18 @@
 package agent
 
 import (
-	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
 	"charm.land/fantasy"
-	"charm.land/lipgloss/v2"
 
-	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	"github.com/tta-lab/lenos/internal/hooks"
-	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
-	"github.com/tta-lab/lenos/internal/stringext"
 )
-
-// buildHistory converts session messages to fantasy messages for the bash-first
-// loop. The current-turn prompt is NOT included — runLoop appends it before
-// calling the model.
-func buildHistory(msgs []message.Message) []fantasy.Message {
-	history := make([]fantasy.Message, 0, len(msgs))
-	for _, m := range msgs {
-		history = append(history, m.ToAIMessage()...)
-	}
-	return history
-}
-
-const queuedPromptSep = "\n\n"
-
-// hookTimeout is the per-invocation deadline for post_step hooks. Var (not
-// const) so tests can shrink it via export_test.go.
-var hookTimeout = 5 * time.Second
-
-// errorFinishFor returns an appropriate FinishReason and user-facing message
-// for a run error. This provides actionable feedback (e.g. "enable Copilot
-// model", "add credits") rather than opaque error strings.
-func errorFinishFor(runErr error, model string) (reason message.FinishReason, title, msg string) {
-	reason = message.FinishReasonError
-	const defaultTitle = "Provider Error"
-	linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6b8a5e")).Underline(true)
-
-	if errors.Is(runErr, hyper.ErrNoCredits) {
-		url := hyper.BaseURL()
-		link := linkStyle.Hyperlink(url, "id=hyper").Render(url)
-		return reason, "No credits", "You're out of credits. Add more at " + link
-	}
-
-	var fantasyErr *fantasy.Error
-	var providerErr *fantasy.ProviderError
-	if errors.As(runErr, &providerErr) {
-		if providerErr.Message == "The requested model is not supported." {
-			url := "https://github.com/settings/copilot/features"
-			link := linkStyle.Hyperlink(url, "id=copilot").Render(url)
-			return reason, "Copilot model not enabled",
-				fmt.Sprintf("%q is not enabled in Copilot. Go to the following page to enable it. Then, wait 5 minutes before trying again. %s", model, link)
-		}
-		return reason, cmp.Or(stringext.Capitalize(providerErr.Title), defaultTitle), providerErr.Message
-	}
-	if errors.As(runErr, &fantasyErr) {
-		return reason, cmp.Or(stringext.Capitalize(fantasyErr.Title), defaultTitle), fantasyErr.Message
-	}
-	return reason, defaultTitle, runErr.Error()
-}
 
 // resolveRunner picks LocalRunner or SandboxRunner from the call context.
 // On fallback to LocalRunner it logs a clear warning so the operator sees the
@@ -160,31 +104,6 @@ runLoopReentry:
 	startTime := time.Now()
 	a.eventPromptSent(call.SessionID)
 
-	// postStepHook builds and fires the configured post_step hook, if any.
-	// Runs in a goroutine with hookTimeout deadline; errors are logged at
-	// WARN but never abort the loop.
-	var postStepHook func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
-	if a.hookRunner != nil {
-		runner := a.hookRunner
-		sessionID := call.SessionID
-		modelID := primaryModel.Model.Model()
-		contextWindow := int(primaryModel.CatwalkCfg.ContextWindow)
-		postStepHook = func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata) {
-			payload, err := hooks.MarshalPostStep(stepIdx, sessionID, modelID, contextWindow, u, time.Now(), usageCost(primaryModel, u, a.openrouterCost(m)))
-			if err != nil {
-				slog.Warn("post_step: marshal envelope", "session", sessionID, "step", stepIdx, "error", err)
-				return
-			}
-			timeout := hookTimeout // capture at closure-execution time, before spawning goroutine
-			go func() {
-				hookCtx, cancel := context.WithTimeout(context.Background(), timeout)
-				defer cancel()
-				if err := runner.Run(hookCtx, payload); err != nil {
-					slog.Warn("post_step: runner failed", "session", sessionID, "step", stepIdx, "error", err)
-				}
-			}()
-		}
-	}
 	deps := loopDeps{
 		model:        primaryModel,
 		provOpts:     call.ProviderOptions,
@@ -196,7 +115,7 @@ runLoopReentry:
 		env:          call.Env,
 		paths:        call.AllowedPaths,
 		bgRunner:     bgRunner,
-		postStepHook: postStepHook,
+		postStepHook: a.buildPostStepHook(call, primaryModel),
 		onUsage: func() func(int, fantasy.Usage, fantasy.ProviderMetadata) {
 			var cumulative int64
 			var autoCompactDone bool
@@ -292,199 +211,4 @@ runLoopReentry:
 		goto runLoopReentry
 	}
 	return nil
-}
-
-func getLastAssistantID(ctx context.Context, msgs message.Service, sessionID string) string {
-	all, err := msgs.List(ctx, sessionID)
-	if err != nil {
-		return ""
-	}
-	for i := len(all) - 1; i >= 0; i-- {
-		if all[i].Role == message.Assistant {
-			return all[i].ID
-		}
-	}
-	return ""
-}
-
-// attachErrorFinish updates the most-recent assistant message in the session
-// with a user-facing FinishReasonError + title + detail derived from the
-// loop's run error. The loop creates assistant rows as it streams; this
-// follow-up replaces any tool-use/end-turn finish on the LAST one with an
-// error-flavored finish so the UI banner makes sense.
-//
-// Boundary note: attach the error banner to the newest durable assistant row
-// rather than assuming every streamed emit still exists.
-func (a *sessionAgent) attachErrorFinish(ctx context.Context, sessionID string, runErr error, model string) {
-	all, listErr := a.messages.List(ctx, sessionID)
-	if listErr != nil {
-		slog.Warn("attachErrorFinish: list messages", "error", listErr)
-		return
-	}
-	for i := len(all) - 1; i >= 0; i-- {
-		if all[i].Role != message.Assistant {
-			continue
-		}
-		latest := all[i]
-		_, title, detail := errorFinishFor(runErr, model)
-		latest.AddFinish(message.FinishReasonError, title, detail)
-		if updateErr := a.messages.Update(ctx, latest); updateErr != nil {
-			slog.Warn("attachErrorFinish: update", "error", updateErr)
-		}
-		return
-	}
-}
-
-func turnPromptsForCall(call SessionAgentCall) []turnPrompt {
-	if len(call.turnPrompts) > 0 {
-		return call.turnPrompts
-	}
-	return []turnPrompt{{
-		Text:    call.Prompt,
-		Persist: !call.runtimePrompt,
-	}}
-}
-
-func (a *sessionAgent) persistVisibleTurnPrompts(ctx context.Context, sessionID string, prompts []turnPrompt) error {
-	for _, prompt := range prompts {
-		if !prompt.Persist {
-			continue
-		}
-		if _, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
-			Role:  message.User,
-			Parts: []message.ContentPart{message.TextContent{Text: prompt.Text}},
-		}); err != nil {
-			return fmt.Errorf("failed to create user message: %w", err)
-		}
-	}
-	return nil
-}
-
-// combineQueuedCalls collapses N queued calls into one re-entry call.
-// Prompts join with "\n\n"; runtime fields take from the FIRST queued call.
-// MarkCompactBoundary is ORed across all calls so compaction is never lost.
-// Caller must check len(calls) > 0 before invoking.
-func combineQueuedCalls(calls []SessionAgentCall) SessionAgentCall {
-	if len(calls) == 0 {
-		panic("combineQueuedCalls: calls must be non-empty")
-	}
-	first := calls[0]
-	if len(calls) == 1 {
-		return first
-	}
-	var sb strings.Builder
-	prompts := make([]turnPrompt, 0, len(calls))
-	compact := first.MarkCompactBoundary
-	for i, c := range calls {
-		if i > 0 {
-			sb.WriteString(queuedPromptSep)
-		}
-		sb.WriteString(c.Prompt)
-		prompts = append(prompts, turnPromptsForCall(c)...)
-		compact = compact || c.MarkCompactBoundary
-	}
-	first.Prompt = sb.String()
-	first.turnPrompts = prompts
-	first.runtimePrompt = false
-	first.MarkCompactBoundary = compact
-	return first
-}
-
-// tryReenter clears the session from activeRequests, cancels the streaming
-// context, and attempts to drain the message queue. Returns the re-entry call
-// and true if a re-entry should happen; returns (call, false) if the queue is
-// empty or absent so the caller can return/continue as appropriate.
-func (a *sessionAgent) tryReenter(call SessionAgentCall, cancel context.CancelFunc) (SessionAgentCall, bool) {
-	a.activeRequests.Del(call.SessionID)
-	cancel()
-	queued, ok := a.messageQueue.Take(call.SessionID)
-	if !ok || len(queued) == 0 {
-		return call, false
-	}
-	return combineQueuedCalls(queued), true
-}
-
-func (a *sessionAgent) getOrCreateBackgroundRunner(call SessionAgentCall) *BackgroundRunner {
-	a.bgRunnersMu.Lock()
-	defer a.bgRunnersMu.Unlock()
-	if br, ok := a.bgRunners.Get(call.SessionID); ok && br != nil {
-		return br
-	}
-	br := NewBackgroundRunner(a.enqueueBackgroundJobResult(call))
-	setOnIdle(br, func() {
-		a.bgRunnersMu.Lock()
-		a.bgRunners.Del(call.SessionID)
-		a.bgRunnersMu.Unlock()
-	})
-	a.bgRunners.Set(call.SessionID, br)
-	return br
-}
-
-// setOnIdle writes the onIdle callback under onIdleMu to prevent races
-// with the background goroutine in Track that reads it.
-func setOnIdle(br *BackgroundRunner, f func()) {
-	br.onIdleMu.Lock()
-	br.onIdle = f
-	br.onIdleMu.Unlock()
-}
-
-func (a *sessionAgent) cleanupBackgroundRunner(sessionID string, br *BackgroundRunner) {
-	if br.ActiveCount() > 0 {
-		a.bgRunners.Set(sessionID, br)
-		return
-	}
-	a.bgRunnersMu.Lock()
-	if current, ok := a.bgRunners.Get(sessionID); ok && current == br {
-		a.bgRunners.Del(sessionID)
-	}
-	a.bgRunnersMu.Unlock()
-}
-
-func (a *sessionAgent) injectRuntimePrompt(call SessionAgentCall, msg string) {
-	runtimeCall := SessionAgentCall{
-		SessionID:           call.SessionID,
-		Prompt:              msg,
-		runtimePrompt:       true,
-		MarkCompactBoundary: call.MarkCompactBoundary,
-		ProviderOptions:     call.ProviderOptions,
-		Sandbox:             call.Sandbox,
-		Env:                 call.Env,
-		AllowedPaths:        call.AllowedPaths,
-	}
-	if a.IsSessionBusy(call.SessionID) {
-		existing, _ := a.messageQueue.Get(call.SessionID)
-		existing = append(existing, runtimeCall)
-		a.messageQueue.Set(call.SessionID, existing)
-		return
-	}
-	go func() {
-		if err := a.Run(context.Background(), runtimeCall); err != nil {
-			slog.Warn("runtime prompt injection: run failed", "session_id", call.SessionID, "error", err)
-		}
-	}()
-}
-
-func (a *sessionAgent) enqueueBackgroundJobResult(call SessionAgentCall) func(msg string) {
-	return func(msg string) {
-		runtimeCall := SessionAgentCall{
-			SessionID:       call.SessionID,
-			Prompt:          msg,
-			runtimePrompt:   true,
-			ProviderOptions: call.ProviderOptions,
-			Sandbox:         call.Sandbox,
-			Env:             call.Env,
-			AllowedPaths:    call.AllowedPaths,
-		}
-		if a.IsSessionBusy(call.SessionID) {
-			existing, _ := a.messageQueue.Get(call.SessionID)
-			existing = append(existing, runtimeCall)
-			a.messageQueue.Set(call.SessionID, existing)
-			return
-		}
-		go func() {
-			if err := a.Run(context.Background(), runtimeCall); err != nil {
-				slog.Warn("background job result: run failed", "session_id", call.SessionID, "error", err)
-			}
-		}()
-	}
 }
