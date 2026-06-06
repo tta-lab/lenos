@@ -209,8 +209,7 @@ runLoopReentry:
 		return fmt.Errorf("failed to get session messages: %w", err)
 	}
 	isNewSession := len(msgs) == 0
-	freshContext := isNewSession || currentSession.SummaryMessageID != ""
-	if freshContext && call.JournalPath != "" {
+	if isNewSession && call.JournalPath != "" {
 		call.ContextCommands = append(call.ContextCommands, RuntimeContextCommand{
 			Command:  "cat ${LENOS_JOURNAL:-" + call.JournalPath + "}",
 			Optional: false,
@@ -467,6 +466,7 @@ func (a *sessionAgent) persistVisibleTurnPrompts(ctx context.Context, sessionID 
 
 // combineQueuedCalls collapses N queued calls into one re-entry call.
 // Prompts join with "\n\n"; runtime fields take from the FIRST queued call.
+// MarkCompactBoundary is ORed across all calls so compaction is never lost.
 // Caller must check len(calls) > 0 before invoking.
 func combineQueuedCalls(calls []SessionAgentCall) SessionAgentCall {
 	if len(calls) == 0 {
@@ -478,16 +478,19 @@ func combineQueuedCalls(calls []SessionAgentCall) SessionAgentCall {
 	}
 	var sb strings.Builder
 	prompts := make([]turnPrompt, 0, len(calls))
+	compact := first.MarkCompactBoundary
 	for i, c := range calls {
 		if i > 0 {
 			sb.WriteString(queuedPromptSep)
 		}
 		sb.WriteString(c.Prompt)
 		prompts = append(prompts, turnPromptsForCall(c)...)
+		compact = compact || c.MarkCompactBoundary
 	}
 	first.Prompt = sb.String()
 	first.turnPrompts = prompts
 	first.runtimePrompt = false
+	first.MarkCompactBoundary = compact
 	return first
 }
 

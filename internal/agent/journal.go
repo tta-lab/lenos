@@ -42,11 +42,6 @@ func CreateJournal(workingDir, sessionID string) (string, error) {
 	return path, nil
 }
 
-// journalEnvVar returns the LENOS_JOURNAL env var value for a session.
-func journalEnvVar(journalPath string) string {
-	return fmt.Sprintf("LENOS_JOURNAL=%s", journalPath)
-}
-
 // journalSystemHint builds the system message text that tells the agent
 // where the journal file is.
 func journalSystemHint(journalPath string) string {
