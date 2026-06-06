@@ -1043,6 +1043,7 @@ func (c *coordinator) CompactSession(ctx context.Context, sessionID string) erro
 		return errModelProviderNotConfigured
 	}
 	call := c.buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg)
+	call.runtimePrompt = true
 	call.MarkCompactBoundary = true
 	return c.currentAgent.CompactSession(ctx, call)
 }

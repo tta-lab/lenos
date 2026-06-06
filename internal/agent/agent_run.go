@@ -192,6 +192,11 @@ runLoopReentry:
 	if call.MarkCompactBoundary {
 		currentSession.SummaryMessageID = getLastAssistantID(ctx, a.messages, call.SessionID)
 		if currentSession.SummaryMessageID != "" {
+			currentSession.PromptTokens = 0
+			currentSession.CompletionTokens = 0
+			currentSession.CacheCreationTokens = 0
+			currentSession.CacheReadTokens = 0
+			currentSession.CacheMissTokens = 0
 			if _, err := a.sessions.Save(ctx, currentSession); err != nil {
 				slog.Warn("compact boundary: failed to save session", "session", call.SessionID, "error", err)
 			}
