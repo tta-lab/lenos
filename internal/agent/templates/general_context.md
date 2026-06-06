@@ -4,17 +4,10 @@ project list
 skill list
 ```
 
----
+{{if .ContextFiles}}---
 
-{{if .ContextFiles}}Read key instructions.
+Read key instructions.
 ```bash
 {{range .ContextFiles}}cat {{shellQuote .Path}}
 {{end}}```
 {{end}}
-
----
-
-Read the session journal.
-```bash
-cat $LENOS_JOURNAL
-```

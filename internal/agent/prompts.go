@@ -26,8 +26,14 @@ var embeddedReviewerMd []byte
 //go:embed templates/initialize.md.tpl
 var initializePromptTmpl []byte
 
-//go:embed templates/context.md
-var runtimeContextPromptTmpl []byte
+//go:embed templates/general_context.md
+var generalRuntimeContextPromptTmpl []byte
+
+//go:embed templates/coder_context.md
+var coderRuntimeContextPromptTmpl []byte
+
+//go:embed templates/reviewer_context.md
+var reviewerRuntimeContextPromptTmpl []byte
 
 // SystemPrompt builds the full system prompt by concatenating:
 //  1. The bash-first base prompt (env, output protocol, available commands).
@@ -129,11 +135,11 @@ type runtimeContextTemplateData struct {
 	ContextFiles []prompt.ContextFile
 }
 
-func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, templates ...[]byte) []RuntimeContextCommand {
 	data := runtimeContextTemplateData{
 		ContextFiles: runtimeContext.ContextFiles,
 	}
-	rendered, err := renderRuntimeContextTemplate(data)
+	rendered, err := renderRuntimeContextTemplates(data, templates...)
 	if err != nil {
 		return fallbackRuntimeContextCommands(runtimeContext)
 	}
@@ -153,10 +159,24 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []Runtime
 	return commands
 }
 
-func renderRuntimeContextTemplate(data runtimeContextTemplateData) (string, error) {
+func renderRuntimeContextTemplates(data runtimeContextTemplateData, templates ...[]byte) (string, error) {
+	var rendered []string
+	for _, tmpl := range templates {
+		section, err := renderRuntimeContextTemplate(data, tmpl)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(section) != "" {
+			rendered = append(rendered, section)
+		}
+	}
+	return strings.Join(rendered, "\n\n---\n\n"), nil
+}
+
+func renderRuntimeContextTemplate(data runtimeContextTemplateData, tmpl []byte) (string, error) {
 	t, err := template.New("context").Funcs(template.FuncMap{
 		"shellQuote": shellQuote,
-	}).Parse(string(runtimeContextPromptTmpl))
+	}).Parse(string(tmpl))
 	if err != nil {
 		return "", err
 	}
