@@ -268,7 +268,7 @@ func cannedDrainer(rounds ...[]string) func() []turnPrompt {
 		}
 		out := make([]turnPrompt, len(rounds[i]))
 		for j, prompt := range rounds[i] {
-			out[j] = turnPrompt{Text: prompt, Persist: true}
+			out[j] = turnPrompt{Text: prompt, Persist: true, Role: message.User}
 		}
 		i++
 		return out

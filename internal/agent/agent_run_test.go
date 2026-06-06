@@ -774,8 +774,8 @@ func TestCombineQueuedCalls_PreservesRuntimePromptVisibility(t *testing.T) {
 	require.Equal(t, "job done\n\nhuman follow-up", out.Prompt)
 	require.Equal(t, "s1", out.SessionID)
 	require.Len(t, out.turnPrompts, 2)
-	require.Equal(t, turnPrompt{Text: "job done", Persist: false}, out.turnPrompts[0])
-	require.Equal(t, turnPrompt{Text: "human follow-up", Persist: true}, out.turnPrompts[1])
+	require.Equal(t, turnPrompt{Text: "job done", Persist: true, Role: message.Runtime}, out.turnPrompts[0])
+	require.Equal(t, turnPrompt{Text: "human follow-up", Persist: true, Role: message.User}, out.turnPrompts[1])
 }
 
 func TestCombineQueuedCalls_EmptyPrecondition(t *testing.T) {
@@ -807,8 +807,9 @@ func TestRun_RuntimePromptFeedsModelWithoutPersistingUserMessage(t *testing.T) {
 	for _, msg := range msgs {
 		require.NotEqual(t, message.User, msg.Role, "runtime prompt must not render as a user chat row")
 	}
+	require.Equal(t, message.Runtime, msgs[0].Role)
 	require.Len(t, model.Captured(), 1)
-	require.Equal(t, "background job completed", fantasyMessageText(model.Captured()[0][1]))
+	require.Equal(t, message.RuntimeText("background job completed"), fantasyMessageText(model.Captured()[0][1]))
 }
 
 func TestRun_PostLoopDrainAllQueued(t *testing.T) {

@@ -66,7 +66,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 	msgs = append(msgs, fantasy.NewSystemMessage(deps.sysPrompt))
 	msgs = append(msgs, history...)
 	for _, prompt := range prompts {
-		msgs = append(msgs, fantasy.NewUserMessage(prompt.Text))
+		msgs = append(msgs, turnPromptMessage(prompt))
 	}
 	for step := 0; step < StepCap; step++ {
 		assistantMsg, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
@@ -445,10 +445,17 @@ func replaceAssistantText(msg *message.Message, text string) {
 
 func persistObservation(ctx context.Context, deps loopDeps, obs string) error {
 	_, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-		Role:  message.Result,
+		Role:  message.Runtime,
 		Parts: []message.ContentPart{message.TextContent{Text: obs}},
 	})
 	return err
+}
+
+func turnPromptMessage(prompt turnPrompt) fantasy.Message {
+	if prompt.Role == message.Runtime {
+		return fantasy.NewUserMessage(message.RuntimeText(prompt.Text))
+	}
+	return fantasy.NewUserMessage(prompt.Text)
 }
 
 func markStepFinished(ctx context.Context, deps loopDeps, msg *message.Message, reason message.FinishReason) {
@@ -512,14 +519,18 @@ func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) 
 	drained := deps.drainQueue()
 	for _, prompt := range drained {
 		if prompt.Persist {
+			role := prompt.Role
+			if role == "" {
+				role = message.User
+			}
 			if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-				Role:  message.User,
+				Role:  role,
 				Parts: []message.ContentPart{message.TextContent{Text: prompt.Text}},
 			}); err != nil {
-				slog.Warn("loop: persist drained user msg", "error", err)
+				slog.Warn("loop: persist drained prompt", "error", err)
 			}
 		}
-		msgs = append(msgs, fantasy.NewUserMessage(prompt.Text))
+		msgs = append(msgs, turnPromptMessage(prompt))
 	}
 	return msgs
 }

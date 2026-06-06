@@ -930,7 +930,7 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 				}
 			}
 		}
-	case message.Result:
+	case message.Result, message.Runtime:
 		if m.chat.MessageItem(msg.ID) != nil {
 			return nil
 		}

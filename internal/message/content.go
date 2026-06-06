@@ -24,6 +24,7 @@ const (
 	Assistant MessageRole = "assistant"
 	User      MessageRole = "user"
 	System    MessageRole = "system"
+	Runtime   MessageRole = "runtime"
 	Result    MessageRole = "result"
 )
 
@@ -482,8 +483,27 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 				fantasy.TextPart{Text: strings.Join(replay, "\n\n")},
 			},
 		})
+	case Runtime:
+		text := strings.TrimSpace(m.Content().Text)
+		if text == "" {
+			break
+		}
+		messages = append(messages, fantasy.Message{
+			Role: fantasy.MessageRoleUser,
+			Content: []fantasy.MessagePart{
+				fantasy.TextPart{Text: RuntimeText(text)},
+			},
+		})
 	}
 	return messages
+}
+
+func RuntimeText(text string) string {
+	text = strings.TrimSpace(text)
+	if strings.HasPrefix(text, lenosbash.RuntimeTag) {
+		return text
+	}
+	return lenosbash.RuntimeBlock(text)
 }
 
 // FormatResults renders completed CommandContent as the result block the

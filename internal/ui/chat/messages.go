@@ -300,7 +300,7 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, showThinking 
 		return []MessageItem{NewUserMessageItem(sty, msg, r)}
 	case message.Assistant:
 		return []MessageItem{NewAssistantMessageItem(sty, msg, showThinking)}
-	case message.Result:
+	case message.Result, message.Runtime:
 		return extractResultMessageItems(sty, msg)
 	}
 	return []MessageItem{}

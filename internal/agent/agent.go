@@ -36,8 +36,8 @@ var userAgent = fmt.Sprintf("Lenos/%s (https://github.com/tta-lab/lenos)", versi
 type SessionAgentCall struct {
 	SessionID string
 	Prompt    string
-	// runtimePrompt marks Prompt as runtime feedback that should be sent to
-	// the model without persisting a user-visible chat row.
+	// runtimePrompt marks Prompt as runtime feedback persisted as a runtime
+	// message, not as a user-visible chat row.
 	runtimePrompt bool
 	turnPrompts   []turnPrompt
 	usageSummary  *RunUsageSummary
@@ -94,6 +94,7 @@ type RuntimeContextCommand struct {
 type turnPrompt struct {
 	Text    string
 	Persist bool
+	Role    message.MessageRole
 }
 
 type SessionAgent interface {

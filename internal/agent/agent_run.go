@@ -10,6 +10,7 @@ import (
 	"charm.land/fantasy"
 
 	"github.com/tta-lab/lenos/internal/agent/notify"
+	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/pubsub"
 )
 
@@ -78,7 +79,8 @@ runLoopReentry:
 	if isNewSession && currentSession.SummaryMessageID == "" && call.JournalPath != "" {
 		turnPrompts = append([]turnPrompt{{
 			Text:    taskDetectionHint(),
-			Persist: false,
+			Persist: true,
+			Role:    message.Runtime,
 		}}, turnPrompts...)
 	}
 	if err := a.persistVisibleTurnPrompts(ctx, call.SessionID, turnPrompts); err != nil {

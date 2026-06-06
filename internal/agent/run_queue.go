@@ -15,9 +15,14 @@ func turnPromptsForCall(call SessionAgentCall) []turnPrompt {
 	if len(call.turnPrompts) > 0 {
 		return call.turnPrompts
 	}
+	role := message.User
+	if call.runtimePrompt {
+		role = message.Runtime
+	}
 	return []turnPrompt{{
 		Text:    call.Prompt,
-		Persist: !call.runtimePrompt,
+		Persist: true,
+		Role:    role,
 	}}
 }
 
@@ -26,8 +31,12 @@ func (a *sessionAgent) persistVisibleTurnPrompts(ctx context.Context, sessionID 
 		if !prompt.Persist {
 			continue
 		}
+		role := prompt.Role
+		if role == "" {
+			role = message.User
+		}
 		if _, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
-			Role:  message.User,
+			Role:  role,
 			Parts: []message.ContentPart{message.TextContent{Text: prompt.Text}},
 		}); err != nil {
 			return fmt.Errorf("failed to create user message: %w", err)
