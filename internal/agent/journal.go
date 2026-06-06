@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 //go:embed templates/journal.md
@@ -47,20 +46,17 @@ func CreateJournal(workingDir, sessionID string) (string, error) {
 	return path, nil
 }
 
-// isTaskLike returns true if the prompt looks like a task request rather
-// than a chat question. A simple heuristic: questions under ~50 chars are
-// likely chat; longer or imperative prompts are likely tasks.
-func isTaskLike(prompt string) bool {
-	trimmed := strings.TrimSpace(prompt)
-	if len(trimmed) < 50 && strings.HasSuffix(trimmed, "?") {
-		return false
-	}
-	return true
-}
-
 // taskDetectionHint returns the runtime hint for task detection.
 func taskDetectionHint() string {
-	return "You have received a task. Fill the journal before proceeding — read and fill the initial sections through Plan before editing any files."
+	return `You have a session journal. Decide whether the current user request is a task.
+
+If it is already a task, fill the journal through Plan before editing,
+creating, or modifying files. Treat the journal as the source of truth for task
+state.
+
+If this is chat, Q&A, or clarification without a concrete task, do not fill the
+journal yet. When a later user request becomes a task, fill the journal through
+Plan before editing files.`
 }
 
 // periodicCheckHint returns a self-check reminder.

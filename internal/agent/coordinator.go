@@ -252,9 +252,9 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		access = AccessModeRO
 	}
 
-	// Create journal for coder task sessions (not reviewers).
+	// Create journal for native coder sessions only.
 	var journalPath string
-	if c.cfg.Overrides().AgentName != config.AgentReviewer {
+	if isNativeCoderAgent(c.cfg) {
 		if path, err := CreateJournal(cwd, sessionID); err != nil {
 			slog.Warn("Failed to create session journal", "error", err)
 		} else {
@@ -281,9 +281,17 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 	}
 }
 
-func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+func isNativeCoderAgent(store *config.ConfigStore) bool {
 	switch store.Overrides().AgentName {
 	case "", config.AgentCoder:
+		return true
+	default:
+		return false
+	}
+}
+
+func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+	if isNativeCoderAgent(store) {
 		return buildRuntimeContextCommands(
 			runtimeContext,
 			config.AgentCoder,
@@ -292,6 +300,8 @@ func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeConte
 			coderRuntimeContextPromptTmpl,
 			reviewerRuntimeContextPromptTmpl,
 		)
+	}
+	switch store.Overrides().AgentName {
 	case config.AgentReviewer:
 		return buildRuntimeContextCommands(
 			runtimeContext,
