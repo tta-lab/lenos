@@ -87,6 +87,14 @@ func compactHandoffHint() string {
 After this turn, the context window will be compacted. When you resume, run ` + "`lenos messages --tail 3`" + ` to recover recent user messages.`
 }
 
+// autoCompactHint returns a prompt asking the agent to update the journal
+// for handoff because the context window is filling up.
+func autoCompactHint() string {
+	return `Your context window is filling up. Update your journal for handoff: fill Progress, Decisions, Failed Paths, Verification, Reflection, Next. If done, mark Deliverables complete.
+
+After this turn, the context window will be compacted to make room. When you resume, run ` + "`lenos messages --tail 3`" + ` to recover recent user messages.`
+}
+
 // journalExitSummary builds the exit message showing the journal path.
 func journalExitSummary(journalPath string) string {
 	return fmt.Sprintf("Journal: %s", journalPath)

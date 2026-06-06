@@ -14,7 +14,7 @@ install:
 
 .PHONY: test
 test:
-	go test -race -failfast ./...
+	gotestsum --format testname -- -race -failfast ./...
 
 .PHONY: fmt
 fmt:

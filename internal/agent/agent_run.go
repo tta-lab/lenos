@@ -209,7 +209,14 @@ runLoopReentry:
 		return fmt.Errorf("failed to get session messages: %w", err)
 	}
 	isNewSession := len(msgs) == 0
-	if isNewSession && len(call.ContextCommands) > 0 {
+	freshContext := isNewSession || currentSession.SummaryMessageID != ""
+	if freshContext && call.JournalPath != "" {
+		call.ContextCommands = append(call.ContextCommands, RuntimeContextCommand{
+			Command:  "cat ${JOURNAL:-" + call.JournalPath + "}",
+			Optional: false,
+		})
+	}
+	if len(call.ContextCommands) > 0 {
 		if err := a.persistRuntimeContextCommands(ctx, call, runner); err != nil {
 			return err
 		}
@@ -298,6 +305,7 @@ runLoopReentry:
 		postStepHook: postStepHook,
 		onUsage: func() func(int, fantasy.Usage, fantasy.ProviderMetadata) {
 			var cumulative int64
+			var autoCompactDone bool
 			interval := call.JournalCheckIntervalTokens
 			hasJournal := call.JournalPath != ""
 			return func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
@@ -310,12 +318,21 @@ runLoopReentry:
 				if call.usageSummary != nil {
 					call.usageSummary.AddUsage(primaryModel, u, usageCost(primaryModel, u, overrideCost))
 				}
-				if hasJournal && interval > 0 {
-					prev := cumulative / int64(interval)
-					cumulative += u.InputTokens
-					cur := cumulative / int64(interval)
-					if cur > prev {
-						a.injectRuntimePrompt(call, periodicCheckHint())
+				if hasJournal {
+					if interval > 0 {
+						prev := cumulative / int64(interval)
+						cumulative += u.InputTokens
+						cur := cumulative / int64(interval)
+						if cur > prev {
+							a.injectRuntimePrompt(call, periodicCheckHint(), false)
+						}
+					}
+					if !autoCompactDone {
+						totalUsed := currentSession.PromptTokens + currentSession.CompletionTokens
+						if ctxWin := primaryModel.CatwalkCfg.ContextWindow; ctxWin > 0 && totalUsed >= int64(ctxWin)*80/100 {
+							autoCompactDone = true
+							a.injectRuntimePrompt(call, autoCompactHint(), true)
+						}
 					}
 				}
 			}
@@ -524,15 +541,16 @@ func (a *sessionAgent) cleanupBackgroundRunner(sessionID string, br *BackgroundR
 	a.bgRunnersMu.Unlock()
 }
 
-func (a *sessionAgent) injectRuntimePrompt(call SessionAgentCall, msg string) {
+func (a *sessionAgent) injectRuntimePrompt(call SessionAgentCall, msg string, markCompactBoundary bool) {
 	runtimeCall := SessionAgentCall{
-		SessionID:       call.SessionID,
-		Prompt:          msg,
-		runtimePrompt:   true,
-		ProviderOptions: call.ProviderOptions,
-		Sandbox:         call.Sandbox,
-		Env:             call.Env,
-		AllowedPaths:    call.AllowedPaths,
+		SessionID:           call.SessionID,
+		Prompt:              msg,
+		runtimePrompt:       true,
+		MarkCompactBoundary: markCompactBoundary,
+		ProviderOptions:     call.ProviderOptions,
+		Sandbox:             call.Sandbox,
+		Env:                 call.Env,
+		AllowedPaths:        call.AllowedPaths,
 	}
 	if a.IsSessionBusy(call.SessionID) {
 		existing, _ := a.messageQueue.Get(call.SessionID)
@@ -542,7 +560,7 @@ func (a *sessionAgent) injectRuntimePrompt(call SessionAgentCall, msg string) {
 	}
 	go func() {
 		if err := a.Run(context.Background(), runtimeCall); err != nil {
-			slog.Warn("journal check injection: run failed", "session_id", call.SessionID, "error", err)
+			slog.Warn("runtime prompt injection: run failed", "session_id", call.SessionID, "error", err)
 		}
 	}()
 }
