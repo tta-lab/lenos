@@ -20,6 +20,11 @@ func JournalDir(workingDir string) string {
 	return filepath.Join(workingDir, journalsDirName)
 }
 
+// JournalPath returns the per-session journal path for a working directory.
+func JournalPath(workingDir, sessionID string) string {
+	return filepath.Join(JournalDir(workingDir), sessionID+".md")
+}
+
 // CreateJournal creates a per-session journal file from the embedded template.
 // Returns the absolute path to the created file.
 func CreateJournal(workingDir, sessionID string) (string, error) {
@@ -28,7 +33,7 @@ func CreateJournal(workingDir, sessionID string) (string, error) {
 		return "", fmt.Errorf("create journal dir: %w", err)
 	}
 
-	path := filepath.Join(dir, sessionID+".md")
+	path := JournalPath(workingDir, sessionID)
 	if _, err := os.Stat(path); err == nil {
 		// Journal already exists for this session — leave it.
 		return path, nil

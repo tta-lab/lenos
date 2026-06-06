@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/tta-lab/lenos/internal/agent"
 	"github.com/tta-lab/lenos/internal/commands"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/ui/common"
@@ -404,8 +405,8 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "open_external_editor", "Open External Editor", "ctrl+o", ActionExternalEditor{}))
 	}
 
-	// Add compact session command for native coder agents with journal.
-	if c.hasSession && os.Getenv("LENOS_JOURNAL") != "" {
+	// Add compact session command when the active session has a journal.
+	if c.hasSession && journalExists(c.com.Workspace.WorkingDir(), c.sessionID) {
 		commands = append(commands, NewCommandItem(c.com.Styles, "compact_handoff", "Compact Session", "", ActionCompactSession{}))
 	}
 
@@ -450,6 +451,14 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	)
 
 	return commands
+}
+
+func journalExists(workingDir, sessionID string) bool {
+	if workingDir == "" || sessionID == "" {
+		return false
+	}
+	_, err := os.Stat(agent.JournalPath(workingDir, sessionID))
+	return err == nil
 }
 
 // SetCustomCommands sets the custom commands and refreshes the view if user commands are currently displayed.

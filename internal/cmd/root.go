@@ -156,7 +156,7 @@ func formatJournalHint(workingDir, sessionID string) string {
 	if workingDir == "" || sessionID == "" {
 		return ""
 	}
-	path := filepath.Join(agent.JournalDir(workingDir), sessionID+".md")
+	path := agent.JournalPath(workingDir, sessionID)
 	if _, err := os.Stat(path); err != nil {
 		return ""
 	}

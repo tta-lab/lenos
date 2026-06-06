@@ -1117,7 +1117,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			m.dialog.CloseDialog(dialog.CommandsID)
 			break
 		}
-		journalPath := filepath.Join(agent.JournalDir(m.com.Workspace.WorkingDir()), m.session.ID+".md")
+		journalPath := agent.JournalPath(m.com.Workspace.WorkingDir(), m.session.ID)
 		if _, err := os.Stat(journalPath); err != nil {
 			cmds = append(cmds, util.ReportWarn("No journal found for this session"))
 		} else {
