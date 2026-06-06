@@ -27,6 +27,9 @@ The installer supports macOS and Linux on x86_64 and arm64. It installs Lenos
 to `~/.local/bin` and also installs the Organon CLIs that Lenos prompts use:
 `src`, `web`, `skill`, and `project`.
 
+Linux sandboxing requires `bubblewrap` (`bwrap`). Install it with your distro
+package manager before running Lenos if it is not already present.
+
 Add `~/.local/bin` to your `PATH` if needed:
 
 ```sh
