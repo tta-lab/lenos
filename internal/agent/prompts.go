@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
@@ -24,6 +25,9 @@ var embeddedReviewerMd []byte
 
 //go:embed templates/initialize.md.tpl
 var initializePromptTmpl []byte
+
+//go:embed templates/context.md
+var runtimeContextPromptTmpl []byte
 
 // SystemPrompt builds the full system prompt by concatenating:
 //  1. The bash-first base prompt (env, output protocol, available commands).
@@ -122,6 +126,83 @@ func buildLenosWrapper(
 }
 
 func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+	rendered, err := renderRuntimeContextTemplate(runtimeContext)
+	if err != nil {
+		return fallbackRuntimeContextCommands(runtimeContext)
+	}
+
+	sections := splitRuntimeContextSections(rendered)
+	commands := make([]RuntimeContextCommand, 0, len(sections))
+	for i, section := range sections {
+		command := markdownBashToRunBlocks(section)
+		if strings.TrimSpace(command) == "" {
+			continue
+		}
+		commands = append(commands, RuntimeContextCommand{
+			Command:  command,
+			Optional: i == 0,
+		})
+	}
+	return commands
+}
+
+func renderRuntimeContextTemplate(runtimeContext prompt.RuntimeContext) (string, error) {
+	t, err := template.New("context").Funcs(template.FuncMap{
+		"shellQuote": shellQuote,
+	}).Parse(string(runtimeContextPromptTmpl))
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	if err := t.Execute(&b, runtimeContext); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
+func splitRuntimeContextSections(rendered string) []string {
+	var sections []string
+	var b strings.Builder
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.TrimSpace(line) == "---" {
+			if section := strings.TrimSpace(b.String()); section != "" {
+				sections = append(sections, section)
+			}
+			b.Reset()
+			continue
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	if section := strings.TrimSpace(b.String()); section != "" {
+		sections = append(sections, section)
+	}
+	return sections
+}
+
+func markdownBashToRunBlocks(section string) string {
+	var b strings.Builder
+	inBash := false
+	for _, line := range strings.Split(section, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case !inBash && trimmed == "```bash":
+			b.WriteString(lenosbash.BashStartTag)
+			b.WriteString("\n")
+			inBash = true
+		case inBash && trimmed == "```":
+			b.WriteString(lenosbash.BashEndTag)
+			b.WriteString("\n")
+			inBash = false
+		default:
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func fallbackRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
 	commands := []RuntimeContextCommand{{
 		Command:  lenosbash.WrapBash("List registered projects and available skills.", "project list\nskill list"),
 		Optional: true,

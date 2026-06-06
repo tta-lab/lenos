@@ -275,9 +275,18 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		Env:                        sandboxEnv,
 		AllowedPaths:               BuildAllowedPaths(ctx, cwd, access),
 		TaskID:                     taskwarrior.ResolveTaskID(cwd),
-		ContextCommands:            buildRuntimeContextCommands(runtimeContext),
+		ContextCommands:            buildNativeCoderContextCommands(c.cfg, runtimeContext),
 		JournalPath:                journalPath,
 		JournalCheckIntervalTokens: c.cfg.Config().Options.JournalCheckIntervalTokens,
+	}
+}
+
+func buildNativeCoderContextCommands(store *config.ConfigStore, runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+	switch store.Overrides().AgentName {
+	case "", config.AgentCoder:
+		return buildRuntimeContextCommands(runtimeContext)
+	default:
+		return nil
 	}
 }
 
