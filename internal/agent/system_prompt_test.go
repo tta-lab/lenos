@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
+	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
 )
 
@@ -419,4 +420,35 @@ func TestResolveIdentityBody_ReviewerFallsBackToEmbeddedReviewer(t *testing.T) {
 	assert.Contains(t, body, "`ttal pr view`")
 	assert.Contains(t, body, "Do not run unit tests, linters, formatters, or build checks.")
 	assert.NotContains(t, body, "You are Lenos, a powerful AI Assistant")
+}
+
+func TestBuildRuntimeContextCommands_FiltersByAgentAndStripsFrontmatter(t *testing.T) {
+	t.Parallel()
+
+	coderTmpl := []byte(`---
+order: 20
+agent: coder
+---
+Read coder context.
+` + "```bash" + `
+cat $LENOS_JOURNAL
+` + "```" + `
+`)
+	reviewerTmpl := []byte(`---
+order: 10
+agent: reviewer
+---
+Inspect reviewer context.
+` + "```bash" + `
+git diff --stat main...HEAD
+` + "```" + `
+`)
+
+	commands := buildRuntimeContextCommands(prompt.RuntimeContext{}, config.AgentReviewer, coderTmpl, reviewerTmpl)
+
+	require.Len(t, commands, 1)
+	assert.Equal(t, lenosbash.WrapBash("Inspect reviewer context.", "git diff --stat main...HEAD"), commands[0].Command)
+	assert.NotContains(t, commands[0].Command, "agent:")
+	assert.NotContains(t, commands[0].Command, "order:")
+	assert.NotContains(t, commands[0].Command, "cat $LENOS_JOURNAL")
 }

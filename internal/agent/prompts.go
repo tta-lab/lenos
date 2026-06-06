@@ -185,16 +185,14 @@ func renderRuntimeContextTemplates(data runtimeContextTemplateData, agentName st
 		if err != nil {
 			return nil, err
 		}
-		for _, splitSection := range splitRuntimeContextSections(rendered) {
-			ctxTmpl := parseRuntimeContextSection(splitSection)
-			if ctxTmpl.Agent != "" && ctxTmpl.Agent != agentName {
-				continue
-			}
-			if strings.TrimSpace(ctxTmpl.Content) == "" {
-				continue
-			}
-			contexts = append(contexts, ctxTmpl)
+		ctxTmpl := parseRuntimeContextSection(rendered)
+		if ctxTmpl.Agent != "" && ctxTmpl.Agent != agentName {
+			continue
 		}
+		if strings.TrimSpace(ctxTmpl.Content) == "" {
+			continue
+		}
+		contexts = append(contexts, ctxTmpl)
 	}
 	slices.SortStableFunc(contexts, func(a, b runtimeContextTemplateMeta) int {
 		return a.Order - b.Order
@@ -249,26 +247,6 @@ func renderRuntimeContextTemplate(data runtimeContextTemplateData, tmpl string) 
 		return "", err
 	}
 	return b.String(), nil
-}
-
-func splitRuntimeContextSections(rendered string) []string {
-	var sections []string
-	var b strings.Builder
-	for _, line := range strings.Split(rendered, "\n") {
-		if strings.TrimSpace(line) == "---" {
-			if section := strings.TrimSpace(b.String()); section != "" {
-				sections = append(sections, section)
-			}
-			b.Reset()
-			continue
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-	if section := strings.TrimSpace(b.String()); section != "" {
-		sections = append(sections, section)
-	}
-	return sections
 }
 
 func markdownBashToRunBlocks(section string) string {
