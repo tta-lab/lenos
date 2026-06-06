@@ -172,10 +172,7 @@ func buildRuntimeContextCommands(runtimeContext prompt.RuntimeContext, agentName
 
 func appendCompactRuntimeContextCommand(commands []RuntimeContextCommand) []RuntimeContextCommand {
 	compactCommands := buildRuntimeContextCommands(prompt.RuntimeContext{}, config.AgentCoder, compactRuntimeContextPromptTmpl)
-	for _, command := range compactCommands {
-		commands = append(commands, command)
-	}
-	return commands
+	return append(commands, compactCommands...)
 }
 
 func renderRuntimeContextTemplates(data runtimeContextTemplateData, agentName string, templates ...[]byte) ([]runtimeContextTemplateMeta, error) {
