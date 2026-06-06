@@ -42,17 +42,6 @@ func CreateJournal(workingDir, sessionID string) (string, error) {
 	return path, nil
 }
 
-// journalSystemHint builds the system message text that tells the agent
-// where the journal file is.
-func journalSystemHint(journalPath string) string {
-	return fmt.Sprintf(
-		"Your session journal is at `%s`. "+
-			"Read it, fill the initial sections through Plan before editing files, "+
-			"and update it when meaningful state changes.",
-		journalPath,
-	)
-}
-
 // isTaskLike returns true if the prompt looks like a task request rather
 // than a chat question. A simple heuristic: questions under ~50 chars are
 // likely chat; longer or imperative prompts are likely tasks.

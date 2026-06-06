@@ -227,16 +227,11 @@ runLoopReentry:
 
 	turnPrompts := turnPromptsForCall(call)
 
-	// Inject journal system hint on first turn for task sessions.
-	if isNewSession && call.JournalPath != "" {
-		hint := journalSystemHint(call.JournalPath)
-		turnPrompts = append([]turnPrompt{{Text: hint, Persist: true}}, turnPrompts...)
-
-		// Inject task detection hint when the prompt looks like a task.
-		if isTaskLike(call.Prompt) {
-			taskHint := taskDetectionHint()
-			turnPrompts = append(turnPrompts, turnPrompt{Text: taskHint, Persist: false})
-		}
+	// Inject task detection hint on first turn when the prompt looks like a task.
+	// The journal is read via synthetic command (cat $LENOS_JOURNAL) above,
+	// so no text hint is needed.
+	if isNewSession && call.JournalPath != "" && isTaskLike(call.Prompt) {
+		turnPrompts = append(turnPrompts, turnPrompt{Text: taskDetectionHint(), Persist: false})
 	}
 	if err := a.persistVisibleTurnPrompts(ctx, call.SessionID, turnPrompts); err != nil {
 		return err
