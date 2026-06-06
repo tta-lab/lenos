@@ -18,7 +18,29 @@ import (
 )
 
 func (a *sessionAgent) getSessionMessages(ctx context.Context, s session.Session) ([]message.Message, error) {
-	return a.messages.List(ctx, s.ID)
+	msgs, err := a.messages.List(ctx, s.ID)
+	if err != nil {
+		return nil, err
+	}
+	// If a compaction boundary exists, only load messages after it.
+	// This gives the agent a fresh context window after Compact Session.
+	if s.SummaryMessageID != "" {
+		found := false
+		trimmed := make([]message.Message, 0, len(msgs))
+		for _, m := range msgs {
+			if m.ID == s.SummaryMessageID {
+				found = true
+				continue // skip the summary message itself
+			}
+			if found {
+				trimmed = append(trimmed, m)
+			}
+		}
+		if found {
+			return trimmed, nil
+		}
+	}
+	return msgs, nil
 }
 
 type taskTitleExporter func(context.Context, string) ([]byte, error)
@@ -279,4 +301,9 @@ func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
 
 func (a *sessionAgent) Model() Model {
 	return a.primaryModel.Get()
+}
+
+func (a *sessionAgent) CompactSession(ctx context.Context, call SessionAgentCall) error {
+	call.MarkCompactBoundary = true
+	return a.Run(ctx, call)
 }

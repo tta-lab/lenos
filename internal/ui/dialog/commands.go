@@ -404,6 +404,11 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "open_external_editor", "Open External Editor", "ctrl+o", ActionExternalEditor{}))
 	}
 
+	// Add compact session command for native coder agents with journal.
+	if c.hasSession && os.Getenv("JOURNAL") != "" {
+		commands = append(commands, NewCommandItem(c.com.Styles, "compact_handoff", "Compact Session", "", ActionCompactSession{}))
+	}
+
 	// Add open journal command when running with a journal.
 	if journalPath := os.Getenv("JOURNAL"); journalPath != "" {
 		commands = append(commands, NewCommandItem(c.com.Styles, "open_journal", "Open Journal", "", ActionOpenJournal{}))

@@ -77,6 +77,9 @@ type Coordinator interface {
 	// to the model on every turn. Useful for `lenos system-prompt` and
 	// debugging "the model isn't following the protocol" issues.
 	SystemPrompt() string
+	// CompactSession sends a journal handoff hint to the agent and marks the
+	// response as a compaction boundary so the next turn starts fresh.
+	CompactSession(ctx context.Context, sessionID string) error
 }
 
 type coordinator struct {
@@ -258,6 +261,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 			journalPath = path
 			// Expose journal to the subprocess runner via env var.
 			sandboxEnv["JOURNAL"] = journalPath
+			sandboxEnv["LENOS_SESSION_ID"] = sessionID
 		}
 	}
 
@@ -1014,4 +1018,20 @@ func agentNameOr(name string) string {
 		return name
 	}
 	return "lenos"
+}
+
+// CompactSession sends a journal handoff hint to the agent and marks the
+// response as a compaction boundary, giving the next turn a fresh context window.
+func (c *coordinator) CompactSession(ctx context.Context, sessionID string) error {
+	if err := c.readyWg.Wait(); err != nil {
+		return err
+	}
+	model := c.currentAgent.Model()
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+	if !ok {
+		return errModelProviderNotConfigured
+	}
+	call := c.buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg)
+	call.MarkCompactBoundary = true
+	return c.currentAgent.CompactSession(ctx, call)
 }

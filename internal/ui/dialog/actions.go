@@ -100,6 +100,10 @@ type (
 	}
 )
 
+// ActionCompactSession is triggered by "Compact Session" in the command palette.
+// It sends a journal handoff hint to the agent as a runtime prompt.
+type ActionCompactSession struct{}
+
 // ActionCmd represents an action that carries a [tea.Cmd] to be passed to the
 // Bubble Tea program loop.
 type ActionCmd struct {

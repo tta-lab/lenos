@@ -79,6 +79,11 @@ type SessionAgentCall struct {
 	// JournalCheckIntervalTokens is the token interval for injecting
 	// periodic journal self-check reminders. 0 disables.
 	JournalCheckIntervalTokens int
+
+	// MarkCompactBoundary marks the assistant response from this call as a
+	// compaction boundary. After this turn, only messages after the boundary
+	// are loaded into the context window, giving the agent a fresh start.
+	MarkCompactBoundary bool
 }
 
 type RuntimeContextCommand struct {
@@ -106,6 +111,9 @@ type SessionAgent interface {
 	KillBackgroundJob(ctx context.Context, sessionID, jobID string) error
 	StopBackgroundJobs(sessionID string)
 	Model() Model
+	// CompactSession sends a journal handoff prompt and marks the assistant
+	// response as a compaction boundary so subsequent turns start fresh.
+	CompactSession(ctx context.Context, call SessionAgentCall) error
 }
 
 type Model struct {

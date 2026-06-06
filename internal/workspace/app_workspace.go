@@ -352,3 +352,7 @@ func untrackedFiles(ctx context.Context, dir string) ([]ModifiedFile, error) {
 
 // Compile-time check that AppWorkspace implements Workspace.
 var _ Workspace = (*AppWorkspace)(nil)
+
+func (w *AppWorkspace) AgentCompactSession(ctx context.Context, sessionID string) error {
+	return w.app.AgentCoordinator.CompactSession(ctx, sessionID)
+}

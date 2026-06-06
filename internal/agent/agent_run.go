@@ -296,17 +296,30 @@ runLoopReentry:
 		paths:        call.AllowedPaths,
 		bgRunner:     bgRunner,
 		postStepHook: postStepHook,
-		onUsage: func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
-			overrideCost := a.openrouterCost(m)
-			s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
-			if !ok {
-				return
+		onUsage: func() func(int, fantasy.Usage, fantasy.ProviderMetadata) {
+			var cumulative int64
+			interval := call.JournalCheckIntervalTokens
+			hasJournal := call.JournalPath != ""
+			return func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
+				overrideCost := a.openrouterCost(m)
+				s, ok := a.saveSessionUsage(streamCtx, call.SessionID, u, m, "Failed to save session usage at step")
+				if !ok {
+					return
+				}
+				currentSession = s
+				if call.usageSummary != nil {
+					call.usageSummary.AddUsage(primaryModel, u, usageCost(primaryModel, u, overrideCost))
+				}
+				if hasJournal && interval > 0 {
+					prev := cumulative / int64(interval)
+					cumulative += u.InputTokens
+					cur := cumulative / int64(interval)
+					if cur > prev {
+						a.injectRuntimePrompt(call, periodicCheckHint())
+					}
+				}
 			}
-			currentSession = s
-			if call.usageSummary != nil {
-				call.usageSummary.AddUsage(primaryModel, u, usageCost(primaryModel, u, overrideCost))
-			}
-		},
+		}(),
 		drainQueue: func() []turnPrompt {
 			queued, ok := a.messageQueue.Take(call.SessionID)
 			if !ok || len(queued) == 0 {
@@ -351,11 +364,35 @@ runLoopReentry:
 		})
 	}
 
+	// Mark compaction boundary if requested. This sets SummaryMessageID so
+	// future turns load only post-boundary history (fresh context window).
+	if call.MarkCompactBoundary {
+		currentSession.SummaryMessageID = getLastAssistantID(ctx, a.messages, call.SessionID)
+		if currentSession.SummaryMessageID != "" {
+			if _, err := a.sessions.Save(ctx, currentSession); err != nil {
+				slog.Warn("compact boundary: failed to save session", "session", call.SessionID, "error", err)
+			}
+		}
+	}
+
 	if newCall, ok := a.tryReenter(call, cancel); ok {
 		call = newCall
 		goto runLoopReentry
 	}
 	return nil
+}
+
+func getLastAssistantID(ctx context.Context, msgs message.Service, sessionID string) string {
+	all, err := msgs.List(ctx, sessionID)
+	if err != nil {
+		return ""
+	}
+	for i := len(all) - 1; i >= 0; i-- {
+		if all[i].Role == message.Assistant {
+			return all[i].ID
+		}
+	}
+	return ""
 }
 
 // attachErrorFinish updates the most-recent assistant message in the session
@@ -485,6 +522,29 @@ func (a *sessionAgent) cleanupBackgroundRunner(sessionID string, br *BackgroundR
 		a.bgRunners.Del(sessionID)
 	}
 	a.bgRunnersMu.Unlock()
+}
+
+func (a *sessionAgent) injectRuntimePrompt(call SessionAgentCall, msg string) {
+	runtimeCall := SessionAgentCall{
+		SessionID:       call.SessionID,
+		Prompt:          msg,
+		runtimePrompt:   true,
+		ProviderOptions: call.ProviderOptions,
+		Sandbox:         call.Sandbox,
+		Env:             call.Env,
+		AllowedPaths:    call.AllowedPaths,
+	}
+	if a.IsSessionBusy(call.SessionID) {
+		existing, _ := a.messageQueue.Get(call.SessionID)
+		existing = append(existing, runtimeCall)
+		a.messageQueue.Set(call.SessionID, existing)
+		return
+	}
+	go func() {
+		if err := a.Run(context.Background(), runtimeCall); err != nil {
+			slog.Warn("journal check injection: run failed", "session_id", call.SessionID, "error", err)
+		}
+	}()
 }
 
 func (a *sessionAgent) enqueueBackgroundJobResult(call SessionAgentCall) func(msg string) {

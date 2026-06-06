@@ -259,14 +259,11 @@ func TestBuildCall_NoLongerInjectsLenosEnvVars(t *testing.T) {
 
 	call := c.buildCall(context.Background(), "sess-123", "hi", Model{}, config.ProviderConfig{})
 
-	// buildCall copies all OS env vars (including any inherited LENOS_SESSION_ID
-	// from the parent process), so checking key presence won't work. Instead
-	// verify the coordinator no longer sets its OWN value "sess-123" — if the
-	// key exists from the OS env, its value will differ.
+	// buildCall copies all OS env vars and also explicitly sets
+	// LENOS_SESSION_ID so subprocess tools can find the session.
 	v, ok := call.Env["LENOS_SESSION_ID"]
-	if ok {
-		assert.NotEqual(t, "sess-123", v, "coordinator must not set LENOS_SESSION_ID to session ID")
-	}
+	assert.True(t, ok, "coordinator must set LENOS_SESSION_ID")
+	assert.Equal(t, "sess-123", v, "LENOS_SESSION_ID must match session ID")
 	_, hasDataDir := call.Env["LENOS_DATA_DIR"]
 	assert.False(t, hasDataDir, "LENOS_DATA_DIR no longer exported")
 }

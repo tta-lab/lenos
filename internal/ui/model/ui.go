@@ -1092,6 +1092,24 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 		cmds = append(cmds, m.openEditor(m.textarea.Value()))
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionCompactSession:
+		if m.isAgentBusy() {
+			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before compacting..."))
+			m.dialog.CloseDialog(dialog.CommandsID)
+			break
+		}
+		if !m.hasSession() {
+			cmds = append(cmds, util.ReportWarn("No active session"))
+			m.dialog.CloseDialog(dialog.CommandsID)
+			break
+		}
+		cmds = append(cmds, func() tea.Msg {
+			if err := m.com.Workspace.AgentCompactSession(context.Background(), m.session.ID); err != nil {
+				return util.InfoMsg{Type: util.InfoTypeError, Msg: fmt.Sprintf("Compact session failed: %v", err)}
+			}
+			return nil
+		})
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionOpenJournal:
 		journalPath := os.Getenv("JOURNAL")
 		if journalPath == "" {
