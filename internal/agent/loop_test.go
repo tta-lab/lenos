@@ -1137,7 +1137,7 @@ func TestRunLoop_CmdNotFoundInBashBlockRePrompts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, stopEndTurn, stop)
 
-	results := messagesByRole(ms, message.Runtime)
+	results := resultsByOrder(ms)
 	require.Len(t, results, 1)
 	obs := results[0].CommandContent().Output
 	assert.Contains(t, obs, "`hello`")
@@ -1438,7 +1438,7 @@ func TestRunLoop_ToolCallInsideBashBlockInvalidBashDoesNotExecute(t *testing.T) 
 	require.NoError(t, err)
 
 	assert.Empty(t, runner.bash, "tool-call-shaped run block must not execute")
-	results := messagesByRole(ms, message.Result)
+	results := messagesByRole(ms, message.Runtime)
 	require.Len(t, results, 1)
 	assert.Contains(t, results[0].Content().Text, "not valid bash")
 }
