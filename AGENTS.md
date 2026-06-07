@@ -286,17 +286,23 @@ func TestYourFunction(t *testing.T) {
 Anytime you need to work on the TUI, read `internal/ui/AGENTS.md` before
 starting work.
 
-## EI Preflight Pattern
+## Lenos + EI Integration
 
-The journal template and coder prompt encourage agents to use `ei ask` (sync,
-not `--async`) for a read-only preflight on complex tasks. Rationale:
+Lenos agents use `ei` (Einai) to spawn subagents. All `ei` commands from
+within Lenos should use sync mode (no `--async`). Rationale:
 
-- Lenos already handles async job management internally; the agent does not
-  need `--async` in the shell command.
-- Sync `ei ask` blocks the current turn while the helper runs, which is
-  correct: the main agent should wait for the helper's answer before filling
-  the journal and starting work.
-- The preflight is a structured checkpoint between "recognize this is a task"
-  and "commit to a plan" — async would break that sequencing.
-- The helper inspects files, tests, tools, and deliverables but never
-  modifies anything. The main agent owns all decisions and journal updates.
+- Lenos already manages turn boundaries and subprocess lifecycle. Adding
+  `--async` inside a Lenos turn creates a detached process that the agent
+  cannot use — it would move to the next turn without the results.
+- Sync `ei ask` and `ei fetch` block the current turn while the subagent
+  runs, so the main agent gets the answer immediately and can act on it.
+- This applies everywhere: preflight helper, research lookups, code search
+  delegation — always sync.
+
+### Journal Preflight
+
+The session journal template includes a Preflight section with a ready-to-use
+sync `ei ask` command for task orientation. See `internal/agent/templates/journal.md`.
+
+The journal feature is documented in `internal/agent/templates/JOURNAL.md` —
+full code map of templates, Go implementation, UI, tests, and data flow.
