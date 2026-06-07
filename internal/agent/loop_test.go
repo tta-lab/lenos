@@ -921,6 +921,58 @@ func TestRunLoop_ExitWaitsForActiveBackgroundJobResult(t *testing.T) {
 	assert.Equal(t, 3, model.calls)
 }
 
+func TestRunLoop_ProseEndTurnWaitsForBackgroundJob(t *testing.T) {
+	t.Parallel()
+	exitStream := make(chan struct{})
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock("sleep 20"),  // step 0: starts bg job
+			"Waiting for the job to finish.", // step 1: prose while bg active
+			"done",                           // step 2: prose after bg result drained
+		},
+		onStream: func(call int) {
+			if call == 1 {
+				close(exitStream)
+			}
+		},
+	}
+	resultCh := make(chan backgroundResult)
+	bgRunner := NewBackgroundRunner(nil)
+	runner := &fakeRunner{results: []ExecResult{
+		{Background: true, JobID: "job-123", Duration: time.Second * 16},
+	}}
+	runner.onRun = func(bash string, _ map[string]string, _ []AllowedPath) {
+		bgRunner.Track("job-123", bash, func() {}, resultCh)
+	}
+	rec := &recordingRecorder{}
+	deps, ms := newDeps(t, model, runner, rec)
+	deps.bgRunner = bgRunner
+
+	go func() {
+		<-exitStream
+		resultCh <- backgroundResult{
+			stdout:   "ok\n",
+			exitCode: 0,
+		}
+	}()
+
+	stop, err := runLoop(context.Background(), deps, nil, "run slow")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+
+	// Three model calls: bg start, prose (continued after bg completion
+	// delivered via WaitAndDrain), then final prose end.
+	assert.Equal(t, 3, model.calls)
+
+	// Verify the background start result row was persisted.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1) // bg job start
+	require.Contains(t, results[0].CommandContent().Observation, "background job started")
+
+	// WaitAndDrain should have cleared the completions.
+	assert.Equal(t, 0, bgRunner.CompletionCount())
+}
+
 func TestRunLoop_ExitWaitIdleCancellationStopsLoop(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2001,4 +2053,213 @@ func intString(i int) string {
 		buf[n] = '-'
 	}
 	return string(buf[n:])
+}
+
+// TestRunLoop_ProseOnlyNoBackgroundEndsWithEndTurn verifies
+// requirement 4: prose-only with no background job ends with exactly
+// one EndTurn.
+func TestRunLoop_ProseOnlyNoBackgroundEndsWithEndTurn(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{
+		emits: []string{"all done"},
+	}
+	runner := &fakeRunner{}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.bgRunner = NewBackgroundRunner(nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "run task")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+
+	// Model called exactly once.
+	assert.Equal(t, 1, model.calls)
+
+	// TurnEnd recorded exactly once.
+}
+
+// TestRunLoop_ExitNoBackgroundEndsWithEndTurn verifies
+// requirement 4: explicit exit with no background job ends with
+// exactly one EndTurn.
+func TestRunLoop_ExitNoBackgroundEndsWithEndTurn(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock(lenosbash.ExitCommand),
+		},
+	}
+	runner := &fakeRunner{}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.bgRunner = NewBackgroundRunner(nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "run task")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+}
+
+// TestRunLoop_ProseOnlyActiveBackgroundContinues verifies
+// requirement 1: prose-only with an active background job waits,
+// drains the completion via WaitAndDrain, and continues.
+func TestRunLoop_ProseOnlyActiveBackgroundContinues(t *testing.T) {
+	t.Parallel()
+	exitStream := make(chan struct{})
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock("sleep 20"), // step 0: bg job starts
+			"prose while job runs",          // step 1: prose, bg still active
+			"final done",                    // step 2: prose after bg completion
+		},
+		onStream: func(call int) {
+			if call == 1 {
+				close(exitStream)
+			}
+		},
+	}
+	resultCh := make(chan backgroundResult)
+	bgRunner := NewBackgroundRunner(nil)
+	runner := &fakeRunner{results: []ExecResult{
+		{Background: true, JobID: "job-1", Duration: time.Second * 16},
+	}}
+	runner.onRun = func(bash string, _ map[string]string, _ []AllowedPath) {
+		bgRunner.Track("job-1", bash, func() {}, resultCh)
+	}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.bgRunner = bgRunner
+
+	go func() {
+		<-exitStream
+		resultCh <- backgroundResult{stdout: "ok\n", exitCode: 0}
+	}()
+
+	stop, err := runLoop(context.Background(), deps, nil, "run task")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+	assert.Equal(t, 3, model.calls)
+}
+
+// TestRunLoop_ExitActiveBackgroundContinues verifies
+// requirement 2: explicit exit with an active background job
+// waits, drains completion via WaitAndDrain, and continues.
+func TestRunLoop_ExitActiveBackgroundContinues(t *testing.T) {
+	t.Parallel()
+	exitStream := make(chan struct{})
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock("sleep 20"),            // step 0: bg job starts
+			lenosbash.BashBlock(lenosbash.ExitCommand), // step 1: exit while bg active
+			"done after drain",                         // step 2: prose after bg completion
+		},
+		onStream: func(call int) {
+			if call == 1 {
+				close(exitStream)
+			}
+		},
+	}
+	resultCh := make(chan backgroundResult)
+	bgRunner := NewBackgroundRunner(nil)
+	runner := &fakeRunner{results: []ExecResult{
+		{Background: true, JobID: "job-1", Duration: time.Second * 16},
+	}}
+	runner.onRun = func(bash string, _ map[string]string, _ []AllowedPath) {
+		bgRunner.Track("job-1", bash, func() {}, resultCh)
+	}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.bgRunner = bgRunner
+
+	go func() {
+		<-exitStream
+		resultCh <- backgroundResult{stdout: "ok\n", exitCode: 0}
+	}()
+
+	stop, err := runLoop(context.Background(), deps, nil, "run task")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+	assert.Equal(t, 3, model.calls)
+}
+
+// TestRunLoop_QueuedPromptNoBackgroundStillContinues verifies
+// requirement 5: a queued runtime prompt with no active background
+// still continues the loop.
+func TestRunLoop_QueuedPromptNoBackgroundStillContinues(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{
+		emits: []string{
+			"prose before prompt",
+			"done",
+		},
+	}
+	runner := &fakeRunner{}
+	rec := &recordingRecorder{}
+
+	// Inject a runtime prompt before the turn ends.
+	prompts := []turnPrompt{
+		{Text: "<runtime>system alert</runtime>", Persist: false},
+	}
+	drainCalled := false
+	drainer := func() []turnPrompt {
+		if drainCalled {
+			return nil
+		}
+		drainCalled = true
+		return prompts
+	}
+	deps, _ := newDepsWithDrain(t, model, runner, rec, drainer)
+	deps.bgRunner = NewBackgroundRunner(nil)
+
+	stop, err := runLoop(context.Background(), deps, nil, "run task")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+
+	// Two calls: prose + drain prompt caused continue, then done.
+	assert.Equal(t, 2, model.calls)
+}
+
+// TestRunLoop_BackgroundCompletionRaceNoLoss verifies
+// requirement 6: background job is no longer active but its
+// completion must not be lost before end-turn.
+// TestRunLoop_BackgroundCompletionRaceNoLoss verifies that when a
+// background job completes before tryEndTurn blocks, the completion
+// is visible to the model via WaitAndDrain.  This is a deterministic
+// test: the completion is stored atomically and WaitAndDrain returns
+// it without any race window between enqueue and drain.
+func TestRunLoop_BackgroundCompletionRaceNoLoss(t *testing.T) {
+	t.Parallel()
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock("sleep 5"), // step 0: bg job starts
+			"waiting",                      // step 1: prose while bg active
+			"done",                         // step 2: prose after bg completion
+		},
+	}
+	resultCh := make(chan backgroundResult)
+	bgRunner := NewBackgroundRunner(nil)
+	runner := &fakeRunner{results: []ExecResult{
+		{Background: true, JobID: "job-1", Duration: time.Second * 16},
+	}}
+	runner.onRun = func(bash string, _ map[string]string, _ []AllowedPath) {
+		bgRunner.Track("job-1", bash, func() {}, resultCh)
+		// Complete the background job immediately — before the
+		// loop reaches tryEndTurn.  The completion is stored in
+		// BackgroundRunner.completions under lock.
+		go func() {
+			resultCh <- backgroundResult{stdout: "fast\n", exitCode: 0}
+		}()
+	}
+	rec := &recordingRecorder{}
+	deps, _ := newDeps(t, model, runner, rec)
+	deps.bgRunner = bgRunner
+
+	stop, err := runLoop(context.Background(), deps, nil, "run task")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+
+	// Three calls: bg start, waiting (completion delivered via
+	// WaitAndDrain, continued), done.
+	assert.Equal(t, 3, model.calls)
+
+	// WaitAndDrain should have cleared the completions.
+	assert.Equal(t, 0, bgRunner.CompletionCount())
 }

@@ -116,9 +116,7 @@ runLoopReentry:
 		bgRunner:     bgRunner,
 		postStepHook: a.buildPostStepHook(call, primaryModel),
 		onUsage: func() func(int, fantasy.Usage, fantasy.ProviderMetadata) {
-			var cumulative int64
 			var autoCompactDone bool
-			interval := call.JournalCheckIntervalTokens
 			hasJournal := call.JournalPath != ""
 			return func(_ int, u fantasy.Usage, m fantasy.ProviderMetadata) {
 				overrideCost := a.openrouterCost(m)
@@ -130,22 +128,12 @@ runLoopReentry:
 				if call.usageSummary != nil {
 					call.usageSummary.AddUsage(primaryModel, u, usageCost(primaryModel, u, overrideCost))
 				}
-				if hasJournal {
-					if interval > 0 {
-						prev := cumulative / int64(interval)
-						cumulative += u.InputTokens
-						cur := cumulative / int64(interval)
-						if cur > prev {
-							a.injectRuntimePrompt(call, periodicCheckHint())
-						}
-					}
-					if !autoCompactDone {
-						totalUsed := currentSession.PromptTokens + currentSession.CompletionTokens
-						if ctxWin := primaryModel.CatwalkCfg.ContextWindow; ctxWin > 0 && totalUsed >= int64(ctxWin)*80/100 {
-							autoCompactDone = true
-							call.MarkCompactBoundary = true
-							a.injectRuntimePrompt(call, autoCompactHint())
-						}
+				if hasJournal && !autoCompactDone {
+					totalUsed := currentSession.PromptTokens + currentSession.CompletionTokens
+					if ctxWin := primaryModel.CatwalkCfg.ContextWindow; ctxWin > 0 && totalUsed >= int64(ctxWin)*80/100 {
+						autoCompactDone = true
+						call.MarkCompactBoundary = true
+						a.injectRuntimePrompt(call, autoCompactHint())
 					}
 				}
 			}

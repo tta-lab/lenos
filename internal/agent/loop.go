@@ -1,20 +1,14 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"html"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 
 	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/google"
-	"charm.land/fantasy/providers/openai"
 
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
@@ -103,7 +97,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				slog.Warn("loop: persist tag-diag re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		if len(parsed.Bash) > 0 && parsed.Accepted != "" && parsed.Accepted != emit {
@@ -127,11 +121,21 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				slog.Warn("loop: persist empty re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
-		// Execute parsed run blocks: prose-only ends the turn.
+		// Execute parsed run blocks: prose-only ends the turn,
+		// but wait for active background jobs first so their
+		// results are visible to the model before exit.
 		if len(parsed.Bash) == 0 {
+			var ended bool
+			msgs, ended, err = tryEndTurn(ctx, deps, msgs, emit, &assistantMsg)
+			if err != nil {
+				return stopError, err
+			}
+			if !ended {
+				continue
+			}
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 				slog.Warn("loop: persist text-only finish", "error", updateErr)
@@ -141,7 +145,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		// Execute the single run block.
 		bashCmd := parsed.Bash[0]
 		if strings.TrimSpace(bashCmd) == "" {
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		if containsBlockedPattern(bashCmd) {
@@ -154,18 +158,17 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				slog.Warn("loop: persist banned re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		// Plain exit in a run block ends the turn, same as prose-only.
 		if strings.TrimSpace(bashCmd) == lenosbash.ExitCommand {
-			if deps.bgRunner != nil && deps.bgRunner.ActiveCount() > 0 {
-				if waitErr := deps.bgRunner.WaitIdle(ctx); waitErr != nil {
-					return stopError, waitErr
-				}
-				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-				msgs = append(msgs, assistantTextMessage(emit, assistantMsg.ReasoningContent()))
-				msgs = drainAndAppend(ctx, deps, msgs)
+			var ended bool
+			msgs, ended, err = tryEndTurn(ctx, deps, msgs, emit, &assistantMsg)
+			if err != nil {
+				return stopError, err
+			}
+			if !ended {
 				continue
 			}
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
@@ -184,7 +187,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				slog.Warn("loop: persist invalid-bash re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
@@ -213,7 +216,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
@@ -251,7 +254,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		obs := lenosbash.ResultBlock(body)
@@ -271,266 +274,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 			fantasy.NewUserMessage(obs),
 		)
-		msgs = drainAndAppend(ctx, deps, msgs)
+		msgs, _ = drainAndAppend(ctx, deps, msgs)
 	}
 	return stopStepCap, ErrStepCap
-}
-
-// streamOne pumps a single model stream into assistantMsg.
-func streamOne(
-	ctx context.Context,
-	deps loopDeps,
-	msgs []fantasy.Message,
-	assistantMsg *message.Message,
-) (string, fantasy.Usage, fantasy.ProviderMetadata, error) {
-	baseline := assistantMsg.Clone()
-	result, err := retryModelStream(ctx,
-		func() (streamOneResult, error) {
-			return streamOneAttempt(ctx, deps, msgs, assistantMsg)
-		},
-		func() {
-			resetMessageForStreamRetry(ctx, deps.messages, assistantMsg, baseline, "loop: reset assistant message for stream retry")
-		},
-	)
-	if err != nil {
-		return "", result.usage, result.meta, err
-	}
-	return result.emit, result.usage, result.meta, nil
-}
-
-type streamOneResult struct {
-	emit  string
-	usage fantasy.Usage
-	meta  fantasy.ProviderMetadata
-}
-
-func streamOneAttempt(
-	ctx context.Context,
-	deps loopDeps,
-	msgs []fantasy.Message,
-	assistantMsg *message.Message,
-) (streamOneResult, error) {
-	call := fantasy.Call{
-		Prompt:          msgs,
-		ProviderOptions: deps.provOpts,
-		UserAgent:       userAgent,
-	}
-	stream, err := deps.model.Model.Stream(ctx, call)
-	if err != nil {
-		return streamOneResult{}, err
-	}
-	var (
-		rawText strings.Builder
-		usage   fantasy.Usage
-		meta    fantasy.ProviderMetadata
-	)
-	for part := range stream {
-		switch part.Type {
-		case fantasy.StreamPartTypeTextDelta:
-			rawText.WriteString(part.Delta)
-			if rc := assistantMsg.ReasoningContent(); rc.Thinking != "" && rc.FinishedAt == 0 {
-				assistantMsg.FinishThinking()
-			}
-			assistantMsg.AppendContent(part.Delta)
-			trimAssistantPostBashTail(assistantMsg)
-			if uerr := deps.messages.Update(ctx, *assistantMsg); uerr != nil {
-				slog.Warn("loop: persist text delta", "error", uerr)
-			}
-		case fantasy.StreamPartTypeReasoningDelta:
-			assistantMsg.AppendReasoningContent(part.Delta)
-			if uerr := deps.messages.Update(ctx, *assistantMsg); uerr != nil {
-				slog.Warn("loop: persist reasoning delta", "error", uerr)
-			}
-		case fantasy.StreamPartTypeReasoningEnd:
-			if anthropicData, ok := part.ProviderMetadata[anthropic.Name]; ok {
-				if sig, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && sig.Signature != "" {
-					assistantMsg.AppendReasoningSignature(sig.Signature)
-				}
-			}
-			if openaiData, ok := part.ProviderMetadata[openai.Name]; ok {
-				if rd, ok := openaiData.(*openai.ResponsesReasoningMetadata); ok {
-					assistantMsg.SetReasoningResponsesData(rd)
-				}
-			}
-			if googleData, ok := part.ProviderMetadata[google.Name]; ok {
-				if rd, ok := googleData.(*google.ReasoningMetadata); ok && rd.Signature != "" {
-					assistantMsg.AppendThoughtSignature(rd.Signature, rd.ToolID)
-				}
-			}
-			assistantMsg.FinishThinking()
-			if uerr := deps.messages.Update(ctx, *assistantMsg); uerr != nil {
-				slog.Warn("loop: persist reasoning end", "error", uerr)
-			}
-		case fantasy.StreamPartTypeFinish:
-			usage = part.Usage
-			meta = part.ProviderMetadata
-		case fantasy.StreamPartTypeError:
-			return streamOneResult{usage: usage, meta: meta}, part.Error
-		}
-	}
-	return streamOneResult{
-		emit:  rawText.String(),
-		usage: usage,
-		meta:  meta,
-	}, nil
-}
-
-func trimAssistantPostBashTail(assistantMsg *message.Message) {
-	parsed, diag := lenosbash.Parse(assistantMsg.Content().Text)
-	if diag != nil || len(parsed.Bash) == 0 || parsed.Accepted == "" || parsed.Accepted == assistantMsg.Content().Text {
-		return
-	}
-	replaceAssistantText(assistantMsg, parsed.Accepted)
-}
-
-func formatResultForModel(_ string, stdout, stderr string, exitCode int) string {
-	body := html.EscapeString(stdout)
-	if stderr != "" {
-		body += "\nSTDERR:\n" + html.EscapeString(stderr)
-	}
-	if body == "" {
-		body = "Bash completed with no output"
-	}
-	if exitCode != 0 && exitCode != -1 {
-		body += fmt.Sprintf("\n(exit code: %d)", exitCode)
-	}
-	return lenosbash.ResultBlock(body)
-}
-
-func assistantTextMessage(text string, rc message.ReasoningContent) fantasy.Message {
-	var parts []fantasy.MessagePart
-	if rc.Thinking != "" {
-		rp := fantasy.ReasoningPart{Text: rc.Thinking, ProviderOptions: fantasy.ProviderOptions{}}
-		if rc.Signature != "" {
-			rp.ProviderOptions[anthropic.Name] = &anthropic.ReasoningOptionMetadata{Signature: rc.Signature}
-		}
-		if rc.ResponsesData != nil {
-			rp.ProviderOptions[openai.Name] = rc.ResponsesData
-		}
-		if rc.ThoughtSignature != "" {
-			rp.ProviderOptions[google.Name] = &google.ReasoningMetadata{
-				Signature: rc.ThoughtSignature,
-				ToolID:    rc.ToolID,
-			}
-		}
-		parts = append(parts, rp)
-	}
-	if t := strings.TrimSpace(text); t != "" {
-		parts = append(parts, fantasy.TextPart{Text: t})
-	}
-	return fantasy.Message{Role: fantasy.MessageRoleAssistant, Content: parts}
-}
-
-func replaceAssistantText(msg *message.Message, text string) {
-	parts := make([]message.ContentPart, 0, len(msg.Parts)+1)
-	replaced := false
-	for _, part := range msg.Parts {
-		switch part.(type) {
-		case message.TextContent:
-			if !replaced {
-				parts = append(parts, message.TextContent{Text: text})
-				replaced = true
-			}
-		case message.Finish:
-			continue
-		default:
-			parts = append(parts, part)
-		}
-	}
-	if !replaced {
-		parts = append(parts, message.TextContent{Text: text})
-	}
-	msg.Parts = parts
-}
-
-func persistObservation(ctx context.Context, deps loopDeps, obs string) error {
-	_, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-		Role:  message.Runtime,
-		Parts: []message.ContentPart{message.TextContent{Text: obs}},
-	})
-	return err
-}
-
-func turnPromptMessage(prompt turnPrompt) fantasy.Message {
-	if prompt.Role == message.Runtime {
-		return fantasy.NewUserMessage(message.RuntimeText(prompt.Text))
-	}
-	return fantasy.NewUserMessage(prompt.Text)
-}
-
-func markStepFinished(ctx context.Context, deps loopDeps, msg *message.Message, reason message.FinishReason) {
-	if msg.IsFinished() {
-		return
-	}
-	msg.AddFinish(reason, "", "")
-	if err := deps.messages.Update(ctx, *msg); err != nil {
-		slog.Warn("loop: persist step finish", "error", err)
-	}
-}
-
-func abandonPending(ctx context.Context, msgs message.Service, m *message.Message) {
-	exitCode := -1
-	cmd := ""
-	if cc := m.CommandContent(); cc.Command != "" {
-		cmd = cc.Command
-	}
-	m.Parts = []message.ContentPart{message.CommandContent{
-		Command: cmd, Output: "canceled before result", ExitCode: &exitCode, Pending: false,
-	}}
-	if err := msgs.Update(ctx, *m); err != nil {
-		slog.Warn("loop: abandon pending result", "error", err)
-	}
-}
-
-func combine(stdout, stderr []byte) []byte {
-	if len(stderr) == 0 {
-		return stdout
-	}
-	if len(stdout) == 0 {
-		return stderr
-	}
-	var buf bytes.Buffer
-	buf.Write(stdout)
-	if !bytes.HasSuffix(stdout, []byte("\n")) {
-		buf.WriteByte('\n')
-	}
-	buf.Write(stderr)
-	return buf.Bytes()
-}
-
-var cmdNotFoundRe = regexp.MustCompile(`(?m)^bash:(?: line \d+:)? (\S+): command not found$`)
-
-func scanFirstCmdNotFound(stderr string) string {
-	m := cmdNotFoundRe.FindStringSubmatch(stderr)
-	if len(m) < 2 {
-		return ""
-	}
-	return m[1]
-}
-
-func isCanceled(err error) bool {
-	return errors.Is(err, context.Canceled)
-}
-
-func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) []fantasy.Message {
-	if deps.drainQueue == nil {
-		return msgs
-	}
-	drained := deps.drainQueue()
-	for _, prompt := range drained {
-		if prompt.Persist {
-			role := prompt.Role
-			if role == "" {
-				role = message.User
-			}
-			if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
-				Role:  role,
-				Parts: []message.ContentPart{message.TextContent{Text: prompt.Text}},
-			}); err != nil {
-				slog.Warn("loop: persist drained prompt", "error", err)
-			}
-		}
-		msgs = append(msgs, turnPromptMessage(prompt))
-	}
-	return msgs
 }

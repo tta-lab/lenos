@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
+	"github.com/tta-lab/lenos/internal/message"
 )
 
 // BackgroundJob represents one tracked background command.
@@ -33,6 +34,12 @@ type BackgroundRunner struct {
 	enqueue    func(msg string)
 	onIdle     func()
 	onIdleMu   sync.Mutex
+
+	// completions stores formatted runtime prompts for completed
+	// background jobs since the last drain. WaitAndDrain returns
+	// them and clears the store. Callers append them directly to
+	// the model stream — no dependency on external drain queues.
+	completions []turnPrompt
 }
 
 // NewBackgroundRunner creates a dormant runner. Track must be called to
@@ -69,14 +76,34 @@ func (r *BackgroundRunner) Track(jobID, command string, cancel context.CancelFun
 			return
 		}
 
+		// Build the completion prompt before taking the lock so the
+		// formatted text is ready and the critical section is short.
+		var promptText string
+		if result.killed {
+			promptText = formatKilledPrompt(jobID, command, result.exitCode)
+		} else {
+			promptText = formatCompletedPrompt(jobID, command, result.stdout, result.stderr, result.exitCode, result.err)
+		}
+
 		r.mu.Lock()
 		_, stillActive := r.active[jobID]
 		delete(r.active, jobID)
 		idle := len(r.active) == 0
+		// Store the completion atomically with the active set so
+		// WaitAndDrain sees it with no race window.
+		if stillActive && !result.killed {
+			r.completions = append(r.completions, turnPrompt{
+				Text:    promptText,
+				Persist: true,
+				Role:    message.Runtime,
+			})
+		}
 		r.mu.Unlock()
 
 		// If the job was already removed by StopAll or KillJob, skip
-		// enqueue: the runner no longer owns this job.
+		// enqueue: the runner no longer owns this job.  Completions
+		// stored under lock are discarded since they won't be
+		// drained by WaitAndDrain.
 		if !stillActive {
 			if idle {
 				r.finishIdle()
@@ -84,10 +111,11 @@ func (r *BackgroundRunner) Track(jobID, command string, cancel context.CancelFun
 			return
 		}
 
-		if result.killed {
-			r.formatAndEnqueueKilled(jobID, command, result.exitCode)
-		} else {
-			r.formatAndEnqueueCompleted(jobID, command, result.stdout, result.stderr, result.exitCode, result.err)
+		// Killed jobs need legacy enqueue (not stored in completions).
+		// Completed jobs are delivered via WaitAndDrain — do NOT
+		// also enqueue, or the active loop will see duplicates.
+		if result.killed && r.enqueue != nil {
+			r.enqueue(promptText)
 		}
 
 		if idle {
@@ -146,6 +174,42 @@ func (r *BackgroundRunner) finishIdle() {
 	}
 }
 
+// WaitAndDrain blocks until all tracked background jobs finish (or ctx
+// is canceled), then returns the number of completions that were enqueued
+// since the last drain. After the call, the completion counter is reset
+// to zero. This gives the loop a deterministic signal: if completions &gt; 0,
+// the turn must continue.
+func (r *BackgroundRunner) WaitAndDrain(ctx context.Context) []turnPrompt {
+	r.mu.Lock()
+	if len(r.active) == 0 {
+		out := r.completions
+		r.completions = nil
+		r.mu.Unlock()
+		return out
+	}
+	idleCh := r.idleCh
+	r.mu.Unlock()
+
+	select {
+	case <-idleCh:
+	case <-ctx.Done():
+	}
+
+	r.mu.Lock()
+	out := r.completions
+	r.completions = nil
+	r.mu.Unlock()
+	return out
+}
+
+// CompletionCount returns the number of completions enqueued since the
+// last drain. Safe to call while active jobs are still running.
+func (r *BackgroundRunner) CompletionCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.completions)
+}
+
 // ListActive returns all tracked background jobs sorted by ID.
 func (r *BackgroundRunner) ListActive() []BackgroundJob {
 	r.mu.Lock()
@@ -185,6 +249,7 @@ func (r *BackgroundRunner) StopAll() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.active) == 0 {
+		r.completions = nil
 		return
 	}
 	for id, job := range r.active {
@@ -195,42 +260,36 @@ func (r *BackgroundRunner) StopAll() {
 		close(r.idleCh)
 		r.idleClosed = true
 	}
+	r.completions = nil
 }
 
-func (r *BackgroundRunner) formatAndEnqueueCompleted(jobID, command, stdout, stderr string, exitCode int, runErr error) {
-	if r.enqueue == nil {
-		return
-	}
+// newJobID generates a short hex ID. Uses time-based prefix for readability.
+func newJobID() string {
+	return uuid.New().String()[:8]
+}
+
+func formatCompletedPrompt(jobID, command, stdout, stderr string, exitCode int, runErr error) string {
 	if runErr != nil {
 		result := lenosbash.ResultBlock(fmt.Sprintf(
 			"job_id: %s\ncommand: %s\nerror: %v",
 			jobID, command, runErr,
 		))
 		obs := fmt.Sprintf("background job completed (job_id: %s)\n\n%s", jobID, result)
-		r.enqueue(lenosbash.RuntimeBlock(obs))
-		return
+		return lenosbash.RuntimeBlock(obs)
 	}
 	result := lenosbash.ResultBlock(fmt.Sprintf(
 		"job_id: %s\ncommand: %s\nexit_code: %d\nstdout: %s\nstderr: %s",
 		jobID, command, exitCode, stdout, stderr,
 	))
 	obs := fmt.Sprintf("background job completed (job_id: %s)\n\n%s", jobID, result)
-	r.enqueue(lenosbash.RuntimeBlock(obs))
+	return lenosbash.RuntimeBlock(obs)
 }
 
-func (r *BackgroundRunner) formatAndEnqueueKilled(jobID, command string, exitCode int) {
-	if r.enqueue == nil {
-		return
-	}
+func formatKilledPrompt(jobID, command string, exitCode int) string {
 	result := lenosbash.ResultBlock(fmt.Sprintf(
 		"job_id: %s\ncommand: %s\nexit_code: %d",
 		jobID, command, exitCode,
 	))
 	obs := fmt.Sprintf("background job killed (job_id: %s)\n\n%s", jobID, result)
-	r.enqueue(lenosbash.RuntimeBlock(obs))
-}
-
-// newJobID generates a short hex ID. Uses time-based prefix for readability.
-func newJobID() string {
-	return uuid.New().String()[:8]
+	return lenosbash.RuntimeBlock(obs)
 }

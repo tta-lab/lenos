@@ -1,46 +1,20 @@
 package agent
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"maps"
-	"net/http"
-	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/fantasy"
-	"github.com/tta-lab/lenos/internal/agent/codex"
-	"github.com/tta-lab/lenos/internal/agent/hyper"
 	"github.com/tta-lab/lenos/internal/agent/notify"
-	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/hooks"
-	"github.com/tta-lab/lenos/internal/log"
 	"github.com/tta-lab/lenos/internal/message"
-	"github.com/tta-lab/lenos/internal/oauth/copilot"
 	"github.com/tta-lab/lenos/internal/pubsub"
 	"github.com/tta-lab/lenos/internal/session"
-	"github.com/tta-lab/lenos/internal/taskwarrior"
 	"golang.org/x/sync/errgroup"
-
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/azure"
-	"charm.land/fantasy/providers/bedrock"
-	"charm.land/fantasy/providers/google"
-	"charm.land/fantasy/providers/openai"
-	"charm.land/fantasy/providers/openaicompat"
-	"charm.land/fantasy/providers/openrouter"
-	"charm.land/fantasy/providers/vercel"
-	openaisdk "github.com/charmbracelet/openai-go/option"
-	"github.com/qjebbs/go-jsons"
 )
 
 // Coordinator errors.
@@ -114,7 +88,7 @@ func NewCoordinator(
 		dataDir:  absDataDir,
 	}
 
-	large, small, err := c.buildAgentModels(ctx, false)
+	large, small, err := buildAgentModels(ctx, false, c.cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +105,7 @@ func NewCoordinator(
 	case config.SelectedModelTypeReview:
 		reviewCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeReview]
 		if ok && reviewCfg.Model != "" {
-			primary, err = c.buildSelectedModel(ctx, reviewCfg, false, errReviewModelProviderNotConfigured, errReviewModelNotFound)
+			primary, err = buildSelectedModel(ctx, reviewCfg, false, errReviewModelProviderNotConfigured, errReviewModelNotFound, c.cfg)
 			if err != nil {
 				return nil, err
 			}
@@ -190,11 +164,11 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 
 	// Refresh OAuth token if expired before running.
 	// Ported from upstream 8cd4786c (extract token refresh helpers).
-	if err := c.maybeRefreshToken(ctx, &model, &providerCfg); err != nil {
+	if err := maybeRefreshToken(ctx, &model, &providerCfg, c.cfg, c.UpdateModels, c.currentAgent.Model); err != nil {
 		return err
 	}
 
-	call := c.buildCall(ctx, sessionID, prompt, model, providerCfg)
+	call := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg)
 
 	runErr := c.currentAgent.Run(ctx, call)
 	if runErr == nil {
@@ -205,11 +179,11 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		slog.Debug("Received 401, attempting token refresh", "provider", providerCfg.ID)
 		switch {
 		case providerCfg.OAuthToken != nil:
-			if err := c.refreshOAuth2Token(ctx, providerCfg); err != nil {
+			if err := refreshOAuth2Token(ctx, providerCfg, c.cfg); err != nil {
 				return fmt.Errorf("token refresh failed after 401: %w", err)
 			}
 		case strings.Contains(providerCfg.APIKeyTemplate, "$"):
-			if err := c.refreshApiKeyTemplate(ctx, providerCfg); err != nil {
+			if err := refreshApiKeyTemplate(ctx, providerCfg, c.cfg); err != nil {
 				return fmt.Errorf("API key refresh failed after 401: %w", err)
 			}
 		default:
@@ -222,674 +196,13 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		if !ok {
 			return fmt.Errorf("provider %s not found after refresh", model.ModelCfg.Provider)
 		}
-		call = c.buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg)
+		call = buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg, c.cfg)
 		if runErr := c.currentAgent.Run(ctx, call); runErr != nil {
 			return fmt.Errorf("agent.Run after refresh: %w", runErr)
 		}
 		return nil
 	}
 	return fmt.Errorf("agent.Run: %w", runErr)
-}
-
-// buildCall assembles the per-turn SessionAgentCall with sandbox env, allowed
-// paths, and provider options. Extracted so the OAuth/API-key refresh path
-// can rebuild a call with fresh credentials without duplicating wiring.
-func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt string, model Model, providerCfg config.ProviderConfig) SessionAgentCall {
-	sandboxEnv := make(map[string]string, len(os.Environ()))
-	for _, e := range os.Environ() {
-		if idx := strings.IndexByte(e, '='); idx >= 0 {
-			sandboxEnv[e[:idx]] = e[idx+1:]
-		}
-	}
-
-	cwd := c.cfg.WorkingDir()
-	runtimeContext := prompt.LoadRuntimeContext(ctx, c.cfg, getCoderContextPaths(c.cfg))
-
-	useSandbox := resolveSandbox(c.cfg.Config().Options.Sandbox)
-
-	access := AccessModeRW
-	if c.cfg.Overrides().ReadOnly {
-		access = AccessModeRO
-	}
-
-	// Create journal for native coder sessions only.
-	var journalPath string
-	if isNativeCoderAgent(c.cfg) {
-		if path, err := CreateJournal(cwd, sessionID); err != nil {
-			slog.Warn("Failed to create session journal", "error", err)
-		} else {
-			journalPath = path
-			// Expose journal to the subprocess runner via env var.
-			sandboxEnv["LENOS_JOURNAL"] = journalPath
-			sandboxEnv["LENOS_SESSION_ID"] = sessionID
-		}
-	}
-
-	return SessionAgentCall{
-		SessionID:                  sessionID,
-		Prompt:                     userPrompt,
-		usageSummary:               RunUsageSummaryFromContext(ctx),
-		ProviderOptions:            getProviderOptions(model, providerCfg),
-		PairWith:                   c.cfg.Overrides().PairWith,
-		Sandbox:                    useSandbox,
-		Env:                        sandboxEnv,
-		AllowedPaths:               BuildAllowedPaths(ctx, cwd, access),
-		TaskID:                     taskwarrior.ResolveTaskID(cwd),
-		ContextCommands:            buildRuntimeContextCommandsForAgent(c.cfg, runtimeContext),
-		JournalPath:                journalPath,
-		JournalCheckIntervalTokens: derefInt(c.cfg.Config().Options.JournalCheckIntervalTokens),
-	}
-}
-
-func isNativeCoderAgent(store *config.ConfigStore) bool {
-	switch store.Overrides().AgentName {
-	case "", config.AgentCoder:
-		return true
-	default:
-		return false
-	}
-}
-
-func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
-	if isNativeCoderAgent(store) {
-		return buildRuntimeContextCommands(
-			runtimeContext,
-			config.AgentCoder,
-			generalRuntimeContextPromptTmpl,
-			contextFilesRuntimeContextPromptTmpl,
-			coderRuntimeContextPromptTmpl,
-			reviewerRuntimeContextPromptTmpl,
-		)
-	}
-	switch store.Overrides().AgentName {
-	case config.AgentReviewer:
-		return buildRuntimeContextCommands(
-			runtimeContext,
-			config.AgentReviewer,
-			generalRuntimeContextPromptTmpl,
-			contextFilesRuntimeContextPromptTmpl,
-			coderRuntimeContextPromptTmpl,
-			reviewerRuntimeContextPromptTmpl,
-		)
-	default:
-		return nil
-	}
-}
-
-func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.ProviderOptions {
-	options := fantasy.ProviderOptions{}
-
-	cfgOpts := []byte("{}")
-	providerCfgOpts := []byte("{}")
-	catwalkOpts := []byte("{}")
-
-	if model.ModelCfg.ProviderOptions != nil {
-		data, err := json.Marshal(model.ModelCfg.ProviderOptions)
-		if err == nil {
-			cfgOpts = data
-		}
-	}
-
-	if providerCfg.ProviderOptions != nil {
-		data, err := json.Marshal(providerCfg.ProviderOptions)
-		if err == nil {
-			providerCfgOpts = data
-		}
-	}
-
-	if model.CatwalkCfg.Options.ProviderOptions != nil {
-		data, err := json.Marshal(model.CatwalkCfg.Options.ProviderOptions)
-		if err == nil {
-			catwalkOpts = data
-		}
-	}
-
-	readers := []io.Reader{
-		bytes.NewReader(catwalkOpts),
-		bytes.NewReader(providerCfgOpts),
-		bytes.NewReader(cfgOpts),
-	}
-
-	got, err := jsons.Merge(readers)
-	if err != nil {
-		slog.Error("Could not merge call config", "err", err)
-		return options
-	}
-
-	mergedOptions := make(map[string]any)
-
-	err = json.Unmarshal([]byte(got), &mergedOptions)
-	if err != nil {
-		slog.Error("Could not create config for call", "err", err)
-		return options
-	}
-
-	providerType := providerCfg.Type
-	switch {
-	case providerType == "hyper" && strings.Contains(model.CatwalkCfg.ID, "claude"):
-		providerType = anthropic.Name
-	case providerType == "hyper" && strings.Contains(model.CatwalkCfg.ID, "gpt"):
-		providerType = openai.Name
-	case providerType == "hyper" && strings.Contains(model.CatwalkCfg.ID, "gemini"):
-		providerType = google.Name
-	case providerType == "hyper":
-		providerType = openaicompat.Name
-	case providerType == codex.Name:
-		providerType = openai.Name
-	}
-
-	// Only set reasoning_effort if the model actually supports the requested
-	// effort level. Ported from upstream 2faa467a.
-	shouldSetEffort := model.CatwalkCfg.CanReason &&
-		(model.ModelCfg.ReasoningEffort == "" || slices.Contains(model.CatwalkCfg.ReasoningLevels, model.ModelCfg.ReasoningEffort))
-
-	switch providerType {
-	case openai.Name, azure.Name:
-		_, hasReasoningEffort := mergedOptions["reasoning_effort"]
-		if !hasReasoningEffort && shouldSetEffort && model.ModelCfg.ReasoningEffort != "" {
-			mergedOptions["reasoning_effort"] = model.ModelCfg.ReasoningEffort
-		}
-		if openai.IsResponsesModel(model.CatwalkCfg.ID) {
-			if openai.IsResponsesReasoningModel(model.CatwalkCfg.ID) {
-				mergedOptions["reasoning_summary"] = "auto"
-				mergedOptions["include"] = []openai.IncludeType{openai.IncludeReasoningEncryptedContent}
-			}
-			parsed, err := openai.ParseResponsesOptions(mergedOptions)
-			if err == nil {
-				options[openai.Name] = parsed
-			}
-		} else {
-			parsed, err := openai.ParseOptions(mergedOptions)
-			if err == nil {
-				options[openai.Name] = parsed
-			}
-		}
-	case anthropic.Name:
-		var (
-			_, hasEffort = mergedOptions["effort"]
-			_, hasThink  = mergedOptions["thinking"]
-		)
-		if shouldSetEffort {
-			switch {
-			case !hasEffort && model.ModelCfg.ReasoningEffort != "":
-				mergedOptions["effort"] = model.ModelCfg.ReasoningEffort
-			case !hasThink && model.ModelCfg.Think:
-				mergedOptions["thinking"] = map[string]any{"budget_tokens": 2000}
-			}
-		}
-		parsed, err := anthropic.ParseOptions(mergedOptions)
-		if err == nil {
-			options[anthropic.Name] = parsed
-		}
-
-	case openrouter.Name:
-		_, hasReasoning := mergedOptions["reasoning"]
-		if !hasReasoning && model.ModelCfg.ReasoningEffort != "" {
-			mergedOptions["reasoning"] = map[string]any{
-				"enabled": true,
-				"effort":  model.ModelCfg.ReasoningEffort,
-			}
-		}
-		parsed, err := openrouter.ParseOptions(mergedOptions)
-		if err == nil {
-			options[openrouter.Name] = parsed
-		}
-	case vercel.Name:
-		_, hasReasoning := mergedOptions["reasoning"]
-		if !hasReasoning && model.ModelCfg.ReasoningEffort != "" {
-			mergedOptions["reasoning"] = map[string]any{
-				"enabled": true,
-				"effort":  model.ModelCfg.ReasoningEffort,
-			}
-		}
-		parsed, err := vercel.ParseOptions(mergedOptions)
-		if err == nil {
-			options[vercel.Name] = parsed
-		}
-	case google.Name:
-		_, hasReasoning := mergedOptions["thinking_config"]
-		if !hasReasoning {
-			if strings.HasPrefix(model.CatwalkCfg.ID, "gemini-2") {
-				mergedOptions["thinking_config"] = map[string]any{
-					"thinking_budget":  2000,
-					"include_thoughts": true,
-				}
-			} else {
-				mergedOptions["thinking_config"] = map[string]any{
-					"thinking_level":   model.ModelCfg.ReasoningEffort,
-					"include_thoughts": true,
-				}
-			}
-		}
-		parsed, err := google.ParseOptions(mergedOptions)
-		if err == nil {
-			options[google.Name] = parsed
-		}
-	case openaicompat.Name:
-		_, hasReasoningEffort := mergedOptions["reasoning_effort"]
-		if !hasReasoningEffort && model.ModelCfg.ReasoningEffort != "" {
-			mergedOptions["reasoning_effort"] = model.ModelCfg.ReasoningEffort
-		}
-		parsed, err := openaicompat.ParseOptions(mergedOptions)
-		if err == nil {
-			options[openaicompat.Name] = parsed
-		}
-	}
-
-	return options
-}
-
-// TODO: when we support multiple agents we need to change this so that we pass in the agent specific model config
-func (c *coordinator) buildAgentModels(ctx context.Context, isSubAgent bool) (Model, Model, error) {
-	largeModelCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeLarge]
-	if !ok {
-		return Model{}, Model{}, errLargeModelNotSelected
-	}
-	smallModelCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeSmall]
-	if !ok {
-		return Model{}, Model{}, errSmallModelNotSelected
-	}
-
-	largeProviderCfg, ok := c.cfg.Config().Providers.Get(largeModelCfg.Provider)
-	if !ok {
-		return Model{}, Model{}, errLargeModelProviderNotConfigured
-	}
-
-	largeProvider, err := c.buildProvider(largeProviderCfg, largeModelCfg, isSubAgent)
-	if err != nil {
-		return Model{}, Model{}, err
-	}
-
-	smallProviderCfg, ok := c.cfg.Config().Providers.Get(smallModelCfg.Provider)
-	if !ok {
-		return Model{}, Model{}, errSmallModelProviderNotConfigured
-	}
-
-	smallProvider, err := c.buildProvider(smallProviderCfg, smallModelCfg, true)
-	if err != nil {
-		return Model{}, Model{}, err
-	}
-
-	var largeCatwalkModel *catwalk.Model
-	var smallCatwalkModel *catwalk.Model
-
-	for _, m := range largeProviderCfg.Models {
-		if m.ID == largeModelCfg.Model {
-			largeCatwalkModel = &m
-		}
-	}
-	for _, m := range smallProviderCfg.Models {
-		if m.ID == smallModelCfg.Model {
-			smallCatwalkModel = &m
-		}
-	}
-
-	if largeCatwalkModel == nil {
-		return Model{}, Model{}, errLargeModelNotFound
-	}
-
-	if smallCatwalkModel == nil {
-		return Model{}, Model{}, errSmallModelNotFound
-	}
-
-	largeModelID := largeModelCfg.Model
-	smallModelID := smallModelCfg.Model
-
-	if largeModelCfg.Provider == openrouter.Name && isExactoSupported(largeModelID) {
-		largeModelID += ":exacto"
-	}
-
-	if smallModelCfg.Provider == openrouter.Name && isExactoSupported(smallModelID) {
-		smallModelID += ":exacto"
-	}
-
-	largeModel, err := largeProvider.LanguageModel(ctx, largeModelID)
-	if err != nil {
-		return Model{}, Model{}, err
-	}
-	smallModel, err := smallProvider.LanguageModel(ctx, smallModelID)
-	if err != nil {
-		return Model{}, Model{}, err
-	}
-
-	return Model{
-			Model:      largeModel,
-			CatwalkCfg: *largeCatwalkModel,
-			ModelCfg:   largeModelCfg,
-		}, Model{
-			Model:      smallModel,
-			CatwalkCfg: *smallCatwalkModel,
-			ModelCfg:   smallModelCfg,
-		}, nil
-}
-
-func (c *coordinator) buildSelectedModel(ctx context.Context, modelCfg config.SelectedModel, isSubAgent bool, providerNotConfiguredErr, modelNotFoundErr error) (Model, error) {
-	providerCfg, ok := c.cfg.Config().Providers.Get(modelCfg.Provider)
-	if !ok {
-		return Model{}, providerNotConfiguredErr
-	}
-
-	provider, err := c.buildProvider(providerCfg, modelCfg, isSubAgent)
-	if err != nil {
-		return Model{}, err
-	}
-
-	var catwalkModel *catwalk.Model
-	for _, m := range providerCfg.Models {
-		if m.ID == modelCfg.Model {
-			catwalkModel = &m
-		}
-	}
-
-	if catwalkModel == nil {
-		return Model{}, modelNotFoundErr
-	}
-
-	modelID := modelCfg.Model
-	if modelCfg.Provider == openrouter.Name && isExactoSupported(modelID) {
-		modelID += ":exacto"
-	}
-
-	languageModel, err := provider.LanguageModel(ctx, modelID)
-	if err != nil {
-		return Model{}, err
-	}
-
-	return Model{
-		Model:      languageModel,
-		CatwalkCfg: *catwalkModel,
-		ModelCfg:   modelCfg,
-	}, nil
-}
-
-func (c *coordinator) buildAnthropicProvider(baseURL, apiKey string, headers map[string]string, providerID string) (fantasy.Provider, error) {
-	var opts []anthropic.Option
-
-	switch {
-	case strings.HasPrefix(apiKey, "Bearer "):
-		// NOTE: Prevent the SDK from picking up the API key from env.
-		os.Setenv("ANTHROPIC_API_KEY", "")
-		headers["Authorization"] = apiKey
-	case providerID == string(catwalk.InferenceProviderMiniMax) || providerID == string(catwalk.InferenceProviderMiniMaxChina):
-		// NOTE: Prevent the SDK from picking up the API key from env.
-		os.Setenv("ANTHROPIC_API_KEY", "")
-		headers["Authorization"] = "Bearer " + apiKey
-	case apiKey != "":
-		// X-Api-Key header
-		opts = append(opts, anthropic.WithAPIKey(apiKey))
-	}
-
-	if len(headers) > 0 {
-		opts = append(opts, anthropic.WithHeaders(headers))
-	}
-
-	if baseURL != "" {
-		opts = append(opts, anthropic.WithBaseURL(baseURL))
-	}
-
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, anthropic.WithHTTPClient(httpClient))
-	}
-	return anthropic.New(opts...)
-}
-
-func (c *coordinator) buildOpenaiProvider(baseURL, apiKey string, headers map[string]string) (fantasy.Provider, error) {
-	opts := []openai.Option{
-		openai.WithAPIKey(apiKey),
-		openai.WithUseResponsesAPI(),
-	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, openai.WithHTTPClient(httpClient))
-	}
-	if len(headers) > 0 {
-		opts = append(opts, openai.WithHeaders(headers))
-	}
-	if baseURL != "" {
-		opts = append(opts, openai.WithBaseURL(baseURL))
-	}
-	return openai.New(opts...)
-}
-
-func (c *coordinator) buildCodexProvider(baseURL, apiKey string, headers map[string]string) (fantasy.Provider, error) {
-	opts := []openai.Option{
-		openai.WithAPIKey(apiKey),
-		openai.WithBaseURL(baseURL),
-		openai.WithUseResponsesAPI(),
-	}
-	// Use the strip-transport wrapper to defend against max_output_tokens leaks.
-	var inner http.RoundTripper
-	if c.cfg.Config().Options.Debug {
-		inner = log.NewHTTPClient().Transport
-	}
-	opts = append(opts, openai.WithHTTPClient(codex.NewClient(inner)))
-	if len(headers) > 0 {
-		opts = append(opts, openai.WithHeaders(headers))
-	}
-	return openai.New(opts...)
-}
-
-func (c *coordinator) buildOpenrouterProvider(_, apiKey string, headers map[string]string) (fantasy.Provider, error) {
-	opts := []openrouter.Option{
-		openrouter.WithAPIKey(apiKey),
-	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, openrouter.WithHTTPClient(httpClient))
-	}
-	if len(headers) > 0 {
-		opts = append(opts, openrouter.WithHeaders(headers))
-	}
-	return openrouter.New(opts...)
-}
-
-func (c *coordinator) buildVercelProvider(_, apiKey string, headers map[string]string) (fantasy.Provider, error) {
-	opts := []vercel.Option{
-		vercel.WithAPIKey(apiKey),
-	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, vercel.WithHTTPClient(httpClient))
-	}
-	if len(headers) > 0 {
-		opts = append(opts, vercel.WithHeaders(headers))
-	}
-	return vercel.New(opts...)
-}
-
-func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers map[string]string, extraBody map[string]any, providerID string, isSubAgent bool) (fantasy.Provider, error) {
-	opts := []openaicompat.Option{
-		openaicompat.WithBaseURL(baseURL),
-		openaicompat.WithAPIKey(apiKey),
-	}
-
-	// Set HTTP client based on provider and debug mode.
-	var httpClient *http.Client
-	if providerID == string(catwalk.InferenceProviderCopilot) {
-		opts = append(opts, openaicompat.WithUseResponsesAPI())
-		httpClient = copilot.NewClient(isSubAgent, c.cfg.Config().Options.Debug)
-	} else if c.cfg.Config().Options.Debug {
-		httpClient = log.NewHTTPClient()
-	}
-	if httpClient != nil {
-		opts = append(opts, openaicompat.WithHTTPClient(httpClient))
-	}
-
-	if len(headers) > 0 {
-		opts = append(opts, openaicompat.WithHeaders(headers))
-	}
-
-	for extraKey, extraValue := range extraBody {
-		opts = append(opts, openaicompat.WithSDKOptions(openaisdk.WithJSONSet(extraKey, extraValue)))
-	}
-
-	return openaicompat.New(opts...)
-}
-
-func (c *coordinator) buildAzureProvider(baseURL, apiKey string, headers map[string]string, options map[string]string) (fantasy.Provider, error) {
-	opts := []azure.Option{
-		azure.WithBaseURL(baseURL),
-		azure.WithAPIKey(apiKey),
-		azure.WithUseResponsesAPI(),
-	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, azure.WithHTTPClient(httpClient))
-	}
-	if options == nil {
-		options = make(map[string]string)
-	}
-	if apiVersion, ok := options["apiVersion"]; ok {
-		opts = append(opts, azure.WithAPIVersion(apiVersion))
-	}
-	if len(headers) > 0 {
-		opts = append(opts, azure.WithHeaders(headers))
-	}
-
-	return azure.New(opts...)
-}
-
-func (c *coordinator) buildBedrockProvider(apiKey string, headers map[string]string) (fantasy.Provider, error) {
-	var opts []bedrock.Option
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, bedrock.WithHTTPClient(httpClient))
-	}
-	if len(headers) > 0 {
-		opts = append(opts, bedrock.WithHeaders(headers))
-	}
-	switch {
-	case apiKey != "":
-		opts = append(opts, bedrock.WithAPIKey(apiKey))
-	case os.Getenv("AWS_BEARER_TOKEN_BEDROCK") != "":
-		opts = append(opts, bedrock.WithAPIKey(os.Getenv("AWS_BEARER_TOKEN_BEDROCK")))
-	default:
-		// Skip, let the SDK do authentication.
-	}
-	return bedrock.New(opts...)
-}
-
-func (c *coordinator) buildGoogleProvider(baseURL, apiKey string, headers map[string]string) (fantasy.Provider, error) {
-	opts := []google.Option{
-		google.WithBaseURL(baseURL),
-		google.WithGeminiAPIKey(apiKey),
-	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, google.WithHTTPClient(httpClient))
-	}
-	if len(headers) > 0 {
-		opts = append(opts, google.WithHeaders(headers))
-	}
-	return google.New(opts...)
-}
-
-func (c *coordinator) buildGoogleVertexProvider(headers map[string]string, options map[string]string) (fantasy.Provider, error) {
-	opts := []google.Option{}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, google.WithHTTPClient(httpClient))
-	}
-	if len(headers) > 0 {
-		opts = append(opts, google.WithHeaders(headers))
-	}
-
-	project := options["project"]
-	location := options["location"]
-
-	opts = append(opts, google.WithVertex(project, location))
-
-	return google.New(opts...)
-}
-
-func (c *coordinator) buildHyperProvider(apiKey string) (fantasy.Provider, error) {
-	opts := []hyper.Option{
-		hyper.WithAPIKey(apiKey),
-	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, hyper.WithHTTPClient(httpClient))
-	}
-	return hyper.New(opts...)
-}
-
-func (c *coordinator) isAnthropicThinking(model config.SelectedModel) bool {
-	if model.Think {
-		return true
-	}
-	opts, err := anthropic.ParseOptions(model.ProviderOptions)
-	return err == nil && opts.Thinking != nil
-}
-
-func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model config.SelectedModel, isSubAgent bool) (fantasy.Provider, error) {
-	headers := maps.Clone(providerCfg.ExtraHeaders)
-	if headers == nil {
-		headers = make(map[string]string)
-	}
-
-	// handle special headers for anthropic
-	if providerCfg.Type == anthropic.Name && c.isAnthropicThinking(model) {
-		if v, ok := headers["anthropic-beta"]; ok {
-			headers["anthropic-beta"] = v + ",interleaved-thinking-2025-05-14"
-		} else {
-			headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"
-		}
-	}
-
-	apiKey, resolveErr := c.cfg.Resolve(providerCfg.APIKey)
-	if resolveErr != nil {
-		return nil, fmt.Errorf("resolve API key: %w", resolveErr)
-	}
-	var baseURL string
-	baseURL, resolveErr = c.cfg.Resolve(providerCfg.BaseURL)
-	if resolveErr != nil {
-		return nil, fmt.Errorf("resolve base URL: %w", resolveErr)
-	}
-
-	switch providerCfg.Type {
-	case openai.Name:
-		return c.buildOpenaiProvider(baseURL, apiKey, headers)
-	case anthropic.Name:
-		return c.buildAnthropicProvider(baseURL, apiKey, headers, providerCfg.ID)
-	case openrouter.Name:
-		return c.buildOpenrouterProvider(baseURL, apiKey, headers)
-	case vercel.Name:
-		return c.buildVercelProvider(baseURL, apiKey, headers)
-	case azure.Name:
-		return c.buildAzureProvider(baseURL, apiKey, headers, providerCfg.ExtraParams)
-	case bedrock.Name:
-		return c.buildBedrockProvider(apiKey, headers)
-	case google.Name:
-		return c.buildGoogleProvider(baseURL, apiKey, headers)
-	case "google-vertex":
-		return c.buildGoogleVertexProvider(headers, providerCfg.ExtraParams)
-	case openaicompat.Name:
-		if providerCfg.ID == string(catwalk.InferenceProviderZAI) {
-			if providerCfg.ExtraBody == nil {
-				providerCfg.ExtraBody = map[string]any{}
-			}
-			providerCfg.ExtraBody["tool_stream"] = true
-		}
-		return c.buildOpenaiCompatProvider(baseURL, apiKey, headers, providerCfg.ExtraBody, providerCfg.ID, isSubAgent)
-	case hyper.Name:
-		return c.buildHyperProvider(apiKey)
-	case codex.Name:
-		return c.buildCodexProvider(baseURL, apiKey, headers)
-	default:
-		return nil, fmt.Errorf("provider type not supported: %q", providerCfg.Type)
-	}
-}
-
-func isExactoSupported(modelID string) bool {
-	supportedModels := []string{
-		"moonshotai/kimi-k2-0905",
-		"deepseek/deepseek-v3.1-terminus",
-		"z-ai/glm-4.6",
-		"openai/gpt-oss-120b",
-		"qwen/qwen3-coder",
-	}
-	return slices.Contains(supportedModels, modelID)
 }
 
 func (c *coordinator) Cancel(sessionID string) {
@@ -922,7 +235,7 @@ func (c *coordinator) SystemPrompt() string {
 
 func (c *coordinator) UpdateModels(ctx context.Context) error {
 	// Build the models again so we make sure we get the latest config.
-	large, small, err := c.buildAgentModels(ctx, false)
+	large, small, err := buildAgentModels(ctx, false, c.cfg)
 	if err != nil {
 		return err
 	}
@@ -933,7 +246,7 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 	case config.SelectedModelTypeReview:
 		reviewCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeReview]
 		if ok && reviewCfg.Model != "" {
-			primary, err = c.buildSelectedModel(ctx, reviewCfg, false, errReviewModelProviderNotConfigured, errReviewModelNotFound)
+			primary, err = buildSelectedModel(ctx, reviewCfg, false, errReviewModelProviderNotConfigured, errReviewModelNotFound, c.cfg)
 			if err != nil {
 				return err
 			}
@@ -980,88 +293,6 @@ func (c *coordinator) StopBackgroundJobs(sessionID string) {
 	c.currentAgent.StopBackgroundJobs(sessionID)
 }
 
-// maybeRefreshToken refreshes the OAuth token if expired, rebuilds the
-// provider, and updates the local model/providerCfg references. Returns nil
-// if no refresh was needed.
-// Ported from upstream 8cd4786c (extract token refresh helpers).
-func (c *coordinator) maybeRefreshToken(ctx context.Context, model *Model, providerCfg *config.ProviderConfig) error {
-	if providerCfg.OAuthToken == nil || !providerCfg.OAuthToken.IsExpired() {
-		return nil
-	}
-	slog.Debug("OAuth token expired, refreshing", "provider", providerCfg.ID)
-	if err := c.refreshOAuth2Token(ctx, *providerCfg); err != nil {
-		return err
-	}
-	if err := c.UpdateModels(ctx); err != nil {
-		return fmt.Errorf("rebuild model after token refresh: %w", err)
-	}
-	*model = c.currentAgent.Model()
-	freshCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-	if !ok {
-		return fmt.Errorf("provider %s not found after token refresh", model.ModelCfg.Provider)
-	}
-	*providerCfg = freshCfg
-	return nil
-}
-
-// isUnauthorized reports whether err is a fantasy.ProviderError with a 401 status
-// code, signalling that OAuth/API-key credentials have expired.
-func isUnauthorized(err error) bool {
-	var providerErr *fantasy.ProviderError
-	return errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusUnauthorized
-}
-
-func (c *coordinator) refreshOAuth2Token(ctx context.Context, providerCfg config.ProviderConfig) error {
-	if err := c.cfg.RefreshOAuthToken(ctx, config.ScopeGlobal, providerCfg.ID); err != nil {
-		slog.Error("Failed to refresh OAuth token", "provider", providerCfg.ID, "error", err)
-		return err
-	}
-	return nil
-}
-
-func (c *coordinator) refreshApiKeyTemplate(ctx context.Context, providerCfg config.ProviderConfig) error {
-	newAPIKey, err := c.cfg.Resolve(providerCfg.APIKeyTemplate)
-	if err != nil {
-		slog.Error("Failed to resolve API key template", "provider", providerCfg.ID, "error", err)
-		return err
-	}
-	providerCfg.APIKey = newAPIKey
-	c.cfg.Config().Providers.Set(providerCfg.ID, providerCfg)
-	return nil
-}
-
-// resolveSandbox returns the sandbox setting, defaulting to true if nil.
-func resolveSandbox(p *bool) bool {
-	if p == nil {
-		return true
-	}
-	return *p
-}
-
-// getCoderContextPaths returns the context paths from the coder agent config.
-// These are populated by SetupAgents with ExtraContextFiles from --context-file
-// and global context paths from config.
-func getCoderContextPaths(store *config.ConfigStore) []string {
-	if coder, ok := store.Config().Agents[config.AgentCoder]; ok {
-		return coder.ContextPaths
-	}
-	return nil
-}
-
-func agentNameOr(name string) string {
-	if name != "" {
-		return name
-	}
-	return "lenos"
-}
-
-func derefInt(p *int) int {
-	if p == nil {
-		return 0
-	}
-	return *p
-}
-
 // CompactSession sends a journal handoff hint to the agent and marks the
 // response as a compaction boundary, giving the next turn a fresh context window.
 func (c *coordinator) CompactSession(ctx context.Context, sessionID string) error {
@@ -1073,7 +304,7 @@ func (c *coordinator) CompactSession(ctx context.Context, sessionID string) erro
 	if !ok {
 		return errModelProviderNotConfigured
 	}
-	call := c.buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg)
+	call := buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg, c.cfg)
 	call.runtimePrompt = true
 	call.MarkCompactBoundary = true
 	return c.currentAgent.CompactSession(ctx, call)

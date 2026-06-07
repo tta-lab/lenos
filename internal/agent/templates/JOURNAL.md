@@ -16,13 +16,11 @@ that make it work.
 
 | File | Role |
 |---|---|
-| `internal/agent/journal.go` | Core functions: `JournalDir`, `JournalPath`, `CreateJournal` (writes template). Hint generators: `taskDetectionHint`, `periodicCheckHint`, `compactHandoffHint`, `autoCompactHint`. |
-| `internal/agent/coordinator.go` | Creates journal via `CreateJournal` for native coder sessions, sets `LENOS_JOURNAL` env var, passes `JournalPath` and `JournalCheckIntervalTokens` in `CallConfig` (§255-280). |
-| `internal/agent/agent.go` | `CallConfig.JournalPath` and `JournalCheckIntervalTokens` fields (§75-81). `AgentCompactSession` interface with `CompactSession()` method for journal handoff (§115). |
-| `internal/agent/agent_run.go` | Injects task-detection runtime hint on first turn when journal exists (§77-82). Injects periodic self-check hints based on token interval (§121-133). |
-| `internal/cmd/root.go` | `formatJournalHint` displays journal path in CLI status output (§155-163). |
-| `internal/config/config.go` | `Options.JournalCheckIntervalTokens` config (default 30000, 0 disables) (§241). |
-| `internal/config/load.go` | Defaults `JournalCheckIntervalTokens` to 30000 if unset (§477-478). |
+| `internal/agent/journal.go` | Core functions: `JournalDir`, `JournalPath`, `CreateJournal` (writes template). Hint generators: `journalFillHint`, `compactHandoffHint`, `autoCompactHint`. |
+| `internal/agent/coordinator.go` | Creates journal via `CreateJournal` for native coder sessions, sets `LENOS_JOURNAL` env var, passes `JournalPath` in `SessionAgentCall`. |
+| `internal/agent/agent.go` | `SessionAgentCall.JournalPath` field. `SessionAgent.CompactSession()` interface for journal handoff. |
+| `internal/agent/agent_run.go` | Injects journal fill hint on first turn when journal exists. Injects auto-compact hint at 80% context window usage. |
+| `internal/cmd/root.go` | `formatJournalHint` displays journal path in CLI status output. |
 | `internal/workspace/workspace.go` | `AgentCompactSession` interface for UI/dialog to trigger journal handoff via compact (§56). |
 
 ## UI

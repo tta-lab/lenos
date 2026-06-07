@@ -58,11 +58,6 @@ func journalFillHint() string {
 		"a better journal. Treat the journal as the source of truth for task state."
 }
 
-// periodicCheckHint returns a self-check reminder.
-func periodicCheckHint() string {
-	return "Reread your session journal with `cat $LENOS_JOURNAL`, then check these sections: Environment, Deliverables, Potential Delivery Risks, Existing Verification, Failed Paths, Verification. Are you still on track? Anything worth to write down?"
-}
-
 // compactHandoffHint returns a prompt asking the agent to update the journal
 // for handoff.
 func compactHandoffHint() string {

@@ -224,21 +224,20 @@ func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 }
 
 type Options struct {
-	ContextPaths               []string     `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=LENOS.md"`
-	AgentPaths                 []string     `json:"agent_paths,omitempty" jsonschema:"description=Paths to directories containing Agent identity files. Each path may contain flat <name>.md files OR per-agent subdirs <name>/AGENTS.md (or both). When both shapes match the same name in the same dir flat takes precedence.,example=~/.config/lenos/agents,example=./.lenos/agents,example=~/.claude/agents,example=~/Code/guion-opensource/ttal-cli/templates/ttal"`
-	TUI                        *TUIOptions  `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
-	Debug                      bool         `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
-	DataDirectory              string       `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data (relative to working directory),default=.lenos,example=.lenos"` // Relative to the cwd
-	DisabledTools              []string     `json:"disabled_tools,omitempty" jsonschema:"description=List of built-in tools to disable and hide from the agent,example=bash"`
-	DisableProviderAutoUpdate  bool         `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable providers auto-update,default=false"`
-	DisableDefaultProviders    bool         `json:"disable_default_providers,omitempty" jsonschema:"description=Ignore all default/embedded providers. When enabled, providers must be fully specified in the config file with base_url, models, and api_key - no merging with defaults occurs,default=false"`
-	Attribution                *Attribution `json:"attribution,omitempty" jsonschema:"description=Attribution settings for generated content"`
-	DisableMetrics             bool         `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending metrics,default=false"`
-	InitializeAs               string       `json:"initialize_as,omitempty" jsonschema:"description=Name of the context file to create/update during project initialization,default=AGENTS.md,example=AGENTS.md,example=LENOS.md,example=CLAUDE.md,example=docs/LLMs.md"`
-	Progress                   *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
-	Sandbox                    *bool        `json:"sandbox,omitempty" jsonschema:"description=Enable sandbox isolation for command execution via temenos SDK,default=true"`
-	DisableNotifications       bool         `json:"disable_notifications,omitempty" jsonschema:"description=Disable desktop notifications,default=false"`
-	JournalCheckIntervalTokens *int         `json:"journal_check_interval_tokens,omitempty" jsonschema:"description=Token interval for journal self-check reminders (0 disables),default=30000"`
+	ContextPaths              []string     `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=LENOS.md"`
+	AgentPaths                []string     `json:"agent_paths,omitempty" jsonschema:"description=Paths to directories containing Agent identity files. Each path may contain flat <name>.md files OR per-agent subdirs <name>/AGENTS.md (or both). When both shapes match the same name in the same dir flat takes precedence.,example=~/.config/lenos/agents,example=./.lenos/agents,example=~/.claude/agents,example=~/Code/guion-opensource/ttal-cli/templates/ttal"`
+	TUI                       *TUIOptions  `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
+	Debug                     bool         `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
+	DataDirectory             string       `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data (relative to working directory),default=.lenos,example=.lenos"` // Relative to the cwd
+	DisabledTools             []string     `json:"disabled_tools,omitempty" jsonschema:"description=List of built-in tools to disable and hide from the agent,example=bash"`
+	DisableProviderAutoUpdate bool         `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable providers auto-update,default=false"`
+	DisableDefaultProviders   bool         `json:"disable_default_providers,omitempty" jsonschema:"description=Ignore all default/embedded providers. When enabled, providers must be fully specified in the config file with base_url, models, and api_key - no merging with defaults occurs,default=false"`
+	Attribution               *Attribution `json:"attribution,omitempty" jsonschema:"description=Attribution settings for generated content"`
+	DisableMetrics            bool         `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending metrics,default=false"`
+	InitializeAs              string       `json:"initialize_as,omitempty" jsonschema:"description=Name of the context file to create/update during project initialization,default=AGENTS.md,example=AGENTS.md,example=LENOS.md,example=CLAUDE.md,example=docs/LLMs.md"`
+	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
+	Sandbox                   *bool        `json:"sandbox,omitempty" jsonschema:"description=Enable sandbox isolation for command execution via temenos SDK,default=true"`
+	DisableNotifications      bool         `json:"disable_notifications,omitempty" jsonschema:"description=Disable desktop notifications,default=false"`
 }
 
 type Agent struct {
