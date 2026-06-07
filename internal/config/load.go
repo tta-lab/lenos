@@ -474,8 +474,9 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 		}
 	}
 	c.Options.InitializeAs = cmp.Or(c.Options.InitializeAs, defaultInitializeAs)
-	if c.Options.JournalCheckIntervalTokens == 0 {
-		c.Options.JournalCheckIntervalTokens = 30000
+	if c.Options.JournalCheckIntervalTokens == nil {
+		defaultInterval := 30000
+		c.Options.JournalCheckIntervalTokens = &defaultInterval
 	}
 }
 
