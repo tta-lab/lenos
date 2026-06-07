@@ -210,7 +210,7 @@ Plan. Do not edit, create, or modify files until you have filled the journal
 through the Plan section.
 
 For complex, unfamiliar, or ambiguous tasks, consider the Preflight section of
-the journal template: ask a read-only helper (`ei ask "..." --async`) to inspect
+the journal template: ask a read-only helper (`ei ask "..."`) to inspect
 files, tests, tools, and deliverables before you commit to a plan. Its answer is
 input for your journal — you still decide, you still update the journal yourself,
 and you own the task.
