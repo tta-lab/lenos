@@ -39,6 +39,12 @@ to do, updating this journal yourself, and completing the task.
 - User-visible outcomes:
 - Acceptance criteria:
 
+## Existing Verification
+
+- Tests/checks that already pass:
+- What the existing verification proves:
+- Gaps in existing coverage:
+
 ## Potential Delivery Risks
 
 - What could still go wrong:
@@ -48,20 +54,13 @@ to do, updating this journal yourself, and completing the task.
 ## Plan
 
 - Current plan:
-- Risks:
-- Verification strategy:
+- Approach:
 
 ## Progress
 
 - Done:
 - Decisions:
 - Failed paths:
-
-## Existing Verification
-
-- Tests/checks that already pass:
-- What the existing verification proves:
-- Gaps in existing coverage:
 
 ## Verification
 
