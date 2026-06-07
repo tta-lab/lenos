@@ -49,8 +49,8 @@ func CreateJournal(workingDir, sessionID string) (string, error) {
 // journalFillHint returns a runtime hint instructing the agent to fill the
 // session journal before changing files.
 func journalFillHint() string {
-	return "You are running as a native coder with a session journal. Fill the journal\n" +
-		"through Plan before editing, creating, or modifying files.\n\n" +
+	return "You are a coder with a session journal. Fill the journal through Plan\n" +
+		"before editing, creating, or modifying files.\n\n" +
 		"The journal helps you achieve the target by making the task state explicit:\n" +
 		"goal, constraints, plan, risks, failed paths, verification, and next action.\n" +
 		"It is your durable working memory and handoff record when context is lost.\n\n" +
