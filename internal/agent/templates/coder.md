@@ -232,7 +232,7 @@ verification results, and next actions.
 - Next
 - Reflection (if complete, set `Next: none`)
 
-**Periodic self-check**: reread sections in this order:
+**Periodic self-check**: re-read your journal (`cat $LENOS_JOURNAL`) and check these sections in order:
 1. Environment (working in right context?)
 2. Deliverables (producing right artifacts?)
 3. Potential Delivery Risks (what could still go wrong?)

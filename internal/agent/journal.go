@@ -63,7 +63,7 @@ func taskDetectionHint() string {
 
 // periodicCheckHint returns a self-check reminder.
 func periodicCheckHint() string {
-	return "Reread your journal sections: Environment, Deliverables, Potential Delivery Risks, Existing Verification, Failed Paths, Verification. Are you still on track?"
+	return "Reread your session journal with `cat $LENOS_JOURNAL`, then check these sections: Environment, Deliverables, Potential Delivery Risks, Existing Verification, Failed Paths, Verification. Are you still on track?"
 }
 
 // compactHandoffHint returns a prompt asking the agent to update the journal
