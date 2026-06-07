@@ -14,7 +14,7 @@ choosing the wrong first approach, you should ask a read-only helper before
 broad changes:
 
 ```
-ei ask "Read-only preflight for the current task. Inspect the current working directory, relevant project files, available tests, and available local tools. Identify the likely goal, verifier or user-visible deliverables, important constraints, task-provided assets, and the safest first approach. Do not modify files. Return concise findings, risks, and recommended next steps."
+ei ask "Read-only preflight for the current task. Inspect the current working directory, relevant project files, available tests, and available local tools. Identify the likely goal, success checks or user-visible deliverables, important constraints, local inputs, and the safest first approach. Do not modify files. Return concise findings, risks, and recommended next steps."
 ```
 
 Use the helper's answer as input only. You are still responsible for deciding what
