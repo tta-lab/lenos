@@ -30,6 +30,7 @@ var (
 	tools = []tool{
 		{Name: "Lenos", Repo: "lenos", Binary: "lenos", ConfigKind: "json"},
 		{Name: "Organon", Repo: "organon", Binary: "organon", Binaries: []string{"src", "web", "skill", "project"}, ConfigKind: "toml"},
+		{Name: "Einai", Repo: "einai", Binary: "ei", NoConfig: true, UseReleaseAPI: true},
 	}
 )
 
@@ -39,6 +40,14 @@ type tool struct {
 	Binary     string
 	Binaries   []string // multiple binaries to extract from one archive (e.g. organon)
 	ConfigKind string
+	NoConfig   bool // skip writing default config for this tool
+	// DownloadName overrides the archive filename for the download URL.
+	// Default is "{Binary}_{titleOS}_{arch}.tar.gz".
+	DownloadName string
+	// UseReleaseAPI fetches the download URL from the GitHub releases API
+	// instead of the /releases/latest/download/ direct link. Use this for
+	// release archives that include version in the filename.
+	UseReleaseAPI bool
 }
 
 type model struct {
@@ -158,10 +167,23 @@ func installToolCmd(binDir string, t tool) tea.Cmd {
 }
 
 func installTool(binDir string, t tool) error {
-	downloadURL := fmt.Sprintf(
-		"https://github.com/%s/%s/releases/latest/download/%s_%s_%s.tar.gz",
-		githubOrg, t.Repo, t.Binary, titleOS(), arch(),
-	)
+	var downloadURL string
+	if t.UseReleaseAPI {
+		u, err := releaseAssetURL(t)
+		if err != nil {
+			return err
+		}
+		downloadURL = u
+	} else {
+		filename := t.DownloadName
+		if filename == "" {
+			filename = fmt.Sprintf("%s_%s_%s.tar.gz", t.Binary, titleOS(), arch())
+		}
+		downloadURL = fmt.Sprintf(
+			"https://github.com/%s/%s/releases/latest/download/%s",
+			githubOrg, t.Repo, filename,
+		)
+	}
 
 	req, err := http.NewRequestWithContext(
 		context.Background(), http.MethodGet, downloadURL, nil,
@@ -269,6 +291,46 @@ func arch() string {
 
 var httpClient = func() *http.Client {
 	return &http.Client{Timeout: 120 * time.Second}
+}
+
+func releaseAssetURL(t tool) (string, error) {
+	apiURL := fmt.Sprintf(
+		"https://api.github.com/repos/%s/%s/releases/latest",
+		githubOrg, t.Repo,
+	)
+	req, err := http.NewRequestWithContext(
+		context.Background(), http.MethodGet, apiURL, nil,
+	)
+	if err != nil {
+		return "", fmt.Errorf("release API %s: %w", t.Name, err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		return "", fmt.Errorf("release API %s: %w", t.Name, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("release API %s: HTTP %d", t.Name, resp.StatusCode)
+	}
+	var release struct {
+		Assets []struct {
+			Name               string `json:"name"`
+			BrowserDownloadURL string `json:"browser_download_url"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", fmt.Errorf("release API %s: %w", t.Name, err)
+	}
+	// Find the asset for this OS/arch.
+	want := fmt.Sprintf("%s_%s", titleOS(), arch())
+	for _, a := range release.Assets {
+		if strings.Contains(a.Name, want) && strings.HasSuffix(a.Name, ".tar.gz") {
+			return a.BrowserDownloadURL, nil
+		}
+	}
+	return "", fmt.Errorf("%s: no release asset found for %s/%s",
+		t.Name, titleOS(), arch())
 }
 
 func main() {

@@ -22,3 +22,21 @@ func TestOrganonToolIncludesProjectCLI(t *testing.T) {
 	require.ElementsMatch(t, []string{"src", "web", "skill", "project"}, organon.Binaries)
 	require.True(t, slices.Contains(organon.Binaries, "project"))
 }
+
+func TestEinaiToolIncluded(t *testing.T) {
+	t.Parallel()
+
+	var einai tool
+	for _, candidate := range tools {
+		if candidate.Repo == "einai" {
+			einai = candidate
+			break
+		}
+	}
+
+	require.NotEmpty(t, einai.Repo)
+	require.Equal(t, "Einai", einai.Name)
+	require.Equal(t, "ei", einai.Binary)
+	require.True(t, einai.NoConfig)
+	require.True(t, einai.UseReleaseAPI)
+}
