@@ -103,7 +103,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				slog.Warn("loop: persist tag-diag re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		if len(parsed.Bash) > 0 && parsed.Accepted != "" && parsed.Accepted != emit {
@@ -127,11 +127,21 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				slog.Warn("loop: persist empty re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
-		// Execute parsed run blocks: prose-only ends the turn.
+		// Execute parsed run blocks: prose-only ends the turn,
+		// but wait for active background jobs first so their
+		// results are visible to the model before exit.
 		if len(parsed.Bash) == 0 {
+			var ended bool
+			msgs, ended, err = tryEndTurn(ctx, deps, msgs, emit, &assistantMsg)
+			if err != nil {
+				return stopError, err
+			}
+			if !ended {
+				continue
+			}
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
 			if updateErr := deps.messages.Update(ctx, assistantMsg); updateErr != nil {
 				slog.Warn("loop: persist text-only finish", "error", updateErr)
@@ -141,7 +151,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		// Execute the single run block.
 		bashCmd := parsed.Bash[0]
 		if strings.TrimSpace(bashCmd) == "" {
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		if containsBlockedPattern(bashCmd) {
@@ -154,18 +164,17 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				slog.Warn("loop: persist banned re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		// Plain exit in a run block ends the turn, same as prose-only.
 		if strings.TrimSpace(bashCmd) == lenosbash.ExitCommand {
-			if deps.bgRunner != nil && deps.bgRunner.ActiveCount() > 0 {
-				if waitErr := deps.bgRunner.WaitIdle(ctx); waitErr != nil {
-					return stopError, waitErr
-				}
-				markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-				msgs = append(msgs, assistantTextMessage(emit, assistantMsg.ReasoningContent()))
-				msgs = drainAndAppend(ctx, deps, msgs)
+			var ended bool
+			msgs, ended, err = tryEndTurn(ctx, deps, msgs, emit, &assistantMsg)
+			if err != nil {
+				return stopError, err
+			}
+			if !ended {
 				continue
 			}
 			assistantMsg.AddFinish(message.FinishReasonEndTurn, "", "")
@@ -184,7 +193,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				slog.Warn("loop: persist invalid-bash re-prompt", "error", obsErr)
 			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		resultMsg, createErr := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
@@ -213,7 +222,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
@@ -251,7 +260,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
 			)
-			msgs = drainAndAppend(ctx, deps, msgs)
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
 		obs := lenosbash.ResultBlock(body)
@@ -271,7 +280,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 			fantasy.NewUserMessage(obs),
 		)
-		msgs = drainAndAppend(ctx, deps, msgs)
+		msgs, _ = drainAndAppend(ctx, deps, msgs)
 	}
 	return stopStepCap, ErrStepCap
 }
@@ -512,11 +521,48 @@ func isCanceled(err error) bool {
 	return errors.Is(err, context.Canceled)
 }
 
-func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) []fantasy.Message {
+// waitForBackgroundJobs waits for any active background jobs to complete
+// and returns whether any were active. It always calls WaitIdle (which
+// is a no-op when ActiveCount is 0), avoiding the race between
+// ActiveCount and WaitIdle.
+func waitForBackgroundJobs(ctx context.Context, deps loopDeps) (bool, error) {
+	if deps.bgRunner == nil {
+		return false, nil
+	}
+	hadActive := deps.bgRunner.ActiveCount() > 0
+	if err := deps.bgRunner.WaitIdle(ctx); err != nil {
+		return false, err
+	}
+	return hadActive || deps.bgRunner.ActiveCount() > 0, nil
+}
+
+// tryEndTurn waits for background jobs and drains queued runtime prompts.
+// It returns true if the loop should end (no outstanding work), or false
+// if the loop should continue (background results or queued prompts were
+// appended). On true, the caller must call finishEndTurn and return.
+func tryEndTurn(ctx context.Context, deps loopDeps, msgs []fantasy.Message, emit string, assistantMsg *message.Message) ([]fantasy.Message, bool, error) {
+	hadActive, err := waitForBackgroundJobs(ctx, deps)
+	if err != nil {
+		return msgs, false, err
+	}
+	markStepFinished(ctx, deps, assistantMsg, message.FinishReasonToolUse)
+	msgs = append(msgs, assistantTextMessage(emit, assistantMsg.ReasoningContent()))
+	var drained bool
+	msgs, drained = drainAndAppend(ctx, deps, msgs)
+	if hadActive || drained {
+		return msgs, false, nil
+	}
+	return msgs, true, nil
+}
+
+func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) ([]fantasy.Message, bool) {
 	if deps.drainQueue == nil {
-		return msgs
+		return msgs, false
 	}
 	drained := deps.drainQueue()
+	if len(drained) == 0 {
+		return msgs, false
+	}
 	for _, prompt := range drained {
 		if prompt.Persist {
 			role := prompt.Role
@@ -532,5 +578,5 @@ func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) 
 		}
 		msgs = append(msgs, turnPromptMessage(prompt))
 	}
-	return msgs
+	return msgs, true
 }

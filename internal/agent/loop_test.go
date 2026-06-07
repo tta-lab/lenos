@@ -921,6 +921,80 @@ func TestRunLoop_ExitWaitsForActiveBackgroundJobResult(t *testing.T) {
 	assert.Equal(t, 3, model.calls)
 }
 
+func TestRunLoop_ProseEndTurnWaitsForBackgroundJob(t *testing.T) {
+	t.Parallel()
+	exitStream := make(chan struct{})
+	model := &scriptedModel{
+		emits: []string{
+			lenosbash.BashBlock("sleep 20"),  // step 0: starts bg job
+			"Waiting for the job to finish.", // step 1: prose while bg active
+			"done",                           // step 2: prose after bg result drained
+		},
+		onStream: func(call int) {
+			if call == 1 {
+				close(exitStream)
+			}
+		},
+	}
+	resultCh := make(chan backgroundResult)
+	// Shared queue: background runner enqueues completions, drainer pulls them.
+	var mu sync.Mutex
+	var drained []turnPrompt
+	enqueue := func(msg string) {
+		mu.Lock()
+		drained = append(drained, turnPrompt{Text: msg, Persist: true, Role: message.User})
+		mu.Unlock()
+	}
+	drainer := func() []turnPrompt {
+		mu.Lock()
+		out := drained
+		drained = nil
+		mu.Unlock()
+		return out
+	}
+	bgRunner := NewBackgroundRunner(enqueue)
+	runner := &fakeRunner{results: []ExecResult{
+		{Background: true, JobID: "job-123", Duration: time.Second * 16},
+	}}
+	runner.onRun = func(bash string, _ map[string]string, _ []AllowedPath) {
+		bgRunner.Track("job-123", bash, func() {}, resultCh)
+	}
+	rec := &recordingRecorder{}
+	deps, ms := newDepsWithDrain(t, model, runner, rec, drainer)
+	deps.bgRunner = bgRunner
+
+	go func() {
+		<-exitStream
+		resultCh <- backgroundResult{
+			stdout:   "ok\n",
+			exitCode: 0,
+		}
+	}()
+
+	stop, err := runLoop(context.Background(), deps, nil, "run slow")
+	require.NoError(t, err)
+	assert.Equal(t, stopEndTurn, stop)
+
+	// Three model calls: bg start, prose (continued after drain), then final prose end.
+	assert.Equal(t, 3, model.calls)
+
+	// Verify the background start result row was persisted.
+	results := resultsByOrder(ms)
+	require.Len(t, results, 1) // bg job start
+	require.Contains(t, results[0].CommandContent().Observation, "background job started")
+
+	// Verify the background completion was drained as a user message.
+	users := messagesByRole(ms, message.User)
+	found := false
+	for _, m := range users {
+		if strings.Contains(m.Content().Text, "background job completed") {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "background job completed message not found in drain")
+}
+
 func TestRunLoop_ExitWaitIdleCancellationStopsLoop(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
