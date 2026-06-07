@@ -285,3 +285,18 @@ func TestYourFunction(t *testing.T) {
 
 Anytime you need to work on the TUI, read `internal/ui/AGENTS.md` before
 starting work.
+
+## EI Preflight Pattern
+
+The journal template and coder prompt encourage agents to use `ei ask` (sync,
+not `--async`) for a read-only preflight on complex tasks. Rationale:
+
+- Lenos already handles async job management internally; the agent does not
+  need `--async` in the shell command.
+- Sync `ei ask` blocks the current turn while the helper runs, which is
+  correct: the main agent should wait for the helper's answer before filling
+  the journal and starting work.
+- The preflight is a structured checkpoint between "recognize this is a task"
+  and "commit to a plan" — async would break that sequencing.
+- The helper inspects files, tests, tools, and deliverables but never
+  modifies anything. The main agent owns all decisions and journal updates.
