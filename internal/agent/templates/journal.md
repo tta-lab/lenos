@@ -8,9 +8,10 @@
 
 ## Preflight
 
-If the task is unfamiliar, has an unknown verifier, involves unfamiliar file
-layouts or toolchains, or falls into complex domains (compression, parsing,
-services, LaTeX, ML), you should ask a read-only helper before broad changes:
+If the task is unfamiliar, has unclear success criteria, depends on local
+files or tools you have not inspected yet, or has meaningful risk from
+choosing the wrong first approach, you should ask a read-only helper before
+broad changes:
 
 ```
 ei ask "Read-only preflight for the current task. Inspect the current working directory, relevant project files, available tests, and available local tools. Identify the likely goal, verifier or user-visible deliverables, important constraints, task-provided assets, and the safest first approach. Do not modify files. Return concise findings, risks, and recommended next steps."
