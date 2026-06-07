@@ -17,7 +17,7 @@ Choose the prompt that fits the task. Provide the full task text.
 **Constraints**: find important constraints, forbidden changes, required outputs,
 and wording that is easy to miss.
 
-```bash
+```
 cat <<'PROMPT_EOF' | ei ask
 Inspect the current workspace for this task. Find important constraints,
 forbidden changes, required outputs, and wording that is easy to miss.
@@ -30,7 +30,7 @@ PROMPT_EOF
 **Verification**: find available verification paths — tests, scripts, expected
 output files, task metadata, or commands that can be run before final answer.
 
-```bash
+```
 cat <<'PROMPT_EOF' | ei ask
 Inspect the current workspace for this task. Find available verification paths:
 tests, scripts, expected output files, task metadata, verifier hints, or commands
@@ -44,7 +44,7 @@ PROMPT_EOF
 **Safest approach**: ask for the smallest change that can satisfy the task, with
 likely pitfalls.
 
-```bash
+```
 cat <<'PROMPT_EOF' | ei ask
 Inspect the current workspace and propose the safest first approach. Focus on
 local files, existing tools, likely pitfalls, and the smallest change that can
@@ -57,7 +57,7 @@ PROMPT_EOF
 
 **Preflight review**: validate a filled Preflight draft for gaps.
 
-```bash
+```
 cat <<'PROMPT_EOF' | ei ask
 Review this preflight draft for missing constraints, missing verification paths,
 or risky assumptions. Suggest corrections only.

@@ -299,10 +299,22 @@ within Lenos should use sync mode (no `--async`). Rationale:
 - This applies everywhere: preflight helper, research lookups, code search
   delegation — always sync.
 
-### Journal Preflight
+### Coder Preflight for No-Guidance Workspaces
 
-The session journal template includes a Preflight section with a ready-to-use
-sync `ei ask` command for task orientation. See `internal/agent/templates/journal.md`.
+When a coder session starts and no project guidance file exists (AGENTS.md,
+CLAUDE.md, etc.), the runtime signals this via `context_files_context.md`:
+"No project guidance file was found for this workspace." The coder must then
+complete the journal Preflight section before changing any files.
 
-The journal feature is documented in `internal/agent/templates/JOURNAL.md` —
-full code map of templates, Go implementation, UI, tests, and data flow.
+This is a hard programmatic rule — no model-side judgment about task complexity
+or chat vs task. If `ei` is available, the coder must call it at least once
+during preflight (constraints, verification paths, or safest approach). The
+helper is read-only input; the coder still decides, edits, and verifies.
+
+Preflight `ei ask` prompts live in `internal/agent/templates/journal.md` as
+plain code-fenced heredocs (no `bash` language tag) to avoid shell-hallucination.
+
+The rule lives in `internal/agent/templates/coder.md` and the runtime fill
+hint in `internal/agent/journal.go` (`journalFillHint`). The journal feature
+is documented in `internal/agent/templates/JOURNAL.md` — full code map of
+templates, Go implementation, UI, tests, and data flow.
