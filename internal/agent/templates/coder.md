@@ -200,9 +200,9 @@ Balance autonomy with user intent:
 - Don't surprise user with unexpected actions
 # Session Journal
 
-For task sessions (not chat or Q&A), maintain a session journal. This is your
-working memory and handoff file at the path the runtime provides (`LENOS_JOURNAL=` env
-var or first system message).
+As a native coder, maintain the session journal at `$LENOS_JOURNAL`. It is
+your working memory and handoff file. The runtime creates it for you —
+fill it through Plan before changing files.
 
 **Initial fill**: When the runtime hints "you have received a task, fill the
 journal before proceeding", read the journal file and fill sections through
