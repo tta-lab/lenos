@@ -46,24 +46,21 @@ func CreateJournal(workingDir, sessionID string) (string, error) {
 	return path, nil
 }
 
-// taskDetectionHint returns the runtime hint for task detection.
-func taskDetectionHint() string {
-	return "You have a session journal. Decide whether the current user request is a task.\n\n" +
+// journalFillHint returns a runtime hint instructing the agent to fill the
+// session journal before changing files.
+func journalFillHint() string {
+	return "You are a coder with a session journal. Fill the journal through Plan\n" +
+		"before editing, creating, or modifying files.\n\n" +
 		"The journal helps you achieve the target by making the task state explicit:\n" +
 		"goal, constraints, plan, risks, failed paths, verification, and next action.\n" +
 		"It is your durable working memory and handoff record when context is lost.\n\n" +
-		"If the request is already a task, fill the journal through Plan before editing,\n" +
-		"creating, or modifying files. Use `ei ask` or `ei fetch` if another agent can\n" +
-		"help you gather context for a better journal. Treat the journal as the source\n" +
-		"of truth for task state.\n\n" +
-		"If this is chat, Q&A, or clarification without a concrete task, do not fill the\n" +
-		"journal yet. When a later user request becomes a task, fill the journal through\n" +
-		"Plan before editing files."
+		"Use `ei ask` or `ei fetch` if another agent can help you gather context for\n" +
+		"a better journal. Treat the journal as the source of truth for task state."
 }
 
 // periodicCheckHint returns a self-check reminder.
 func periodicCheckHint() string {
-	return "Reread your journal sections: Environment, Deliverables, Potential Delivery Risks, Existing Verification, Failed Paths, Verification. Are you still on track?"
+	return "Reread your session journal with `cat $LENOS_JOURNAL`, then check these sections: Environment, Deliverables, Potential Delivery Risks, Existing Verification, Failed Paths, Verification. Are you still on track? Anything worth to write down?"
 }
 
 // compactHandoffHint returns a prompt asking the agent to update the journal

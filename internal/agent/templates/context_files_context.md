@@ -5,4 +5,6 @@ order: 20
 ```bash
 {{range .ContextFiles}}cat {{shellQuote .Path}}
 {{end}}```
+{{else}}
+No project guidance file was found for this workspace.
 {{end}}

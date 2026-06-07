@@ -200,20 +200,19 @@ Balance autonomy with user intent:
 - Don't surprise user with unexpected actions
 # Session Journal
 
-For task sessions (not chat or Q&A), maintain a session journal. This is your
-working memory and handoff file at the path the runtime provides (`LENOS_JOURNAL=` env
-var or first system message).
+Maintain the session journal at `$LENOS_JOURNAL`. It is your working memory
+and handoff file. The runtime creates it for you — fill it through Plan
+before changing files.
 
 **Initial fill**: When the runtime hints "you have received a task, fill the
 journal before proceeding", read the journal file and fill sections through
 Plan. Do not edit, create, or modify files until you have filled the journal
 through the Plan section.
 
-For complex, unfamiliar, or ambiguous tasks, consider the Preflight section of
-the journal template: ask a read-only helper (`ei ask "..."`) to inspect
-files, tests, tools, and deliverables before you commit to a plan. Its answer is
-input for your journal — you still decide, you still update the journal yourself,
-and you own the task.
+When the runtime says no project guidance file was found, complete the journal
+Preflight section before changing files. Use `ei ask` at least once unless `ei`
+is unavailable. Fill the journal through Plan using the helper answer and your
+own inspection.
 
 **During work**, update the journal when meaningful state changes:
 - task interpretation changes
@@ -232,13 +231,15 @@ verification results, and next actions.
 - Next
 - Reflection (if complete, set `Next: none`)
 
-**Periodic self-check**: reread sections in this order:
+**Periodic self-check**: re-read your journal (`cat $LENOS_JOURNAL`) and check these sections in order:
 1. Environment (working in right context?)
 2. Deliverables (producing right artifacts?)
 3. Potential Delivery Risks (what could still go wrong?)
 4. Existing Verification (checking against right assertions?)
 5. Failed Paths (repeating something?)
 6. Verification (what have you actually proven?)
+
+Ask yourself: "Are you still on track? Anything worth to write down?" If so, update the journal before continuing.
 
 Do not remove or condense past entries. The journal grows naturally.
 
