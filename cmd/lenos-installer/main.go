@@ -30,7 +30,7 @@ var (
 	tools = []tool{
 		{Name: "Lenos", Repo: "lenos", Binary: "lenos", ConfigKind: "json"},
 		{Name: "Organon", Repo: "organon", Binary: "organon", Binaries: []string{"src", "web", "skill", "project"}, ConfigKind: "toml"},
-		{Name: "Einai", Repo: "einai", Binary: "ei", NoConfig: true, UseReleaseAPI: true},
+		{Name: "Einai", Repo: "einai", Binary: "ei", UseReleaseAPI: true},
 	}
 )
 
@@ -40,7 +40,6 @@ type tool struct {
 	Binary     string
 	Binaries   []string // multiple binaries to extract from one archive (e.g. organon)
 	ConfigKind string
-	NoConfig   bool // skip writing default config for this tool
 	// DownloadName overrides the archive filename for the download URL.
 	// Default is "{Binary}_{titleOS}_{arch}.tar.gz".
 	DownloadName string
@@ -305,6 +304,9 @@ func releaseAssetURL(t tool) (string, error) {
 		return "", fmt.Errorf("release API %s: %w", t.Name, err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	resp, err := httpClient().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("release API %s: %w", t.Name, err)

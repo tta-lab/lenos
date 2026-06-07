@@ -37,6 +37,5 @@ func TestEinaiToolIncluded(t *testing.T) {
 	require.NotEmpty(t, einai.Repo)
 	require.Equal(t, "Einai", einai.Name)
 	require.Equal(t, "ei", einai.Binary)
-	require.True(t, einai.NoConfig)
 	require.True(t, einai.UseReleaseAPI)
 }

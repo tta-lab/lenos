@@ -32,7 +32,7 @@ func tryEndTurn(ctx context.Context, deps loopDeps, msgs []fantasy.Message, emit
 
 	// Drain queued runtime prompts (everything except background
 	// completions, which we already have).
-	queued, drained := drainQueue(deps)
+	queued, _ := drainQueue(deps)
 
 	// Merge background completions and queued prompts.
 	var continuePrompts []turnPrompt
@@ -58,16 +58,6 @@ func tryEndTurn(ctx context.Context, deps loopDeps, msgs []fantasy.Message, emit
 			}
 			msgs = append(msgs, turnPromptMessage(p))
 		}
-		return msgs, false, nil
-	}
-
-	if drained {
-		// Queued non-background prompts with no bg completions:
-		// drainAndAppend already appends.  This path should not
-		// happen (queued non-nil but continuePrompts empty).
-		markStepFinished(ctx, deps, assistantMsg, message.FinishReasonToolUse)
-		msgs = append(msgs, assistantTextMessage(emit, assistantMsg.ReasoningContent()))
-		msgs, _ = drainAndAppend(ctx, deps, msgs)
 		return msgs, false, nil
 	}
 
