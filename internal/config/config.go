@@ -238,7 +238,7 @@ type Options struct {
 	Progress                   *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
 	Sandbox                    *bool        `json:"sandbox,omitempty" jsonschema:"description=Enable sandbox isolation for command execution via temenos SDK,default=true"`
 	DisableNotifications       bool         `json:"disable_notifications,omitempty" jsonschema:"description=Disable desktop notifications,default=false"`
-	JournalCheckIntervalTokens int          `json:"journal_check_interval_tokens,omitempty" jsonschema:"description=Token interval for journal self-check reminders (0 disables),default=30000"`
+	JournalCheckIntervalTokens *int         `json:"journal_check_interval_tokens,omitempty" jsonschema:"description=Token interval for journal self-check reminders (0 disables),default=30000"`
 }
 
 type Agent struct {

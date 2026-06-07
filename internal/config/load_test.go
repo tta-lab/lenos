@@ -52,6 +52,8 @@ func TestConfig_LoadHooks(t *testing.T) {
 	})
 }
 
+func intPtr(v int) *int { return &v }
+
 // testStore wraps a Config in a minimal ConfigStore for testing.
 func testStore(cfg *Config) *ConfigStore {
 	return &ConfigStore{config: cfg}
@@ -69,9 +71,23 @@ func TestConfig_setDefaults(t *testing.T) {
 	require.NotNil(t, cfg.Models)
 	require.Equal(t, filepath.Join("/tmp", ".lenos"), cfg.Options.DataDirectory)
 	require.Equal(t, "AGENTS.md", cfg.Options.InitializeAs)
+	require.NotNil(t, cfg.Options.JournalCheckIntervalTokens)
+	require.Equal(t, 30000, *cfg.Options.JournalCheckIntervalTokens)
 	for _, path := range defaultContextPaths {
 		require.Contains(t, cfg.Options.ContextPaths, path)
 	}
+
+	// Explicit 0 stays 0 (disables reminders).
+	t.Run("explicit zero disables journal check", func(t *testing.T) {
+		cfg := &Config{
+			Options: &Options{
+				JournalCheckIntervalTokens: intPtr(0),
+			},
+		}
+		cfg.setDefaults("/tmp", "")
+		require.NotNil(t, cfg.Options.JournalCheckIntervalTokens)
+		require.Equal(t, 0, *cfg.Options.JournalCheckIntervalTokens)
+	})
 }
 
 func TestConfig_configureProviders(t *testing.T) {

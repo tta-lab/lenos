@@ -277,7 +277,7 @@ func (c *coordinator) buildCall(ctx context.Context, sessionID, userPrompt strin
 		TaskID:                     taskwarrior.ResolveTaskID(cwd),
 		ContextCommands:            buildRuntimeContextCommandsForAgent(c.cfg, runtimeContext),
 		JournalPath:                journalPath,
-		JournalCheckIntervalTokens: c.cfg.Config().Options.JournalCheckIntervalTokens,
+		JournalCheckIntervalTokens: derefInt(c.cfg.Config().Options.JournalCheckIntervalTokens),
 	}
 }
 
@@ -1053,6 +1053,13 @@ func agentNameOr(name string) string {
 		return name
 	}
 	return "lenos"
+}
+
+func derefInt(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 // CompactSession sends a journal handoff hint to the agent and marks the

@@ -285,3 +285,24 @@ func TestYourFunction(t *testing.T) {
 
 Anytime you need to work on the TUI, read `internal/ui/AGENTS.md` before
 starting work.
+
+## Lenos + EI Integration
+
+Lenos agents use `ei` (Einai) to spawn subagents. All `ei` commands from
+within Lenos should use sync mode (no `--async`). Rationale:
+
+- Lenos already manages turn boundaries and subprocess lifecycle. Adding
+  `--async` inside a Lenos turn creates a detached process that the agent
+  cannot use — it would move to the next turn without the results.
+- Sync `ei ask` and `ei fetch` block the current turn while the subagent
+  runs, so the main agent gets the answer immediately and can act on it.
+- This applies everywhere: preflight helper, research lookups, code search
+  delegation — always sync.
+
+### Journal Preflight
+
+The session journal template includes a Preflight section with a ready-to-use
+sync `ei ask` command for task orientation. See `internal/agent/templates/journal.md`.
+
+The journal feature is documented in `internal/agent/templates/JOURNAL.md` —
+full code map of templates, Go implementation, UI, tests, and data flow.
