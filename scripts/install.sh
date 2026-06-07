@@ -1,5 +1,5 @@
 #!/bin/sh
-# Lenos Installer Bootstrap (macOS)
+# Lenos Installer Bootstrap (macOS/Linux)
 # Usage: curl -fsSL https://github.com/tta-lab/lenos/releases/latest/download/install.sh | sh
 #
 # Downloads the lenos-installer binary and runs the interactive setup.
@@ -10,6 +10,16 @@ ORG="tta-lab"
 REPO="lenos"
 INSTALLER="lenos-installer"
 BIN_DIR="${HOME}/.local/bin"
+
+OS="$(uname -s)"
+case "$OS" in
+	Darwin) GOOS="Darwin" ;;
+	Linux) GOOS="Linux" ;;
+	*)
+		echo "error: unsupported os: $OS" >&2
+		exit 1
+		;;
+esac
 
 ARCH="$(uname -m)"
 case "$ARCH" in
@@ -33,10 +43,11 @@ else
 	RELEASE_URL="https://github.com/${ORG}/${REPO}/releases/download/${VERSION}"
 fi
 
-ARCHIVE="${INSTALLER}_Darwin_${GOARCH}.tar.gz"
+ARCHIVE="${INSTALLER}_${GOOS}_${GOARCH}.tar.gz"
 DOWNLOAD_URL="${RELEASE_URL}/${ARCHIVE}"
 
 echo "→ Lenos installer bootstrap"
+echo "  os: $GOOS"
 echo "  arch: $GOARCH"
 
 mkdir -p "$BIN_DIR"
