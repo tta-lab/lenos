@@ -6,6 +6,18 @@
 - Working goal:
 - Done means:
 
+## Preflight
+
+If the task is non-trivial, unfamiliar, or has unclear files/tests/tools, you may
+ask a read-only helper before broad changes:
+
+```
+ei ask "Read-only preflight for the current task. Inspect the current working directory, relevant project files, available tests, and available local tools. Identify the likely goal, verifier or user-visible deliverables, important constraints, task-provided assets, and the safest first approach. Do not modify files. Return concise findings, risks, and recommended next steps." --async
+```
+
+Use the helper's answer as input only. You are still responsible for deciding what
+to do, updating this journal yourself, and completing the task.
+
 ## Context
 
 - Project facts:
