@@ -68,13 +68,6 @@ func agentNameOr(name string) string {
 	return "lenos"
 }
 
-func derefInt(p *int) int {
-	if p == nil {
-		return 0
-	}
-	return *p
-}
-
 // buildCall assembles the per-turn SessionAgentCall with sandbox env, allowed
 // paths, and provider options. Extracted so the OAuth/API-key refresh path
 // can rebuild a call with fresh credentials without duplicating wiring.
@@ -110,17 +103,16 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 	}
 
 	return SessionAgentCall{
-		SessionID:                  sessionID,
-		Prompt:                     userPrompt,
-		usageSummary:               RunUsageSummaryFromContext(ctx),
-		ProviderOptions:            getProviderOptions(model, providerCfg),
-		PairWith:                   cfg.Overrides().PairWith,
-		Sandbox:                    useSandbox,
-		Env:                        sandboxEnv,
-		AllowedPaths:               BuildAllowedPaths(ctx, cwd, access),
-		TaskID:                     taskwarrior.ResolveTaskID(cwd),
-		ContextCommands:            buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
-		JournalPath:                journalPath,
-		JournalCheckIntervalTokens: derefInt(cfg.Config().Options.JournalCheckIntervalTokens),
+		SessionID:       sessionID,
+		Prompt:          userPrompt,
+		usageSummary:    RunUsageSummaryFromContext(ctx),
+		ProviderOptions: getProviderOptions(model, providerCfg),
+		PairWith:        cfg.Overrides().PairWith,
+		Sandbox:         useSandbox,
+		Env:             sandboxEnv,
+		AllowedPaths:    BuildAllowedPaths(ctx, cwd, access),
+		TaskID:          taskwarrior.ResolveTaskID(cwd),
+		ContextCommands: buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
+		JournalPath:     journalPath,
 	}
 }

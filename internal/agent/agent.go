@@ -76,10 +76,6 @@ type SessionAgentCall struct {
 	// for non-task sessions (reviewer, sub-agent, chat-only).
 	JournalPath string
 
-	// JournalCheckIntervalTokens is the token interval for injecting
-	// periodic journal self-check reminders. 0 disables.
-	JournalCheckIntervalTokens int
-
 	// MarkCompactBoundary marks the assistant response from this call as a
 	// compaction boundary. After this turn, only messages after the boundary
 	// are loaded into the context window, giving the agent a fresh start.
