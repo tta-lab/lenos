@@ -257,7 +257,7 @@ func TestBuildCall_NoLongerInjectsLenosEnvVars(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(sessionsDir, "sess-123.md"), nil, 0o644))
 
-	call := c.buildCall(context.Background(), "sess-123", "hi", Model{}, config.ProviderConfig{})
+	call := buildCall(context.Background(), "sess-123", "hi", Model{}, config.ProviderConfig{}, c.cfg)
 
 	// buildCall copies all OS env vars and also explicitly sets
 	// LENOS_SESSION_ID so subprocess tools can find the session.
@@ -382,10 +382,10 @@ func TestBuildSelectedModel_ReviewErrorsNameReviewTier(t *testing.T) {
 	require.NoError(t, err)
 
 	c := &coordinator{cfg: cfg}
-	_, err = c.buildSelectedModel(context.Background(), config.SelectedModel{
+	_, err = buildSelectedModel(context.Background(), config.SelectedModel{
 		Provider: "missing-provider",
 		Model:    "review-model",
-	}, false, errReviewModelProviderNotConfigured, errReviewModelNotFound)
+	}, false, errReviewModelProviderNotConfigured, errReviewModelNotFound, c.cfg)
 
 	require.ErrorIs(t, err, errReviewModelProviderNotConfigured)
 	require.Contains(t, err.Error(), "review model provider not configured")
@@ -422,7 +422,7 @@ func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 			dataDir:      cfg.WorkingDir(),
 			currentAgent: &stubAgent{modelName: "test-model"},
 		}
-		call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
+		call := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
 		require.NotEmpty(t, call.AllowedPaths)
 		assert.False(t, call.AllowedPaths[0].ReadOnly, "default should be RW")
 	})
@@ -435,7 +435,7 @@ func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 			dataDir:      cfg.WorkingDir(),
 			currentAgent: &stubAgent{modelName: "test-model"},
 		}
-		call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
+		call := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
 		require.NotEmpty(t, call.AllowedPaths)
 		assert.True(t, call.AllowedPaths[0].ReadOnly, "RO override should set cwd ReadOnly=true")
 	})
@@ -459,7 +459,7 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 		dataDir:      cfg.WorkingDir(),
 		currentAgent: &stubAgent{modelName: "test-model"},
 	}
-	call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
+	call := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
 
 	for _, allowed := range call.AllowedPaths {
 		assert.True(t, filepath.IsAbs(allowed.Path), "allowed path must be absolute: %q", allowed.Path)
@@ -494,7 +494,7 @@ func TestBuildCall_ReviewerContextExcludesCoderContext(t *testing.T) {
 		dataDir:      cfg.WorkingDir(),
 		currentAgent: &stubAgent{modelName: "test-model"},
 	}
-	call := c.buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{})
+	call := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
 
 	joined := strings.Join(commandTexts(call.ContextCommands), "\n")
 	assert.Contains(t, joined, "Inspect local review state.")
