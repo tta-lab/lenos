@@ -46,8 +46,9 @@ func CreateJournal(workingDir, sessionID string) (string, error) {
 	return path, nil
 }
 
-// taskDetectionHint returns the runtime hint for task detection.
-func taskDetectionHint() string {
+// journalFillHint returns a runtime hint instructing the agent to fill the
+// session journal before changing files.
+func journalFillHint() string {
 	return "You are running as a native coder with a session journal. Fill the journal\n" +
 		"through Plan before editing, creating, or modifying files.\n\n" +
 		"The journal helps you achieve the target by making the task state explicit:\n" +

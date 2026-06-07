@@ -78,7 +78,7 @@ runLoopReentry:
 	// code, decides whether the current user request is task-like.
 	if isNewSession && currentSession.SummaryMessageID == "" && call.JournalPath != "" {
 		turnPrompts = append(turnPrompts, turnPrompt{
-			Text:    taskDetectionHint(),
+			Text:    journalFillHint(),
 			Persist: true,
 			Role:    message.Runtime,
 		})
