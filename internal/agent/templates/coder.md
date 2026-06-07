@@ -240,6 +240,8 @@ verification results, and next actions.
 5. Failed Paths (repeating something?)
 6. Verification (what have you actually proven?)
 
+Ask yourself: "Are you still on track? Anything worth to write down?" If so, update the journal before continuing.
+
 Do not remove or condense past entries. The journal grows naturally.
 
 Never write provider secrets, API keys, tokens, or passwords to the journal.
