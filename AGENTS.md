@@ -308,7 +308,7 @@ complete the journal Preflight section before changing any files.
 
 The Preflight section is a checklist, not a subagent requirement. For trivial
 tasks, a short note is enough. For risky tasks, the coder should answer the
-checklist questions about constraints, verification, safest approach, and
+checklist questions about constraints, verification, project-fit approach, and
 remaining risks before editing.
 
 The rule lives in `internal/agent/templates/coder.md` and the runtime fill

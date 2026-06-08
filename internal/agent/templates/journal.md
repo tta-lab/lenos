@@ -15,7 +15,8 @@ trivial tasks, a short note is enough.
   miss?
 - Verification: what tests, scripts, expected outputs, or manual checks prove
   the work?
-- Safest approach: what is the smallest local change that can satisfy the task?
+- Approach: what solution best fits the long-term shape of the project while
+  staying scoped to the task?
 - Risks: what assumptions or environment gaps could make the result wrong?
 
 ## Context
