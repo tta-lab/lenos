@@ -39,6 +39,21 @@ func TestRootCmd_NoSandboxFlagParse(t *testing.T) {
 	require.True(t, v)
 }
 
+func TestReadonlySandboxPolicy_ConfigSandboxFalseFails(t *testing.T) {
+	disabled := false
+	err := validateReadonlySandboxPolicy(true, &disabled, false)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--readonly requires sandbox enforcement")
+	require.Contains(t, err.Error(), "options.sandbox=false")
+}
+
+func TestReadonlySandboxPolicy_NoSandboxFlagFails(t *testing.T) {
+	err := validateReadonlySandboxPolicy(true, nil, true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--readonly requires sandbox enforcement")
+	require.Contains(t, err.Error(), "--no-sandbox")
+}
+
 func TestRootCmd_PairWithFlagDeclared(t *testing.T) {
 	f := rootCmd.Flags().Lookup("pair-with")
 	require.NotNil(t, f, "--pair-with flag must be declared on rootCmd")

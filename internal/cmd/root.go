@@ -274,10 +274,14 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 		store.Overrides().ExtraContextFiles = append(store.Overrides().ExtraContextFiles, cf)
 	}
 
+	noSandbox, _ := cmd.Flags().GetBool("no-sandbox")
+	if err := validateReadonlySandboxPolicy(readOnly, cfg.Options.Sandbox, noSandbox); err != nil {
+		return nil, nil, err
+	}
 	if readOnly {
 		store.Overrides().ReadOnly = true
 	}
-	if noSandbox, _ := cmd.Flags().GetBool("no-sandbox"); noSandbox {
+	if noSandbox {
 		store.Overrides().NoSandbox = true
 	}
 
@@ -324,6 +328,19 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 	ws := workspace.NewAppWorkspace(appInstance, store)
 	cleanup := func() { appInstance.Shutdown() }
 	return ws, cleanup, nil
+}
+
+func validateReadonlySandboxPolicy(readOnly bool, sandbox *bool, noSandbox bool) error {
+	if !readOnly {
+		return nil
+	}
+	if noSandbox {
+		return fmt.Errorf("--readonly requires sandbox enforcement, but --no-sandbox disables it")
+	}
+	if sandbox != nil && !*sandbox {
+		return fmt.Errorf("--readonly requires sandbox enforcement, but options.sandbox=false disables it")
+	}
+	return nil
 }
 
 func shouldEnableMetrics(cfg *config.Config) bool {
