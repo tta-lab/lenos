@@ -12,6 +12,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringP("agent", "a", "", "")
 	cmd.Flags().StringArrayP("context-file", "f", nil, "")
 	cmd.Flags().Bool("readonly", false, "")
+	cmd.Flags().Bool("no-sandbox", false, "")
 	cmd.Flags().String("pair-with", "", "")
 	cmd.Flags().String("usage-json", "", "")
 	cmd.Flags().String("reasoning-effort", "", "")
@@ -77,11 +78,26 @@ func TestRunCmd_ReadonlyFlagDeclared(t *testing.T) {
 	require.Equal(t, "false", f.DefValue, "--readonly default must be false")
 }
 
+func TestRunCmd_NoSandboxFlagDeclared(t *testing.T) {
+	f := runCmd.Flags().Lookup("no-sandbox")
+	require.NotNil(t, f, "--no-sandbox flag must be declared on runCmd")
+	require.Equal(t, "", f.Shorthand, "--no-sandbox should have no shorthand")
+	require.Equal(t, "false", f.DefValue, "--no-sandbox default must be false")
+}
+
 func TestRunCmd_ReadonlyFlagParse(t *testing.T) {
 	cmd := newRunCmd()
 	err := cmd.ParseFlags([]string{"--readonly", "hi"})
 	require.NoError(t, err)
 	v, _ := cmd.Flags().GetBool("readonly")
+	require.True(t, v)
+}
+
+func TestRunCmd_NoSandboxFlagParse(t *testing.T) {
+	cmd := newRunCmd()
+	err := cmd.ParseFlags([]string{"--no-sandbox", "hi"})
+	require.NoError(t, err)
+	v, _ := cmd.Flags().GetBool("no-sandbox")
 	require.True(t, v)
 }
 

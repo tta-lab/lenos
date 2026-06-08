@@ -18,10 +18,24 @@ func TestRootCmd_ReadonlyFlagDeclared(t *testing.T) {
 	require.Equal(t, "false", f.DefValue, "--readonly default must be false")
 }
 
+func TestRootCmd_NoSandboxFlagDeclared(t *testing.T) {
+	f := rootCmd.Flags().Lookup("no-sandbox")
+	require.NotNil(t, f, "--no-sandbox flag must be declared on rootCmd")
+	require.Equal(t, "", f.Shorthand, "--no-sandbox should have no shorthand")
+	require.Equal(t, "false", f.DefValue, "--no-sandbox default must be false")
+}
+
 func TestRootCmd_ReadonlyFlagParse(t *testing.T) {
 	err := rootCmd.ParseFlags([]string{"--readonly"})
 	require.NoError(t, err)
 	v, _ := rootCmd.Flags().GetBool("readonly")
+	require.True(t, v)
+}
+
+func TestRootCmd_NoSandboxFlagParse(t *testing.T) {
+	err := rootCmd.ParseFlags([]string{"--no-sandbox"})
+	require.NoError(t, err)
+	v, _ := rootCmd.Flags().GetBool("no-sandbox")
 	require.True(t, v)
 }
 

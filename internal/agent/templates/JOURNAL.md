@@ -9,7 +9,7 @@ that make it work.
 | File | Role |
 |---|---|
 | `internal/agent/templates/journal.md` | Empty journal template agents fill out. Sections: Task, Preflight, Context, Environment, Plan, Progress, Verification, Next. |
-| `internal/agent/templates/coder.md` | Coder system prompt. Session Journal section (§201+) describes the workflow: initial fill, periodic self-check, handoff on compact/timeout. Preflight paragraph references `ei ask` sync helper. |
+| `internal/agent/templates/coder.md` | Coder system prompt. Session Journal section (§201+) describes the workflow: initial fill, periodic self-check, handoff on compact/timeout. Preflight paragraph points agents to the journal checklist. |
 | `internal/agent/templates/coder_context.md` | Startup synthetic response. Runs `cat $LENOS_JOURNAL` so the agent sees its journal on new context windows. |
 
 ## Go implementation
@@ -43,7 +43,7 @@ that make it work.
 
 1. Session starts → `coordinator.StartAgent` calls `CreateJournal` (template on disk)
 2. `LENOS_JOURNAL` env var exported to subprocess runner
-3. First turn → `agent_run.go` injects task-detection runtime hint
+3. First turn → `agent_run.go` injects journal fill runtime hint
 4. Agent reads journal via `coder_context.md` → fills sections through Plan
 5. During work → periodic self-check hints at token intervals
 6. Compact/timeout → handoff hint asks agent to update journal

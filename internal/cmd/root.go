@@ -48,6 +48,7 @@ func init() {
 	rootCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file to inject at startup (repeatable)")
 	rootCmd.Flags().String("pair-with", "", "Default target for untargeted message blocks")
 	rootCmd.Flags().Bool("readonly", false, "Enforce read-only filesystem access on the working directory via the temenos sandbox; agent cannot create or modify files in cwd.")
+	rootCmd.Flags().Bool("no-sandbox", false, "Disable temenos sandbox isolation and run commands directly on the host.")
 	rootCmd.MarkFlagsMutuallyExclusive("session", "continue")
 
 	rootCmd.AddCommand(
@@ -275,6 +276,9 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 
 	if readOnly {
 		store.Overrides().ReadOnly = true
+	}
+	if noSandbox, _ := cmd.Flags().GetBool("no-sandbox"); noSandbox {
+		store.Overrides().NoSandbox = true
 	}
 
 	// Re-run SetupAgents now that overrides are set.

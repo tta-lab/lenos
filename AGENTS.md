@@ -306,13 +306,10 @@ CLAUDE.md, etc.), the runtime signals this via `context_files_context.md`:
 "No project guidance file was found for this workspace." The coder must then
 complete the journal Preflight section before changing any files.
 
-This is a hard programmatic rule — no model-side judgment about task complexity
-or chat vs task. If `ei` is available, the coder must call it at least once
-during preflight (constraints, verification paths, or safest approach). The
-helper is read-only input; the coder still decides, edits, and verifies.
-
-Preflight `ei ask` prompts live in `internal/agent/templates/journal.md` as
-plain code-fenced heredocs (no `bash` language tag) to avoid shell-hallucination.
+The Preflight section is a checklist, not a subagent requirement. For trivial
+tasks, a short note is enough. For risky tasks, the coder should answer the
+checklist questions about constraints, verification, safest approach, and
+remaining risks before editing.
 
 The rule lives in `internal/agent/templates/coder.md` and the runtime fill
 hint in `internal/agent/journal.go` (`journalFillHint`). The journal feature
