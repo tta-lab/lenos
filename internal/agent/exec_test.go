@@ -171,7 +171,7 @@ func TestWaitBackgroundResultCompletionWinsOverLateKill(t *testing.T) {
 	killCh := make(chan struct{})
 	close(killCh)
 
-	result := waitBackgroundResult(done, func() {}, killCh)
+	result := waitBackgroundResult(done, func() {}, killCh, time.Now())
 
 	require.False(t, result.killed)
 	require.Equal(t, "done", result.stdout)
@@ -187,7 +187,7 @@ func TestWaitBackgroundResultKillBeforeCompletion(t *testing.T) {
 		done <- execOut{stderr: "killed", exitCode: -1, err: context.Canceled}
 	}()
 
-	result := waitBackgroundResult(done, func() {}, killCh)
+	result := waitBackgroundResult(done, func() {}, killCh, time.Now())
 
 	require.True(t, result.killed)
 	require.Equal(t, "killed", result.stderr)
