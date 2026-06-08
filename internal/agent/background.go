@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
@@ -80,9 +81,9 @@ func (r *BackgroundRunner) Track(jobID, command string, cancel context.CancelFun
 		// formatted text is ready and the critical section is short.
 		var promptText string
 		if result.killed {
-			promptText = formatKilledPrompt(jobID, command, result.exitCode)
+			promptText = formatKilledPrompt(jobID, command, result.exitCode, result.duration)
 		} else {
-			promptText = formatCompletedPrompt(jobID, command, result.stdout, result.stderr, result.exitCode, result.err)
+			promptText = formatCompletedPrompt(jobID, command, result.stdout, result.stderr, result.exitCode, result.err, result.duration)
 		}
 
 		r.mu.Lock()
@@ -130,6 +131,7 @@ type backgroundResult struct {
 	exitCode int
 	err      error
 	killed   bool
+	duration time.Duration
 }
 
 // ActiveCount returns the number of tracked background jobs.
@@ -268,27 +270,27 @@ func newJobID() string {
 	return uuid.New().String()[:8]
 }
 
-func formatCompletedPrompt(jobID, command, stdout, stderr string, exitCode int, runErr error) string {
+func formatCompletedPrompt(jobID, command, stdout, stderr string, exitCode int, runErr error, elapsed time.Duration) string {
 	if runErr != nil {
 		result := lenosbash.ResultBlock(fmt.Sprintf(
-			"job_id: %s\ncommand: %s\nerror: %v",
-			jobID, command, runErr,
+			"job_id: %s\ncommand: %s\nerror: %v\nwall_time: %s",
+			jobID, command, runErr, elapsed.Truncate(time.Second),
 		))
 		obs := fmt.Sprintf("background job completed (job_id: %s)\n\n%s", jobID, result)
 		return lenosbash.RuntimeBlock(obs)
 	}
 	result := lenosbash.ResultBlock(fmt.Sprintf(
-		"job_id: %s\ncommand: %s\nexit_code: %d\nstdout: %s\nstderr: %s",
-		jobID, command, exitCode, stdout, stderr,
+		"job_id: %s\ncommand: %s\nexit_code: %d\nwall_time: %s\nstdout: %s\nstderr: %s",
+		jobID, command, exitCode, elapsed.Truncate(time.Second), stdout, stderr,
 	))
 	obs := fmt.Sprintf("background job completed (job_id: %s)\n\n%s", jobID, result)
 	return lenosbash.RuntimeBlock(obs)
 }
 
-func formatKilledPrompt(jobID, command string, exitCode int) string {
+func formatKilledPrompt(jobID, command string, exitCode int, elapsed time.Duration) string {
 	result := lenosbash.ResultBlock(fmt.Sprintf(
-		"job_id: %s\ncommand: %s\nexit_code: %d",
-		jobID, command, exitCode,
+		"job_id: %s\ncommand: %s\nexit_code: %d\nwall_time: %s",
+		jobID, command, exitCode, elapsed.Truncate(time.Second),
 	))
 	obs := fmt.Sprintf("background job killed (job_id: %s)\n\n%s", jobID, result)
 	return lenosbash.RuntimeBlock(obs)

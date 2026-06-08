@@ -217,7 +217,7 @@ func waitForegroundOrBackground(
 		}
 		resultCh := make(chan backgroundResult, 1)
 		go func() {
-			resultCh <- waitBackgroundResult(done, cancel, killCh)
+			resultCh <- waitBackgroundResult(done, cancel, killCh, start)
 			close(resultCh)
 		}()
 		bg.Track(jobID, bash, kill, resultCh)
@@ -229,38 +229,41 @@ func waitForegroundOrBackground(
 	}
 }
 
-func waitBackgroundResult(done <-chan execOut, cancel context.CancelFunc, killCh <-chan struct{}) backgroundResult {
+func waitBackgroundResult(done <-chan execOut, cancel context.CancelFunc, killCh <-chan struct{}, start time.Time) backgroundResult {
+	dur := func() time.Duration { return time.Since(start) }
+
 	select {
 	case out := <-done:
 		cancel()
-		return backgroundResultFromOut(out, false)
+		return backgroundResultFromOut(out, false, dur())
 	default:
 	}
 
 	select {
 	case out := <-done:
 		cancel()
-		return backgroundResultFromOut(out, false)
+		return backgroundResultFromOut(out, false, dur())
 	case <-killCh:
 		select {
 		case out := <-done:
 			cancel()
-			return backgroundResultFromOut(out, false)
+			return backgroundResultFromOut(out, false, dur())
 		default:
 		}
 		cancel()
 		out := <-done
-		return backgroundResultFromOut(out, true)
+		return backgroundResultFromOut(out, true, dur())
 	}
 }
 
-func backgroundResultFromOut(out execOut, killed bool) backgroundResult {
+func backgroundResultFromOut(out execOut, killed bool, dur time.Duration) backgroundResult {
 	return backgroundResult{
 		stdout:   out.stdout,
 		stderr:   out.stderr,
 		exitCode: out.exitCode,
 		err:      out.err,
 		killed:   killed,
+		duration: dur,
 	}
 }
 
