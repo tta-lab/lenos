@@ -118,6 +118,20 @@ func TestCurrentModelSupportsImages(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+func TestToggleSandboxUpdatesSessionLocalConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{}
+	ui := newTestUIWithConfig(t, cfg)
+
+	require.Equal(t, "Sandbox disabled", ui.toggleSandbox())
+	require.NotNil(t, cfg.Options)
+	require.NotNil(t, cfg.Options.Sandbox)
+	require.False(t, *cfg.Options.Sandbox)
+
+	require.Equal(t, "Sandbox enabled", ui.toggleSandbox())
+	require.True(t, *cfg.Options.Sandbox)
+}
 
 func newTestUIWithConfig(t *testing.T, cfg *config.Config) *UI {
 	t.Helper()

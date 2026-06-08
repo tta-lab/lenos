@@ -1086,6 +1086,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionToggleHelp:
 		m.status.ToggleHelp()
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionToggleSandbox:
+		cmds = append(cmds, util.CmdHandler(util.NewInfoMsg(m.toggleSandbox())))
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionExternalEditor:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is working, please wait..."))
@@ -2473,6 +2476,28 @@ func (m *UI) renderEditorView(width int) string {
 		m.textarea.View(),
 		"", // margin at bottom of editor
 	}, "\n")
+}
+
+func (m *UI) toggleSandbox() string {
+	cfg := m.com.Config()
+	if cfg == nil {
+		return "Sandbox unchanged"
+	}
+	if cfg.Options == nil {
+		cfg.Options = &config.Options{}
+	}
+
+	current := true
+	if cfg.Options.Sandbox != nil {
+		current = *cfg.Options.Sandbox
+	}
+	next := !current
+	cfg.Options.Sandbox = &next
+
+	if next {
+		return "Sandbox enabled"
+	}
+	return "Sandbox disabled"
 }
 
 // sendMessage sends a message with the given content and attachments.

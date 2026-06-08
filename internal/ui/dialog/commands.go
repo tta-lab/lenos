@@ -360,8 +360,14 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "background_jobs", "Background Jobs", "", ActionOpenDialog{DialogID: BackgroundJobsID}))
 	}
 
-	// Add reasoning toggle for models that support it
 	cfg := c.com.Config()
+	sandboxLabel := "Disable Sandbox"
+	if cfg != nil && cfg.Options != nil && cfg.Options.Sandbox != nil && !*cfg.Options.Sandbox {
+		sandboxLabel = "Enable Sandbox"
+	}
+	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_sandbox", sandboxLabel, "", ActionToggleSandbox{}))
+
+	// Add reasoning toggle for models that support it
 	if agentCfg, ok := cfg.Agents[config.AgentCoder]; ok {
 		providerCfg := cfg.GetProviderForModel(agentCfg.Model)
 		model := cfg.GetModelByType(agentCfg.Model)

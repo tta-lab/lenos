@@ -21,7 +21,7 @@ func resolveRunner(call SessionAgentCall, bg *BackgroundRunner) Runner {
 	if call.Sandbox {
 		return &SandboxedRunner{bg: bg}
 	}
-	return LocalRunner{}
+	return LocalRunner{bg: bg}
 }
 
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) error {
