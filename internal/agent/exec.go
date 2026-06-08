@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/tta-lab/temenos/sandbox"
@@ -63,12 +63,7 @@ type LocalRunner struct {
 
 func (l LocalRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []AllowedPath) ExecResult {
 	start := time.Now()
-	var canceled atomic.Bool
-	runCtx, runCancel := context.WithTimeout(context.Background(), DefaultPerCmdTimeout)
-	cancel := func() {
-		canceled.Store(true)
-		runCancel()
-	}
+	runCtx, cancel := context.WithTimeout(context.Background(), DefaultPerCmdTimeout)
 
 	done := make(chan execOut, 1)
 	go func() {
@@ -115,7 +110,7 @@ func (l LocalRunner) Run(ctx context.Context, bash string, env map[string]string
 		done <- out
 	}()
 
-	return waitForegroundOrBackground(ctx, start, bash, l.bg, cancel, canceled.Load, done)
+	return waitForegroundOrBackground(ctx, start, bash, l.bg, cancel, done)
 }
 
 // SandboxedRunner runs commands via the temenos sandbox SDK directly — no
@@ -164,12 +159,7 @@ func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]s
 		WorkingDir: workDir,
 	}
 
-	var canceled atomic.Bool
-	bgCtx, bgCancel := context.WithCancel(context.Background())
-	cancel := func() {
-		canceled.Store(true)
-		bgCancel()
-	}
+	bgCtx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan execOut, 1)
 	go func() {
@@ -177,7 +167,7 @@ func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]s
 		done <- execOut{stdout, stderr, exitCode, err}
 	}()
 
-	return waitForegroundOrBackground(ctx, start, bash, s.bg, cancel, canceled.Load, done)
+	return waitForegroundOrBackground(ctx, start, bash, s.bg, cancel, done)
 }
 
 type execOut struct {
@@ -193,7 +183,6 @@ func waitForegroundOrBackground(
 	bash string,
 	bg *BackgroundRunner,
 	cancel context.CancelFunc,
-	killed func() bool,
 	done <-chan execOut,
 ) ExecResult {
 	autoBgTimer := time.NewTimer(defaultAutoBackgroundAfter)
@@ -219,24 +208,59 @@ func waitForegroundOrBackground(
 		}
 
 		jobID := newJobID()
+		killCh := make(chan struct{})
+		var killOnce sync.Once
+		kill := func() {
+			killOnce.Do(func() {
+				close(killCh)
+			})
+		}
 		resultCh := make(chan backgroundResult, 1)
 		go func() {
-			out := <-done
-			resultCh <- backgroundResult{
-				stdout:   out.stdout,
-				stderr:   out.stderr,
-				exitCode: out.exitCode,
-				err:      out.err,
-				killed:   killed(),
-			}
+			resultCh <- waitBackgroundResult(done, cancel, killCh)
 			close(resultCh)
 		}()
-		bg.Track(jobID, bash, cancel, resultCh)
+		bg.Track(jobID, bash, kill, resultCh)
 		return ExecResult{
 			JobID:      jobID,
 			Background: true,
 			Duration:   time.Since(start),
 		}
+	}
+}
+
+func waitBackgroundResult(done <-chan execOut, cancel context.CancelFunc, killCh <-chan struct{}) backgroundResult {
+	select {
+	case out := <-done:
+		cancel()
+		return backgroundResultFromOut(out, false)
+	default:
+	}
+
+	select {
+	case out := <-done:
+		cancel()
+		return backgroundResultFromOut(out, false)
+	case <-killCh:
+		select {
+		case out := <-done:
+			cancel()
+			return backgroundResultFromOut(out, false)
+		default:
+		}
+		cancel()
+		out := <-done
+		return backgroundResultFromOut(out, true)
+	}
+}
+
+func backgroundResultFromOut(out execOut, killed bool) backgroundResult {
+	return backgroundResult{
+		stdout:   out.stdout,
+		stderr:   out.stderr,
+		exitCode: out.exitCode,
+		err:      out.err,
+		killed:   killed,
 	}
 }
 

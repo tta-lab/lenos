@@ -162,3 +162,34 @@ func TestLocalRunner_KillBackgroundJob(t *testing.T) {
 	require.Len(t, queued, 1)
 	assert.Contains(t, queued[0], "background job killed")
 }
+
+func TestWaitBackgroundResultCompletionWinsOverLateKill(t *testing.T) {
+	t.Parallel()
+
+	done := make(chan execOut, 1)
+	done <- execOut{stdout: "done", exitCode: 0}
+	killCh := make(chan struct{})
+	close(killCh)
+
+	result := waitBackgroundResult(done, func() {}, killCh)
+
+	require.False(t, result.killed)
+	require.Equal(t, "done", result.stdout)
+}
+
+func TestWaitBackgroundResultKillBeforeCompletion(t *testing.T) {
+	t.Parallel()
+
+	done := make(chan execOut)
+	killCh := make(chan struct{})
+	close(killCh)
+	go func() {
+		done <- execOut{stderr: "killed", exitCode: -1, err: context.Canceled}
+	}()
+
+	result := waitBackgroundResult(done, func() {}, killCh)
+
+	require.True(t, result.killed)
+	require.Equal(t, "killed", result.stderr)
+	require.ErrorIs(t, result.err, context.Canceled)
+}
