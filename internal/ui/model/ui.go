@@ -1087,7 +1087,13 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		m.status.ToggleHelp()
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleSandbox:
-		cmds = append(cmds, util.CmdHandler(util.NewInfoMsg(m.toggleSandbox())))
+		cmds = append(cmds, func() tea.Msg {
+			msg, err := m.toggleSandboxRuntime(context.Background())
+			if err != nil {
+				return util.InfoMsg{Type: util.InfoTypeWarn, Msg: err.Error()}
+			}
+			return util.NewInfoMsg(msg)
+		})
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionExternalEditor:
 		if m.isAgentBusy() {
@@ -2498,6 +2504,24 @@ func (m *UI) toggleSandbox() string {
 		return "Sandbox enabled"
 	}
 	return "Sandbox disabled"
+}
+
+func (m *UI) toggleSandboxRuntime(ctx context.Context) (string, error) {
+	if m.isAgentBusy() {
+		return "", errors.New("agent is busy")
+	}
+	if !m.hasSession() {
+		return "", errors.New("no active session")
+	}
+	if len(m.com.Workspace.AgentActiveBackgroundJobs(m.session.ID)) > 0 {
+		return "", errors.New("background jobs are active")
+	}
+
+	msg := m.toggleSandbox()
+	if _, err := m.com.Workspace.CreateRuntimeMessage(ctx, m.session.ID, msg); err != nil {
+		return "", err
+	}
+	return msg, nil
 }
 
 // sendMessage sends a message with the given content and attachments.
