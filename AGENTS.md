@@ -306,10 +306,10 @@ CLAUDE.md, etc.), the runtime signals this via `context_files_context.md`:
 "No project guidance file was found for this workspace." The coder must then
 complete the journal Preflight section before changing any files.
 
-The Preflight section is a checklist, not a subagent requirement. For trivial
-tasks, a short note is enough. For risky tasks, the coder should answer the
-checklist questions about constraints, verification, project-fit approach, and
-remaining risks before editing.
+The Preflight section is a checklist, not a subagent requirement. Its main
+purpose is to find existing code, docs, tests, and conventions to reuse instead
+of reinventing the wheel. For trivial tasks, a short note is enough. For risky
+tasks, the coder should answer the checklist questions before editing.
 
 The rule lives in `internal/agent/templates/coder.md` and the runtime fill
 hint in `internal/agent/journal.go` (`journalFillHint`). The journal feature

@@ -15,8 +15,8 @@ trivial tasks, a short note is enough.
   miss?
 - Verification: what tests, scripts, expected outputs, or manual checks prove
   the work?
-- Approach: what solution best fits the long-term shape of the project while
-  staying scoped to the task?
+- Existing patterns: what similar code, docs, tests, or project conventions can
+  be reused instead of inventing a new approach?
 - Risks: what assumptions or environment gaps could make the result wrong?
 
 ## Context
