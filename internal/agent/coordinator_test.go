@@ -439,6 +439,18 @@ func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 		require.NotEmpty(t, call.AllowedPaths)
 		assert.True(t, call.AllowedPaths[0].ReadOnly, "RO override should set cwd ReadOnly=true")
 	})
+
+	t.Run("override disables sandbox", func(t *testing.T) {
+		cfg := setup(t)
+		cfg.Overrides().NoSandbox = true
+		c := &coordinator{
+			cfg:          cfg,
+			dataDir:      cfg.WorkingDir(),
+			currentAgent: &stubAgent{modelName: "test-model"},
+		}
+		call := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
+		assert.False(t, call.Sandbox)
+	})
 }
 
 func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {

@@ -83,6 +83,9 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 	runtimeContext := prompt.LoadRuntimeContext(ctx, cfg, getCoderContextPaths(cfg))
 
 	useSandbox := resolveSandbox(cfg.Config().Options.Sandbox)
+	if cfg.Overrides().NoSandbox {
+		useSandbox = false
+	}
 
 	access := AccessModeRW
 	if cfg.Overrides().ReadOnly {

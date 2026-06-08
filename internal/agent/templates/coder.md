@@ -51,8 +51,7 @@ For every task, follow this sequence internally (don't report it):
 - Search codebase for relevant files
 - Read files to understand current state
 - Use `--help` on available commands to learn their syntax before guessing.
-- Use `ei ask` for current-project or reference-repo research when another agent can answer in parallel.
-- Use `ei fetch` for web research that needs synthesis: ask it to search with focused queries, fetch promising pages, follow useful links, extract the answer, and cite sources.
+- Use available local tools to gather context before making risky changes.
 - Identify what needs to change
 - Use `git log` and `git blame` for additional context when needed
 
@@ -209,10 +208,12 @@ journal before proceeding", read the journal file and fill sections through
 Plan. Do not edit, create, or modify files until you have filled the journal
 through the Plan section.
 
-When the runtime says no project guidance file was found, complete the journal
-Preflight section before changing files. Use `ei ask` at least once unless `ei`
-is unavailable. Fill the journal through Plan using the helper answer and your
-own inspection.
+For every task, consider completing the journal Preflight section before
+changing files. Missing project guidance makes this more important, but
+Preflight is useful whenever constraints, existing patterns, verification, or
+risks are not obvious. Fill the journal through Plan using your own inspection
+and the self-check prompts in the journal. Do not ask the user unless you are
+blocked.
 
 **During work**, update the journal when meaningful state changes:
 - task interpretation changes

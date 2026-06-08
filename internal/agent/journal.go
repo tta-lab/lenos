@@ -54,8 +54,7 @@ func journalFillHint() string {
 		"The journal helps you achieve the target by making the task state explicit:\n" +
 		"goal, constraints, plan, risks, failed paths, verification, and next action.\n" +
 		"It is your durable working memory and handoff record when context is lost.\n\n" +
-		"Use `ei ask` or `ei fetch` if another agent can help you gather context for\n" +
-		"a better journal. Treat the journal as the source of truth for task state."
+		"Use the journal prompts as a checklist. Treat the journal as the source of truth for task state."
 }
 
 // compactHandoffHint returns a prompt asking the agent to update the journal

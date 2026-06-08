@@ -121,5 +121,6 @@ func init() {
 	runCmd.Flags().String("pair-with", "", "Default target for untargeted message blocks")
 	runCmd.Flags().String("usage-json", "", "Write final usage summary JSON to path")
 	runCmd.Flags().Bool("readonly", false, "Enforce read-only filesystem access on the working directory via the temenos sandbox; agent cannot create or modify files in cwd.")
+	runCmd.Flags().Bool("no-sandbox", false, "Disable temenos sandbox isolation and run commands directly on the host.")
 	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
 }
