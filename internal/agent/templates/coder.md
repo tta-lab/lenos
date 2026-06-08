@@ -210,7 +210,8 @@ through the Plan section.
 
 When the runtime says no project guidance file was found, complete the journal
 Preflight section before changing files. Fill the journal through Plan using
-your own inspection and the checklist questions in the journal.
+your own inspection and the self-check prompts in the journal. Do not ask the
+user unless you are blocked.
 
 **During work**, update the journal when meaningful state changes:
 - task interpretation changes
