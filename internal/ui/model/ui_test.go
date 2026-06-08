@@ -118,6 +118,74 @@ func TestCurrentModelSupportsImages(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+func TestToggleSandboxUpdatesSessionLocalConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{}
+	ui := newTestUIWithConfig(t, cfg)
+
+	require.Equal(t, "Sandbox disabled", ui.toggleSandbox())
+	require.NotNil(t, cfg.Options)
+	require.NotNil(t, cfg.Options.Sandbox)
+	require.False(t, *cfg.Options.Sandbox)
+
+	require.Equal(t, "Sandbox enabled", ui.toggleSandbox())
+	require.True(t, *cfg.Options.Sandbox)
+}
+
+func TestToggleSandboxCreatesRuntimeMessage(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{}
+	tw := &testWorkspace{cfg: cfg}
+	ui := newTestUIWithConfig(t, cfg)
+	ui.com.Workspace = tw
+	ui.session = &session.Session{ID: "session-1"}
+
+	msg, err := ui.toggleSandboxRuntime(context.Background())
+
+	require.NoError(t, err)
+	require.Equal(t, "Sandbox disabled", msg)
+	require.Len(t, tw.runtimeMessages, 1)
+	require.Equal(t, "session-1", tw.runtimeMessages[0].SessionID)
+	require.Equal(t, message.Runtime, tw.runtimeMessages[0].Role)
+	require.Equal(t, "Sandbox disabled", tw.runtimeMessages[0].Content().Text)
+}
+
+func TestToggleSandboxRuntimeRejectsBusyOrBackgroundJobs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("agent busy", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.Config{}
+		tw := &testWorkspace{cfg: cfg, agentReady: true, agentBusy: true}
+		ui := newTestUIWithConfig(t, cfg)
+		ui.com.Workspace = tw
+		ui.session = &session.Session{ID: "session-1"}
+
+		_, err := ui.toggleSandboxRuntime(context.Background())
+
+		require.ErrorContains(t, err, "agent is busy")
+		require.Empty(t, tw.runtimeMessages)
+	})
+
+	t.Run("background jobs active", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.Config{}
+		tw := &testWorkspace{
+			cfg:  cfg,
+			jobs: []agent.BackgroundJob{{ID: "job-1", Command: "go test ./..."}},
+		}
+		ui := newTestUIWithConfig(t, cfg)
+		ui.com.Workspace = tw
+		ui.session = &session.Session{ID: "session-1"}
+
+		_, err := ui.toggleSandboxRuntime(context.Background())
+
+		require.ErrorContains(t, err, "background jobs are active")
+		require.Empty(t, tw.runtimeMessages)
+	})
+}
 
 func newTestUIWithConfig(t *testing.T, cfg *config.Config) *UI {
 	t.Helper()
@@ -131,16 +199,19 @@ func newTestUIWithConfig(t *testing.T, cfg *config.Config) *UI {
 }
 
 // testWorkspace is a minimal [workspace.Workspace] stub for unit tests.
+// testWorkspace is a minimal [workspace.Workspace] stub for unit tests.
 type testWorkspace struct {
 	workspace.Workspace
-	cfg            *config.Config
-	agentReady     bool
-	agentModel     workspace.AgentModel
-	gitWorktree    bool
-	workingDir     string
-	modifiedFiles  []workspace.ModifiedFile
-	jobs           []agent.BackgroundJob
-	listModifiedFn func() ([]workspace.ModifiedFile, error)
+	cfg             *config.Config
+	agentReady      bool
+	agentBusy       bool
+	agentModel      workspace.AgentModel
+	gitWorktree     bool
+	workingDir      string
+	modifiedFiles   []workspace.ModifiedFile
+	jobs            []agent.BackgroundJob
+	runtimeMessages []message.Message
+	listModifiedFn  func() ([]workspace.ModifiedFile, error)
 }
 
 func (w *testWorkspace) Config() *config.Config {
@@ -156,6 +227,10 @@ func (w *testWorkspace) WorkingDir() string {
 
 func (w *testWorkspace) AgentIsReady() bool {
 	return w.agentReady
+}
+
+func (w *testWorkspace) AgentIsBusy() bool {
+	return w.agentBusy
 }
 
 func (w *testWorkspace) AgentModel() workspace.AgentModel {
@@ -175,6 +250,17 @@ func (w *testWorkspace) ListModifiedFiles(ctx context.Context) ([]workspace.Modi
 
 func (w *testWorkspace) AgentActiveBackgroundJobs(string) []agent.BackgroundJob {
 	return w.jobs
+}
+
+func (w *testWorkspace) CreateRuntimeMessage(_ context.Context, sessionID, text string) (message.Message, error) {
+	msg := message.Message{
+		ID:        "runtime-message",
+		SessionID: sessionID,
+		Role:      message.Runtime,
+		Parts:     []message.ContentPart{message.TextContent{Text: text}},
+	}
+	w.runtimeMessages = append(w.runtimeMessages, msg)
+	return msg, nil
 }
 
 func (w *testWorkspace) SetActiveModel(modelType config.SelectedModelType, model config.SelectedModel) {

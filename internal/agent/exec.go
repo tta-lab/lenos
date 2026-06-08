@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tta-lab/temenos/sandbox"
@@ -56,50 +57,60 @@ type Runner interface {
 // enforce read/write boundaries — the subprocess can access any path via
 // absolute paths or cd regardless of AllowedPaths. Use SandboxRunner for
 // actual sandboxing.
-type LocalRunner struct{}
+type LocalRunner struct {
+	bg *BackgroundRunner
+}
 
-func (LocalRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []AllowedPath) ExecResult {
+func (l LocalRunner) Run(ctx context.Context, bash string, env map[string]string, allowedPaths []AllowedPath) ExecResult {
 	start := time.Now()
-	runCtx, cancel := context.WithTimeout(ctx, DefaultPerCmdTimeout)
-	defer cancel()
+	runCtx, cancel := context.WithTimeout(context.Background(), DefaultPerCmdTimeout)
 
-	cmd := exec.CommandContext(runCtx, "/bin/bash", "-c", bash)
-	if len(allowedPaths) > 0 {
-		cmd.Dir = allowedPaths[0].Path
-	}
-	cmd.Env = mergeEnv(os.Environ(), env)
+	done := make(chan execOut, 1)
+	go func() {
+		cmd := exec.CommandContext(runCtx, "/bin/bash", "-c", bash)
+		if len(allowedPaths) > 0 {
+			cmd.Dir = allowedPaths[0].Path
+		}
+		cmd.Env = mergeEnv(os.Environ(), env)
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
 
-	runErr := cmd.Run()
-	dur := time.Since(start)
-	res := ExecResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), Duration: dur}
+		runErr := cmd.Run()
+		out := execOut{
+			stdout:   stdout.String(),
+			stderr:   stderr.String(),
+			exitCode: 0,
+		}
+		if runErr == nil {
+			done <- out
+			return
+		}
+		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			out.exitCode = -1
+			out.err = context.DeadlineExceeded
+			done <- out
+			return
+		}
+		if errors.Is(runCtx.Err(), context.Canceled) {
+			out.exitCode = -1
+			out.err = context.Canceled
+			done <- out
+			return
+		}
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
+			out.exitCode = exitErr.ExitCode()
+			done <- out
+			return
+		}
+		out.exitCode = -1
+		out.err = runErr
+		done <- out
+	}()
 
-	if runErr == nil {
-		return res
-	}
-	// Timeout: surface DeadlineExceeded so the loop can emit the timeout
-	// re-prompt rather than the generic exit-code branch.
-	if errors.Is(runCtx.Err(), context.DeadlineExceeded) && !errors.Is(ctx.Err(), context.Canceled) {
-		res.ExitCode = -1
-		res.Err = context.DeadlineExceeded
-		return res
-	}
-	if errors.Is(ctx.Err(), context.Canceled) {
-		res.ExitCode = -1
-		res.Err = ctx.Err()
-		return res
-	}
-	var exitErr *exec.ExitError
-	if errors.As(runErr, &exitErr) {
-		res.ExitCode = exitErr.ExitCode()
-		return res
-	}
-	res.ExitCode = -1
-	res.Err = runErr
-	return res
+	return waitForegroundOrBackground(ctx, start, bash, l.bg, cancel, done)
 }
 
 // SandboxedRunner runs commands via the temenos sandbox SDK directly — no
@@ -148,83 +159,118 @@ func (s *SandboxedRunner) Run(ctx context.Context, bash string, env map[string]s
 		WorkingDir: workDir,
 	}
 
-	// Spawn execution in a goroutine; wait up to the auto-background threshold.
-	// If it completes in time, return synchronously. Otherwise, hand off to
-	// BackgroundRunner and return Background: true.
-	type execOut struct {
-		stdout, stderr string
-		exitCode       int
-		err            error
-	}
+	bgCtx, cancel := context.WithCancel(context.Background())
+
 	done := make(chan execOut, 1)
-	bgCtx, bgCancel := context.WithCancel(context.Background())
 	go func() {
 		stdout, stderr, exitCode, err := s.sbx.Exec(bgCtx, bash, execCfg)
 		done <- execOut{stdout, stderr, exitCode, err}
 	}()
 
+	return waitForegroundOrBackground(ctx, start, bash, s.bg, cancel, done)
+}
+
+type execOut struct {
+	stdout   string
+	stderr   string
+	exitCode int
+	err      error
+}
+
+func waitForegroundOrBackground(
+	ctx context.Context,
+	start time.Time,
+	bash string,
+	bg *BackgroundRunner,
+	cancel context.CancelFunc,
+	done <-chan execOut,
+) ExecResult {
 	autoBgTimer := time.NewTimer(defaultAutoBackgroundAfter)
 	defer autoBgTimer.Stop()
+
 	select {
 	case out := <-done:
-		bgCancel()
-		dur := time.Since(start)
-		if out.err != nil {
-			return ExecResult{Stdout: []byte(out.stdout), Stderr: []byte(out.stderr), ExitCode: out.exitCode, Duration: dur, Err: out.err}
-		}
-		return ExecResult{
-			Stdout:   []byte(out.stdout),
-			Stderr:   []byte(out.stderr),
-			ExitCode: out.exitCode,
-			Duration: dur,
-		}
+		cancel()
+		return execResultFromOut(out, time.Since(start))
 	case <-ctx.Done():
-		bgCancel()
+		cancel()
 		return ExecResult{ExitCode: -1, Duration: time.Since(start), Err: ctx.Err()}
 	case <-autoBgTimer.C:
-		// Command still running — hand to BackgroundRunner if available.
-		if s.bg == nil {
-			// No runner; wait for completion.
+		if bg == nil {
 			select {
 			case out := <-done:
-				bgCancel()
-				dur := time.Since(start)
-				if out.err != nil {
-					return ExecResult{Stdout: []byte(out.stdout), Stderr: []byte(out.stderr), ExitCode: out.exitCode, Duration: dur, Err: out.err}
-				}
-				return ExecResult{
-					Stdout:   []byte(out.stdout),
-					Stderr:   []byte(out.stderr),
-					ExitCode: out.exitCode,
-					Duration: dur,
-				}
+				cancel()
+				return execResultFromOut(out, time.Since(start))
 			case <-ctx.Done():
-				bgCancel()
+				cancel()
 				return ExecResult{ExitCode: -1, Duration: time.Since(start), Err: ctx.Err()}
 			}
 		}
 
 		jobID := newJobID()
+		killCh := make(chan struct{})
+		var killOnce sync.Once
+		kill := func() {
+			killOnce.Do(func() {
+				close(killCh)
+			})
+		}
 		resultCh := make(chan backgroundResult, 1)
 		go func() {
-			out := <-done
-			killed := bgCtx.Err() != nil
-			bgCancel()
-			resultCh <- backgroundResult{
-				stdout:   out.stdout,
-				stderr:   out.stderr,
-				exitCode: out.exitCode,
-				err:      out.err,
-				killed:   killed,
-			}
+			resultCh <- waitBackgroundResult(done, cancel, killCh)
 			close(resultCh)
 		}()
-		s.bg.Track(jobID, bash, bgCancel, resultCh)
+		bg.Track(jobID, bash, kill, resultCh)
 		return ExecResult{
 			JobID:      jobID,
 			Background: true,
 			Duration:   time.Since(start),
 		}
+	}
+}
+
+func waitBackgroundResult(done <-chan execOut, cancel context.CancelFunc, killCh <-chan struct{}) backgroundResult {
+	select {
+	case out := <-done:
+		cancel()
+		return backgroundResultFromOut(out, false)
+	default:
+	}
+
+	select {
+	case out := <-done:
+		cancel()
+		return backgroundResultFromOut(out, false)
+	case <-killCh:
+		select {
+		case out := <-done:
+			cancel()
+			return backgroundResultFromOut(out, false)
+		default:
+		}
+		cancel()
+		out := <-done
+		return backgroundResultFromOut(out, true)
+	}
+}
+
+func backgroundResultFromOut(out execOut, killed bool) backgroundResult {
+	return backgroundResult{
+		stdout:   out.stdout,
+		stderr:   out.stderr,
+		exitCode: out.exitCode,
+		err:      out.err,
+		killed:   killed,
+	}
+}
+
+func execResultFromOut(out execOut, dur time.Duration) ExecResult {
+	return ExecResult{
+		Stdout:   []byte(out.stdout),
+		Stderr:   []byte(out.stderr),
+		ExitCode: out.exitCode,
+		Duration: dur,
+		Err:      out.err,
 	}
 }
 

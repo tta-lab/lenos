@@ -72,6 +72,13 @@ func (w *AppWorkspace) ListMessages(ctx context.Context, sessionID string) ([]me
 	return w.app.Messages.List(ctx, sessionID)
 }
 
+func (w *AppWorkspace) CreateRuntimeMessage(ctx context.Context, sessionID, text string) (message.Message, error) {
+	return w.app.Messages.Create(ctx, sessionID, message.CreateMessageParams{
+		Role:  message.Runtime,
+		Parts: []message.ContentPart{message.TextContent{Text: text}},
+	})
+}
+
 func (w *AppWorkspace) ListUserMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
 	return w.app.Messages.ListUserMessages(ctx, sessionID)
 }

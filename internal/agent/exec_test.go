@@ -112,3 +112,84 @@ func TestLocalRunner_AllowedPathsFirstAsCwd(t *testing.T) {
 	assert.True(t, strings.HasSuffix(got, tmp) || got == tmp,
 		"want pwd to resolve to (or under) %q, got %q", tmp, got)
 }
+
+func TestLocalRunner_BackgroundJob(t *testing.T) {
+	orig := defaultAutoBackgroundAfter
+	defaultAutoBackgroundAfter = 50 * time.Millisecond
+	t.Cleanup(func() {
+		defaultAutoBackgroundAfter = orig
+	})
+
+	bgRunner := NewBackgroundRunner(nil)
+	res := LocalRunner{bg: bgRunner}.Run(context.Background(), `printf start; sleep 0.2; printf done`, nil, nil)
+
+	require.NoError(t, res.Err)
+	require.True(t, res.Background)
+	require.NotEmpty(t, res.JobID)
+	assert.Equal(t, 1, bgRunner.ActiveCount())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	prompts := bgRunner.WaitAndDrain(ctx)
+
+	require.Len(t, prompts, 1)
+	assert.Contains(t, prompts[0].Text, "background job completed")
+	assert.Contains(t, prompts[0].Text, "startdone")
+}
+
+func TestLocalRunner_KillBackgroundJob(t *testing.T) {
+	orig := defaultAutoBackgroundAfter
+	defaultAutoBackgroundAfter = 50 * time.Millisecond
+	t.Cleanup(func() {
+		defaultAutoBackgroundAfter = orig
+	})
+
+	var queued []string
+	bgRunner := NewBackgroundRunner(func(msg string) {
+		queued = append(queued, msg)
+	})
+	res := LocalRunner{bg: bgRunner}.Run(context.Background(), `sleep 5`, nil, nil)
+
+	require.NoError(t, res.Err)
+	require.True(t, res.Background)
+	require.NotEmpty(t, res.JobID)
+
+	require.NoError(t, bgRunner.KillJob(res.JobID))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	require.NoError(t, bgRunner.WaitIdle(ctx))
+	require.Len(t, queued, 1)
+	assert.Contains(t, queued[0], "background job killed")
+}
+
+func TestWaitBackgroundResultCompletionWinsOverLateKill(t *testing.T) {
+	t.Parallel()
+
+	done := make(chan execOut, 1)
+	done <- execOut{stdout: "done", exitCode: 0}
+	killCh := make(chan struct{})
+	close(killCh)
+
+	result := waitBackgroundResult(done, func() {}, killCh)
+
+	require.False(t, result.killed)
+	require.Equal(t, "done", result.stdout)
+}
+
+func TestWaitBackgroundResultKillBeforeCompletion(t *testing.T) {
+	t.Parallel()
+
+	done := make(chan execOut)
+	killCh := make(chan struct{})
+	close(killCh)
+	go func() {
+		done <- execOut{stderr: "killed", exitCode: -1, err: context.Canceled}
+	}()
+
+	result := waitBackgroundResult(done, func() {}, killCh)
+
+	require.True(t, result.killed)
+	require.Equal(t, "killed", result.stderr)
+	require.ErrorIs(t, result.err, context.Canceled)
+}

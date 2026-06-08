@@ -1086,6 +1086,15 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionToggleHelp:
 		m.status.ToggleHelp()
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionToggleSandbox:
+		cmds = append(cmds, func() tea.Msg {
+			msg, err := m.toggleSandboxRuntime(context.Background())
+			if err != nil {
+				return util.InfoMsg{Type: util.InfoTypeWarn, Msg: err.Error()}
+			}
+			return util.NewInfoMsg(msg)
+		})
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionExternalEditor:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is working, please wait..."))
@@ -2473,6 +2482,46 @@ func (m *UI) renderEditorView(width int) string {
 		m.textarea.View(),
 		"", // margin at bottom of editor
 	}, "\n")
+}
+
+func (m *UI) toggleSandbox() string {
+	cfg := m.com.Config()
+	if cfg == nil {
+		return "Sandbox unchanged"
+	}
+	if cfg.Options == nil {
+		cfg.Options = &config.Options{}
+	}
+
+	current := true
+	if cfg.Options.Sandbox != nil {
+		current = *cfg.Options.Sandbox
+	}
+	next := !current
+	cfg.Options.Sandbox = &next
+
+	if next {
+		return "Sandbox enabled"
+	}
+	return "Sandbox disabled"
+}
+
+func (m *UI) toggleSandboxRuntime(ctx context.Context) (string, error) {
+	if m.isAgentBusy() {
+		return "", errors.New("agent is busy")
+	}
+	if !m.hasSession() {
+		return "", errors.New("no active session")
+	}
+	if len(m.com.Workspace.AgentActiveBackgroundJobs(m.session.ID)) > 0 {
+		return "", errors.New("background jobs are active")
+	}
+
+	msg := m.toggleSandbox()
+	if _, err := m.com.Workspace.CreateRuntimeMessage(ctx, m.session.ID, msg); err != nil {
+		return "", err
+	}
+	return msg, nil
 }
 
 // sendMessage sends a message with the given content and attachments.
