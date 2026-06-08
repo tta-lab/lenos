@@ -208,10 +208,12 @@ journal before proceeding", read the journal file and fill sections through
 Plan. Do not edit, create, or modify files until you have filled the journal
 through the Plan section.
 
-When the runtime says no project guidance file was found, complete the journal
-Preflight section before changing files. Fill the journal through Plan using
-your own inspection and the self-check prompts in the journal. Do not ask the
-user unless you are blocked.
+For every task, consider completing the journal Preflight section before
+changing files. Missing project guidance makes this more important, but
+Preflight is useful whenever constraints, existing patterns, verification, or
+risks are not obvious. Fill the journal through Plan using your own inspection
+and the self-check prompts in the journal. Do not ask the user unless you are
+blocked.
 
 **During work**, update the journal when meaningful state changes:
 - task interpretation changes

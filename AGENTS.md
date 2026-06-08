@@ -299,12 +299,12 @@ within Lenos should use sync mode (no `--async`). Rationale:
 - This applies everywhere: preflight helper, research lookups, code search
   delegation — always sync.
 
-### Coder Preflight for No-Guidance Workspaces
+### Coder Preflight
 
-When a coder session starts and no project guidance file exists (AGENTS.md,
-CLAUDE.md, etc.), the runtime signals this via `context_files_context.md`:
-"No project guidance file was found for this workspace." The coder must then
-complete the journal Preflight section before changing any files.
+For every task, the coder should consider completing the journal Preflight
+section before changing files. Missing project guidance makes this more
+important, but Preflight is useful whenever constraints, existing patterns,
+verification, or risks are not obvious.
 
 The Preflight section is agent self-review, not questions for the user or a
 subagent requirement. Its main purpose is to improve task and journal quality
