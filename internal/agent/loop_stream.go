@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
+	"github.com/tta-lab/lenos/internal/agent/codex"
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
 	"github.com/tta-lab/lenos/internal/message"
 
@@ -21,13 +22,20 @@ func streamOne(
 	msgs []fantasy.Message,
 	assistantMsg *message.Message,
 ) (string, fantasy.Usage, fantasy.ProviderMetadata, error) {
+	// Attach session identity to context for transport-layer headers
+	// (prompt cache key, client request ID).
+	streamCtx := ctx
+	if deps.sessionID != "" {
+		streamCtx = codex.WithSessionID(ctx, deps.sessionID)
+	}
+
 	baseline := assistantMsg.Clone()
-	result, err := retryModelStream(ctx,
+	result, err := retryModelStream(streamCtx,
 		func() (streamOneResult, error) {
-			return streamOneAttempt(ctx, deps, msgs, assistantMsg)
+			return streamOneAttempt(streamCtx, deps, msgs, assistantMsg)
 		},
 		func() {
-			resetMessageForStreamRetry(ctx, deps.messages, assistantMsg, baseline, "loop: reset assistant message for stream retry")
+			resetMessageForStreamRetry(streamCtx, deps.messages, assistantMsg, baseline, "loop: reset assistant message for stream retry")
 		},
 	)
 	if err != nil {

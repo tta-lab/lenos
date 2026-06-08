@@ -2,6 +2,7 @@ package codex
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -29,8 +30,38 @@ func NewClient(wrap http.RoundTripper) *http.Client {
 	}
 }
 
+type contextKey string
+
+const sessionIDKey contextKey = "codex-session-id"
+
 type stripTransport struct {
 	wrap http.RoundTripper
+}
+
+// WithSessionID returns a context with the given session ID for Codex cache routing.
+// When set, the transport injects prompt_cache_key into the request body
+// and x-client-request-id/session_id into the headers.
+func WithSessionID(ctx context.Context, sessionID string) context.Context {
+	return context.WithValue(ctx, sessionIDKey, sessionID)
+}
+
+// injectPromptCacheKey adds a top-level prompt_cache_key field to the JSON body.
+func injectPromptCacheKey(body []byte, sessionID string) []byte {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(body, &m); err != nil {
+		return body
+	}
+	// Only set if not already present (defensive).
+	if _, ok := m["prompt_cache_key"]; ok {
+		return body
+	}
+	m["prompt_cache_key"], _ = json.Marshal(sessionID)
+	out, err := json.Marshal(m)
+	if err != nil {
+		slog.Warn("codex transport: failed to marshal body with prompt_cache_key", "err", err)
+		return body
+	}
+	return out
 }
 
 func (t *stripTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -51,12 +82,24 @@ func (t *stripTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	stripped := stripJSONField(bodyBytes, "max_output_tokens")
 	stripped = hoistSystemToInstructions(stripped)
 
+	// Inject session identity for prompt cache routing when available.
+	if sid, ok := req.Context().Value(sessionIDKey).(string); ok && sid != "" {
+		stripped = injectPromptCacheKey(stripped, sid)
+	}
+
 	req = req.Clone(req.Context())
 	req.Body = io.NopCloser(bytes.NewReader(stripped))
 	req.ContentLength = int64(len(stripped))
 	req.GetBody = func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(stripped)), nil
 	}
+
+	// Inject session identity headers for request routing.
+	if sid, ok := req.Context().Value(sessionIDKey).(string); ok && sid != "" {
+		req.Header.Set("x-client-request-id", sid)
+		req.Header.Set("session_id", sid)
+	}
+
 	return t.wrap.RoundTrip(req)
 }
 
