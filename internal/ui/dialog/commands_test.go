@@ -56,6 +56,37 @@ func TestDefaultCommandsIncludesBackgroundJobsForActiveSession(t *testing.T) {
 	require.Equal(t, BackgroundJobsID, action.DialogID)
 }
 
+func TestDefaultCommandsIncludesExportTrajectoryForActiveSession(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.DefaultStyles()
+	cmds, err := NewCommands(&common.Common{
+		Workspace: commandTestWorkspace{
+			cfg: &config.Config{
+				Options:   &config.Options{TUI: &config.TUIOptions{}},
+				Models:    map[config.SelectedModelType]config.SelectedModel{},
+				Providers: csync.NewMap[string, config.ProviderConfig](),
+				Agents:    map[string]config.Agent{},
+			},
+			workingDir: t.TempDir(),
+		},
+		Styles: &sty,
+	}, "session-1", true, false, false, nil)
+	require.NoError(t, err)
+
+	var export *CommandItem
+	for _, item := range cmds.defaultCommands() {
+		if item.ID() == "export_atif_trajectory" {
+			export = item
+			break
+		}
+	}
+	require.NotNil(t, export, "active sessions should expose an ATIF export command")
+	require.Equal(t, "Export ATIF Trajectory", export.title)
+	_, ok := export.Action().(ActionExportTrajectory)
+	require.True(t, ok, "export command should export the ATIF trajectory")
+}
+
 func TestDefaultCommandsIncludesSingleSandboxToggle(t *testing.T) {
 	t.Parallel()
 

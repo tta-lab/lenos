@@ -415,6 +415,10 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "compact_handoff", "Compact Session", "", ActionCompactSession{}))
 	}
 
+	if c.hasSession {
+		commands = append(commands, NewCommandItem(c.com.Styles, "export_atif_trajectory", "Export ATIF Trajectory", "", ActionExportTrajectory{}))
+	}
+
 	commands = append(commands, NewCommandItem(c.com.Styles, "open_journal", "Open Journal", "", ActionOpenJournal{}))
 
 	commands = append(commands, NewCommandItem(c.com.Styles, "open_goal", "Open Goal", "", ActionOpenGoal{}))
