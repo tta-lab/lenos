@@ -151,7 +151,7 @@ func TestGoalCheckHint_ContainsKeyInstructions(t *testing.T) {
 	t.Parallel()
 	hint := goalCheckHint()
 	assert.Contains(t, hint, "LENOS_GOAL")
-	assert.Contains(t, hint, "still active")
+	assert.Contains(t, hint, "cat $LENOS_GOAL")
 	assert.Contains(t, hint, "status: complete")
 	assert.Contains(t, hint, "status: blocked")
 	assert.Contains(t, hint, "LENOS_JOURNAL")
@@ -161,16 +161,15 @@ func TestGoalUpdateHint_ContainsKeyInstructions(t *testing.T) {
 	t.Parallel()
 	hint := GoalUpdateHint()
 	assert.Contains(t, hint, "LENOS_GOAL")
-	assert.Contains(t, hint, "was modified")
-	assert.Contains(t, hint, "Re-read")
-	assert.Contains(t, hint, "Adjust your task")
+	assert.Contains(t, hint, "cat $LENOS_GOAL")
+	assert.Contains(t, hint, "runtime_goal_updated")
 }
 
 func TestGoalStartupHint_ContainsKeyInstructions(t *testing.T) {
 	t.Parallel()
 	hint := goalStartupHint()
 	assert.Contains(t, hint, "LENOS_GOAL")
-	assert.Contains(t, hint, "completion contract")
+	assert.Contains(t, hint, "runtime_goal")
 	assert.Contains(t, hint, "LENOS_JOURNAL")
 	assert.Contains(t, hint, "status: complete")
 	assert.Contains(t, hint, "status: blocked")
