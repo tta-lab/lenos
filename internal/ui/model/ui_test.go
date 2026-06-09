@@ -322,7 +322,7 @@ func TestLoadInitialSessionCreatesSessionWhenNoSessionSelected(t *testing.T) {
 	tw := &testWorkspace{cfg: cfg}
 	ui := newTestUIWithConfig(t, cfg)
 	ui.com.Workspace = tw
-	ui.state = uiLanding
+	ui.state = uiChat
 
 	cmd := ui.loadInitialSession()
 	require.NotNil(t, cmd)
@@ -345,7 +345,7 @@ func TestLoadInitialSessionContinuesExistingSession(t *testing.T) {
 	}
 	ui := newTestUIWithConfig(t, cfg)
 	ui.com.Workspace = tw
-	ui.state = uiLanding
+	ui.state = uiChat
 	ui.continueLastSession = true
 
 	cmd := ui.loadInitialSession()

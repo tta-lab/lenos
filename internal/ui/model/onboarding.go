@@ -68,10 +68,8 @@ func (m *UI) initializeProject() tea.Cmd {
 
 // skipInitializeProject skips project initialization and transitions to the landing view.
 func (m *UI) skipInitializeProject() tea.Cmd {
-	// TODO: initialize the project
-	m.setState(uiLanding, uiFocusEditor)
-	// mark the project as initialized
-	return m.markProjectInitialized
+	m.setState(uiChat, uiFocusEditor)
+	return tea.Sequence(m.markProjectInitialized, m.loadInitialSession())
 }
 
 // initializeView renders the project initialization prompt with Yes/No buttons.

@@ -96,7 +96,6 @@ type uiState uint8
 const (
 	uiOnboarding uiState = iota
 	uiInitialize
-	uiLanding
 	uiChat
 )
 
@@ -315,7 +314,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool, trigger
 	// set onboarding state defaults
 	ui.onboarding.yesInitializeSelected = true
 
-	desiredState := uiLanding
+	desiredState := uiChat
 	desiredFocus := uiFocusEditor
 	if !com.Config().IsConfigured() {
 		desiredState = uiOnboarding
@@ -382,8 +381,7 @@ func (m *UI) Init() tea.Cmd {
 // loadInitialSession loads the initial session if one was specified on startup.
 func (m *UI) loadInitialSession() tea.Cmd {
 	switch {
-	case m.state != uiLanding:
-		// Only load if we're in landing state (i.e., fully configured).
+	case m.state != uiChat:
 		return nil
 	case m.initialSessionID != "":
 		return m.loadSession(m.initialSessionID)
@@ -1317,10 +1315,13 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		m.dialog.CloseDialog(dialog.ModelsID)
 
 		if isOnboarding {
-			m.setState(uiLanding, uiFocusEditor)
+			m.setState(uiChat, uiFocusEditor)
 			m.com.Config().SetupAgents()
 			if err := m.com.Workspace.InitCoderAgent(context.TODO()); err != nil {
 				cmds = append(cmds, util.ReportError(err))
+			}
+			if cmd := m.loadInitialSession(); cmd != nil {
+				cmds = append(cmds, cmd)
 			}
 		}
 	case dialog.ActionSelectReasoningEffort:
@@ -1503,7 +1504,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 	case uiInitialize:
 		cmds = append(cmds, m.updateInitializeView(msg)...)
 		return tea.Batch(cmds...)
-	case uiChat, uiLanding:
+	case uiChat:
 		switch m.focus {
 		case uiFocusEditor:
 			// Handle completions if open.
@@ -1575,7 +1576,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 
 				return tea.Batch(m.sendMessage(value, attachments...), m.loadPromptHistory())
 			case key.Matches(msg, m.keyMap.Tab):
-				if m.state != uiLanding {
+				if m.chat.Len() > 0 {
 					m.setState(m.state, uiFocusMain)
 					m.textarea.Blur()
 					m.chat.Focus()
@@ -1798,14 +1799,6 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 		main := uv.NewStyledString(m.initializeView())
 		main.Draw(scr, layout.main)
-
-	case uiLanding:
-		m.drawHeader(scr, layout.header)
-		main := uv.NewStyledString(m.landingView())
-		main.Draw(scr, layout.main)
-
-		editor := uv.NewStyledString(m.renderEditorView(scr.Bounds().Dx()))
-		editor.Draw(scr, layout.editor)
 
 	case uiChat:
 		m.drawHeader(scr, layout.header)
@@ -2117,7 +2110,7 @@ func (m *UI) FullHelp() [][]key.Binding {
 }
 
 func (m *UI) currentModelSupportsImages() bool {
-	model := m.selectedAgentModel()
+	model := selectedAgentModel(m.com)
 	return model != nil && model.CatwalkCfg.SupportsImages
 }
 
@@ -2212,7 +2205,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 	appRect.Min.X += 1
 	appRect.Max.X -= 1
 
-	if slices.Contains([]uiState{uiOnboarding, uiInitialize, uiLanding}, m.state) {
+	if slices.Contains([]uiState{uiOnboarding, uiInitialize}, m.state) {
 		// extra padding on left and right for these states
 		appRect.Min.X += 1
 		appRect.Max.X -= 1
@@ -2239,29 +2232,6 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		mainRect := hdrRects[1]
 		uiLayout.header = headerRect
 		uiLayout.main = mainRect
-
-	case uiLanding:
-		// Layout
-		//
-		// header
-		// ------
-		// main
-		// ------
-		// editor
-		// ------
-		// help
-		hdrRects := layout.Vertical(layout.Len(landingHeaderHeight), layout.Fill(1)).Split(appRect)
-		headerRect := hdrRects[0]
-		remainingRect := hdrRects[1]
-		bodyRects := layout.Vertical(layout.Len(remainingRect.Dy()-editorHeight), layout.Fill(1)).Split(remainingRect)
-		mainRect := bodyRects[0]
-		editorRect := bodyRects[1]
-		// Remove extra padding from editor (but keep it for header and main)
-		editorRect.Min.X -= 1
-		editorRect.Max.X += 1
-		uiLayout.header = headerRect
-		uiLayout.main = mainRect
-		uiLayout.editor = editorRect
 
 	case uiChat:
 		// Layout
