@@ -417,6 +417,8 @@ func (c *Commands) defaultCommands() []*CommandItem {
 
 	commands = append(commands, NewCommandItem(c.com.Styles, "open_journal", "Open Journal", "", ActionOpenJournal{}))
 
+	commands = append(commands, NewCommandItem(c.com.Styles, "open_goal", "Open Goal", "", ActionOpenGoal{}))
+
 	if c.hasTodos || c.hasQueue {
 		var label string
 		switch {

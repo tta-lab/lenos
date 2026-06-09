@@ -45,6 +45,11 @@ type RuntimeOverrides struct {
 	ActiveTier SelectedModelType
 	// PairWith is the default external recipient for callers that support it.
 	PairWith string
+	// GoalText is the Markdown body for a goal file created at session start.
+	GoalText string
+	// GoalFile is the path to an external Markdown goal file whose body is
+	// copied into the managed goal file at session start.
+	GoalFile string
 }
 
 // ConfigStore is the single entry point for all config access. It owns the

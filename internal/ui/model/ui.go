@@ -116,6 +116,9 @@ type (
 		Content     string
 		Attachments []message.Attachment
 	}
+	runRuntimeMsg struct {
+		Content string
+	}
 
 	// closeDialogMsg is sent to close the current dialog.
 	closeDialogMsg struct{}
@@ -502,6 +505,20 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
+
+	case runRuntimeMsg:
+		if m.hasSession() && m.session != nil {
+			sessionID := m.session.ID
+			cmds = append(cmds, func() tea.Msg {
+				if err := m.com.Workspace.AgentRunRuntime(context.Background(), sessionID, msg.Content); err != nil {
+					return util.InfoMsg{
+						Type: util.InfoTypeError,
+						Msg:  fmt.Sprintf("Failed to run agent: %v", err),
+					}
+				}
+				return nil
+			})
+		}
 
 	case userCommandsLoadedMsg:
 		m.customCommands = msg.Commands
@@ -1132,6 +1149,37 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		} else {
 			cmds = append(cmds, m.openFile(journalPath))
 		}
+		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionOpenGoal:
+		if !m.hasSession() {
+			cmds = append(cmds, util.ReportWarn("No active session"))
+			m.dialog.CloseDialog(dialog.CommandsID)
+			break
+		}
+		goalPath := agent.GoalPath(m.com.Workspace.WorkingDir(), m.session.ID)
+		if _, err := os.Stat(goalPath); os.IsNotExist(err) {
+			createdAt := time.Now().Format(time.RFC3339)
+			if _, err := agent.CreateGoal(m.com.Workspace.WorkingDir(), m.session.ID, "", createdAt); err != nil {
+				cmds = append(cmds, util.ReportError(fmt.Errorf("failed to create goal: %w", err)))
+				m.dialog.CloseDialog(dialog.CommandsID)
+				break
+			}
+		}
+		// Open the goal file in the external editor for review/edit.
+		// After the editor returns, trigger agent execution with a
+		// runtime hint to re-read the updated goal.
+		cmds = append(cmds, tea.Sequence(
+			m.openFile(goalPath),
+			func() tea.Msg {
+				if m.isAgentBusy() {
+					return nil
+				}
+				if m.hasSession() && m.session != nil {
+					return runRuntimeMsg{Content: agent.GoalUpdateHint()}
+				}
+				return nil
+			},
+		))
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionTogglePills:
 		if cmd := m.togglePillsExpanded(); cmd != nil {

@@ -61,6 +61,32 @@ func tryEndTurn(ctx context.Context, deps loopDeps, msgs []fantasy.Message, emit
 		return msgs, false, nil
 	}
 
+	// Check goal status before allowing natural exit.
+	if deps.goalPath != "" {
+		status, err := ReadGoalStatus(deps.goalPath)
+		if err != nil {
+			slog.Warn("loop: read goal status", "path", deps.goalPath, "error", err)
+		}
+		if status != GoalComplete && status != GoalBlocked {
+			// Goal is still active — inject check hint and continue.
+			hint := goalCheckHint()
+			markStepFinished(ctx, deps, assistantMsg, message.FinishReasonToolUse)
+			msgs = append(msgs, assistantTextMessage(emit, assistantMsg.ReasoningContent()))
+			msgs = append(msgs, turnPromptMessage(turnPrompt{
+				Text:    hint,
+				Persist: true,
+				Role:    message.Runtime,
+			}))
+			if _, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
+				Role:  message.Runtime,
+				Parts: []message.ContentPart{message.TextContent{Text: hint}},
+			}); err != nil {
+				slog.Warn("loop: persist goal check hint", "error", err)
+			}
+			return msgs, false, nil
+		}
+	}
+
 	// No background completions, no queued prompts — truly end.
 	return msgs, true, nil
 }

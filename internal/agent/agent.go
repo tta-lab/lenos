@@ -76,6 +76,17 @@ type SessionAgentCall struct {
 	// for non-task sessions (reviewer, sub-agent, chat-only).
 	JournalPath string
 
+	// GoalPath is the absolute path to the per-session goal file. Empty when
+	// no goal is set for this session.
+	GoalPath string
+
+	// GoalStartupHint indicates the goal startup runtime hint should be
+	// injected on this turn. Set when a goal file is newly created (CLI
+	// --goal/--goal-file) or opened/edited (TUI "Open Goal"). The hint is
+	// idempotent and only fires once at the first turn where the goal
+	// becomes active; ordinary user messages do not set this.
+	GoalStartupHint bool
+
 	// MarkCompactBoundary marks the assistant response from this call as a
 	// compaction boundary. After this turn, only messages after the boundary
 	// are loaded into the context window, giving the agent a fresh start.

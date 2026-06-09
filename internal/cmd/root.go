@@ -285,6 +285,12 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 		store.Overrides().NoSandbox = true
 	}
 
+	// Store goal overrides from CLI flags.
+	goalText, _ := cmd.Flags().GetString("goal")
+	goalFile, _ := cmd.Flags().GetString("goal-file")
+	store.Overrides().GoalText = strings.TrimSpace(goalText)
+	store.Overrides().GoalFile = strings.TrimSpace(goalFile)
+
 	// Re-run SetupAgents now that overrides are set.
 	store.SetupAgents()
 

@@ -2,10 +2,12 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
@@ -72,7 +74,7 @@ func agentNameOr(name string) string {
 // buildCall assembles the per-turn SessionAgentCall with sandbox env, allowed
 // paths, and provider options. Extracted so the OAuth/API-key refresh path
 // can rebuild a call with fresh credentials without duplicating wiring.
-func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, providerCfg config.ProviderConfig, cfg *config.ConfigStore) SessionAgentCall {
+func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, providerCfg config.ProviderConfig, cfg *config.ConfigStore) (SessionAgentCall, error) {
 	sandboxEnv := make(map[string]string, len(os.Environ()))
 	for _, e := range os.Environ() {
 		if idx := strings.IndexByte(e, '='); idx >= 0 {
@@ -106,6 +108,41 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 		}
 	}
 
+	// Create goal file when goal text or goal file is provided.
+	var goalPath string
+	if cfg.Overrides().GoalText != "" || cfg.Overrides().GoalFile != "" {
+		var body string
+		createdAt := time.Now().Format(time.RFC3339)
+		if cfg.Overrides().GoalText != "" {
+			body = cfg.Overrides().GoalText
+		} else {
+			data, err := os.ReadFile(cfg.Overrides().GoalFile)
+			if err != nil {
+				return SessionAgentCall{}, fmt.Errorf("failed to read goal file %s: %w", cfg.Overrides().GoalFile, err)
+			}
+			body = string(data)
+			// Strip existing frontmatter from the source file; the managed
+			// file gets its own normalized frontmatter.
+			body = stripYAMLFrontmatter(body)
+		}
+		if body != "" {
+			path, err := CreateGoal(cwd, sessionID, body, createdAt)
+			if err != nil {
+				return SessionAgentCall{}, fmt.Errorf("failed to create goal file: %w", err)
+			}
+			goalPath = path
+			sandboxEnv["LENOS_GOAL"] = goalPath
+		}
+	}
+	// Auto-detect an existing goal file on disk (created e.g. via TUI "Open Goal").
+	if goalPath == "" {
+		diskPath := GoalPath(cwd, sessionID)
+		if _, err := os.Stat(diskPath); err == nil {
+			goalPath = diskPath
+			sandboxEnv["LENOS_GOAL"] = goalPath
+		}
+	}
+
 	dataDir := filepath.Join(cwd, cfg.Config().Options.DataDirectory)
 	return SessionAgentCall{
 		SessionID:       sessionID,
@@ -119,7 +156,9 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 		TaskID:          taskwarrior.ResolveTaskID(cwd),
 		ContextCommands: buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
 		JournalPath:     journalPath,
+		GoalPath:        goalPath,
+		GoalStartupHint: goalPath != "" && (cfg.Overrides().GoalText != "" || cfg.Overrides().GoalFile != ""),
 		BashOutput:      cfg.Config().Options.BashOutput,
 		DataDir:         dataDir,
-	}
+	}, nil
 }

@@ -35,6 +35,7 @@ type Coordinator interface {
 	// INFO: (kujtim) this is not used yet we will use this when we have multiple agents
 	// SetMainAgent(string)
 	Run(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error
+	RunRuntime(ctx context.Context, sessionID, prompt string) error
 	Cancel(sessionID string)
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
@@ -175,7 +176,10 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return err
 	}
 
-	call := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg)
+	call, err := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg)
+	if err != nil {
+		return fmt.Errorf("build call: %w", err)
+	}
 
 	if c.titleMgr != nil {
 		c.titleMgr.StartWorking()
@@ -207,7 +211,11 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		if !ok {
 			return fmt.Errorf("provider %s not found after refresh", model.ModelCfg.Provider)
 		}
-		call = buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg, c.cfg)
+		var buildErr error
+		call, buildErr = buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg, c.cfg)
+		if buildErr != nil {
+			return fmt.Errorf("build call: %w", buildErr)
+		}
 		if c.titleMgr != nil {
 			c.titleMgr.StartWorking()
 			defer c.titleMgr.StopWorking()
@@ -218,6 +226,31 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return nil
 	}
 	return fmt.Errorf("agent.Run: %w", runErr)
+}
+
+func (c *coordinator) RunRuntime(ctx context.Context, sessionID, prompt string) error {
+	if err := c.readyWg.Wait(); err != nil {
+		return err
+	}
+
+	model := c.currentAgent.Model()
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+	if !ok {
+		return errModelProviderNotConfigured
+	}
+
+	call, err := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg)
+	if err != nil {
+		return fmt.Errorf("build call: %w", err)
+	}
+	call.runtimePrompt = true
+	call.GoalStartupHint = true
+
+	if c.titleMgr != nil {
+		c.titleMgr.StartWorking()
+		defer c.titleMgr.StopWorking()
+	}
+	return c.currentAgent.Run(ctx, call)
 }
 
 func (c *coordinator) Cancel(sessionID string) {
@@ -319,7 +352,10 @@ func (c *coordinator) CompactSession(ctx context.Context, sessionID string) erro
 	if !ok {
 		return errModelProviderNotConfigured
 	}
-	call := buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg, c.cfg)
+	call, err := buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg, c.cfg)
+	if err != nil {
+		return err
+	}
 	call.runtimePrompt = true
 	call.MarkCompactBoundary = true
 	return c.currentAgent.CompactSession(ctx, call)

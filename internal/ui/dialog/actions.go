@@ -54,6 +54,7 @@ type (
 	ActionToggleTransparentBackground struct{}
 	ActionInitializeProject           struct{}
 	ActionOpenJournal                 struct{}
+	ActionOpenGoal                    struct{}
 	ActionKillBackgroundJob           struct {
 		SessionID string
 		JobID     string
