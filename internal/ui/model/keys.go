@@ -21,10 +21,11 @@ type KeyMap struct {
 		// History navigation
 		HistoryPrev key.Binding
 		HistoryNext key.Binding
+
+		ClearInput key.Binding
 	}
 
 	Chat struct {
-		NewSession     key.Binding
 		AddAttachment  key.Binding
 		Cancel         key.Binding
 		Tab            key.Binding
@@ -149,11 +150,11 @@ func DefaultKeyMap() KeyMap {
 	km.Editor.HistoryNext = key.NewBinding(
 		key.WithKeys("down"),
 	)
-
-	km.Chat.NewSession = key.NewBinding(
-		key.WithKeys("ctrl+n"),
-		key.WithHelp("ctrl+n", "new session"),
+	km.Editor.ClearInput = key.NewBinding(
+		key.WithKeys("ctrl+u"),
+		key.WithHelp("ctrl+u", "clear input"),
 	)
+
 	km.Chat.AddAttachment = key.NewBinding(
 		key.WithKeys("ctrl+f"),
 		key.WithHelp("ctrl+f", "add attachment"),
