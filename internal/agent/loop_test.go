@@ -3,10 +3,13 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"iter"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -493,6 +496,8 @@ func TestRunLoop_ContextCancelMidExec(t *testing.T) {
 	}}
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
+	trajectoryPath := filepath.Join(t.TempDir(), "trajectory.json")
+	deps.trajectoryRecorder = NewTrajectoryRecorder(trajectoryPath, deps.sessionID, deps.model)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -506,6 +511,18 @@ func TestRunLoop_ContextCancelMidExec(t *testing.T) {
 		cc := m.CommandContent()
 		assert.False(t, cc.Pending, "pending row left behind: %+v", cc)
 	}
+
+	data, readErr := os.ReadFile(trajectoryPath)
+	require.NoError(t, readErr)
+	var trajectory map[string]any
+	require.NoError(t, json.Unmarshal(data, &trajectory))
+	steps := trajectory["steps"].([]any)
+	agentStep := steps[len(steps)-1].(map[string]any)
+	results := agentStep["observation"].(map[string]any)["results"].([]any)
+	result := results[0].(map[string]any)
+	require.Equal(t, "canceled before result", result["content"])
+	require.Equal(t, "sleep 5", result["extra"].(map[string]any)["command"])
+	require.Equal(t, float64(-1), result["extra"].(map[string]any)["exit_code"])
 }
 
 func TestRunLoop_ExecPersistsResultRow(t *testing.T) {

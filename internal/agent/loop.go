@@ -264,6 +264,9 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		}
 		if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 			abandonPending(ctx, deps.messages, &resultMsg)
+			if err := deps.trajectoryRecorder.AttachRunObservation(ctx, resultMsg.CommandContent(), res.Duration, false, ""); err != nil {
+				slog.Warn("trajectory: record canceled observation", "error", err)
+			}
 			return stopCanceled, ctx.Err()
 		}
 		exitCode := res.ExitCode

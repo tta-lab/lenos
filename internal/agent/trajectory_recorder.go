@@ -63,6 +63,7 @@ func (r *TrajectoryRecorder) UserMessage(ctx context.Context, text string) error
 	defer r.mu.Unlock()
 
 	r.traj.Steps = append(r.traj.Steps, atif.Step{
+		StepID:  r.nextStepIDLocked(),
 		Source:  "user",
 		Message: text,
 	})
@@ -87,6 +88,7 @@ func (r *TrajectoryRecorder) RuntimePrompt(ctx context.Context, text string, ext
 		extra["name"] = "lenos_runtime"
 	}
 	r.traj.Steps = append(r.traj.Steps, atif.Step{
+		StepID:  r.nextStepIDLocked(),
 		Source:  "system",
 		Message: text,
 		Extra:   extra,
@@ -104,6 +106,7 @@ func (r *TrajectoryRecorder) AgentStep(ctx context.Context, msg message.Message,
 
 	metrics := metricsFromUsage(usage, costUSD)
 	r.traj.Steps = append(r.traj.Steps, atif.Step{
+		StepID:           r.nextStepIDLocked(),
 		Source:           "agent",
 		Message:          msg.Content().String(),
 		ReasoningContent: msg.ReasoningContent().String(),
@@ -193,6 +196,10 @@ func metricsFromUsage(usage fantasy.Usage, costUSD float64) atif.Metrics {
 			"raw_input_tokens":      usage.InputTokens,
 		},
 	}
+}
+
+func (r *TrajectoryRecorder) nextStepIDLocked() int {
+	return len(r.traj.Steps) + 1
 }
 
 func (r *TrajectoryRecorder) checkpointLocked() error {

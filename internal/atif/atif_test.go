@@ -22,6 +22,7 @@ func TestTrajectoryJSONFields(t *testing.T) {
 		},
 		Steps: []Step{
 			{
+				StepID:           1,
 				Source:           "agent",
 				Message:          "hello",
 				ReasoningContent: "thinking",
@@ -73,6 +74,7 @@ func TestTrajectoryJSONFields(t *testing.T) {
 		},
 		"steps": [
 			{
+				"step_id": 1,
 				"source": "agent",
 				"message": "hello",
 				"reasoning_content": "thinking",

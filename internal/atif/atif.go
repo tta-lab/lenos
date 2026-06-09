@@ -20,6 +20,7 @@ type Agent struct {
 }
 
 type Step struct {
+	StepID           int            `json:"step_id"`
 	Source           string         `json:"source,omitempty"`
 	Message          string         `json:"message,omitempty"`
 	ReasoningContent string         `json:"reasoning_content,omitempty"`
