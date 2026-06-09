@@ -474,6 +474,26 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 		}
 	}
 	c.Options.InitializeAs = cmp.Or(c.Options.InitializeAs, defaultInitializeAs)
+
+	if c.Options.BashOutput == nil {
+		c.Options.BashOutput = &BashOutputConfig{
+			MaxLines: 2000,
+			MaxBytes: 51200,
+		}
+	}
+	if c.Options.BashOutput.MaxLines == 0 {
+		c.Options.BashOutput.MaxLines = 2000
+	}
+	if c.Options.BashOutput.MaxBytes == 0 {
+		c.Options.BashOutput.MaxBytes = 51200
+	}
+	// Guardrail: reject tiny values.
+	if c.Options.BashOutput.MaxLines < 20 {
+		c.Options.BashOutput.MaxLines = 20
+	}
+	if c.Options.BashOutput.MaxBytes < 1024 {
+		c.Options.BashOutput.MaxBytes = 1024
+	}
 }
 
 func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (largeModel SelectedModel, smallModel SelectedModel, err error) {

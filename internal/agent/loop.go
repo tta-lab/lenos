@@ -11,6 +11,7 @@ import (
 	"charm.land/fantasy"
 
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
+	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 )
 
@@ -38,6 +39,8 @@ type loopDeps struct {
 	onUsage      func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 	postStepHook func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 	bgRunner     *BackgroundRunner
+	bashOutput   *config.BashOutputConfig
+	dataDir      string
 }
 
 // stopReason explains why runLoop returned.
@@ -252,10 +255,13 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		}
 		exitCode := res.ExitCode
 		stderr := string(res.Stderr)
+		stdout := string(res.Stdout)
 		if res.Err != nil && len(res.Stdout) == 0 && stderr == "" {
 			stderr = res.Err.Error()
 		}
-		envelope := formatResultForModel(bashCmd, string(res.Stdout), stderr, res.ExitCode)
+		bounded := boundOutput(res.Stdout, deps.bashOutput, deps.dataDir)
+		stdout = bounded.Preview
+		envelope := formatResultForModel(bashCmd, stdout, stderr, res.ExitCode)
 		body := lenosbash.ResultBody(envelope)
 		resultMsg.Parts = []message.ContentPart{message.CommandContent{
 			Command:  bashCmd,

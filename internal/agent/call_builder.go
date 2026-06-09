@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
@@ -105,6 +106,7 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 		}
 	}
 
+	dataDir := filepath.Join(cwd, cfg.Config().Options.DataDirectory)
 	return SessionAgentCall{
 		SessionID:       sessionID,
 		Prompt:          userPrompt,
@@ -117,5 +119,7 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 		TaskID:          taskwarrior.ResolveTaskID(cwd),
 		ContextCommands: buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
 		JournalPath:     journalPath,
+		BashOutput:      cfg.Config().Options.BashOutput,
+		DataDir:         dataDir,
 	}
 }
