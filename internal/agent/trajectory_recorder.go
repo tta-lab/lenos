@@ -254,11 +254,13 @@ func WriteTrajectoryFile(path string, traj atif.Trajectory) error {
 		return nil
 	}
 
-	data, err := json.Marshal(traj)
-	if err != nil {
+	var buf strings.Builder
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(traj); err != nil {
 		return fmt.Errorf("write trajectory: marshal: %w", err)
 	}
-	data = append(data, '\n')
+	data := []byte(buf.String())
 
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".trajectory-*.tmp")
