@@ -254,18 +254,19 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			return stopCanceled, ctx.Err()
 		}
 		exitCode := res.ExitCode
-		stderr := string(res.Stderr)
-		stdout := string(res.Stdout)
-		if res.Err != nil && len(res.Stdout) == 0 && stderr == "" {
-			stderr = res.Err.Error()
+		stderrStr := string(res.Stderr)
+		if res.Err != nil && len(res.Stdout) == 0 && stderrStr == "" {
+			stderrStr = res.Err.Error()
 		}
-		bounded := boundOutput(res.Stdout, deps.bashOutput, deps.dataDir)
-		stdout = bounded.Preview
-		envelope := formatResultForModel(bashCmd, stdout, stderr, res.ExitCode)
+		boundedStdout := boundOutput(res.Stdout, deps.bashOutput, deps.dataDir)
+		boundedStderr := boundOutput([]byte(stderrStr), deps.bashOutput, deps.dataDir)
+		stdout := boundedStdout.Preview
+		stderrPreview := boundedStderr.Preview
+		envelope := formatResultForModel(bashCmd, stdout, stderrPreview, res.ExitCode)
 		body := lenosbash.ResultBody(envelope)
 		resultMsg.Parts = []message.ContentPart{message.CommandContent{
 			Command:  bashCmd,
-			Output:   string(combine(res.Stdout, []byte(stderr))),
+			Output:   string(combine(res.Stdout, []byte(stderrStr))),
 			ExitCode: &exitCode, Pending: false,
 			Observation: body,
 		}}
@@ -291,7 +292,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			continue
 		}
 		obs := lenosbash.ResultBlock(body)
-		if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
+		if firstNotFound := scanFirstCmdNotFound(stderrStr); firstNotFound != "" {
 			rePrompt := rePromptCmdNotFound(firstNotFound)
 			obs = rePrompt + "\n\n" + obs
 			exitCode := 1

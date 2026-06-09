@@ -34,7 +34,7 @@ func TestBoundOutput_ExceedsLines(t *testing.T) {
 	// Build content with 10 lines.
 	var sb strings.Builder
 	for i := 0; i < 10; i++ {
-		sb.WriteString(fmt.Sprintf("line %d\n", i))
+		fmt.Fprintf(&sb, "line %d\n", i)
 	}
 
 	out := boundOutput([]byte(sb.String()), limits, dir)
@@ -106,7 +106,7 @@ func TestBuildTailBiasedPreview(t *testing.T) {
 	t.Parallel()
 	var sb strings.Builder
 	for i := 0; i < 20; i++ {
-		sb.WriteString(fmt.Sprintf("line %d\n", i))
+		fmt.Fprintf(&sb, "line %d\n", i)
 	}
 	content := []byte(sb.String())
 
@@ -116,4 +116,22 @@ func TestBuildTailBiasedPreview(t *testing.T) {
 	require.LessOrEqual(t, len(lines), 8) // 80% of 10 = 8
 	// Tail-biased should include later lines.
 	require.Contains(t, preview, "line 19")
+}
+
+func TestBoundOutput_StderrBounded(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	limits := &config.BashOutputConfig{MaxLines: 2, MaxBytes: 1000}
+
+	stderr := "error line 1\nerror line 2\nerror line 3\nerror line 4\nerror line 5\n"
+	out := boundOutput([]byte(stderr), limits, dir)
+
+	require.Contains(t, out.Preview, "...bash output truncated")
+	require.Contains(t, out.Preview, "Full output saved to:")
+	require.NotEmpty(t, out.FullPath)
+	require.FileExists(t, out.FullPath)
+
+	b, err := os.ReadFile(out.FullPath)
+	require.NoError(t, err)
+	require.Equal(t, stderr, string(b))
 }
