@@ -476,6 +476,7 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 		currentAgent: &stubAgent{modelName: "test-model"},
 	}
 	call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
+	require.NoError(t, err)
 
 	for _, allowed := range call.AllowedPaths {
 		assert.True(t, filepath.IsAbs(allowed.Path), "allowed path must be absolute: %q", allowed.Path)
@@ -511,6 +512,7 @@ func TestBuildCall_ReviewerContextExcludesCoderContext(t *testing.T) {
 		currentAgent: &stubAgent{modelName: "test-model"},
 	}
 	call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
+	require.NoError(t, err)
 
 	joined := strings.Join(commandTexts(call.ContextCommands), "\n")
 	assert.Contains(t, joined, "Inspect local review state.")
