@@ -101,6 +101,34 @@ func TestTrajectoryRecorderMarksInterrupted(t *testing.T) {
 	require.Equal(t, "signal", extra["interrupt_reason"])
 }
 
+func TestTrajectoryRecorderRecordsBackgroundCompletionAsSystemObservation(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "trajectory.json")
+	recorder := NewTrajectoryRecorder(path, "session-1", trajectoryTestModel())
+	require.NoError(t, recorder.RuntimePrompt(t.Context(), "background job completed (job_id: job-1)\n\nok\n", map[string]any{
+		"kind":   "background_job_completed",
+		"name":   "lenos_runtime",
+		"job_id": "job-1",
+	}))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(data, &got))
+	steps := got["steps"].([]any)
+	require.Len(t, steps, 1)
+
+	step := steps[0].(map[string]any)
+	require.Equal(t, "system", step["source"])
+	require.Equal(t, "Background job completed.", step["message"])
+	observation := step["observation"].(map[string]any)
+	results := observation["results"].([]any)
+	require.Contains(t, results[0].(map[string]any)["content"], "ok")
+	require.Equal(t, "job-1", results[0].(map[string]any)["extra"].(map[string]any)["job_id"])
+}
+
 func trajectoryTestModel() Model {
 	return Model{
 		ModelCfg: config.SelectedModel{

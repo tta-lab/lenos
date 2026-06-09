@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/tta-lab/lenos/internal/atif"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/version"
@@ -88,12 +87,27 @@ func (r *TrajectoryRecorder) RuntimePrompt(ctx context.Context, text string, ext
 	if _, ok := extra["name"]; !ok {
 		extra["name"] = "lenos_runtime"
 	}
-	r.traj.Steps = append(r.traj.Steps, atif.Step{
+	step := atif.Step{
 		StepID:  r.nextStepIDLocked(),
 		Source:  "system",
-		Message: text,
+		Message: cleanTrajectoryText(text),
 		Extra:   extra,
-	})
+	}
+	if kind, _ := extra["kind"].(string); isBackgroundRuntimeKind(kind) {
+		step.Message = backgroundRuntimeMessage(kind)
+		step.Observation = &atif.Observation{
+			Results: []atif.ObservationResult{{
+				Content: cleanTrajectoryText(text),
+				Extra: map[string]any{
+					"kind":       kind,
+					"tool":       "run",
+					"background": true,
+					"job_id":     extra["job_id"],
+				},
+			}},
+		}
+	}
+	r.traj.Steps = append(r.traj.Steps, step)
 	r.current = -1
 	return r.checkpointLocked()
 }
@@ -135,7 +149,7 @@ func (r *TrajectoryRecorder) AttachRunObservation(ctx context.Context, cmd messa
 	}
 	extra := map[string]any{
 		"tool":             "run",
-		"command":          ansi.Strip(cmd.Command),
+		"command":          cleanTrajectoryText(cmd.Command),
 		"pending":          cmd.Pending,
 		"background":       background,
 		"job_id":           nil,
@@ -150,7 +164,7 @@ func (r *TrajectoryRecorder) AttachRunObservation(ctx context.Context, cmd messa
 		extra["job_id"] = jobID
 	}
 	step.Observation.Results = append(step.Observation.Results, atif.ObservationResult{
-		Content: ansi.Strip(cmd.Observation),
+		Content: cleanTrajectoryText(cmd.Observation),
 		Extra:   extra,
 	})
 	return r.checkpointLocked()
@@ -308,14 +322,21 @@ func recordTrajectoryPrompt(ctx context.Context, recorder *TrajectoryRecorder, p
 }
 
 func runtimePromptExtra(text string) map[string]any {
-	if strings.Contains(text, "background job completed") {
+	if kind := backgroundKindFromText(text); kind != "" {
 		return map[string]any{
-			"kind":   "background_job_completed",
+			"kind":   kind,
 			"name":   "lenos_runtime",
 			"job_id": extractBackgroundJobID(text),
 		}
 	}
 	return nil
+}
+
+func backgroundRuntimeMessage(kind string) string {
+	if kind == "background_job_killed" {
+		return "Background job killed."
+	}
+	return "Background job completed."
 }
 
 func extractBackgroundJobID(text string) any {

@@ -112,14 +112,9 @@ func StepFromMessage(msg message.Message) (atif.Step, bool) {
 		}
 		kind := "result"
 		stepMessage := "Command result."
-		if strings.Contains(content, "background job completed") {
-			kind = "background_job_completed"
-			stepMessage = "Background job completed."
-			extra["background"] = true
-			extra["job_id"] = extractBackgroundJobID(content)
-		} else if strings.Contains(content, "background job killed") {
-			kind = "background_job_killed"
-			stepMessage = "Background job killed."
+		if backgroundKind := backgroundKindFromText(content); backgroundKind != "" {
+			kind = backgroundKind
+			stepMessage = backgroundRuntimeMessage(backgroundKind)
 			extra["background"] = true
 			extra["job_id"] = extractBackgroundJobID(content)
 		}
@@ -165,6 +160,21 @@ func isBackgroundCompletionStep(step atif.Step) bool {
 		return false
 	}
 	kind, _ := step.Extra["kind"].(string)
+	return isBackgroundRuntimeKind(kind)
+}
+
+func backgroundKindFromText(text string) string {
+	switch {
+	case strings.Contains(text, "background job completed"):
+		return "background_job_completed"
+	case strings.Contains(text, "background job killed"):
+		return "background_job_killed"
+	default:
+		return ""
+	}
+}
+
+func isBackgroundRuntimeKind(kind string) bool {
 	return kind == "background_job_completed" || kind == "background_job_killed"
 }
 
