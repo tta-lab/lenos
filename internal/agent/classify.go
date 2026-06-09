@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 
@@ -61,4 +62,22 @@ func bashSyntaxCheck(emit string) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// isHallucinatedToolJSON returns true when the entire emit (trimmed) is a
+// JSON object whose top-level keys include "function" or "tool". These are
+// model hallucinations of native tool-call instructions the runtime must
+// discard and retry.
+func isHallucinatedToolJSON(emit string) bool {
+	trimmed := strings.TrimSpace(emit)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return false
+	}
+	var top map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &top); err != nil {
+		return false
+	}
+	_, hasFunction := top["function"]
+	_, hasTool := top["tool"]
+	return hasFunction || hasTool
 }

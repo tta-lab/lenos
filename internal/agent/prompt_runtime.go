@@ -47,6 +47,17 @@ partial output captured. if the command needed more time, use bash native timeou
 or break it into smaller steps.`, secs))
 }
 
+// rePromptHallucinatedJSON is the observation after a hallucinated JSON
+// tool output. The agent emitted a raw JSON object with "function" or
+// "tool" keys instead of a run block or Markdown prose.
+func rePromptHallucinatedJSON(attempt int) string {
+	msg := "your last response was a raw JSON object with 'function' or 'tool' keys — this looks like a hallucinated tool call. Emit Markdown prose, a run block, or `exit` to end the turn."
+	if attempt > 1 {
+		msg += fmt.Sprintf(" (attempt %d/3)", attempt)
+	}
+	return lenosbash.RuntimeLine(msg)
+}
+
 // rePromptCmdNotFound is the next-observation text after `bash -c <emit>`
 // exited with 127 (command not found). Fires both for legit-missing-tool
 // scenarios (model expected a binary that is not installed) AND for

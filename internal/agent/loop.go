@@ -62,6 +62,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 	for _, prompt := range prompts {
 		msgs = append(msgs, turnPromptMessage(prompt))
 	}
+	var hallucinatedJSONCount int
 	for step := 0; step < StepCap; step++ {
 		assistantMsg, err := deps.messages.Create(ctx, deps.sessionID, message.CreateMessageParams{
 			Role:     message.Assistant,
@@ -84,6 +85,32 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		}
 		if deps.onUsage != nil {
 			deps.onUsage(step, usage, meta)
+		}
+		if isHallucinatedToolJSON(emit) {
+			hallucinatedJSONCount++
+			preview := emit
+			if len(preview) > 200 {
+				preview = preview[:200]
+			}
+			slog.Error("loop: hallucinated tool JSON detected, retrying",
+				"session", deps.sessionID,
+				"attempt", hallucinatedJSONCount,
+				"emit_preview", preview,
+			)
+			if hallucinatedJSONCount >= 3 {
+				return stopError, fmt.Errorf("hallucinated tool JSON retry limit exceeded (3 attempts)")
+			}
+			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
+			obs := rePromptHallucinatedJSON(hallucinatedJSONCount)
+			msgs = append(msgs,
+				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
+				fantasy.NewUserMessage(obs),
+			)
+			if obsErr := persistObservation(ctx, deps, obs); obsErr != nil {
+				slog.Warn("loop: persist hallucinated-json re-prompt", "error", obsErr)
+			}
+			msgs, _ = drainAndAppend(ctx, deps, msgs)
+			continue
 		}
 		parsed, diag := lenosbash.Parse(emit)
 		// Handle parse errors.

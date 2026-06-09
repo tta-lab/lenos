@@ -1512,17 +1512,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				m.historyReset()
 
 				return tea.Batch(m.sendMessage(value, attachments...), m.loadPromptHistory())
-			case key.Matches(msg, m.keyMap.Chat.NewSession):
-				if !m.hasSession() {
-					break
-				}
-				if m.isAgentBusy() {
-					cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before starting a new session..."))
-					break
-				}
-				if cmd := m.newSession(); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
 			case key.Matches(msg, m.keyMap.Tab):
 				if m.state != uiLanding {
 					m.setState(m.state, uiFocusMain)
@@ -1625,18 +1614,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				m.focus = uiFocusEditor
 				cmds = append(cmds, m.textarea.Focus())
 				m.chat.Blur()
-			case key.Matches(msg, m.keyMap.Chat.NewSession):
-				if !m.hasSession() {
-					break
-				}
-				if m.isAgentBusy() {
-					cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before starting a new session..."))
-					break
-				}
-				m.focus = uiFocusEditor
-				if cmd := m.newSession(); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
 			case key.Matches(msg, m.keyMap.Chat.Expand):
 				m.chat.ToggleExpandedSelectedItem()
 			case key.Matches(msg, m.keyMap.Chat.Up):
@@ -1919,6 +1896,7 @@ func (m *UI) ShortHelp() []key.Binding {
 		case uiFocusEditor:
 			binds = append(binds,
 				k.Editor.Newline,
+				k.Editor.ClearInput,
 			)
 		case uiFocusMain:
 			binds = append(binds,
@@ -1955,7 +1933,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 	help := k.Help
 	help.SetHelp("ctrl+g", "less")
 	hasAttachments := len(m.attachments.List()) > 0
-	hasSession := m.hasSession()
 	commands := k.Commands
 	if m.focus == uiFocusEditor && m.textarea.Value() == "" {
 		commands.SetHelp("/ or ctrl+p", "commands")
@@ -1993,9 +1970,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 			k.Models,
 			k.Sessions,
 		)
-		if hasSession {
-			mainBinds = append(mainBinds, k.Chat.NewSession)
-		}
 
 		binds = append(binds, mainBinds)
 
