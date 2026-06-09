@@ -114,6 +114,8 @@ runLoopReentry:
 		env:          call.Env,
 		paths:        call.AllowedPaths,
 		bgRunner:     bgRunner,
+		bashOutput:   call.BashOutput,
+		dataDir:      call.DataDir,
 		postStepHook: a.buildPostStepHook(call, primaryModel),
 		onUsage: func() func(int, fantasy.Usage, fantasy.ProviderMetadata) {
 			var autoCompactDone bool

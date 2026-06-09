@@ -80,6 +80,14 @@ type SessionAgentCall struct {
 	// compaction boundary. After this turn, only messages after the boundary
 	// are loaded into the context window, giving the agent a fresh start.
 	MarkCompactBoundary bool
+
+	// BashOutput configures output bounding for bash commands. Nil means
+	// no bounding (output is never truncated). When non-nil, MaxLines
+	// and MaxBytes are used to determine truncation.
+	BashOutput *config.BashOutputConfig
+
+	// DataDir is the absolute path to the Lenos data directory (e.g., .lenos).
+	DataDir string
 }
 
 type RuntimeContextCommand struct {

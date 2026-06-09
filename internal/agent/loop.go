@@ -11,6 +11,7 @@ import (
 	"charm.land/fantasy"
 
 	"github.com/tta-lab/lenos/internal/agent/lenosbash"
+	"github.com/tta-lab/lenos/internal/config"
 	"github.com/tta-lab/lenos/internal/message"
 )
 
@@ -38,6 +39,8 @@ type loopDeps struct {
 	onUsage      func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 	postStepHook func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
 	bgRunner     *BackgroundRunner
+	bashOutput   *config.BashOutputConfig
+	dataDir      string
 }
 
 // stopReason explains why runLoop returned.
@@ -251,15 +254,23 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			return stopCanceled, ctx.Err()
 		}
 		exitCode := res.ExitCode
-		stderr := string(res.Stderr)
-		if res.Err != nil && len(res.Stdout) == 0 && stderr == "" {
-			stderr = res.Err.Error()
+		stderrStr := string(res.Stderr)
+		if res.Err != nil && len(res.Stdout) == 0 && stderrStr == "" {
+			stderrStr = res.Err.Error()
 		}
-		envelope := formatResultForModel(bashCmd, string(res.Stdout), stderr, res.ExitCode)
+		boundedStdout := boundOutput(res.Stdout, deps.bashOutput, deps.dataDir)
+		boundedStderr := boundOutput([]byte(stderrStr), deps.bashOutput, deps.dataDir)
+		stdout := boundedStdout.Preview
+		stderrPreview := boundedStderr.Preview
+		envelope := formatResultForModel(bashCmd, stdout, stderrPreview, res.ExitCode)
 		body := lenosbash.ResultBody(envelope)
+		outputStr := string(combine(res.Stdout, []byte(stderrStr)))
+		if boundedStdout.FullPath != "" || boundedStderr.FullPath != "" {
+			outputStr = body
+		}
 		resultMsg.Parts = []message.ContentPart{message.CommandContent{
 			Command:  bashCmd,
-			Output:   string(combine(res.Stdout, []byte(stderr))),
+			Output:   outputStr,
 			ExitCode: &exitCode, Pending: false,
 			Observation: body,
 		}}
@@ -285,7 +296,7 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			continue
 		}
 		obs := lenosbash.ResultBlock(body)
-		if firstNotFound := scanFirstCmdNotFound(stderr); firstNotFound != "" {
+		if firstNotFound := scanFirstCmdNotFound(stderrStr); firstNotFound != "" {
 			rePrompt := rePromptCmdNotFound(firstNotFound)
 			obs = rePrompt + "\n\n" + obs
 			exitCode := 1
