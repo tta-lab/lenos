@@ -65,7 +65,8 @@ type coordinator struct {
 	systemPrompt string
 	readyWg      errgroup.Group
 
-	dataDir string
+	dataDir  string
+	titleMgr *titleManager
 }
 
 func NewCoordinator(
@@ -86,6 +87,12 @@ func NewCoordinator(
 		messages: messages,
 		notify:   notify,
 		dataDir:  absDataDir,
+	}
+
+	if shouldEnableTitle(c.cfg) {
+		agentName := agentNameOr(c.cfg.Overrides().AgentName)
+		c.titleMgr = newTitleManager(agentName)
+		tmuxRenameWindow(agentName)
 	}
 
 	large, small, err := buildAgentModels(ctx, false, c.cfg)
@@ -170,6 +177,10 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 
 	call := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg)
 
+	if c.titleMgr != nil {
+		c.titleMgr.StartWorking()
+		defer c.titleMgr.StopWorking()
+	}
 	runErr := c.currentAgent.Run(ctx, call)
 	if runErr == nil {
 		return nil
@@ -197,6 +208,10 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 			return fmt.Errorf("provider %s not found after refresh", model.ModelCfg.Provider)
 		}
 		call = buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg, c.cfg)
+		if c.titleMgr != nil {
+			c.titleMgr.StartWorking()
+			defer c.titleMgr.StopWorking()
+		}
 		if runErr := c.currentAgent.Run(ctx, call); runErr != nil {
 			return fmt.Errorf("agent.Run after refresh: %w", runErr)
 		}
