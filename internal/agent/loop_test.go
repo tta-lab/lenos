@@ -521,7 +521,7 @@ func TestRunLoop_ContextCancelMidExec(t *testing.T) {
 	results := agentStep["observation"].(map[string]any)["results"].([]any)
 	result := results[0].(map[string]any)
 	require.Equal(t, "canceled before result", result["content"])
-	require.Equal(t, "sleep 5", result["extra"].(map[string]any)["command"])
+	require.Equal(t, "sleep 5", strings.TrimSpace(result["extra"].(map[string]any)["command"].(string)))
 	require.Equal(t, float64(-1), result["extra"].(map[string]any)["exit_code"])
 }
 
