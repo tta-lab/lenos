@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/tta-lab/lenos/internal/config"
 )
-
-var bashOutputCounter atomic.Int64
 
 // bashOutputDir returns the managed output directory for bounded bash output.
 func bashOutputDir(dataDir string) string {
@@ -49,16 +46,22 @@ func boundOutput(stdout []byte, limits *config.BashOutputConfig, dataDir string)
 		return boundedOutput{Preview: string(stdout)}
 	}
 
-	// Save full output.
+	// Save full output using a temp file for atomic, collision-free naming.
 	dir := bashOutputDir(dataDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return boundedOutput{Preview: string(stdout) + fmt.Sprintf("\n\nFailed to save full output: %v", err)}
 	}
 
-	id := bashOutputCounter.Add(1)
-	filename := fmt.Sprintf("bash_%d.log", id)
-	fullPath := filepath.Join(dir, filename)
-	if err := os.WriteFile(fullPath, stdout, 0o644); err != nil {
+	f, err := os.CreateTemp(dir, "bash_*.log")
+	if err != nil {
+		return boundedOutput{Preview: string(stdout) + fmt.Sprintf("\n\nFailed to save full output: %v", err)}
+	}
+	fullPath := f.Name()
+	if _, err := f.Write(stdout); err != nil {
+		f.Close()
+		return boundedOutput{Preview: string(stdout) + fmt.Sprintf("\n\nFailed to save full output: %v", err)}
+	}
+	if err := f.Close(); err != nil {
 		return boundedOutput{Preview: string(stdout) + fmt.Sprintf("\n\nFailed to save full output: %v", err)}
 	}
 
