@@ -56,6 +56,9 @@ func tryEndTurn(ctx context.Context, deps loopDeps, msgs []fantasy.Message, emit
 					slog.Warn("loop: persist continue prompt", "error", err)
 				}
 			}
+			if err := recordTrajectoryPrompt(ctx, deps.trajectoryRecorder, p); err != nil {
+				slog.Warn("trajectory: record continue prompt", "error", err)
+			}
 			msgs = append(msgs, turnPromptMessage(p))
 		}
 		return msgs, false, nil
@@ -82,6 +85,13 @@ func tryEndTurn(ctx context.Context, deps loopDeps, msgs []fantasy.Message, emit
 				Parts: []message.ContentPart{message.TextContent{Text: hint}},
 			}); err != nil {
 				slog.Warn("loop: persist goal check hint", "error", err)
+			}
+			if err := recordTrajectoryPrompt(ctx, deps.trajectoryRecorder, turnPrompt{
+				Text:    hint,
+				Persist: true,
+				Role:    message.Runtime,
+			}); err != nil {
+				slog.Warn("trajectory: record goal check hint", "error", err)
 			}
 			return msgs, false, nil
 		}
@@ -121,6 +131,9 @@ func drainAndAppend(ctx context.Context, deps loopDeps, msgs []fantasy.Message) 
 			}); err != nil {
 				slog.Warn("loop: persist drained prompt", "error", err)
 			}
+		}
+		if err := recordTrajectoryPrompt(ctx, deps.trajectoryRecorder, prompt); err != nil {
+			slog.Warn("trajectory: record drained prompt", "error", err)
 		}
 		msgs = append(msgs, turnPromptMessage(prompt))
 	}
