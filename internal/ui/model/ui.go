@@ -116,6 +116,9 @@ type (
 		Content     string
 		Attachments []message.Attachment
 	}
+	runRuntimeMsg struct {
+		Content string
+	}
 
 	// closeDialogMsg is sent to close the current dialog.
 	closeDialogMsg struct{}
@@ -502,6 +505,20 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
+
+	case runRuntimeMsg:
+		if m.hasSession() && m.session != nil {
+			sessionID := m.session.ID
+			cmds = append(cmds, func() tea.Msg {
+				if err := m.com.Workspace.AgentRunRuntime(context.Background(), sessionID, msg.Content); err != nil {
+					return util.InfoMsg{
+						Type: util.InfoTypeError,
+						Msg:  fmt.Sprintf("Failed to run agent: %v", err),
+					}
+				}
+				return nil
+			})
+		}
 
 	case userCommandsLoadedMsg:
 		m.customCommands = msg.Commands
@@ -1158,10 +1175,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 					return nil
 				}
 				if m.hasSession() && m.session != nil {
-					return sendMessageMsg{
-						Content: "Goal file saved. Re-read the goal and adjust your task.\n\n" +
-							agent.GoalUpdateHint(),
-					}
+					return runRuntimeMsg{Content: agent.GoalUpdateHint()}
 				}
 				return nil
 			},

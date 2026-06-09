@@ -34,6 +34,7 @@ func (c *runTestCoordinator) Run(ctx context.Context, _ string, _ string, _ ...m
 	}
 	return c.err
 }
+func (c *runTestCoordinator) RunRuntime(_ context.Context, _ string, _ string) error { return c.err }
 
 func (c *runTestCoordinator) Cancel(string)                                           {}
 func (c *runTestCoordinator) CancelAll()                                              {}
