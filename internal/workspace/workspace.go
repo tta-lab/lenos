@@ -45,6 +45,7 @@ type Workspace interface {
 	// Agent
 	AgentRun(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error
 	AgentRunRuntime(ctx context.Context, sessionID, prompt string) error
+	AgentPrefillContext(ctx context.Context, sessionID string) error
 	AgentCancel(sessionID string)
 	AgentIsBusy() bool
 	AgentIsSessionBusy(sessionID string) bool

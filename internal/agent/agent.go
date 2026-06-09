@@ -114,6 +114,7 @@ type turnPrompt struct {
 
 type SessionAgent interface {
 	Run(context.Context, SessionAgentCall) error
+	PrefillContext(context.Context, SessionAgentCall) error
 	SetModels(large Model, small Model, primary Model)
 	SetSystemPrompt(systemPrompt string)
 	Cancel(sessionID string)

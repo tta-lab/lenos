@@ -36,6 +36,7 @@ type Coordinator interface {
 	// SetMainAgent(string)
 	Run(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error
 	RunRuntime(ctx context.Context, sessionID, prompt string) error
+	PrefillContext(ctx context.Context, sessionID string) error
 	Cancel(sessionID string)
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
@@ -251,6 +252,24 @@ func (c *coordinator) RunRuntime(ctx context.Context, sessionID, prompt string) 
 		defer c.titleMgr.StopWorking()
 	}
 	return c.currentAgent.Run(ctx, call)
+}
+
+func (c *coordinator) PrefillContext(ctx context.Context, sessionID string) error {
+	if err := c.readyWg.Wait(); err != nil {
+		return err
+	}
+
+	model := c.currentAgent.Model()
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+	if !ok {
+		return errModelProviderNotConfigured
+	}
+
+	call, err := buildCall(ctx, sessionID, "context prefill", model, providerCfg, c.cfg)
+	if err != nil {
+		return fmt.Errorf("build call: %w", err)
+	}
+	return c.currentAgent.PrefillContext(ctx, call)
 }
 
 func (c *coordinator) Cancel(sessionID string) {

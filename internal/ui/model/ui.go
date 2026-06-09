@@ -383,21 +383,35 @@ func (m *UI) Init() tea.Cmd {
 func (m *UI) loadInitialSession() tea.Cmd {
 	switch {
 	case m.state != uiLanding:
-		// Only load if we're in landing state (i.e., fully configured)
+		// Only load if we're in landing state (i.e., fully configured).
 		return nil
 	case m.initialSessionID != "":
 		return m.loadSession(m.initialSessionID)
 	case m.continueLastSession:
 		return func() tea.Msg {
 			sessions, err := m.com.Workspace.ListSessions(context.Background())
-			if err != nil || len(sessions) == 0 {
-				return nil
+			if err == nil && len(sessions) > 0 {
+				return m.loadSession(sessions[0].ID)()
 			}
-			return m.loadSession(sessions[0].ID)()
+			return m.createSessionMsg()
 		}
 	default:
-		return nil
+		return func() tea.Msg {
+			return m.createSessionMsg()
+		}
 	}
+}
+
+func (m *UI) createSessionMsg() tea.Msg {
+	ctx := context.Background()
+	newSession, err := m.com.Workspace.CreateSession(ctx, "New Session")
+	if err != nil {
+		return util.ReportError(err)
+	}
+	if err := m.com.Workspace.AgentPrefillContext(ctx, newSession.ID); err != nil {
+		return util.ReportError(err)
+	}
+	return loadSessionMsg{session: &newSession}
 }
 
 // waitAndTrigger waits for the agent to be ready and then sends the trigger message.
@@ -2554,14 +2568,12 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 
 	var cmds []tea.Cmd
 	if !m.hasSession() {
-		newSession, err := m.com.Workspace.CreateSession(context.Background(), "New Session")
-		if err != nil {
-			return util.ReportError(err)
+		msg := m.createSessionMsg()
+		if info, ok := msg.(util.InfoMsg); ok {
+			return util.CmdHandler(info)
 		}
-		if newSession.ID != "" {
-			m.session = &newSession
-			cmds = append(cmds, m.loadSession(newSession.ID))
-		}
+		loadMsg := msg.(loadSessionMsg)
+		m.session = loadMsg.session
 		m.setState(uiChat, m.focus)
 	}
 
@@ -2808,18 +2820,12 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 	}
 }
 
-// newSession clears the current session state and prepares for a new session.
-// The actual session creation happens when the user sends their first message.
-// Returns a command to reload prompt history.
+// newSession clears the current session state and creates a fresh session.
 func (m *UI) newSession() tea.Cmd {
-	if !m.hasSession() {
-		return nil
-	}
-
 	m.session = nil
 	m.modifiedFiles = nil
 	m.sessionFileReads = nil
-	m.setState(uiLanding, uiFocusEditor)
+	m.setState(uiChat, uiFocusEditor)
 	m.textarea.Focus()
 	m.chat.Blur()
 	m.chat.ClearMessages()
@@ -2827,7 +2833,10 @@ func (m *UI) newSession() tea.Cmd {
 	m.promptQueue = 0
 	m.pillsView = ""
 	m.historyReset()
-	return m.loadPromptHistory()
+
+	return tea.Sequence(func() tea.Msg {
+		return m.createSessionMsg()
+	}, m.loadPromptHistory())
 }
 
 // handlePasteMsg handles a paste message.

@@ -2,10 +2,12 @@ package model
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/textarea"
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
@@ -210,7 +212,11 @@ type testWorkspace struct {
 	workingDir      string
 	modifiedFiles   []workspace.ModifiedFile
 	jobs            []agent.BackgroundJob
+	sessions        []session.Session
+	messages        map[string][]message.Message
 	runtimeMessages []message.Message
+	agentRuns       []string
+	contextPrefills []string
 	listModifiedFn  func() ([]workspace.ModifiedFile, error)
 }
 
@@ -252,6 +258,45 @@ func (w *testWorkspace) AgentActiveBackgroundJobs(string) []agent.BackgroundJob 
 	return w.jobs
 }
 
+func (w *testWorkspace) CreateSession(_ context.Context, title string) (session.Session, error) {
+	sess := session.Session{
+		ID:    fmt.Sprintf("session-%d", len(w.sessions)+1),
+		Title: title,
+	}
+	w.sessions = append([]session.Session{sess}, w.sessions...)
+	return sess, nil
+}
+
+func (w *testWorkspace) GetSession(_ context.Context, sessionID string) (session.Session, error) {
+	for _, sess := range w.sessions {
+		if sess.ID == sessionID {
+			return sess, nil
+		}
+	}
+	return session.Session{ID: sessionID, Title: "Session"}, nil
+}
+
+func (w *testWorkspace) ListSessions(context.Context) ([]session.Session, error) {
+	return w.sessions, nil
+}
+
+func (w *testWorkspace) ListMessages(_ context.Context, sessionID string) ([]message.Message, error) {
+	if w.messages == nil {
+		return nil, nil
+	}
+	return w.messages[sessionID], nil
+}
+
+func (w *testWorkspace) AgentRun(_ context.Context, sessionID, _ string, _ ...message.Attachment) error {
+	w.agentRuns = append(w.agentRuns, sessionID)
+	return nil
+}
+
+func (w *testWorkspace) AgentPrefillContext(_ context.Context, sessionID string) error {
+	w.contextPrefills = append(w.contextPrefills, sessionID)
+	return nil
+}
+
 func (w *testWorkspace) CreateRuntimeMessage(_ context.Context, sessionID, text string) (message.Message, error) {
 	msg := message.Message{
 		ID:        "runtime-message",
@@ -268,6 +313,76 @@ func (w *testWorkspace) SetActiveModel(modelType config.SelectedModelType, model
 		return
 	}
 	w.cfg.Models[modelType] = model
+}
+
+func TestLoadInitialSessionCreatesSessionWhenNoSessionSelected(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{}
+	tw := &testWorkspace{cfg: cfg}
+	ui := newTestUIWithConfig(t, cfg)
+	ui.com.Workspace = tw
+	ui.state = uiLanding
+
+	cmd := ui.loadInitialSession()
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	loadMsg, ok := msg.(loadSessionMsg)
+	require.True(t, ok)
+	require.NotNil(t, loadMsg.session)
+	require.Equal(t, "session-1", loadMsg.session.ID)
+	require.Len(t, tw.sessions, 1)
+}
+
+func TestLoadInitialSessionContinuesExistingSession(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{}
+	tw := &testWorkspace{
+		cfg:      cfg,
+		sessions: []session.Session{{ID: "session-existing", Title: "Existing"}},
+	}
+	ui := newTestUIWithConfig(t, cfg)
+	ui.com.Workspace = tw
+	ui.state = uiLanding
+	ui.continueLastSession = true
+
+	cmd := ui.loadInitialSession()
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	loadMsg, ok := msg.(loadSessionMsg)
+	require.True(t, ok)
+	require.NotNil(t, loadMsg.session)
+	require.Equal(t, "session-existing", loadMsg.session.ID)
+	require.Len(t, tw.sessions, 1)
+}
+
+func TestNewSessionCreatesSessionImmediately(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{}
+	tw := &testWorkspace{cfg: cfg}
+	ui := newTestUIWithConfig(t, cfg)
+	ui.com.Workspace = tw
+	ui.status = NewStatus(ui.com, ui)
+	ui.textarea = textarea.New()
+	ui.chat = NewChat(ui.com)
+	ui.session = &session.Session{ID: "session-old"}
+	ui.state = uiChat
+
+	cmd := ui.newSession()
+	require.NotNil(t, cmd)
+	require.Nil(t, ui.session)
+	require.Equal(t, uiChat, ui.state)
+
+	msg := ui.createSessionMsg()
+	loadMsg, ok := msg.(loadSessionMsg)
+	require.True(t, ok)
+	require.Equal(t, "session-1", loadMsg.session.ID)
+	require.Len(t, tw.sessions, 1)
+	require.Equal(t, []string{"session-1"}, tw.contextPrefills)
 }
 
 func TestActiveSessionID(t *testing.T) {

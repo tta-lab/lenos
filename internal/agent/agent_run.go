@@ -24,6 +24,33 @@ func resolveRunner(call SessionAgentCall, bg *BackgroundRunner) Runner {
 	return LocalRunner{bg: bg}
 }
 
+// PrefillContext persists synthetic runtime context for a fresh session.
+func (a *sessionAgent) PrefillContext(ctx context.Context, call SessionAgentCall) error {
+	if call.SessionID == "" {
+		return ErrSessionMissing
+	}
+	if a.IsSessionBusy(call.SessionID) {
+		return nil
+	}
+	currentSession, err := a.sessions.Get(ctx, call.SessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get session: %w", err)
+	}
+	msgs, err := a.getSessionMessages(ctx, currentSession)
+	if err != nil {
+		return fmt.Errorf("failed to get session messages: %w", err)
+	}
+	if len(msgs) > 0 || len(call.ContextCommands) == 0 {
+		return nil
+	}
+	if currentSession.SummaryMessageID != "" {
+		call.ContextCommands = appendCompactRuntimeContextCommand(call.ContextCommands)
+	}
+	bgRunner := a.getOrCreateBackgroundRunner(call)
+	defer a.cleanupBackgroundRunner(call.SessionID, bgRunner)
+	return a.persistRuntimeContextCommands(ctx, call, resolveRunner(call, bgRunner))
+}
+
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) error {
 runLoopReentry:
 	if call.Prompt == "" {
