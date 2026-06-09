@@ -175,7 +175,10 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return err
 	}
 
-	call := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg)
+	call, err := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg)
+	if err != nil {
+		return fmt.Errorf("build call: %w", err)
+	}
 
 	if c.titleMgr != nil {
 		c.titleMgr.StartWorking()
@@ -207,7 +210,11 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		if !ok {
 			return fmt.Errorf("provider %s not found after refresh", model.ModelCfg.Provider)
 		}
-		call = buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg, c.cfg)
+		var buildErr error
+		call, buildErr = buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg, c.cfg)
+		if buildErr != nil {
+			return fmt.Errorf("build call: %w", buildErr)
+		}
 		if c.titleMgr != nil {
 			c.titleMgr.StartWorking()
 			defer c.titleMgr.StopWorking()
@@ -319,7 +326,10 @@ func (c *coordinator) CompactSession(ctx context.Context, sessionID string) erro
 	if !ok {
 		return errModelProviderNotConfigured
 	}
-	call := buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg, c.cfg)
+	call, err := buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg, c.cfg)
+	if err != nil {
+		return err
+	}
 	call.runtimePrompt = true
 	call.MarkCompactBoundary = true
 	return c.currentAgent.CompactSession(ctx, call)

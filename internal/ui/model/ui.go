@@ -1148,7 +1148,20 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 				break
 			}
 		}
-		cmds = append(cmds, m.openFile(goalPath))
+		// Open the goal file in the external editor, then trigger agent
+		// execution so the goal startup hint fires and the exit gate engages.
+		cmds = append(cmds, tea.Sequence(
+			m.openFile(goalPath),
+			func() tea.Msg {
+				if m.isAgentBusy() {
+					return nil
+				}
+				if m.hasSession() && m.session != nil {
+					return sendMessageMsg{Content: "Goal file saved. Start or resume work."}
+				}
+				return nil
+			},
+		))
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionTogglePills:
 		if cmd := m.togglePillsExpanded(); cmd != nil {

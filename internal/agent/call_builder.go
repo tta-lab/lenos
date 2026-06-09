@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -73,7 +74,7 @@ func agentNameOr(name string) string {
 // buildCall assembles the per-turn SessionAgentCall with sandbox env, allowed
 // paths, and provider options. Extracted so the OAuth/API-key refresh path
 // can rebuild a call with fresh credentials without duplicating wiring.
-func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, providerCfg config.ProviderConfig, cfg *config.ConfigStore) SessionAgentCall {
+func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, providerCfg config.ProviderConfig, cfg *config.ConfigStore) (SessionAgentCall, error) {
 	sandboxEnv := make(map[string]string, len(os.Environ()))
 	for _, e := range os.Environ() {
 		if idx := strings.IndexByte(e, '='); idx >= 0 {
@@ -117,18 +118,20 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 		} else {
 			data, err := os.ReadFile(cfg.Overrides().GoalFile)
 			if err != nil {
-				slog.Warn("Failed to read goal file", "path", cfg.Overrides().GoalFile, "error", err)
-			} else {
-				body = string(data)
+				return SessionAgentCall{}, fmt.Errorf("failed to read goal file %s: %w", cfg.Overrides().GoalFile, err)
 			}
+			body = string(data)
+			// Strip existing frontmatter from the source file; the managed
+			// file gets its own normalized frontmatter.
+			body = stripYAMLFrontmatter(body)
 		}
 		if body != "" {
-			if path, err := CreateGoal(cwd, sessionID, body, createdAt); err != nil {
-				slog.Warn("Failed to create goal file", "error", err)
-			} else {
-				goalPath = path
-				sandboxEnv["LENOS_GOAL"] = goalPath
+			path, err := CreateGoal(cwd, sessionID, body, createdAt)
+			if err != nil {
+				return SessionAgentCall{}, fmt.Errorf("failed to create goal file: %w", err)
 			}
+			goalPath = path
+			sandboxEnv["LENOS_GOAL"] = goalPath
 		}
 	}
 	// Auto-detect an existing goal file on disk (created e.g. via TUI "Open Goal").
@@ -154,7 +157,8 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 		ContextCommands: buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
 		JournalPath:     journalPath,
 		GoalPath:        goalPath,
+		GoalStartupHint: goalPath != "" && (cfg.Overrides().GoalText != "" || cfg.Overrides().GoalFile != ""),
 		BashOutput:      cfg.Config().Options.BashOutput,
 		DataDir:         dataDir,
-	}
+	}, nil
 }

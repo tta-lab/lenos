@@ -83,8 +83,10 @@ runLoopReentry:
 			Role:    message.Runtime,
 		})
 	}
-	// Inject goal startup hint when a goal file is active.
-	if isNewSession && currentSession.SummaryMessageID == "" && call.GoalPath != "" {
+	// Inject goal startup hint on the turn where the goal is newly
+	// created or opened. Set by CLI --goal/--goal-file or TUI "Open Goal".
+	// Ordinary user messages do not trigger this hint.
+	if call.GoalStartupHint && call.GoalPath != "" {
 		turnPrompts = append(turnPrompts, turnPrompt{
 			Text:    goalStartupHint(),
 			Persist: true,
