@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
@@ -51,15 +52,16 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var (
-			quiet, _     = cmd.Flags().GetBool("quiet")
-			verbose, _   = cmd.Flags().GetBool("verbose")
-			sessionID, _ = cmd.Flags().GetString("session")
-			useLast, _   = cmd.Flags().GetBool("continue")
-			usageJSON, _ = cmd.Flags().GetString("usage-json")
+			quiet, _          = cmd.Flags().GetBool("quiet")
+			verbose, _        = cmd.Flags().GetBool("verbose")
+			sessionID, _      = cmd.Flags().GetString("session")
+			useLast, _        = cmd.Flags().GetBool("continue")
+			usageJSON, _      = cmd.Flags().GetString("usage-json")
+			trajectoryJSON, _ = cmd.Flags().GetString("trajectory-json")
 		)
 
 		// Cancel on SIGINT or SIGTERM.
-		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 
 		prompt := strings.Join(args, " ")
@@ -111,7 +113,7 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
 			slog.SetDefault(slog.New(log.New(os.Stderr)))
 		}
 
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, quiet || verbose, sessionID, useLast, usageJSON)
+		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, quiet || verbose, sessionID, useLast, usageJSON, trajectoryJSON)
 	},
 }
 
@@ -127,6 +129,7 @@ func init() {
 	runCmd.Flags().StringArrayP("context-file", "f", nil, "Extra context file to inject at startup (repeatable)")
 	runCmd.Flags().String("pair-with", "", "Default target for untargeted message blocks")
 	runCmd.Flags().String("usage-json", "", "Write final usage summary JSON to path")
+	runCmd.Flags().String("trajectory-json", "", "Write incremental ATIF trajectory JSON to path")
 	runCmd.Flags().Bool("readonly", false, "Enforce read-only filesystem access on the working directory via the temenos sandbox; agent cannot create or modify files in cwd.")
 	runCmd.Flags().Bool("no-sandbox", false, "Disable temenos sandbox isolation and run commands directly on the host.")
 	runCmd.Flags().String("goal", "", "Write a goal file with this Markdown body to gate session exit")

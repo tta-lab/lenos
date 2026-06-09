@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -96,6 +97,11 @@ runLoopReentry:
 	if err := a.persistVisibleTurnPrompts(ctx, call.SessionID, turnPrompts); err != nil {
 		return err
 	}
+	for _, prompt := range turnPrompts {
+		if err := recordTrajectoryPrompt(ctx, call.trajectoryRecorder, prompt); err != nil {
+			slog.Warn("trajectory: record prompt", "error", err)
+		}
+	}
 
 	var wg sync.WaitGroup
 	titleCtx := ctx
@@ -114,19 +120,23 @@ runLoopReentry:
 	a.eventPromptSent(call.SessionID)
 
 	deps := loopDeps{
-		model:        primaryModel,
-		provOpts:     call.ProviderOptions,
-		pairWith:     call.PairWith,
-		messages:     a.messages,
-		runner:       runner,
-		sessionID:    call.SessionID,
-		sysPrompt:    a.systemPrompt.Get(),
-		env:          call.Env,
-		paths:        call.AllowedPaths,
-		bgRunner:     bgRunner,
-		bashOutput:   call.BashOutput,
-		dataDir:      call.DataDir,
-		goalPath:     call.GoalPath,
+		model:              primaryModel,
+		provOpts:           call.ProviderOptions,
+		pairWith:           call.PairWith,
+		messages:           a.messages,
+		runner:             runner,
+		sessionID:          call.SessionID,
+		sysPrompt:          a.systemPrompt.Get(),
+		env:                call.Env,
+		paths:              call.AllowedPaths,
+		bgRunner:           bgRunner,
+		bashOutput:         call.BashOutput,
+		dataDir:            call.DataDir,
+		goalPath:           call.GoalPath,
+		trajectoryRecorder: call.trajectoryRecorder,
+		usageCost: func(u fantasy.Usage, m fantasy.ProviderMetadata) float64 {
+			return usageCost(primaryModel, u, a.openrouterCost(m))
+		},
 		postStepHook: a.buildPostStepHook(call, primaryModel),
 		onUsage: func() func(int, fantasy.Usage, fantasy.ProviderMetadata) {
 			var autoCompactDone bool
@@ -167,6 +177,11 @@ runLoopReentry:
 	_ = stop
 
 	if runErr != nil {
+		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, ErrRequestCancelled) {
+			if err := call.trajectoryRecorder.MarkInterrupted(ctx, "signal"); err != nil {
+				slog.Warn("trajectory: mark interrupted", "error", err)
+			}
+		}
 		// Release activeRequests before surfacing the error so
 		// IsSessionBusy returns false. Ported from upstream 9d346688.
 		cancel()
@@ -209,6 +224,10 @@ runLoopReentry:
 				slog.Warn("compact boundary: failed to save session", "session", call.SessionID, "error", err)
 			}
 		}
+	}
+
+	if err := call.trajectoryRecorder.Finish(ctx); err != nil {
+		slog.Warn("trajectory: finish", "error", err)
 	}
 
 	if newCall, ok := a.tryReenter(call, cancel); ok {

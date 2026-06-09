@@ -26,22 +26,24 @@ var ErrStepCap = errors.New("agent: step cap reached")
 
 // loopDeps wires the bash-first loop to its environment.
 type loopDeps struct {
-	model        Model
-	drainQueue   func() []turnPrompt
-	provOpts     fantasy.ProviderOptions
-	pairWith     string
-	messages     message.Service
-	runner       Runner
-	sessionID    string
-	sysPrompt    string
-	env          map[string]string
-	paths        []AllowedPath
-	onUsage      func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
-	postStepHook func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
-	bgRunner     *BackgroundRunner
-	bashOutput   *config.BashOutputConfig
-	dataDir      string
-	goalPath     string
+	model              Model
+	drainQueue         func() []turnPrompt
+	provOpts           fantasy.ProviderOptions
+	pairWith           string
+	messages           message.Service
+	runner             Runner
+	sessionID          string
+	sysPrompt          string
+	env                map[string]string
+	paths              []AllowedPath
+	onUsage            func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
+	usageCost          func(u fantasy.Usage, m fantasy.ProviderMetadata) float64
+	postStepHook       func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
+	trajectoryRecorder *TrajectoryRecorder
+	bgRunner           *BackgroundRunner
+	bashOutput         *config.BashOutputConfig
+	dataDir            string
+	goalPath           string
 }
 
 // stopReason explains why runLoop returned.
@@ -155,6 +157,13 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
+		stepCost := usageCost(deps.model, usage, nil)
+		if deps.usageCost != nil {
+			stepCost = deps.usageCost(usage, meta)
+		}
+		if err := deps.trajectoryRecorder.AgentStep(ctx, assistantMsg, usage, stepCost); err != nil {
+			slog.Warn("trajectory: record agent step", "error", err)
+		}
 		// Execute parsed run blocks: prose-only ends the turn,
 		// but wait for active background jobs first so their
 		// results are visible to the model before exit.
@@ -242,6 +251,9 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 				slog.Warn("loop: persist background job result row", "error", updateErr)
 			}
+			if err := deps.trajectoryRecorder.AttachRunObservation(ctx, resultMsg.CommandContent(), res.Duration, true, res.JobID); err != nil {
+				slog.Warn("trajectory: record background observation", "error", err)
+			}
 			markStepFinished(ctx, deps, &assistantMsg, message.FinishReasonToolUse)
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
@@ -289,6 +301,9 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 				slog.Warn("loop: persist timeout result row", "error", updateErr)
 			}
+			if err := deps.trajectoryRecorder.AttachRunObservation(ctx, resultMsg.CommandContent(), res.Duration, false, ""); err != nil {
+				slog.Warn("trajectory: record timeout observation", "error", err)
+			}
 			msgs = append(msgs,
 				assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 				fantasy.NewUserMessage(obs),
@@ -308,6 +323,9 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			if updateErr := deps.messages.Update(ctx, resultMsg); updateErr != nil {
 				slog.Warn("loop: persist cmd-not-found result row", "error", updateErr)
 			}
+		}
+		if err := deps.trajectoryRecorder.AttachRunObservation(ctx, resultMsg.CommandContent(), res.Duration, false, ""); err != nil {
+			slog.Warn("trajectory: record run observation", "error", err)
 		}
 		msgs = append(msgs,
 			assistantTextMessage(emit, assistantMsg.ReasoningContent()),

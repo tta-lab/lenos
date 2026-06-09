@@ -144,21 +144,27 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 	}
 
 	dataDir := filepath.Join(cwd, cfg.Config().Options.DataDirectory)
+	var trajectoryRecorder *TrajectoryRecorder
+	if path := TrajectoryPathFromContext(ctx); path != "" {
+		trajectoryRecorder = NewTrajectoryRecorder(path, sessionID, model)
+	}
+
 	return SessionAgentCall{
-		SessionID:       sessionID,
-		Prompt:          userPrompt,
-		usageSummary:    RunUsageSummaryFromContext(ctx),
-		ProviderOptions: getProviderOptions(model, providerCfg),
-		PairWith:        cfg.Overrides().PairWith,
-		Sandbox:         useSandbox,
-		Env:             sandboxEnv,
-		AllowedPaths:    BuildAllowedPaths(ctx, cwd, access),
-		TaskID:          taskwarrior.ResolveTaskID(cwd),
-		ContextCommands: buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
-		JournalPath:     journalPath,
-		GoalPath:        goalPath,
-		GoalStartupHint: goalPath != "" && (cfg.Overrides().GoalText != "" || cfg.Overrides().GoalFile != ""),
-		BashOutput:      cfg.Config().Options.BashOutput,
-		DataDir:         dataDir,
+		SessionID:          sessionID,
+		Prompt:             userPrompt,
+		usageSummary:       RunUsageSummaryFromContext(ctx),
+		trajectoryRecorder: trajectoryRecorder,
+		ProviderOptions:    getProviderOptions(model, providerCfg),
+		PairWith:           cfg.Overrides().PairWith,
+		Sandbox:            useSandbox,
+		Env:                sandboxEnv,
+		AllowedPaths:       BuildAllowedPaths(ctx, cwd, access),
+		TaskID:             taskwarrior.ResolveTaskID(cwd),
+		ContextCommands:    buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
+		JournalPath:        journalPath,
+		GoalPath:           goalPath,
+		GoalStartupHint:    goalPath != "" && (cfg.Overrides().GoalText != "" || cfg.Overrides().GoalFile != ""),
+		BashOutput:         cfg.Config().Options.BashOutput,
+		DataDir:            dataDir,
 	}, nil
 }
