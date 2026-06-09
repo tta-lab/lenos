@@ -69,9 +69,13 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 	boundedStderr := boundOutput([]byte(stderrStr), call.BashOutput, call.DataDir)
 	envelope := formatResultForModel(commandForBash, boundedStdout.Preview, boundedStderr.Preview, res.ExitCode)
 	body := lenosbash.ResultBody(envelope)
+	outputStr := string(combine(res.Stdout, stderrBytes))
+	if boundedStdout.FullPath != "" || boundedStderr.FullPath != "" {
+		outputStr = body
+	}
 	resultMsg.Parts = []message.ContentPart{message.CommandContent{
 		Command:     commandForBash,
-		Output:      string(combine(res.Stdout, stderrBytes)),
+		Output:      outputStr,
 		ExitCode:    &exitCode,
 		Pending:     false,
 		Observation: body,

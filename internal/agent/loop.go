@@ -264,9 +264,13 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 		stderrPreview := boundedStderr.Preview
 		envelope := formatResultForModel(bashCmd, stdout, stderrPreview, res.ExitCode)
 		body := lenosbash.ResultBody(envelope)
+		outputStr := string(combine(res.Stdout, []byte(stderrStr)))
+		if boundedStdout.FullPath != "" || boundedStderr.FullPath != "" {
+			outputStr = body
+		}
 		resultMsg.Parts = []message.ContentPart{message.CommandContent{
 			Command:  bashCmd,
-			Output:   string(combine(res.Stdout, []byte(stderrStr))),
+			Output:   outputStr,
 			ExitCode: &exitCode, Pending: false,
 			Observation: body,
 		}}
