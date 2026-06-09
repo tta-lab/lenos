@@ -417,6 +417,11 @@ func (c *Commands) defaultCommands() []*CommandItem {
 
 	commands = append(commands, NewCommandItem(c.com.Styles, "open_journal", "Open Journal", "", ActionOpenJournal{}))
 
+	// Add Open Goal command when there's an active session.
+	if c.hasSession {
+		commands = append(commands, NewCommandItem(c.com.Styles, "open_goal", "Open Goal", "", ActionOpenGoal{}))
+	}
+
 	if c.hasTodos || c.hasQueue {
 		var label string
 		switch {

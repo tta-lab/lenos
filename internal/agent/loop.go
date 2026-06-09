@@ -41,6 +41,7 @@ type loopDeps struct {
 	bgRunner     *BackgroundRunner
 	bashOutput   *config.BashOutputConfig
 	dataDir      string
+	goalPath     string
 }
 
 // stopReason explains why runLoop returned.

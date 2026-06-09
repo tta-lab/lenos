@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
@@ -106,6 +107,31 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 		}
 	}
 
+	// Create goal file when goal text or goal file is provided.
+	var goalPath string
+	if cfg.Overrides().GoalText != "" || cfg.Overrides().GoalFile != "" {
+		var body string
+		createdAt := time.Now().Format(time.RFC3339)
+		if cfg.Overrides().GoalText != "" {
+			body = cfg.Overrides().GoalText
+		} else {
+			data, err := os.ReadFile(cfg.Overrides().GoalFile)
+			if err != nil {
+				slog.Warn("Failed to read goal file", "path", cfg.Overrides().GoalFile, "error", err)
+			} else {
+				body = string(data)
+			}
+		}
+		if body != "" {
+			if path, err := CreateGoal(cwd, sessionID, body, createdAt); err != nil {
+				slog.Warn("Failed to create goal file", "error", err)
+			} else {
+				goalPath = path
+				sandboxEnv["LENOS_GOAL"] = goalPath
+			}
+		}
+	}
+
 	dataDir := filepath.Join(cwd, cfg.Config().Options.DataDirectory)
 	return SessionAgentCall{
 		SessionID:       sessionID,
@@ -119,6 +145,7 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 		TaskID:          taskwarrior.ResolveTaskID(cwd),
 		ContextCommands: buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
 		JournalPath:     journalPath,
+		GoalPath:        goalPath,
 		BashOutput:      cfg.Config().Options.BashOutput,
 		DataDir:         dataDir,
 	}

@@ -1133,6 +1133,23 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, m.openFile(journalPath))
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionOpenGoal:
+		if !m.hasSession() {
+			cmds = append(cmds, util.ReportWarn("No active session"))
+			m.dialog.CloseDialog(dialog.CommandsID)
+			break
+		}
+		goalPath := agent.GoalPath(m.com.Workspace.WorkingDir(), m.session.ID)
+		if _, err := os.Stat(goalPath); os.IsNotExist(err) {
+			createdAt := time.Now().Format(time.RFC3339)
+			if _, err := agent.CreateGoal(m.com.Workspace.WorkingDir(), m.session.ID, "", createdAt); err != nil {
+				cmds = append(cmds, util.ReportError(fmt.Errorf("failed to create goal: %w", err)))
+				m.dialog.CloseDialog(dialog.CommandsID)
+				break
+			}
+		}
+		cmds = append(cmds, m.openFile(goalPath))
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionTogglePills:
 		if cmd := m.togglePillsExpanded(); cmd != nil {
 			cmds = append(cmds, cmd)

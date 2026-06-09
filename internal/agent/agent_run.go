@@ -83,6 +83,14 @@ runLoopReentry:
 			Role:    message.Runtime,
 		})
 	}
+	// Inject goal startup hint when a goal file is active.
+	if isNewSession && currentSession.SummaryMessageID == "" && call.GoalPath != "" {
+		turnPrompts = append(turnPrompts, turnPrompt{
+			Text:    goalStartupHint(),
+			Persist: true,
+			Role:    message.Runtime,
+		})
+	}
 	if err := a.persistVisibleTurnPrompts(ctx, call.SessionID, turnPrompts); err != nil {
 		return err
 	}
@@ -116,6 +124,7 @@ runLoopReentry:
 		bgRunner:     bgRunner,
 		bashOutput:   call.BashOutput,
 		dataDir:      call.DataDir,
+		goalPath:     call.GoalPath,
 		postStepHook: a.buildPostStepHook(call, primaryModel),
 		onUsage: func() func(int, fantasy.Usage, fantasy.ProviderMetadata) {
 			var autoCompactDone bool

@@ -74,6 +74,13 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
 			return fmt.Errorf("no prompt provided")
 		}
 
+		// Reject goal flags when continuing an existing session.
+		goalText, _ := cmd.Flags().GetString("goal")
+		goalFile, _ := cmd.Flags().GetString("goal-file")
+		if (goalText != "" || goalFile != "") && (sessionID != "" || useLast) {
+			return fmt.Errorf("--goal and --goal-file cannot be used with --session or --continue; goals are session-start contracts")
+		}
+
 		event.SetNonInteractive(true)
 		event.AppInitialized()
 
@@ -122,5 +129,8 @@ func init() {
 	runCmd.Flags().String("usage-json", "", "Write final usage summary JSON to path")
 	runCmd.Flags().Bool("readonly", false, "Enforce read-only filesystem access on the working directory via the temenos sandbox; agent cannot create or modify files in cwd.")
 	runCmd.Flags().Bool("no-sandbox", false, "Disable temenos sandbox isolation and run commands directly on the host.")
+	runCmd.Flags().String("goal", "", "Write a goal file with this Markdown body to gate session exit")
+	runCmd.Flags().String("goal-file", "", "Copy the provided goal file into .lenos/goals/<session-id>.md to gate session exit")
 	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
+	runCmd.MarkFlagsMutuallyExclusive("goal", "goal-file")
 }
