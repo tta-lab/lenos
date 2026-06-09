@@ -123,9 +123,8 @@ func StepFromMessage(msg message.Message) (atif.Step, bool) {
 			Message: stepMessage,
 			Observation: &atif.Observation{
 				Results: []atif.ObservationResult{{
-					Content:      content,
-					SourceCallID: cleanCommand,
-					Extra:        extra,
+					Content: content,
+					Extra:   extra,
 				}},
 			},
 			Extra: map[string]any{

@@ -37,9 +37,8 @@ type Observation struct {
 }
 
 type ObservationResult struct {
-	Content      string         `json:"content,omitempty"`
-	SourceCallID string         `json:"source_call_id,omitempty"`
-	Extra        map[string]any `json:"extra,omitempty"`
+	Content string         `json:"content,omitempty"`
+	Extra   map[string]any `json:"extra,omitempty"`
 }
 
 type Metrics struct {

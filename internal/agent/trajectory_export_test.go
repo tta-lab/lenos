@@ -46,7 +46,7 @@ func TestExportTrajectoryFileStripsANSIAndAddsAgentVersion(t *testing.T) {
 	observation := agentStep["observation"].(map[string]any)
 	results := observation["results"].([]any)
 	require.Equal(t, "ok\n", results[0].(map[string]any)["content"])
-	require.Equal(t, "echo ok", results[0].(map[string]any)["source_call_id"])
+	require.NotContains(t, results[0].(map[string]any), "source_call_id")
 }
 
 func TestExportTrajectoryFileKeepsBackgroundCompletionAsSystemStep(t *testing.T) {
