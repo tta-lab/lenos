@@ -124,6 +124,20 @@ After setting ` + "`status: complete`" + ` or ` + "`status: blocked`" + `, emit 
 </runtime_goal_check>`
 }
 
+// goalUpdateHint returns a runtime prompt sent when the goal file was
+// modified externally (e.g. via TUI "Open Goal" editor). Tells the agent
+// to re-read the goal and adjust its task.
+func GoalUpdateHint() string {
+	return `<runtime_goal_updated>
+The goal file at ` + "`$LENOS_GOAL`" + ` was modified.
+
+Re-read it:
+  cat $LENOS_GOAL
+
+Adjust your task, constraints, and verification plan to match the updated goal.
+</runtime_goal_updated>`
+}
+
 // goalStartupHint returns the startup runtime prompt that tells the agent a
 // goal is active.
 func goalStartupHint() string {

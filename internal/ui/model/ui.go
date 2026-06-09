@@ -1148,8 +1148,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 				break
 			}
 		}
-		// Open the goal file in the external editor, then trigger agent
-		// execution so the goal startup hint fires and the exit gate engages.
+		// Open the goal file in the external editor for review/edit.
+		// After the editor returns, trigger agent execution with a
+		// runtime hint to re-read the updated goal.
 		cmds = append(cmds, tea.Sequence(
 			m.openFile(goalPath),
 			func() tea.Msg {
@@ -1157,7 +1158,10 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 					return nil
 				}
 				if m.hasSession() && m.session != nil {
-					return sendMessageMsg{Content: "Goal file saved. Start or resume work."}
+					return sendMessageMsg{
+						Content: "Goal file saved. Re-read the goal and adjust your task.\n\n" +
+							agent.GoalUpdateHint(),
+					}
 				}
 				return nil
 			},
