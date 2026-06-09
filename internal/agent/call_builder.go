@@ -131,6 +131,14 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 			}
 		}
 	}
+	// Auto-detect an existing goal file on disk (created e.g. via TUI "Open Goal").
+	if goalPath == "" {
+		diskPath := GoalPath(cwd, sessionID)
+		if _, err := os.Stat(diskPath); err == nil {
+			goalPath = diskPath
+			sandboxEnv["LENOS_GOAL"] = goalPath
+		}
+	}
 
 	dataDir := filepath.Join(cwd, cfg.Config().Options.DataDirectory)
 	return SessionAgentCall{
