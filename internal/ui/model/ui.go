@@ -519,7 +519,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
 
 	case runRuntimeMsg:
-		if m.hasSession() && m.session != nil {
+		if m.hasSession() {
 			sessionID := m.session.ID
 			cmds = append(cmds, func() tea.Msg {
 				if err := m.com.Workspace.AgentRunRuntime(context.Background(), sessionID, msg.Content); err != nil {
@@ -786,7 +786,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 		}
-		if m.state == uiChat && m.hasSession() && hasInProgressTodo(m.effectiveTodos()) && m.todoIsSpinning {
+		if m.state == uiChat && m.session != nil && hasInProgressTodo(m.effectiveTodos()) && m.todoIsSpinning {
 			var cmd tea.Cmd
 			m.todoSpinner, cmd = m.todoSpinner.Update(msg)
 			if cmd != nil {
@@ -1457,7 +1457,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			m.updateLayoutAndSize()
 			return true
 		case key.Matches(msg, m.keyMap.Chat.TogglePills):
-			if m.state == uiChat && m.hasSession() {
+			if m.state == uiChat && m.session != nil {
 				if cmd := m.togglePillsExpanded(); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
@@ -2516,7 +2516,7 @@ func (m *UI) toggleSandboxRuntime(ctx context.Context) (string, error) {
 	if m.isAgentBusy() {
 		return "", errors.New("agent is busy")
 	}
-	if !m.hasSession() {
+	if m.session == nil {
 		return "", errors.New("no active session")
 	}
 	if len(m.com.Workspace.AgentActiveBackgroundJobs(m.session.ID)) > 0 {
