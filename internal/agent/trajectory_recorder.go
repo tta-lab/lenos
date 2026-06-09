@@ -19,11 +19,10 @@ import (
 type trajectoryPathContextKey struct{}
 
 type TrajectoryRecorder struct {
-	mu       sync.Mutex
-	path     string
-	current  int
-	traj     atif.Trajectory
-	finished bool
+	mu      sync.Mutex
+	path    string
+	current int
+	traj    atif.Trajectory
 }
 
 func NewTrajectoryRecorder(path, sessionID string, model Model) *TrajectoryRecorder {
@@ -192,7 +191,6 @@ func (r *TrajectoryRecorder) Finish(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.finished = true
 	return r.checkpointLocked()
 }
 
