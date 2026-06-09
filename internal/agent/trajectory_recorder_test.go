@@ -37,8 +37,8 @@ func TestTrajectoryRecorderMetricsAndObservation(t *testing.T) {
 
 	exitCode := 0
 	require.NoError(t, recorder.AttachRunObservation(t.Context(), message.CommandContent{
-		Command:     "echo ok",
-		Observation: "ok",
+		Command:     "\x1b[31mecho ok\x1b[m",
+		Observation: "\x1b[32mok\x1b[m",
 		ExitCode:    &exitCode,
 	}, 1200*time.Millisecond, false, ""))
 

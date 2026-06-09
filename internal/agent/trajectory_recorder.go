@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/tta-lab/lenos/internal/atif"
 	"github.com/tta-lab/lenos/internal/message"
 	"github.com/tta-lab/lenos/internal/version"
@@ -134,7 +135,7 @@ func (r *TrajectoryRecorder) AttachRunObservation(ctx context.Context, cmd messa
 	}
 	extra := map[string]any{
 		"tool":             "run",
-		"command":          cmd.Command,
+		"command":          ansi.Strip(cmd.Command),
 		"pending":          cmd.Pending,
 		"background":       background,
 		"job_id":           nil,
@@ -149,7 +150,7 @@ func (r *TrajectoryRecorder) AttachRunObservation(ctx context.Context, cmd messa
 		extra["job_id"] = jobID
 	}
 	step.Observation.Results = append(step.Observation.Results, atif.ObservationResult{
-		Content: cmd.Observation,
+		Content: ansi.Strip(cmd.Observation),
 		Extra:   extra,
 	})
 	return r.checkpointLocked()

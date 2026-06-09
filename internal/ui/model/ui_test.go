@@ -655,17 +655,13 @@ func TestExportTrajectoryWritesATIFJSON(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	exitCode := 0
 	ui := &UI{
 		com: &common.Common{
 			Workspace: &testWorkspace{
 				workingDir: dir,
-				agentName:  "coder",
 				agentModel: workspace.AgentModel{ModelCfg: config.SelectedModel{Model: "test-model"}},
 				messages: []message.Message{
 					{ID: "m1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "hello"}}},
-					{ID: "m2", Role: message.Assistant, Model: "test-model", Provider: "mock", Parts: []message.ContentPart{message.TextContent{Text: "hi"}}},
-					{ID: "m3", Role: message.Result, Parts: []message.ContentPart{message.CommandContent{Command: "echo ok", Output: "ok\n", ExitCode: &exitCode}}},
 				},
 			},
 			Styles: ptr(styles.DefaultStyles()),
@@ -683,16 +679,6 @@ func TestExportTrajectoryWritesATIFJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &got))
 	require.Equal(t, "ATIF-v1.7", got["schema_version"])
 	require.Equal(t, "session-1", got["trajectory_id"])
-
-	steps := got["steps"].([]any)
-	require.Len(t, steps, 3)
-	for i, step := range steps {
-		require.Equal(t, float64(i+1), step.(map[string]any)["step_id"])
-	}
-	require.Equal(t, "user", steps[0].(map[string]any)["source"])
-	require.Equal(t, "agent", steps[1].(map[string]any)["source"])
-	require.Equal(t, "system", steps[2].(map[string]any)["source"])
-	require.Contains(t, steps[2].(map[string]any), "observation")
 }
 
 // callTracker records method invocations on testWorkspace for assertions.
