@@ -140,13 +140,11 @@ func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage
 	//   → sum is correct.
 	// Anthropic-style: InputTokens already includes CacheReadTokens (subset).
 	//   → summing would double-count. Use InputTokens directly.
-	promptInput := usage.InputTokens
 	if usage.CacheReadTokens > 0 && providerNormalizesCacheReads(model.ModelCfg.Provider) {
-		promptInput = usage.InputTokens // CacheReadTokens is subset, not addend.
+		s.TotalPromptTokens += usage.InputTokens
 	} else {
-		promptInput = usage.InputTokens + usage.CacheReadTokens
+		s.TotalPromptTokens += usage.InputTokens + usage.CacheReadTokens
 	}
-	s.TotalPromptTokens += promptInput
 	s.TotalCompletionTokens += usage.OutputTokens
 	s.TotalReasoningTokens += usage.ReasoningTokens
 }
