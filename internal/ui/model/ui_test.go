@@ -217,6 +217,7 @@ type testWorkspace struct {
 	jobs            []agent.BackgroundJob
 	runtimeMessages []message.Message
 	listModifiedFn  func() ([]workspace.ModifiedFile, error)
+	sessions        map[string]session.Session
 }
 
 func (w *testWorkspace) Config() *config.Config {
@@ -270,6 +271,15 @@ func (w *testWorkspace) CreateRuntimeMessage(_ context.Context, sessionID, text 
 
 func (w *testWorkspace) ListMessages(context.Context, string) ([]message.Message, error) {
 	return w.messages, nil
+}
+
+func (w *testWorkspace) GetSession(_ context.Context, sessionID string) (session.Session, error) {
+	if w.sessions != nil {
+		if s, ok := w.sessions[sessionID]; ok {
+			return s, nil
+		}
+	}
+	return session.Session{ID: sessionID}, nil
 }
 
 func (w *testWorkspace) AgentName() string {

@@ -261,11 +261,11 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			continue
 		}
 		if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-			abandonPending(ctx, deps.messages, &resultMsg)
-			// Materialize before return with a detached context so DB
-			// writes succeed even when the parent context is canceled.
 			matCtx, matCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer matCancel()
+			abandonPending(matCtx, deps.messages, &resultMsg)
+			// Materialize before return so DB writes succeed even when
+			// the parent context is canceled.
 			if err := deps.trajectoryMaterializer.Refresh(matCtx, deps.sessionID); err != nil {
 				slog.Warn("trajectory: refresh after cancel", "error", err)
 			}

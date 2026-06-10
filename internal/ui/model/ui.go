@@ -2647,13 +2647,18 @@ func (m *UI) exportTrajectory(ctx context.Context, sessionID string) (string, er
 		return "", fmt.Errorf("list messages: %w", err)
 	}
 
+	sess, err := m.com.Workspace.GetSession(ctx, sessionID)
+	if err != nil {
+		return "", fmt.Errorf("get session: %w", err)
+	}
+
 	path := filepath.Join(m.com.Workspace.WorkingDir(), ".lenos", "trajectories", sessionID+".json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", fmt.Errorf("create trajectory directory: %w", err)
 	}
 
 	model := m.com.Workspace.AgentModel()
-	if err := agent.ExportTrajectoryFile(path, sessionID, model.ModelCfg.Model, messages, nil); err != nil {
+	if err := agent.ExportTrajectoryFile(path, sessionID, model.ModelCfg.Model, messages, &sess); err != nil {
 		return "", err
 	}
 	return path, nil
