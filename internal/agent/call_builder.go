@@ -30,7 +30,10 @@ func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeConte
 		return buildRuntimeContextCommands(
 			runtimeContext,
 			config.AgentCoder,
-			generalRuntimeContextPromptTmpl,
+			srcRuntimeContextPromptTmpl,
+			webRuntimeContextPromptTmpl,
+			skillRuntimeContextPromptTmpl,
+			projectRuntimeContextPromptTmpl,
 			coderRuntimeContextPromptTmpl,
 			reviewerRuntimeContextPromptTmpl,
 		)
@@ -40,7 +43,10 @@ func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeConte
 		return buildRuntimeContextCommands(
 			runtimeContext,
 			config.AgentReviewer,
-			generalRuntimeContextPromptTmpl,
+			srcRuntimeContextPromptTmpl,
+			webRuntimeContextPromptTmpl,
+			skillRuntimeContextPromptTmpl,
+			projectRuntimeContextPromptTmpl,
 			coderRuntimeContextPromptTmpl,
 			reviewerRuntimeContextPromptTmpl,
 		)
