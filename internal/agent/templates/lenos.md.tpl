@@ -130,9 +130,9 @@ Fix: use `src edit --section <id>` for symbol-level targeting, or add more surro
 
 {{ .IdentityBody }}
 {{if .ContextFiles}}
-# Project Instructions
-
-{{range .ContextFiles}}{{.Content}}
+{{range .ContextFiles}}<context-file path="{{.Path}}">
+{{.Content}}
+</context-file>
 {{end}}{{end}}
 {{if .JobID}}
 # Task
