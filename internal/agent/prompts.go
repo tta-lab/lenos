@@ -31,9 +31,6 @@ var initializePromptTmpl []byte
 //go:embed templates/general_context.md
 var generalRuntimeContextPromptTmpl []byte
 
-//go:embed templates/context_files_context.md
-var contextFilesRuntimeContextPromptTmpl []byte
-
 //go:embed templates/coder_context.md
 var coderRuntimeContextPromptTmpl []byte
 
@@ -275,28 +272,16 @@ func markdownBashToRunBlocks(section string) string {
 }
 
 func fallbackRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
-	commands := []RuntimeContextCommand{{
-		Command:  lenosbash.WrapBash("List registered projects and available skills.", "project list\nskill list"),
-		Optional: true,
-	}}
-	if len(runtimeContext.ContextFiles) > 0 {
-		var readCmd strings.Builder
-		readCmd.WriteString("Read key instructions.")
-		readCmd.WriteString("\n\n")
-		readCmd.WriteString(lenosbash.BashStartTag)
-		for _, file := range runtimeContext.ContextFiles {
-			readCmd.WriteString("\ncat ")
-			readCmd.WriteString(shellQuote(file.Path))
-		}
-		readCmd.WriteString("\n")
-		readCmd.WriteString(lenosbash.BashEndTag)
-		commands = append(commands, RuntimeContextCommand{
-			Command: readCmd.String(),
-		})
+	commands := []RuntimeContextCommand{
+		{
+			Command:  lenosbash.WrapBash("Read available command documentation.", "echo \"------src --help------\" && src --help\necho \"------web --help------\" && web --help\necho \"------skill --help------\" && skill --help\necho \"------project --help------\" && project --help"),
+			Optional: true,
+		},
+		{
+			Command:  lenosbash.WrapBash("List registered projects and organizations.", "project get orga"),
+			Optional: true,
+		},
 	}
-	commands = append(commands, RuntimeContextCommand{
-		Command: "\nReady.\n\nLets rock and roll.\n",
-	})
 	return commands
 }
 

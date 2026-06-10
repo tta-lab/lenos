@@ -7,7 +7,7 @@ import (
 	"text/template"
 )
 
-//go:embed cmd-*.md cmd-git.tpl
+//go:embed cmd-git.tpl
 var cmdFS embed.FS
 
 // cmdDocsDirPaths is the ordered list of directories to search for cmd-*.md
@@ -34,7 +34,7 @@ func loadCommandDocs() ([]CommandDoc, error) {
 		}
 	}
 	if len(matches) == 0 {
-		return nil, fmt.Errorf("no cmd-*.md files found in embedded filesystem")
+		return []CommandDoc{}, nil
 	}
 
 	docs := make([]CommandDoc, 0, len(matches))

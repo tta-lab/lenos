@@ -2,8 +2,8 @@
 order: 10
 optional: true
 ---
-List registered projects and available skills.
+Read available command documentation. Use `echo` separators to split each
+invocation so the results are clearly delimited.
 ```bash
-project list
-skill list
+echo "------src --help------" && src --help && echo "------web --help------" && web --help && echo "------skill --help------" && skill --help && echo "------project --help------" && project --help && echo "------project get orga------" && project get orga
 ```
