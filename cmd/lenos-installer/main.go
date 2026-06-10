@@ -367,7 +367,7 @@ func installDefuddle() {
 	}
 
 	fmt.Println("  Installing defuddle (web content sanitizer)...")
-	npmInstall := exec.Command("npm", "install", "-g", "defuddle")
+	npmInstall := exec.CommandContext(context.Background(), "npm", "install", "-g", "defuddle")
 	npmInstall.Stdout = os.Stdout
 	npmInstall.Stderr = os.Stderr
 	if err := npmInstall.Run(); err != nil {
