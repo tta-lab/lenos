@@ -2,6 +2,9 @@ package model
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -206,12 +209,15 @@ type testWorkspace struct {
 	agentReady      bool
 	agentBusy       bool
 	agentModel      workspace.AgentModel
+	agentName       string
 	gitWorktree     bool
 	workingDir      string
+	messages        []message.Message
 	modifiedFiles   []workspace.ModifiedFile
 	jobs            []agent.BackgroundJob
 	runtimeMessages []message.Message
 	listModifiedFn  func() ([]workspace.ModifiedFile, error)
+	sessions        map[string]session.Session
 }
 
 func (w *testWorkspace) Config() *config.Config {
@@ -261,6 +267,23 @@ func (w *testWorkspace) CreateRuntimeMessage(_ context.Context, sessionID, text 
 	}
 	w.runtimeMessages = append(w.runtimeMessages, msg)
 	return msg, nil
+}
+
+func (w *testWorkspace) ListMessages(context.Context, string) ([]message.Message, error) {
+	return w.messages, nil
+}
+
+func (w *testWorkspace) GetSession(_ context.Context, sessionID string) (session.Session, error) {
+	if w.sessions != nil {
+		if s, ok := w.sessions[sessionID]; ok {
+			return s, nil
+		}
+	}
+	return session.Session{ID: sessionID}, nil
+}
+
+func (w *testWorkspace) AgentName() string {
+	return w.agentName
 }
 
 func (w *testWorkspace) SetActiveModel(modelType config.SelectedModelType, model config.SelectedModel) {
@@ -636,6 +659,36 @@ func TestUpdateSessionMessage_Result(t *testing.T) {
 		item := ui.chat.MessageItem("result-update-1")
 		require.Nil(t, item, "successful result item should be removed after completion")
 	})
+}
+
+func TestExportTrajectoryWritesATIFJSON(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	ui := &UI{
+		com: &common.Common{
+			Workspace: &testWorkspace{
+				workingDir: dir,
+				agentModel: workspace.AgentModel{ModelCfg: config.SelectedModel{Model: "test-model"}},
+				messages: []message.Message{
+					{ID: "m1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "hello"}}},
+				},
+			},
+			Styles: ptr(styles.DefaultStyles()),
+		},
+	}
+
+	path, err := ui.exportTrajectory(context.Background(), "session-1")
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(dir, ".lenos", "trajectories", "session-1.json"), path)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(data, &got))
+	require.Equal(t, "ATIF-v1.7", got["schema_version"])
+	require.Equal(t, "session-1", got["trajectory_id"])
 }
 
 // callTracker records method invocations on testWorkspace for assertions.

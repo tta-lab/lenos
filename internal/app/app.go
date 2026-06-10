@@ -167,7 +167,7 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 
 // RunNonInteractive runs the application in non-interactive mode with the
 // given prompt, printing to stdout.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt string, hideSpinner bool, continueSessionID string, useLast bool, usageSummaryPath string) error {
+func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt string, hideSpinner bool, continueSessionID string, useLast bool, usageSummaryPath string, trajectoryPath string) error {
 	slog.Info("Running in non-interactive mode")
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -239,6 +239,9 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt 
 	usageSummary := agent.NewRunUsageSummary(sess.ID, startedAt)
 	if usageSummaryPath != "" {
 		ctx = agent.ContextWithRunUsageSummary(ctx, usageSummary)
+	}
+	if trajectoryPath != "" {
+		ctx = agent.ContextWithTrajectoryPath(ctx, trajectoryPath)
 	}
 	finishUsageSummary := func() error {
 		if usageSummaryPath == "" {
@@ -332,7 +335,12 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt 
 
 		case <-ctx.Done():
 			stopSpinner()
-			return errors.Join(ctx.Err(), finishUsageSummary())
+			select {
+			case result := <-done:
+				return errors.Join(ctx.Err(), result.err, finishUsageSummary())
+			case <-time.After(5 * time.Second):
+				return errors.Join(ctx.Err(), finishUsageSummary())
+			}
 		}
 	}
 }

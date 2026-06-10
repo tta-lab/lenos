@@ -15,6 +15,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().Bool("no-sandbox", false, "")
 	cmd.Flags().String("pair-with", "", "")
 	cmd.Flags().String("usage-json", "", "")
+	cmd.Flags().String("trajectory-json", "", "")
 	cmd.Flags().String("reasoning-effort", "", "")
 	return cmd
 }
@@ -120,6 +121,22 @@ func TestRunCmd_UsageJSONFlagParse(t *testing.T) {
 	value, err := cmd.Flags().GetString("usage-json")
 	require.NoError(t, err)
 	require.Equal(t, "/tmp/usage.json", value)
+}
+
+func TestRunCmd_TrajectoryJSONFlagDeclared(t *testing.T) {
+	cmd := newRunCmd()
+
+	flag := cmd.Flags().Lookup("trajectory-json")
+	require.NotNil(t, flag)
+}
+
+func TestRunCmd_TrajectoryJSONFlagParse(t *testing.T) {
+	cmd := newRunCmd()
+
+	require.NoError(t, cmd.ParseFlags([]string{"--trajectory-json", "/tmp/trajectory.json"}))
+	got, err := cmd.Flags().GetString("trajectory-json")
+	require.NoError(t, err)
+	require.Equal(t, "/tmp/trajectory.json", got)
 }
 
 func TestRunCmd_PairWithFlagParse(t *testing.T) {

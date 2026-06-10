@@ -104,7 +104,7 @@ func TestRunNonInteractive_WritesUsageSummaryOnAgentError(t *testing.T) {
 	app := newRunNonInteractiveTestApp(t, &runTestCoordinator{err: errors.New("boom")})
 	path := filepath.Join(t.TempDir(), "usage.json")
 
-	err := app.RunNonInteractive(t.Context(), &bytes.Buffer{}, "go", true, "", false, path)
+	err := app.RunNonInteractive(t.Context(), &bytes.Buffer{}, "go", true, "", false, path, "")
 
 	require.ErrorContains(t, err, "agent processing failed")
 	data := requireReadFile(t, path)
@@ -124,7 +124,7 @@ func TestRunNonInteractive_UsageSummaryPathFailureReturnsError(t *testing.T) {
 	app := newRunNonInteractiveTestApp(t, &runTestCoordinator{})
 	path := filepath.Join(t.TempDir(), "missing", "usage.json")
 
-	err := app.RunNonInteractive(t.Context(), &bytes.Buffer{}, "go", true, "", false, path)
+	err := app.RunNonInteractive(t.Context(), &bytes.Buffer{}, "go", true, "", false, path, "")
 
 	require.ErrorContains(t, err, "write usage summary")
 }

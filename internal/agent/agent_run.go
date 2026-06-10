@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -96,6 +97,9 @@ runLoopReentry:
 	if err := a.persistVisibleTurnPrompts(ctx, call.SessionID, turnPrompts); err != nil {
 		return err
 	}
+	if err := call.trajectoryMaterializer.Refresh(ctx, call.SessionID); err != nil {
+		slog.Warn("trajectory: initial refresh", "error", err)
+	}
 
 	var wg sync.WaitGroup
 	titleCtx := ctx
@@ -114,19 +118,23 @@ runLoopReentry:
 	a.eventPromptSent(call.SessionID)
 
 	deps := loopDeps{
-		model:        primaryModel,
-		provOpts:     call.ProviderOptions,
-		pairWith:     call.PairWith,
-		messages:     a.messages,
-		runner:       runner,
-		sessionID:    call.SessionID,
-		sysPrompt:    a.systemPrompt.Get(),
-		env:          call.Env,
-		paths:        call.AllowedPaths,
-		bgRunner:     bgRunner,
-		bashOutput:   call.BashOutput,
-		dataDir:      call.DataDir,
-		goalPath:     call.GoalPath,
+		model:                  primaryModel,
+		provOpts:               call.ProviderOptions,
+		pairWith:               call.PairWith,
+		messages:               a.messages,
+		runner:                 runner,
+		sessionID:              call.SessionID,
+		sysPrompt:              a.systemPrompt.Get(),
+		env:                    call.Env,
+		paths:                  call.AllowedPaths,
+		bgRunner:               bgRunner,
+		bashOutput:             call.BashOutput,
+		dataDir:                call.DataDir,
+		goalPath:               call.GoalPath,
+		trajectoryMaterializer: call.trajectoryMaterializer,
+		usageCost: func(u fantasy.Usage, m fantasy.ProviderMetadata) float64 {
+			return usageCost(primaryModel, u, a.openrouterCost(m))
+		},
 		postStepHook: a.buildPostStepHook(call, primaryModel),
 		onUsage: func() func(int, fantasy.Usage, fantasy.ProviderMetadata) {
 			var autoCompactDone bool
@@ -167,6 +175,14 @@ runLoopReentry:
 	_ = stop
 
 	if runErr != nil {
+		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, ErrRequestCancelled) {
+			call.trajectoryMaterializer.SetExtra(map[string]any{"interrupted": true, "interrupt_reason": "signal"})
+			matCtx, matCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer matCancel()
+			if err := call.trajectoryMaterializer.Refresh(matCtx, call.SessionID); err != nil {
+				slog.Warn("trajectory: refresh after interrupt", "error", err)
+			}
+		}
 		// Release activeRequests before surfacing the error so
 		// IsSessionBusy returns false. Ported from upstream 9d346688.
 		cancel()
@@ -193,6 +209,13 @@ runLoopReentry:
 			SessionTitle: currentSession.Title,
 			Type:         notify.TypeAgentFinished,
 		})
+	}
+
+	// Refresh ATIF trajectory before compaction resets session token fields.
+	// Compaction zeros cumulative token counters so the next window starts
+	// fresh; refreshing first captures the full pre-compaction totals.
+	if err := call.trajectoryMaterializer.Refresh(ctx, call.SessionID); err != nil {
+		slog.Warn("trajectory: final refresh", "error", err)
 	}
 
 	// Mark compaction boundary if requested. This sets SummaryMessageID so

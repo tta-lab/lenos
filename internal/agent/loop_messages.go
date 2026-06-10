@@ -72,6 +72,7 @@ func abandonPending(ctx context.Context, msgs message.Service, m *message.Messag
 	}
 	m.Parts = []message.ContentPart{message.CommandContent{
 		Command: cmd, Output: "canceled before result", ExitCode: &exitCode, Pending: false,
+		Observation: "canceled before result",
 	}}
 	if err := msgs.Update(ctx, *m); err != nil {
 		slog.Warn("loop: abandon pending result", "error", err)

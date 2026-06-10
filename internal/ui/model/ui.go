@@ -1137,6 +1137,21 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		})
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionExportTrajectory:
+		if !m.hasSession() {
+			cmds = append(cmds, util.ReportWarn("No active session"))
+			m.dialog.CloseDialog(dialog.CommandsID)
+			break
+		}
+		sessionID := m.session.ID
+		cmds = append(cmds, func() tea.Msg {
+			path, err := m.exportTrajectory(context.Background(), sessionID)
+			if err != nil {
+				return util.InfoMsg{Type: util.InfoTypeError, Msg: fmt.Sprintf("Export ATIF trajectory failed: %v", err)}
+			}
+			return util.NewInfoMsg("Exported ATIF trajectory to " + path)
+		})
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionOpenJournal:
 		if !m.hasSession() {
 			cmds = append(cmds, util.ReportWarn("No active session"))
@@ -2624,6 +2639,29 @@ func (m *UI) cancelAgent() tea.Cmd {
 	// First escape press - set canceling state and start timer.
 	m.isCanceling = true
 	return cancelTimerCmd()
+}
+
+func (m *UI) exportTrajectory(ctx context.Context, sessionID string) (string, error) {
+	messages, err := m.com.Workspace.ListMessages(ctx, sessionID)
+	if err != nil {
+		return "", fmt.Errorf("list messages: %w", err)
+	}
+
+	sess, err := m.com.Workspace.GetSession(ctx, sessionID)
+	if err != nil {
+		return "", fmt.Errorf("get session: %w", err)
+	}
+
+	path := filepath.Join(m.com.Workspace.WorkingDir(), ".lenos", "trajectories", sessionID+".json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("create trajectory directory: %w", err)
+	}
+
+	model := m.com.Workspace.AgentModel()
+	if err := agent.ExportTrajectoryFile(path, sessionID, model.ModelCfg.Model, messages, &sess); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // openDialog opens a dialog by its ID.

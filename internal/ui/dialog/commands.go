@@ -350,6 +350,7 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 // defaultCommands returns the list of default system commands.
 func (c *Commands) defaultCommands() []*CommandItem {
 	commands := []*CommandItem{
+		NewCommandItem(c.com.Styles, "new_session", "New Session", "", ActionNewSession{}),
 		NewCommandItem(c.com.Styles, "switch_session", "Sessions", "ctrl+s", ActionOpenDialog{SessionsID}),
 		NewCommandItem(c.com.Styles, "switch_model", "Switch Model", "ctrl+l", ActionOpenDialog{ModelsID}),
 	}
@@ -413,6 +414,10 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	// Add compact session command when the active session has a journal.
 	if c.hasSession && journalExists(c.com.Workspace.WorkingDir(), c.sessionID) {
 		commands = append(commands, NewCommandItem(c.com.Styles, "compact_handoff", "Compact Session", "", ActionCompactSession{}))
+	}
+
+	if c.hasSession {
+		commands = append(commands, NewCommandItem(c.com.Styles, "export_atif_trajectory", "Export ATIF Trajectory", "", ActionExportTrajectory{}))
 	}
 
 	commands = append(commands, NewCommandItem(c.com.Styles, "open_journal", "Open Journal", "", ActionOpenJournal{}))

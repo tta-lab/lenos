@@ -26,22 +26,24 @@ var ErrStepCap = errors.New("agent: step cap reached")
 
 // loopDeps wires the bash-first loop to its environment.
 type loopDeps struct {
-	model        Model
-	drainQueue   func() []turnPrompt
-	provOpts     fantasy.ProviderOptions
-	pairWith     string
-	messages     message.Service
-	runner       Runner
-	sessionID    string
-	sysPrompt    string
-	env          map[string]string
-	paths        []AllowedPath
-	onUsage      func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
-	postStepHook func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
-	bgRunner     *BackgroundRunner
-	bashOutput   *config.BashOutputConfig
-	dataDir      string
-	goalPath     string
+	model                  Model
+	drainQueue             func() []turnPrompt
+	provOpts               fantasy.ProviderOptions
+	pairWith               string
+	messages               message.Service
+	runner                 Runner
+	sessionID              string
+	sysPrompt              string
+	env                    map[string]string
+	paths                  []AllowedPath
+	onUsage                func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
+	usageCost              func(u fantasy.Usage, m fantasy.ProviderMetadata) float64
+	postStepHook           func(stepIdx int, u fantasy.Usage, m fantasy.ProviderMetadata)
+	trajectoryMaterializer *TrajectoryMaterializer
+	bgRunner               *BackgroundRunner
+	bashOutput             *config.BashOutputConfig
+	dataDir                string
+	goalPath               string
 }
 
 // stopReason explains why runLoop returned.
@@ -155,6 +157,14 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			msgs, _ = drainAndAppend(ctx, deps, msgs)
 			continue
 		}
+		_ = usageCost(deps.model, usage, nil)
+		if deps.usageCost != nil {
+			_ = deps.usageCost(usage, meta)
+		}
+		// Materialize after assistant message is persisted.
+		if err := deps.trajectoryMaterializer.Refresh(ctx, deps.sessionID); err != nil {
+			slog.Warn("trajectory: refresh after agent step", "error", err)
+		}
 		// Execute parsed run blocks: prose-only ends the turn,
 		// but wait for active background jobs first so their
 		// results are visible to the model before exit.
@@ -251,7 +261,14 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			continue
 		}
 		if errors.Is(res.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-			abandonPending(ctx, deps.messages, &resultMsg)
+			matCtx, matCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer matCancel()
+			abandonPending(matCtx, deps.messages, &resultMsg)
+			// Materialize before return so DB writes succeed even when
+			// the parent context is canceled.
+			if err := deps.trajectoryMaterializer.Refresh(matCtx, deps.sessionID); err != nil {
+				slog.Warn("trajectory: refresh after cancel", "error", err)
+			}
 			return stopCanceled, ctx.Err()
 		}
 		exitCode := res.ExitCode
@@ -313,6 +330,10 @@ func runLoopWithPrompts(ctx context.Context, deps loopDeps, history []fantasy.Me
 			assistantTextMessage(emit, assistantMsg.ReasoningContent()),
 			fantasy.NewUserMessage(obs),
 		)
+		// Materialize after result is persisted.
+		if err := deps.trajectoryMaterializer.Refresh(ctx, deps.sessionID); err != nil {
+			slog.Warn("trajectory: refresh after run", "error", err)
+		}
 		msgs, _ = drainAndAppend(ctx, deps, msgs)
 	}
 	return stopStepCap, ErrStepCap
