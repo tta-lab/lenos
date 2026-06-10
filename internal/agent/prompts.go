@@ -28,11 +28,17 @@ var embeddedReviewerMd []byte
 //go:embed templates/initialize.md.tpl
 var initializePromptTmpl []byte
 
-//go:embed templates/general_context.md
-var generalRuntimeContextPromptTmpl []byte
+//go:embed templates/src_context.md
+var srcRuntimeContextPromptTmpl []byte
 
-//go:embed templates/context_files_context.md
-var contextFilesRuntimeContextPromptTmpl []byte
+//go:embed templates/web_context.md
+var webRuntimeContextPromptTmpl []byte
+
+//go:embed templates/skill_context.md
+var skillRuntimeContextPromptTmpl []byte
+
+//go:embed templates/project_context.md
+var projectRuntimeContextPromptTmpl []byte
 
 //go:embed templates/coder_context.md
 var coderRuntimeContextPromptTmpl []byte
@@ -275,28 +281,24 @@ func markdownBashToRunBlocks(section string) string {
 }
 
 func fallbackRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
-	commands := []RuntimeContextCommand{{
-		Command:  lenosbash.WrapBash("List registered projects and available skills.", "project list\nskill list"),
-		Optional: true,
-	}}
-	if len(runtimeContext.ContextFiles) > 0 {
-		var readCmd strings.Builder
-		readCmd.WriteString("Read key instructions.")
-		readCmd.WriteString("\n\n")
-		readCmd.WriteString(lenosbash.BashStartTag)
-		for _, file := range runtimeContext.ContextFiles {
-			readCmd.WriteString("\ncat ")
-			readCmd.WriteString(shellQuote(file.Path))
-		}
-		readCmd.WriteString("\n")
-		readCmd.WriteString(lenosbash.BashEndTag)
-		commands = append(commands, RuntimeContextCommand{
-			Command: readCmd.String(),
-		})
+	commands := []RuntimeContextCommand{
+		{
+			Command:  lenosbash.WrapBash("Read available source-code tool documentation.", "echo \"------src --help------\" && src --help && echo \"------src edit --help------\" && src edit --help && echo \"------src replace --help------\" && src replace --help && echo \"------src delete --help------\" && src delete --help && echo \"------src insert --help------\" && src insert --help"),
+			Optional: true,
+		},
+		{
+			Command:  lenosbash.WrapBash("Read available web tool documentation.", "echo \"------web --help------\" && web --help && echo \"------web search --help------\" && web search --help && echo \"------web fetch --help------\" && web fetch --help && echo \"------web docs --help------\" && web docs --help && echo \"------web sgraph --help------\" && web sgraph --help"),
+			Optional: true,
+		},
+		{
+			Command:  lenosbash.WrapBash("Read available skill tool documentation.", "echo \"------skill --help------\" && skill --help && echo \"------skill list------\" && skill list"),
+			Optional: true,
+		},
+		{
+			Command:  lenosbash.WrapBash("Read available project tool documentation.", "echo \"------project --help------\" && project --help && echo \"------project list------\" && project list"),
+			Optional: true,
+		},
 	}
-	commands = append(commands, RuntimeContextCommand{
-		Command: "\nReady.\n\nLets rock and roll.\n",
-	})
 	return commands
 }
 

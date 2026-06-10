@@ -65,8 +65,11 @@ func (a *sessionAgent) persistSyntheticCommandResult(ctx context.Context, call S
 		stderrBytes = []byte(res.Err.Error())
 	}
 	stderrStr := string(stderrBytes)
-	boundedStdout := boundOutput(res.Stdout, call.BashOutput, call.DataDir)
-	boundedStderr := boundOutput([]byte(stderrStr), call.BashOutput, call.DataDir)
+	// Synthetic context commands (e.g. --help) are reference material the
+	// agent needs in full; never truncate them. Unlike user-run commands,
+	// where tail-biased truncation is fine, help text must be complete.
+	boundedStdout := boundOutput(res.Stdout, nil, call.DataDir)
+	boundedStderr := boundOutput([]byte(stderrStr), nil, call.DataDir)
 	envelope := formatResultForModel(commandForBash, boundedStdout.Preview, boundedStderr.Preview, res.ExitCode)
 	body := lenosbash.ResultBody(envelope)
 	outputStr := string(combine(res.Stdout, stderrBytes))

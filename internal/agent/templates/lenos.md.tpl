@@ -129,6 +129,11 @@ Fix: use `src edit --section <id>` for symbol-level targeting, or add more surro
 - Never retry with guessed changes -- read the actual file output
 
 {{ .IdentityBody }}
+{{if .ContextFiles}}
+{{range .ContextFiles}}<context-file path="{{.Path}}">
+{{.Content}}
+</context-file>
+{{end}}{{end}}
 {{if .JobID}}
 # Task
 

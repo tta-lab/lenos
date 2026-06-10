@@ -115,8 +115,14 @@ func (p *Prompt) Build(ctx context.Context, provider, model string, store *confi
 }
 
 func processFile(filePath string) *ContextFile {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		slog.Warn("Failed to read context file", "path", filePath, "error", err)
+		return nil
+	}
 	return &ContextFile{
-		Path: filePath,
+		Path:    filePath,
+		Content: string(data),
 	}
 }
 
@@ -231,6 +237,9 @@ func (p *Prompt) promptData(_ context.Context, provider, model string, store *co
 
 	cfg := store.Config()
 	isGit := isGitRepo(store.WorkingDir())
+
+	contextFiles := LoadRuntimeContext(context.Background(), store, p.contextPaths).ContextFiles
+
 	return PromptDat{
 		Provider:     provider,
 		Model:        model,
@@ -240,6 +249,7 @@ func (p *Prompt) promptData(_ context.Context, provider, model string, store *co
 		Platform:     platform,
 		Date:         p.now().Format("1/2/2006"),
 		IdentityBody: p.identityBody,
+		ContextFiles: contextFiles,
 		JobID:        taskwarrior.ResolveTaskIDFromCwd(),
 		BashStartTag: lenosbash.BashStartTag,
 		BashEndTag:   lenosbash.BashEndTag,

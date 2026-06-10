@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -350,7 +351,32 @@ func main() {
 	fmt.Printf("\nAdd %s to your PATH if it's not already:\n", binDir)
 	fmt.Printf("  export PATH=\"%s:$PATH\"\n\n", binDir)
 
+	installDefuddle()
+
 	writeDefaultConfigs()
+}
+
+func installDefuddle() {
+	if _, err := exec.LookPath("npm"); err != nil {
+		fmt.Println("  ⚠ npm is not installed. The web fetch tool requires defuddle.")
+		fmt.Println("    Install Node.js (https://nodejs.org) then run: npm install -g defuddle")
+		fmt.Println("    Defuddle sanitizes web content, removes ads and tracking, and")
+		fmt.Println("    extracts clean article text — far more reliable than raw HTTP.")
+		fmt.Println()
+		return
+	}
+
+	fmt.Println("  Installing defuddle (web content sanitizer)...")
+	npmInstall := exec.CommandContext(context.Background(), "npm", "install", "-g", "defuddle")
+	npmInstall.Stdout = os.Stdout
+	npmInstall.Stderr = os.Stderr
+	if err := npmInstall.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "  ⚠ Failed to install defuddle: %v\n", err)
+		fmt.Println("  Web fetch will still work when defuddle is available on PATH.")
+	} else {
+		fmt.Println("  ✓ defuddle installed.")
+	}
+	fmt.Println()
 }
 
 func writeDefaultConfigs() {
