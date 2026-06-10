@@ -295,7 +295,7 @@ func fallbackRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []Runt
 			Optional: true,
 		},
 		{
-			Command:  lenosbash.WrapBash("Read available project tool documentation.", "echo \"------project --help------\" && project --help && echo \"------project get orga------\" && project get orga && echo \"------project list------\" && project list"),
+			Command:  lenosbash.WrapBash("Read available project tool documentation.", "echo \"------project --help------\" && project --help && echo \"------project list------\" && project list"),
 			Optional: true,
 		},
 	}
