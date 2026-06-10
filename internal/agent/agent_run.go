@@ -177,7 +177,9 @@ runLoopReentry:
 	if runErr != nil {
 		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, ErrRequestCancelled) {
 			call.trajectoryMaterializer.SetExtra(map[string]any{"interrupted": true, "interrupt_reason": "signal"})
-			if err := call.trajectoryMaterializer.Refresh(ctx, call.SessionID); err != nil {
+			matCtx, matCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer matCancel()
+			if err := call.trajectoryMaterializer.Refresh(matCtx, call.SessionID); err != nil {
 				slog.Warn("trajectory: refresh after interrupt", "error", err)
 			}
 		}
@@ -209,6 +211,13 @@ runLoopReentry:
 		})
 	}
 
+	// Refresh ATIF trajectory before compaction resets session token fields.
+	// Compaction zeros cumulative token counters so the next window starts
+	// fresh; refreshing first captures the full pre-compaction totals.
+	if err := call.trajectoryMaterializer.Refresh(ctx, call.SessionID); err != nil {
+		slog.Warn("trajectory: final refresh", "error", err)
+	}
+
 	// Mark compaction boundary if requested. This sets SummaryMessageID so
 	// future turns load only post-boundary history (fresh context window).
 	if call.MarkCompactBoundary {
@@ -223,10 +232,6 @@ runLoopReentry:
 				slog.Warn("compact boundary: failed to save session", "session", call.SessionID, "error", err)
 			}
 		}
-	}
-
-	if err := call.trajectoryMaterializer.Refresh(ctx, call.SessionID); err != nil {
-		slog.Warn("trajectory: final refresh", "error", err)
 	}
 
 	if newCall, ok := a.tryReenter(call, cancel); ok {
