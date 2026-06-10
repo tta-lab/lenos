@@ -1,19 +1,48 @@
 package agent
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/tta-lab/lenos/internal/atif"
 	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/version"
 )
 
-func ExportTrajectoryFile(path, sessionID, modelName string, messages []message.Message) error {
-	return WriteTrajectoryFile(path, TrajectoryFromMessages(sessionID, modelName, messages))
+// trajectoryPathContextKey is the context key for --trajectory-json path.
+type trajectoryPathContextKey struct{}
+
+// ContextWithTrajectoryPath stores a trajectory output path in ctx.
+func ContextWithTrajectoryPath(ctx context.Context, path string) context.Context {
+	if path == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, trajectoryPathContextKey{}, path)
 }
 
-func TrajectoryFromMessages(sessionID, modelName string, messages []message.Message) atif.Trajectory {
+// TrajectoryPathFromContext returns the trajectory path from ctx, if set.
+func TrajectoryPathFromContext(ctx context.Context) string {
+	path, _ := ctx.Value(trajectoryPathContextKey{}).(string)
+	return path
+}
+
+// ExportTrajectoryFile builds an ATIF trajectory from DB messages and session
+// and writes it to path. When sess is nil, final_metrics are computed from
+// step-level metrics only.
+func ExportTrajectoryFile(path, sessionID, modelName string, messages []message.Message, sess *session.Session) error {
+	return WriteTrajectoryFile(path, TrajectoryFromMessages(sessionID, modelName, messages, sess))
+}
+
+// TrajectoryFromMessages converts DB messages into an ATIF trajectory.
+// When sess is non-nil, final_metrics are populated from the session's
+// cumulative token accounting fields.
+func TrajectoryFromMessages(sessionID, modelName string, messages []message.Message, sess *session.Session) atif.Trajectory {
 	traj := atif.Trajectory{
 		SchemaVersion: "ATIF-v1.7",
 		TrajectoryID:  sessionID,
@@ -22,9 +51,6 @@ func TrajectoryFromMessages(sessionID, modelName string, messages []message.Mess
 			Name:      "lenos",
 			Version:   version.Version,
 			ModelName: modelName,
-		},
-		Extra: map[string]any{
-			"export_source": "tui",
 		},
 	}
 
@@ -42,7 +68,7 @@ func TrajectoryFromMessages(sessionID, modelName string, messages []message.Mess
 		step.StepID = len(traj.Steps) + 1
 		traj.Steps = append(traj.Steps, step)
 	}
-	traj.FinalMetrics = finalMetrics(traj.Steps)
+	traj.FinalMetrics = finalMetrics(traj.Steps, sess)
 	return traj
 }
 
@@ -179,4 +205,130 @@ func isBackgroundRuntimeKind(kind string) bool {
 
 func cleanTrajectoryText(text string) string {
 	return ansi.Strip(text)
+}
+
+func backgroundRuntimeMessage(kind string) string {
+	if kind == "background_job_killed" {
+		return "Background job killed."
+	}
+	return "Background job completed."
+}
+
+func extractBackgroundJobID(text string) any {
+	const marker = "(job_id: "
+	start := strings.Index(text, marker)
+	if start < 0 {
+		return nil
+	}
+	rest := text[start+len(marker):]
+	end := strings.Index(rest, ")")
+	if end < 0 {
+		return nil
+	}
+	return rest[:end]
+}
+
+// finalMetrics computes final_metrics. When sess is non-nil, cumulative token
+// accounting from the sessions table is used for totals; step-level per-turn
+// metrics still contribute to reasoning/cache breakdowns.
+func finalMetrics(steps []atif.Step, sess *session.Session) atif.FinalMetrics {
+	final := atif.FinalMetrics{
+		TotalSteps: len(steps),
+		Extra: map[string]any{
+			"reasoning_tokens":      int64(0),
+			"cache_creation_tokens": int64(0),
+			"cache_miss_tokens":     int64(0),
+			"total_tokens":          int64(0),
+		},
+	}
+	for _, step := range steps {
+		if step.Metrics == nil {
+			continue
+		}
+		if sess == nil {
+			final.TotalPromptTokens += step.Metrics.PromptTokens
+			final.TotalCompletionTokens += step.Metrics.CompletionTokens
+			final.TotalCachedTokens += step.Metrics.CachedTokens
+		}
+		if step.Metrics.CostUSD != nil {
+			if final.TotalCostUSD == nil {
+				final.TotalCostUSD = new(float64)
+			}
+			*final.TotalCostUSD += *step.Metrics.CostUSD
+		}
+		addExtraInt64(final.Extra, "reasoning_tokens", step.Metrics.Extra["reasoning_tokens"])
+		addExtraInt64(final.Extra, "cache_creation_tokens", step.Metrics.Extra["cache_creation_tokens"])
+		addExtraInt64(final.Extra, "cache_miss_tokens", step.Metrics.Extra["cache_miss_tokens"])
+	}
+	if sess != nil {
+		rawInput := sess.CacheMissTokens - sess.CacheCreationTokens
+		final.TotalPromptTokens = rawInput + sess.CacheReadTokens
+		final.TotalCompletionTokens = 0 // Not cumulative in current schema.
+		final.TotalCachedTokens = sess.CacheReadTokens
+		cost := sess.Cost
+		final.TotalCostUSD = &cost
+		final.Extra["cache_creation"] = sess.CacheCreationTokens
+		final.Extra["cache_miss"] = sess.CacheMissTokens
+	}
+	if final.TotalCostUSD == nil {
+		zeroCost := 0.0
+		final.TotalCostUSD = &zeroCost
+	}
+	final.Extra["total_tokens"] = final.TotalPromptTokens + final.TotalCompletionTokens
+	return final
+}
+
+func addExtraInt64(extra map[string]any, key string, value any) {
+	current, _ := extra[key].(int64)
+	switch v := value.(type) {
+	case int64:
+		extra[key] = current + v
+	case int:
+		extra[key] = current + int64(v)
+	}
+}
+
+// WriteTrajectoryFile writes a trajectory to path atomically (temp + rename).
+func WriteTrajectoryFile(path string, traj atif.Trajectory) error {
+	if path == "" {
+		return nil
+	}
+
+	var buf strings.Builder
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(traj); err != nil {
+		return fmt.Errorf("write trajectory: marshal: %w", err)
+	}
+	data := []byte(buf.String())
+
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".trajectory-*.tmp")
+	if err != nil {
+		return fmt.Errorf("write trajectory: create temp: %w", err)
+	}
+	tmpPath := tmp.Name()
+	keep := false
+	defer func() {
+		if !keep {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write trajectory: write temp: %w", err)
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write trajectory: chmod temp: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("write trajectory: close temp: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("write trajectory: rename temp: %w", err)
+	}
+	keep = true
+	return nil
 }

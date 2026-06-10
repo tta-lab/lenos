@@ -257,7 +257,7 @@ func TestBuildCall_NoLongerInjectsLenosEnvVars(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(sessionsDir, "sess-123.md"), nil, 0o644))
 
-	call, err := buildCall(context.Background(), "sess-123", "hi", Model{}, config.ProviderConfig{}, c.cfg)
+	call, err := buildCall(context.Background(), "sess-123", "hi", Model{}, config.ProviderConfig{}, c.cfg, nil, nil)
 	require.NoError(t, err)
 
 	// buildCall copies all OS env vars and also explicitly sets
@@ -423,7 +423,7 @@ func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 			dataDir:      cfg.WorkingDir(),
 			currentAgent: &stubAgent{modelName: "test-model"},
 		}
-		call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
+		call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg, nil, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, call.AllowedPaths)
 		assert.False(t, call.AllowedPaths[0].ReadOnly, "default should be RW")
@@ -437,7 +437,7 @@ func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 			dataDir:      cfg.WorkingDir(),
 			currentAgent: &stubAgent{modelName: "test-model"},
 		}
-		call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
+		call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg, nil, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, call.AllowedPaths)
 		assert.True(t, call.AllowedPaths[0].ReadOnly, "RO override should set cwd ReadOnly=true")
@@ -451,7 +451,7 @@ func TestBuildCall_AccessModeFromOverrides(t *testing.T) {
 			dataDir:      cfg.WorkingDir(),
 			currentAgent: &stubAgent{modelName: "test-model"},
 		}
-		call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
+		call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, call.Sandbox)
 	})
@@ -475,7 +475,7 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 		dataDir:      cfg.WorkingDir(),
 		currentAgent: &stubAgent{modelName: "test-model"},
 	}
-	call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
+	call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg, nil, nil)
 	require.NoError(t, err)
 
 	for _, allowed := range call.AllowedPaths {
@@ -511,7 +511,7 @@ func TestBuildCall_ReviewerContextExcludesCoderContext(t *testing.T) {
 		dataDir:      cfg.WorkingDir(),
 		currentAgent: &stubAgent{modelName: "test-model"},
 	}
-	call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg)
+	call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg, nil, nil)
 	require.NoError(t, err)
 
 	joined := strings.Join(commandTexts(call.ContextCommands), "\n")

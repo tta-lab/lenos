@@ -19,7 +19,7 @@ func TestExportTrajectoryFileStripsANSIAndAddsAgentVersion(t *testing.T) {
 		{ID: "m1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "\x1b[31mhello\x1b[m"}}},
 		{ID: "m2", Role: message.Assistant, Model: "test-model", Provider: "mock", Parts: []message.ContentPart{message.TextContent{Text: "\x3crun>\necho ok\n\x3c/run>"}}},
 		{ID: "m3", Role: message.Result, Parts: []message.ContentPart{message.CommandContent{Command: "\x1b[31mecho ok\x1b[m", Output: "\x1b[32mok\x1b[m\n", ExitCode: &exitCode}}},
-	})
+	}, nil)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(path)
@@ -58,7 +58,7 @@ func TestExportTrajectoryFileKeepsBackgroundCompletionAsSystemStep(t *testing.T)
 		{ID: "m1", Role: message.Assistant, Model: "test-model", Parts: []message.ContentPart{message.TextContent{Text: "\x3crun>\nlong command\n\x3c/run>"}}},
 		{ID: "m2", Role: message.Result, Parts: []message.ContentPart{message.CommandContent{Command: "long command", Output: "background job started (job_id: job-1).", ExitCode: &exitCode}}},
 		{ID: "m3", Role: message.Result, Parts: []message.ContentPart{message.CommandContent{Command: "long command", Output: "background job completed (job_id: job-1)\n\nok\n", ExitCode: &exitCode}}},
-	})
+	}, nil)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(path)

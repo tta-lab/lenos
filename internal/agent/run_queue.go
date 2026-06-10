@@ -118,14 +118,14 @@ func (a *sessionAgent) injectRuntimePrompt(call SessionAgentCall, msg string) {
 func (a *sessionAgent) enqueueBackgroundJobResult(call SessionAgentCall) func(msg string) {
 	return func(msg string) {
 		runtimeCall := SessionAgentCall{
-			SessionID:          call.SessionID,
-			Prompt:             msg,
-			runtimePrompt:      true,
-			ProviderOptions:    call.ProviderOptions,
-			Sandbox:            call.Sandbox,
-			Env:                call.Env,
-			AllowedPaths:       call.AllowedPaths,
-			trajectoryRecorder: call.trajectoryRecorder,
+			SessionID:              call.SessionID,
+			Prompt:                 msg,
+			runtimePrompt:          true,
+			ProviderOptions:        call.ProviderOptions,
+			Sandbox:                call.Sandbox,
+			Env:                    call.Env,
+			AllowedPaths:           call.AllowedPaths,
+			trajectoryMaterializer: call.trajectoryMaterializer,
 		}
 		if a.IsSessionBusy(call.SessionID) {
 			existing, _ := a.messageQueue.Get(call.SessionID)

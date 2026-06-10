@@ -497,7 +497,7 @@ func TestRunLoop_ContextCancelMidExec(t *testing.T) {
 	rec := &recordingRecorder{}
 	deps, ms := newDeps(t, model, runner, rec)
 	trajectoryPath := filepath.Join(t.TempDir(), "trajectory.json")
-	deps.trajectoryRecorder = NewTrajectoryRecorder(trajectoryPath, deps.sessionID, deps.model)
+	deps.trajectoryMaterializer = NewTrajectoryMaterializer(trajectoryPath, nil, deps.messages, deps.model.messageModelID())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

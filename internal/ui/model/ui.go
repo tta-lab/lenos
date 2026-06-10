@@ -2653,7 +2653,7 @@ func (m *UI) exportTrajectory(ctx context.Context, sessionID string) (string, er
 	}
 
 	model := m.com.Workspace.AgentModel()
-	if err := agent.ExportTrajectoryFile(path, sessionID, model.ModelCfg.Model, messages); err != nil {
+	if err := agent.ExportTrajectoryFile(path, sessionID, model.ModelCfg.Model, messages, nil); err != nil {
 		return "", err
 	}
 	return path, nil

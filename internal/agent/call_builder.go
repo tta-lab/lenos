@@ -11,6 +11,8 @@ import (
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/message"
+	"github.com/tta-lab/lenos/internal/session"
 	"github.com/tta-lab/lenos/internal/taskwarrior"
 )
 
@@ -74,7 +76,7 @@ func agentNameOr(name string) string {
 // buildCall assembles the per-turn SessionAgentCall with sandbox env, allowed
 // paths, and provider options. Extracted so the OAuth/API-key refresh path
 // can rebuild a call with fresh credentials without duplicating wiring.
-func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, providerCfg config.ProviderConfig, cfg *config.ConfigStore) (SessionAgentCall, error) {
+func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, providerCfg config.ProviderConfig, cfg *config.ConfigStore, sessions session.Service, messages message.Service) (SessionAgentCall, error) {
 	sandboxEnv := make(map[string]string, len(os.Environ()))
 	for _, e := range os.Environ() {
 		if idx := strings.IndexByte(e, '='); idx >= 0 {
@@ -144,27 +146,27 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 	}
 
 	dataDir := filepath.Join(cwd, cfg.Config().Options.DataDirectory)
-	var trajectoryRecorder *TrajectoryRecorder
+	var trajectoryMaterializer *TrajectoryMaterializer
 	if path := TrajectoryPathFromContext(ctx); path != "" {
-		trajectoryRecorder = NewTrajectoryRecorder(path, sessionID, model)
+		trajectoryMaterializer = NewTrajectoryMaterializer(path, sessions, messages, model.messageModelID())
 	}
 
 	return SessionAgentCall{
-		SessionID:          sessionID,
-		Prompt:             userPrompt,
-		usageSummary:       RunUsageSummaryFromContext(ctx),
-		trajectoryRecorder: trajectoryRecorder,
-		ProviderOptions:    getProviderOptions(model, providerCfg),
-		PairWith:           cfg.Overrides().PairWith,
-		Sandbox:            useSandbox,
-		Env:                sandboxEnv,
-		AllowedPaths:       BuildAllowedPaths(ctx, cwd, access),
-		TaskID:             taskwarrior.ResolveTaskID(cwd),
-		ContextCommands:    buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
-		JournalPath:        journalPath,
-		GoalPath:           goalPath,
-		GoalStartupHint:    goalPath != "" && (cfg.Overrides().GoalText != "" || cfg.Overrides().GoalFile != ""),
-		BashOutput:         cfg.Config().Options.BashOutput,
-		DataDir:            dataDir,
+		SessionID:              sessionID,
+		Prompt:                 userPrompt,
+		usageSummary:           RunUsageSummaryFromContext(ctx),
+		trajectoryMaterializer: trajectoryMaterializer,
+		ProviderOptions:        getProviderOptions(model, providerCfg),
+		PairWith:               cfg.Overrides().PairWith,
+		Sandbox:                useSandbox,
+		Env:                    sandboxEnv,
+		AllowedPaths:           BuildAllowedPaths(ctx, cwd, access),
+		TaskID:                 taskwarrior.ResolveTaskID(cwd),
+		ContextCommands:        buildRuntimeContextCommandsForAgent(cfg, runtimeContext),
+		JournalPath:            journalPath,
+		GoalPath:               goalPath,
+		GoalStartupHint:        goalPath != "" && (cfg.Overrides().GoalText != "" || cfg.Overrides().GoalFile != ""),
+		BashOutput:             cfg.Config().Options.BashOutput,
+		DataDir:                dataDir,
 	}, nil
 }

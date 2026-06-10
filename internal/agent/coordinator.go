@@ -176,7 +176,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return err
 	}
 
-	call, err := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg)
+	call, err := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg, c.sessions, c.messages)
 	if err != nil {
 		return fmt.Errorf("build call: %w", err)
 	}
@@ -212,7 +212,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 			return fmt.Errorf("provider %s not found after refresh", model.ModelCfg.Provider)
 		}
 		var buildErr error
-		call, buildErr = buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg, c.cfg)
+		call, buildErr = buildCall(ctx, sessionID, prompt, c.currentAgent.Model(), freshCfg, c.cfg, c.sessions, c.messages)
 		if buildErr != nil {
 			return fmt.Errorf("build call: %w", buildErr)
 		}
@@ -239,7 +239,7 @@ func (c *coordinator) RunRuntime(ctx context.Context, sessionID, prompt string) 
 		return errModelProviderNotConfigured
 	}
 
-	call, err := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg)
+	call, err := buildCall(ctx, sessionID, prompt, model, providerCfg, c.cfg, c.sessions, c.messages)
 	if err != nil {
 		return fmt.Errorf("build call: %w", err)
 	}
@@ -352,7 +352,7 @@ func (c *coordinator) CompactSession(ctx context.Context, sessionID string) erro
 	if !ok {
 		return errModelProviderNotConfigured
 	}
-	call, err := buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg, c.cfg)
+	call, err := buildCall(ctx, sessionID, compactHandoffHint(), model, providerCfg, c.cfg, c.sessions, c.messages)
 	if err != nil {
 		return err
 	}

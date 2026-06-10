@@ -38,10 +38,10 @@ type SessionAgentCall struct {
 	Prompt    string
 	// runtimePrompt marks Prompt as runtime feedback persisted as a runtime
 	// message, not as a user-visible chat row.
-	runtimePrompt      bool
-	turnPrompts        []turnPrompt
-	usageSummary       *RunUsageSummary
-	trajectoryRecorder *TrajectoryRecorder
+	runtimePrompt          bool
+	turnPrompts            []turnPrompt
+	usageSummary           *RunUsageSummary
+	trajectoryMaterializer *TrajectoryMaterializer
 
 	// ProviderOptions are the per-provider streaming options merged from
 	// catwalk + provider config + model config (anthropic thinking, openai

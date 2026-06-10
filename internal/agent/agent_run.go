@@ -97,10 +97,8 @@ runLoopReentry:
 	if err := a.persistVisibleTurnPrompts(ctx, call.SessionID, turnPrompts); err != nil {
 		return err
 	}
-	for _, prompt := range turnPrompts {
-		if err := recordTrajectoryPrompt(ctx, call.trajectoryRecorder, prompt); err != nil {
-			slog.Warn("trajectory: record prompt", "error", err)
-		}
+	if err := call.trajectoryMaterializer.Refresh(ctx, call.SessionID); err != nil {
+		slog.Warn("trajectory: initial refresh", "error", err)
 	}
 
 	var wg sync.WaitGroup
@@ -120,20 +118,20 @@ runLoopReentry:
 	a.eventPromptSent(call.SessionID)
 
 	deps := loopDeps{
-		model:              primaryModel,
-		provOpts:           call.ProviderOptions,
-		pairWith:           call.PairWith,
-		messages:           a.messages,
-		runner:             runner,
-		sessionID:          call.SessionID,
-		sysPrompt:          a.systemPrompt.Get(),
-		env:                call.Env,
-		paths:              call.AllowedPaths,
-		bgRunner:           bgRunner,
-		bashOutput:         call.BashOutput,
-		dataDir:            call.DataDir,
-		goalPath:           call.GoalPath,
-		trajectoryRecorder: call.trajectoryRecorder,
+		model:                  primaryModel,
+		provOpts:               call.ProviderOptions,
+		pairWith:               call.PairWith,
+		messages:               a.messages,
+		runner:                 runner,
+		sessionID:              call.SessionID,
+		sysPrompt:              a.systemPrompt.Get(),
+		env:                    call.Env,
+		paths:                  call.AllowedPaths,
+		bgRunner:               bgRunner,
+		bashOutput:             call.BashOutput,
+		dataDir:                call.DataDir,
+		goalPath:               call.GoalPath,
+		trajectoryMaterializer: call.trajectoryMaterializer,
 		usageCost: func(u fantasy.Usage, m fantasy.ProviderMetadata) float64 {
 			return usageCost(primaryModel, u, a.openrouterCost(m))
 		},
@@ -178,8 +176,9 @@ runLoopReentry:
 
 	if runErr != nil {
 		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, ErrRequestCancelled) {
-			if err := call.trajectoryRecorder.MarkInterrupted(ctx, "signal"); err != nil {
-				slog.Warn("trajectory: mark interrupted", "error", err)
+			call.trajectoryMaterializer.SetExtra(map[string]any{"interrupted": true, "interrupt_reason": "signal"})
+			if err := call.trajectoryMaterializer.Refresh(ctx, call.SessionID); err != nil {
+				slog.Warn("trajectory: refresh after interrupt", "error", err)
 			}
 		}
 		// Release activeRequests before surfacing the error so
@@ -226,8 +225,8 @@ runLoopReentry:
 		}
 	}
 
-	if err := call.trajectoryRecorder.Finish(ctx); err != nil {
-		slog.Warn("trajectory: finish", "error", err)
+	if err := call.trajectoryMaterializer.Refresh(ctx, call.SessionID); err != nil {
+		slog.Warn("trajectory: final refresh", "error", err)
 	}
 
 	if newCall, ok := a.tryReenter(call, cancel); ok {
