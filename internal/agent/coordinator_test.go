@@ -568,6 +568,37 @@ func TestBuildCall_ExistingDraftGoalDoesNotBindRuntimeGoal(t *testing.T) {
 	assert.False(t, call.GoalStartupHint)
 }
 
+func TestBuildCall_ExistingTerminalGoalDoesNotBindRuntimeGoal(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status GoalStatus
+	}{
+		{name: "complete", status: GoalComplete},
+		{name: "blocked", status: GoalBlocked},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			installFakeGoalCLI(t)
+			configDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+			t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+			t.Setenv("LENOS_GLOBAL_DATA", configDir)
+			t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+			cfg, err := config.Init(tmp, "", false)
+			require.NoError(t, err)
+			_, err = CreateGoal(t.Context(), tmp, "sess-terminal", "# Terminal\n", tc.status)
+			require.NoError(t, err)
+
+			call, err := buildCall(context.Background(), "sess-terminal", "hi", Model{}, config.ProviderConfig{}, cfg, nil, nil)
+			require.NoError(t, err)
+
+			assert.Empty(t, call.GoalPath)
+			assert.NotContains(t, call.Env, "LENOS_GOAL")
+			assert.False(t, call.GoalStartupHint)
+		})
+	}
+}
+
 func TestBuildCall_ExistingActiveGoalBindsRuntimeGoal(t *testing.T) {
 	tmp := t.TempDir()
 	installFakeGoalCLI(t)
