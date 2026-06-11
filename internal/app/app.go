@@ -154,15 +154,45 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 		return sess, nil
 
 	case useLast:
-		sess, err := app.Sessions.GetLast(ctx)
+		sess, err := app.lastSessionForActiveAgent(ctx)
 		if err != nil {
 			return session.Session{}, fmt.Errorf("no sessions found to continue")
 		}
 		return sess, nil
 
 	default:
-		return app.Sessions.Create(ctx, agent.DefaultSessionName)
+		metadata := session.Metadata{AgentName: config.AgentCoder}
+		if app.config != nil {
+			if agentName := app.config.Overrides().AgentName; agentName != "" {
+				metadata.AgentName = agentName
+			}
+		}
+		if app.AgentCoordinator != nil {
+			model := app.AgentCoordinator.Model()
+			metadata.Provider = model.ModelCfg.Provider
+			metadata.Model = model.ModelCfg.Model
+		}
+		return app.Sessions.CreateWithMetadata(ctx, agent.DefaultSessionName, metadata)
 	}
+}
+
+func (app *App) lastSessionForActiveAgent(ctx context.Context) (session.Session, error) {
+	agentName := config.AgentCoder
+	if app.config != nil {
+		if override := app.config.Overrides().AgentName; override != "" {
+			agentName = override
+		}
+	}
+	sessions, err := app.Sessions.List(ctx)
+	if err != nil {
+		return session.Session{}, err
+	}
+	for _, sess := range sessions {
+		if sess.AgentName == agentName {
+			return sess, nil
+		}
+	}
+	return session.Session{}, sql.ErrNoRows
 }
 
 // RunNonInteractive runs the application in non-interactive mode with the

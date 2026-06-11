@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -114,6 +115,15 @@ lenos --continue
 				return err
 			}
 			sessionID = sess.ID
+		} else if continueLast {
+			sess, ok, err := resolveWorkspaceContinueSession(cmd.Context(), ws)
+			if err != nil {
+				return err
+			}
+			if ok {
+				sessionID = sess.ID
+				continueLast = false
+			}
 		}
 
 		event.AppInitialized()
@@ -316,6 +326,10 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := applySessionResumeDefaultsFromFlags(ctx, cmd, store, conn, agentName); err != nil {
+		_ = conn.Close()
+		return nil, nil, err
+	}
 
 	logFile := filepath.Join(cfg.Options.DataDirectory, "logs", "lenos.log")
 	lenoslog.Setup(logFile, debug)
@@ -334,6 +348,93 @@ func setupWorkspace(cmd *cobra.Command, agentName string, contextFiles []string,
 	ws := workspace.NewAppWorkspace(appInstance, store)
 	cleanup := func() { appInstance.Shutdown() }
 	return ws, cleanup, nil
+}
+
+func applySessionResumeDefaultsFromFlags(ctx context.Context, cmd *cobra.Command, store *config.ConfigStore, conn *sql.DB, requestedAgent string) error {
+	sessionFlag := cmd.Flags().Lookup("session")
+	continueFlag := cmd.Flags().Lookup("continue")
+	if sessionFlag == nil && continueFlag == nil {
+		return nil
+	}
+
+	sessionID := ""
+	if sessionFlag != nil {
+		sessionID, _ = cmd.Flags().GetString("session")
+	}
+	continueLast := false
+	if continueFlag != nil {
+		continueLast, _ = cmd.Flags().GetBool("continue")
+	}
+	if sessionID == "" && !continueLast {
+		return nil
+	}
+
+	svc := session.NewService(db.New(conn), conn)
+	var sess session.Session
+	var err error
+	switch {
+	case sessionID != "":
+		sess, err = resolveSessionID(ctx, svc, sessionID)
+	case continueLast:
+		list, listErr := svc.List(ctx)
+		if listErr != nil {
+			return fmt.Errorf("failed to list sessions: %w", listErr)
+		}
+		var ok bool
+		sess, ok = selectResumeSession(list, requestedAgent)
+		if !ok {
+			return nil
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	explicitAgent := cmd.Flags().Changed("agent")
+	explicitModel := cmd.Flags().Changed("model") ||
+		cmd.Flags().Changed("small-model") ||
+		cmd.Flags().Changed("reasoning-effort")
+	defaults := config.SessionResumeDefaults{
+		AgentName:     sess.AgentName,
+		Provider:      sess.Provider,
+		Model:         sess.Model,
+		ExplicitAgent: explicitAgent,
+		ExplicitModel: explicitModel,
+	}
+	if defaults.AgentName == "" && requestedAgent != "" {
+		defaults.AgentName = requestedAgent
+	}
+	if defaults.AgentName != "" && !explicitAgent {
+		agentName, agentContextFile, resolveErr := resolveWorkspaceAgent(defaults.AgentName, store.Config().Options.AgentPaths)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		defaults.AgentName = agentName
+		store.Overrides().AgentContextFile = agentContextFile
+	}
+	config.ApplySessionResumeDefaults(store, defaults)
+	return nil
+}
+
+func resolveWorkspaceContinueSession(ctx context.Context, ws workspace.Workspace) (session.Session, bool, error) {
+	sessions, err := ws.ListSessions(ctx)
+	if err != nil {
+		return session.Session{}, false, err
+	}
+	sess, ok := selectResumeSession(sessions, ws.AgentName())
+	return sess, ok, nil
+}
+
+func selectResumeSession(sessions []session.Session, agentName string) (session.Session, bool) {
+	if agentName == "" {
+		agentName = config.AgentCoder
+	}
+	for _, sess := range sessions {
+		if sess.AgentName == agentName {
+			return sess, true
+		}
+	}
+	return session.Session{}, false
 }
 
 func validateReadonlySandboxPolicy(readOnly bool, sandbox *bool, noSandbox bool) error {
