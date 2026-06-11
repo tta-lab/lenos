@@ -117,11 +117,11 @@ func (q *Queries) GetRecentActivity(ctx context.Context) ([]GetRecentActivityRow
 const getTotalStats = `-- name: GetTotalStats :one
 SELECT
     COUNT(*) as total_sessions,
-    COALESCE(SUM(prompt_tokens), 0) as total_prompt_tokens,
-    COALESCE(SUM(completion_tokens), 0) as total_completion_tokens,
+    COALESCE(SUM(total_prompt_tokens), 0) as total_prompt_tokens,
+    COALESCE(SUM(total_completion_tokens), 0) as total_completion_tokens,
     COALESCE(SUM(cost), 0) as total_cost,
     COALESCE(SUM(message_count), 0) as total_messages,
-    COALESCE(AVG(prompt_tokens + completion_tokens), 0) as avg_tokens_per_session,
+    COALESCE(AVG(total_prompt_tokens + total_completion_tokens), 0) as avg_tokens_per_session,
     COALESCE(AVG(message_count), 0) as avg_messages_per_session
 FROM sessions
 WHERE parent_session_id IS NULL
@@ -155,8 +155,8 @@ func (q *Queries) GetTotalStats(ctx context.Context) (GetTotalStatsRow, error) {
 const getUsageByDay = `-- name: GetUsageByDay :many
 SELECT
     date(created_at, 'unixepoch') as day,
-    SUM(prompt_tokens) as prompt_tokens,
-    SUM(completion_tokens) as completion_tokens,
+    SUM(total_prompt_tokens) as prompt_tokens,
+    SUM(total_completion_tokens) as completion_tokens,
     SUM(cost) as cost,
     COUNT(*) as session_count
 FROM sessions
@@ -206,8 +206,8 @@ const getUsageByDayOfWeek = `-- name: GetUsageByDayOfWeek :many
 SELECT
     CAST(strftime('%w', created_at, 'unixepoch') AS INTEGER) as day_of_week,
     COUNT(*) as session_count,
-    SUM(prompt_tokens) as prompt_tokens,
-    SUM(completion_tokens) as completion_tokens
+    SUM(total_prompt_tokens) as prompt_tokens,
+    SUM(total_completion_tokens) as completion_tokens
 FROM sessions
 WHERE parent_session_id IS NULL
 GROUP BY day_of_week

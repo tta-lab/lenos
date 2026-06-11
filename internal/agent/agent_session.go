@@ -130,19 +130,21 @@ func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage
 	}
 
 	s.CompletionTokens = usage.OutputTokens
-	s.PromptTokens = usage.InputTokens + usage.CacheReadTokens
 	s.CacheCreationTokens += usage.CacheCreationTokens
 	s.CacheReadTokens += usage.CacheReadTokens
-	s.CacheMissTokens += usage.InputTokens
 
-	// TotalPromptTokens = total input tokens sent to the model.
-	// OpenAI-style: InputTokens is non-cached only, CacheReadTokens is cached.
-	//   → sum is correct.
-	// Anthropic-style: InputTokens already includes CacheReadTokens (subset).
-	//   → summing would double-count. Use InputTokens directly.
+	// Provider-normalized accumulation.
+	// OpenAI/Codex: InputTokens = non-cached only. CacheReadTokens = cached.
+	//   → prompt = InputTokens + CacheReadTokens, miss = InputTokens.
+	// Anthropic/Bedrock: InputTokens already includes CacheReadTokens (subset).
+	//   → prompt = InputTokens, miss = InputTokens - CacheReadTokens.
 	if usage.CacheReadTokens > 0 && providerNormalizesCacheReads(model.ModelCfg.Provider) {
+		s.PromptTokens = usage.InputTokens
+		s.CacheMissTokens += usage.InputTokens - usage.CacheReadTokens
 		s.TotalPromptTokens += usage.InputTokens
 	} else {
+		s.PromptTokens = usage.InputTokens + usage.CacheReadTokens
+		s.CacheMissTokens += usage.InputTokens
 		s.TotalPromptTokens += usage.InputTokens + usage.CacheReadTokens
 	}
 	s.TotalCompletionTokens += usage.OutputTokens
