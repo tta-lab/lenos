@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/tta-lab/lenos/internal/agent/prompt"
 	"github.com/tta-lab/lenos/internal/config"
@@ -34,6 +33,7 @@ func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeConte
 			webRuntimeContextPromptTmpl,
 			skillRuntimeContextPromptTmpl,
 			projectRuntimeContextPromptTmpl,
+			goalRuntimeContextPromptTmpl,
 			coderRuntimeContextPromptTmpl,
 			reviewerRuntimeContextPromptTmpl,
 		)
@@ -47,6 +47,7 @@ func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeConte
 			webRuntimeContextPromptTmpl,
 			skillRuntimeContextPromptTmpl,
 			projectRuntimeContextPromptTmpl,
+			goalRuntimeContextPromptTmpl,
 			coderRuntimeContextPromptTmpl,
 			reviewerRuntimeContextPromptTmpl,
 		)
@@ -118,7 +119,6 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 	var goalPath string
 	if cfg.Overrides().GoalText != "" || cfg.Overrides().GoalFile != "" {
 		var body string
-		createdAt := time.Now().Format(time.RFC3339)
 		if cfg.Overrides().GoalText != "" {
 			body = cfg.Overrides().GoalText
 		} else {
@@ -132,7 +132,7 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 			body = stripYAMLFrontmatter(body)
 		}
 		if body != "" {
-			path, err := CreateGoal(cwd, sessionID, body, createdAt)
+			path, err := CreateGoal(ctx, cwd, sessionID, body, GoalActive)
 			if err != nil {
 				return SessionAgentCall{}, fmt.Errorf("failed to create goal file: %w", err)
 			}
@@ -144,8 +144,13 @@ func buildCall(ctx context.Context, sessionID, userPrompt string, model Model, p
 	if goalPath == "" {
 		diskPath := GoalPath(cwd, sessionID)
 		if _, err := os.Stat(diskPath); err == nil {
-			goalPath = diskPath
-			sandboxEnv["LENOS_GOAL"] = goalPath
+			status, err := ReadGoalStatus(ctx, diskPath)
+			if err != nil {
+				slog.Warn("Failed to read goal status", "path", diskPath, "error", err)
+			} else if IsGoalRuntimeActive(status) {
+				goalPath = diskPath
+				sandboxEnv["LENOS_GOAL"] = goalPath
+			}
 		}
 	}
 

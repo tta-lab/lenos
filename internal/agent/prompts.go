@@ -40,6 +40,9 @@ var skillRuntimeContextPromptTmpl []byte
 //go:embed templates/project_context.md
 var projectRuntimeContextPromptTmpl []byte
 
+//go:embed templates/goal_context.md
+var goalRuntimeContextPromptTmpl []byte
+
 //go:embed templates/coder_context.md
 var coderRuntimeContextPromptTmpl []byte
 
@@ -296,6 +299,10 @@ func fallbackRuntimeContextCommands(runtimeContext prompt.RuntimeContext) []Runt
 		},
 		{
 			Command:  lenosbash.WrapBash("Read available project tool documentation.", "echo \"------project --help------\" && project --help && echo \"------project list------\" && project list"),
+			Optional: true,
+		},
+		{
+			Command:  lenosbash.WrapBash("Read available goal tool documentation.", "echo \"------goal --help------\" && goal --help"),
 			Optional: true,
 		},
 	}

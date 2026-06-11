@@ -63,11 +63,11 @@ func tryEndTurn(ctx context.Context, deps loopDeps, msgs []fantasy.Message, emit
 
 	// Check goal status before allowing natural exit.
 	if deps.goalPath != "" {
-		status, err := ReadGoalStatus(deps.goalPath)
+		status, err := ReadGoalStatus(ctx, deps.goalPath)
 		if err != nil {
 			slog.Warn("loop: read goal status", "path", deps.goalPath, "error", err)
 		}
-		if status != GoalComplete && status != GoalBlocked {
+		if IsGoalRuntimeActive(status) {
 			// Goal is still active — inject check hint and continue.
 			hint := goalCheckHint()
 			markStepFinished(ctx, deps, assistantMsg, message.FinishReasonToolUse)
