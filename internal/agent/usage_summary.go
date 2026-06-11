@@ -85,7 +85,7 @@ func (s *RunUsageSummary) AddUsage(model Model, usage fantasy.Usage, costUSD flo
 		s.InputCacheMissTokens += rawInput
 	}
 
-	s.InputTokens = s.RawInputTokens + s.InputCacheHitTokens
+	s.InputTokens = s.InputCacheMissTokens + s.InputCacheHitTokens
 	s.TotalTokens = s.InputTokens + s.OutputTokens
 	s.CostUSD += costUSD
 }
