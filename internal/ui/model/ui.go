@@ -1173,8 +1173,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 		goalPath := agent.GoalPath(m.com.Workspace.WorkingDir(), m.session.ID)
 		if _, err := os.Stat(goalPath); os.IsNotExist(err) {
-			createdAt := time.Now().Format(time.RFC3339)
-			if _, err := agent.CreateGoal(m.com.Workspace.WorkingDir(), m.session.ID, "", createdAt); err != nil {
+			if _, err := agent.CreateGoal(context.Background(), m.com.Workspace.WorkingDir(), m.session.ID, "", agent.GoalDraft); err != nil {
 				cmds = append(cmds, util.ReportError(fmt.Errorf("failed to create goal: %w", err)))
 				m.dialog.CloseDialog(dialog.CommandsID)
 				break
@@ -1187,6 +1186,10 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			m.openFile(goalPath),
 			func() tea.Msg {
 				if m.isAgentBusy() {
+					return nil
+				}
+				status, err := agent.ReadGoalStatus(context.Background(), goalPath)
+				if err != nil || !agent.IsGoalRuntimeActive(status) {
 					return nil
 				}
 				if m.hasSession() && m.session != nil {
