@@ -28,11 +28,8 @@ func ApplySessionResumeDefaults(store *ConfigStore, defaults SessionResumeDefaul
 		tier = SelectedModelTypeReview
 	}
 	store.Overrides().ActiveTier = tier
-	if store.config.Models == nil {
-		store.config.Models = make(map[SelectedModelType]SelectedModel)
-	}
-	store.config.Models[tier] = SelectedModel{
+	store.SetActiveModel(tier, SelectedModel{
 		Provider: defaults.Provider,
 		Model:    defaults.Model,
-	}
+	})
 }
