@@ -83,6 +83,25 @@ func TestBuildBaseSystemPrompt_RendersLenosBashProtocol(t *testing.T) {
 	assert.NotContains(t, got, "</bash>")
 }
 
+func TestBuildBaseSystemPrompt_RendersSkillTriggerRules(t *testing.T) {
+	t.Parallel()
+
+	got, err := buildBaseSystemPrompt(promptData{
+		WorkingDir: "/repo",
+		Platform:   "linux",
+		Date:       "2026-04-29",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "Use `skill list` to see all available skills.")
+	assert.Contains(t, got, "Use `skill find <keyword>` to search skills.")
+	assert.Contains(t, got, "Use `skill get <name>` to read a skill before using it.")
+	assert.Contains(t, got, "If the user names a skill, you must use that skill for this turn.")
+	assert.Contains(t, got, "If the task clearly matches a skill's description, you must use that skill for this turn.")
+	assert.Contains(t, got, "Multiple mentions mean use them all.")
+	assert.Contains(t, got, "Do not carry skills across turns unless re-mentioned.")
+}
+
 func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
