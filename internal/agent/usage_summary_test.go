@@ -46,7 +46,7 @@ func TestRunUsageSummaryExportsCostAndCacheFields(t *testing.T) {
 	require.Equal(t, float64(40928), got["input_tokens"])
 	require.Equal(t, float64(1632), got["raw_input_tokens"])
 	require.Equal(t, float64(39296), got["input_cache_hit_tokens"])
-	require.Equal(t, float64(1649), got["input_cache_miss_tokens"])
+	require.Equal(t, float64(1632), got["input_cache_miss_tokens"])
 	require.Equal(t, float64(17), got["cache_creation_tokens"])
 	require.Equal(t, float64(39296), got["cache_read_tokens"])
 	require.Equal(t, float64(3972), got["output_tokens"])

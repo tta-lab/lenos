@@ -72,12 +72,20 @@ func (s *RunUsageSummary) AddUsage(model Model, usage fantasy.Usage, costUSD flo
 
 	s.RawInputTokens += rawInput
 	s.InputCacheHitTokens += cacheRead
-	s.InputCacheMissTokens += rawInput + cacheCreation
 	s.CacheCreationTokens += cacheCreation
 	s.CacheReadTokens += cacheRead
 	s.OutputTokens += output
 	s.ReasoningTokens += int64(usage.ReasoningTokens)
-	s.InputTokens = s.RawInputTokens + s.InputCacheHitTokens
+
+	// Provider-normalized cache miss: Anthropic/Bedrock InputTokens includes
+	// CacheReadTokens as a subset, so miss = InputTokens - CacheReadTokens.
+	if cacheRead > 0 && providerNormalizesCacheReads(model.ModelCfg.Provider) {
+		s.InputCacheMissTokens += rawInput - cacheRead
+	} else {
+		s.InputCacheMissTokens += rawInput
+	}
+
+	s.InputTokens = s.InputCacheMissTokens + s.InputCacheHitTokens
 	s.TotalTokens = s.InputTokens + s.OutputTokens
 	s.CostUSD += costUSD
 }

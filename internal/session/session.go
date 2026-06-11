@@ -45,19 +45,22 @@ func HasIncompleteTodos(todos []Todo) bool {
 }
 
 type Session struct {
-	ID                  string
-	ParentSessionID     string
-	Title               string
-	MessageCount        int64
-	PromptTokens        int64
-	CompletionTokens    int64
-	CacheCreationTokens int64
-	CacheReadTokens     int64
-	CacheMissTokens     int64
-	SummaryMessageID    string
-	Cost                float64
-	CreatedAt           int64
-	UpdatedAt           int64
+	ID                    string
+	ParentSessionID       string
+	Title                 string
+	MessageCount          int64
+	PromptTokens          int64
+	CompletionTokens      int64
+	CacheCreationTokens   int64
+	CacheReadTokens       int64
+	CacheMissTokens       int64
+	TotalPromptTokens     int64
+	TotalCompletionTokens int64
+	TotalReasoningTokens  int64
+	SummaryMessageID      string
+	Cost                  float64
+	CreatedAt             int64
+	UpdatedAt             int64
 }
 
 type Service interface {
@@ -69,7 +72,6 @@ type Service interface {
 	GetLast(ctx context.Context) (Session, error)
 	List(ctx context.Context) ([]Session, error)
 	Save(ctx context.Context, session Session) (Session, error)
-	UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens, cacheCreationTokens, cacheReadTokens, cacheMissTokens int64, cost float64) error
 	Rename(ctx context.Context, id string, title string) error
 	Delete(ctx context.Context, id string) error
 
@@ -177,13 +179,16 @@ func (s *service) GetLast(ctx context.Context) (Session, error) {
 
 func (s *service) Save(ctx context.Context, session Session) (Session, error) {
 	dbSession, err := s.q.UpdateSession(ctx, db.UpdateSessionParams{
-		ID:                  session.ID,
-		Title:               session.Title,
-		PromptTokens:        session.PromptTokens,
-		CompletionTokens:    session.CompletionTokens,
-		CacheCreationTokens: session.CacheCreationTokens,
-		CacheReadTokens:     session.CacheReadTokens,
-		CacheMissTokens:     session.CacheMissTokens,
+		ID:                    session.ID,
+		Title:                 session.Title,
+		PromptTokens:          session.PromptTokens,
+		CompletionTokens:      session.CompletionTokens,
+		CacheCreationTokens:   session.CacheCreationTokens,
+		CacheReadTokens:       session.CacheReadTokens,
+		CacheMissTokens:       session.CacheMissTokens,
+		TotalPromptTokens:     session.TotalPromptTokens,
+		TotalCompletionTokens: session.TotalCompletionTokens,
+		TotalReasoningTokens:  session.TotalReasoningTokens,
 		SummaryMessageID: sql.NullString{
 			String: session.SummaryMessageID,
 			Valid:  session.SummaryMessageID != "",
@@ -196,21 +201,6 @@ func (s *service) Save(ctx context.Context, session Session) (Session, error) {
 	session = s.fromDBItem(dbSession)
 	s.Publish(pubsub.UpdatedEvent, session)
 	return session, nil
-}
-
-// UpdateTitleAndUsage updates only the title and usage fields atomically.
-// This is safer than fetching, modifying, and saving the entire session.
-func (s *service) UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens, cacheCreationTokens, cacheReadTokens, cacheMissTokens int64, cost float64) error {
-	return s.q.UpdateSessionTitleAndUsage(ctx, db.UpdateSessionTitleAndUsageParams{
-		ID:                  sessionID,
-		Title:               title,
-		PromptTokens:        promptTokens,
-		CompletionTokens:    completionTokens,
-		CacheCreationTokens: cacheCreationTokens,
-		CacheReadTokens:     cacheReadTokens,
-		CacheMissTokens:     cacheMissTokens,
-		Cost:                cost,
-	})
 }
 
 // Rename updates only the title of a session without touching updated_at or
@@ -236,19 +226,22 @@ func (s *service) List(ctx context.Context) ([]Session, error) {
 
 func (s service) fromDBItem(item db.Session) Session {
 	return Session{
-		ID:                  item.ID,
-		ParentSessionID:     item.ParentSessionID.String,
-		Title:               item.Title,
-		MessageCount:        item.MessageCount,
-		PromptTokens:        item.PromptTokens,
-		CompletionTokens:    item.CompletionTokens,
-		CacheCreationTokens: item.CacheCreationTokens,
-		CacheReadTokens:     item.CacheReadTokens,
-		CacheMissTokens:     item.CacheMissTokens,
-		SummaryMessageID:    item.SummaryMessageID.String,
-		Cost:                item.Cost,
-		CreatedAt:           item.CreatedAt,
-		UpdatedAt:           item.UpdatedAt,
+		ID:                    item.ID,
+		ParentSessionID:       item.ParentSessionID.String,
+		Title:                 item.Title,
+		MessageCount:          item.MessageCount,
+		PromptTokens:          item.PromptTokens,
+		CompletionTokens:      item.CompletionTokens,
+		CacheCreationTokens:   item.CacheCreationTokens,
+		CacheReadTokens:       item.CacheReadTokens,
+		CacheMissTokens:       item.CacheMissTokens,
+		TotalPromptTokens:     item.TotalPromptTokens,
+		TotalCompletionTokens: item.TotalCompletionTokens,
+		TotalReasoningTokens:  item.TotalReasoningTokens,
+		SummaryMessageID:      item.SummaryMessageID.String,
+		Cost:                  item.Cost,
+		CreatedAt:             item.CreatedAt,
+		UpdatedAt:             item.UpdatedAt,
 	}
 }
 

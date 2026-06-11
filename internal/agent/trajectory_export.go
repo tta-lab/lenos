@@ -228,9 +228,9 @@ func extractBackgroundJobID(text string) any {
 	return rest[:end]
 }
 
-// finalMetrics computes final_metrics. When sess is non-nil, cumulative token
-// accounting from the sessions table is used for totals; step-level per-turn
-// metrics still contribute to reasoning/cache breakdowns.
+// finalMetrics computes final_metrics. When sess is non-nil, cumulative session
+// lifetime totals are used. Step-level per-turn metrics contribute to extra
+// breakdowns only.
 func finalMetrics(steps []atif.Step, sess *session.Session) atif.FinalMetrics {
 	final := atif.FinalMetrics{
 		TotalSteps: len(steps),
@@ -261,12 +261,12 @@ func finalMetrics(steps []atif.Step, sess *session.Session) atif.FinalMetrics {
 		addExtraInt64(final.Extra, "cache_miss_tokens", step.Metrics.Extra["cache_miss_tokens"])
 	}
 	if sess != nil {
-		rawInput := sess.CacheMissTokens - sess.CacheCreationTokens
-		final.TotalPromptTokens = rawInput + sess.CacheReadTokens
-		final.TotalCompletionTokens = 0 // Not cumulative in current schema.
+		final.TotalPromptTokens = sess.TotalPromptTokens
+		final.TotalCompletionTokens = sess.TotalCompletionTokens
 		final.TotalCachedTokens = sess.CacheReadTokens
 		cost := sess.Cost
 		final.TotalCostUSD = &cost
+		final.Extra["reasoning_tokens"] = sess.TotalReasoningTokens
 		final.Extra["cache_creation_tokens"] = sess.CacheCreationTokens
 		final.Extra["cache_miss_tokens"] = sess.CacheMissTokens
 	}

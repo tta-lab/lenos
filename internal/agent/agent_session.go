@@ -130,10 +130,38 @@ func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage
 	}
 
 	s.CompletionTokens = usage.OutputTokens
-	s.PromptTokens = usage.InputTokens + usage.CacheReadTokens
 	s.CacheCreationTokens += usage.CacheCreationTokens
 	s.CacheReadTokens += usage.CacheReadTokens
-	s.CacheMissTokens += usage.InputTokens + usage.CacheCreationTokens
+
+	// Provider-normalized accumulation.
+	// OpenAI/Codex: InputTokens = non-cached only. CacheReadTokens = cached.
+	//   → prompt = InputTokens + CacheReadTokens, miss = InputTokens.
+	// Anthropic/Bedrock: InputTokens already includes CacheReadTokens (subset).
+	//   → prompt = InputTokens, miss = InputTokens - CacheReadTokens.
+	if usage.CacheReadTokens > 0 && providerNormalizesCacheReads(model.ModelCfg.Provider) {
+		s.PromptTokens = usage.InputTokens
+		s.CacheMissTokens += usage.InputTokens - usage.CacheReadTokens
+		s.TotalPromptTokens += usage.InputTokens
+	} else {
+		s.PromptTokens = usage.InputTokens + usage.CacheReadTokens
+		s.CacheMissTokens += usage.InputTokens
+		s.TotalPromptTokens += usage.InputTokens + usage.CacheReadTokens
+	}
+	s.TotalCompletionTokens += usage.OutputTokens
+	s.TotalReasoningTokens += usage.ReasoningTokens
+}
+
+// providerNormalizesCacheReads reports whether the provider sets InputTokens to
+// full prompt input (including cached reads) with CacheReadTokens as a subset.
+// For these providers, TotalPromptTokens should use InputTokens directly to
+// avoid double-counting.
+func providerNormalizesCacheReads(provider string) bool {
+	switch provider {
+	case "anthropic", "bedrock":
+		return true
+	default:
+		return false
+	}
 }
 
 // saveSessionUsage fetches the session, updates usage metrics with the supplied

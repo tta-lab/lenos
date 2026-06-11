@@ -21,6 +21,9 @@ INSERT INTO sessions (
     cache_creation_tokens,
     cache_read_tokens,
     cache_miss_tokens,
+    total_prompt_tokens,
+    total_completion_tokens,
+    total_reasoning_tokens,
     cost,
     summary_message_id,
     updated_at,
@@ -36,23 +39,29 @@ INSERT INTO sessions (
     ?,
     ?,
     ?,
+    ?,
+    ?,
+    ?,
     null,
     strftime('%s', 'now'),
     strftime('%s', 'now')
-) RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens
+) RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens
 `
 
 type CreateSessionParams struct {
-	ID                  string         `json:"id"`
-	ParentSessionID     sql.NullString `json:"parent_session_id"`
-	Title               string         `json:"title"`
-	MessageCount        int64          `json:"message_count"`
-	PromptTokens        int64          `json:"prompt_tokens"`
-	CompletionTokens    int64          `json:"completion_tokens"`
-	CacheCreationTokens int64          `json:"cache_creation_tokens"`
-	CacheReadTokens     int64          `json:"cache_read_tokens"`
-	CacheMissTokens     int64          `json:"cache_miss_tokens"`
-	Cost                float64        `json:"cost"`
+	ID                    string         `json:"id"`
+	ParentSessionID       sql.NullString `json:"parent_session_id"`
+	Title                 string         `json:"title"`
+	MessageCount          int64          `json:"message_count"`
+	PromptTokens          int64          `json:"prompt_tokens"`
+	CompletionTokens      int64          `json:"completion_tokens"`
+	CacheCreationTokens   int64          `json:"cache_creation_tokens"`
+	CacheReadTokens       int64          `json:"cache_read_tokens"`
+	CacheMissTokens       int64          `json:"cache_miss_tokens"`
+	TotalPromptTokens     int64          `json:"total_prompt_tokens"`
+	TotalCompletionTokens int64          `json:"total_completion_tokens"`
+	TotalReasoningTokens  int64          `json:"total_reasoning_tokens"`
+	Cost                  float64        `json:"cost"`
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
@@ -66,6 +75,9 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		arg.CacheCreationTokens,
 		arg.CacheReadTokens,
 		arg.CacheMissTokens,
+		arg.TotalPromptTokens,
+		arg.TotalCompletionTokens,
+		arg.TotalReasoningTokens,
 		arg.Cost,
 	)
 	var i Session
@@ -83,6 +95,9 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.CacheCreationTokens,
 		&i.CacheReadTokens,
 		&i.CacheMissTokens,
+		&i.TotalPromptTokens,
+		&i.TotalCompletionTokens,
+		&i.TotalReasoningTokens,
 	)
 	return i, err
 }
@@ -98,7 +113,7 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 }
 
 const getLastSession = `-- name: GetLastSession :one
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens
 FROM sessions
 ORDER BY updated_at DESC
 LIMIT 1
@@ -121,12 +136,15 @@ func (q *Queries) GetLastSession(ctx context.Context) (Session, error) {
 		&i.CacheCreationTokens,
 		&i.CacheReadTokens,
 		&i.CacheMissTokens,
+		&i.TotalPromptTokens,
+		&i.TotalCompletionTokens,
+		&i.TotalReasoningTokens,
 	)
 	return i, err
 }
 
 const getSessionByID = `-- name: GetSessionByID :one
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens
 FROM sessions
 WHERE id = ? LIMIT 1
 `
@@ -148,12 +166,15 @@ func (q *Queries) GetSessionByID(ctx context.Context, id string) (Session, error
 		&i.CacheCreationTokens,
 		&i.CacheReadTokens,
 		&i.CacheMissTokens,
+		&i.TotalPromptTokens,
+		&i.TotalCompletionTokens,
+		&i.TotalReasoningTokens,
 	)
 	return i, err
 }
 
 const listSessions = `-- name: ListSessions :many
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens
 FROM sessions
 WHERE parent_session_id is NULL
 ORDER BY updated_at DESC
@@ -182,6 +203,9 @@ func (q *Queries) ListSessions(ctx context.Context) ([]Session, error) {
 			&i.CacheCreationTokens,
 			&i.CacheReadTokens,
 			&i.CacheMissTokens,
+			&i.TotalPromptTokens,
+			&i.TotalCompletionTokens,
+			&i.TotalReasoningTokens,
 		); err != nil {
 			return nil, err
 		}
@@ -222,22 +246,28 @@ SET
     cache_creation_tokens = ?,
     cache_read_tokens = ?,
     cache_miss_tokens = ?,
+    total_prompt_tokens = ?,
+    total_completion_tokens = ?,
+    total_reasoning_tokens = ?,
     summary_message_id = ?,
     cost = ?
 WHERE id = ?
-RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens
 `
 
 type UpdateSessionParams struct {
-	Title               string         `json:"title"`
-	PromptTokens        int64          `json:"prompt_tokens"`
-	CompletionTokens    int64          `json:"completion_tokens"`
-	CacheCreationTokens int64          `json:"cache_creation_tokens"`
-	CacheReadTokens     int64          `json:"cache_read_tokens"`
-	CacheMissTokens     int64          `json:"cache_miss_tokens"`
-	SummaryMessageID    sql.NullString `json:"summary_message_id"`
-	Cost                float64        `json:"cost"`
-	ID                  string         `json:"id"`
+	Title                 string         `json:"title"`
+	PromptTokens          int64          `json:"prompt_tokens"`
+	CompletionTokens      int64          `json:"completion_tokens"`
+	CacheCreationTokens   int64          `json:"cache_creation_tokens"`
+	CacheReadTokens       int64          `json:"cache_read_tokens"`
+	CacheMissTokens       int64          `json:"cache_miss_tokens"`
+	TotalPromptTokens     int64          `json:"total_prompt_tokens"`
+	TotalCompletionTokens int64          `json:"total_completion_tokens"`
+	TotalReasoningTokens  int64          `json:"total_reasoning_tokens"`
+	SummaryMessageID      sql.NullString `json:"summary_message_id"`
+	Cost                  float64        `json:"cost"`
+	ID                    string         `json:"id"`
 }
 
 func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (Session, error) {
@@ -248,6 +278,9 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (S
 		arg.CacheCreationTokens,
 		arg.CacheReadTokens,
 		arg.CacheMissTokens,
+		arg.TotalPromptTokens,
+		arg.TotalCompletionTokens,
+		arg.TotalReasoningTokens,
 		arg.SummaryMessageID,
 		arg.Cost,
 		arg.ID,
@@ -267,45 +300,9 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (S
 		&i.CacheCreationTokens,
 		&i.CacheReadTokens,
 		&i.CacheMissTokens,
+		&i.TotalPromptTokens,
+		&i.TotalCompletionTokens,
+		&i.TotalReasoningTokens,
 	)
 	return i, err
-}
-
-const updateSessionTitleAndUsage = `-- name: UpdateSessionTitleAndUsage :exec
-UPDATE sessions
-SET
-    title = ?,
-    prompt_tokens = prompt_tokens + ?,
-    completion_tokens = completion_tokens + ?,
-    cache_creation_tokens = cache_creation_tokens + ?,
-    cache_read_tokens = cache_read_tokens + ?,
-    cache_miss_tokens = cache_miss_tokens + ?,
-    cost = cost + ?,
-    updated_at = strftime('%s', 'now')
-WHERE id = ?
-`
-
-type UpdateSessionTitleAndUsageParams struct {
-	Title               string  `json:"title"`
-	PromptTokens        int64   `json:"prompt_tokens"`
-	CompletionTokens    int64   `json:"completion_tokens"`
-	CacheCreationTokens int64   `json:"cache_creation_tokens"`
-	CacheReadTokens     int64   `json:"cache_read_tokens"`
-	CacheMissTokens     int64   `json:"cache_miss_tokens"`
-	Cost                float64 `json:"cost"`
-	ID                  string  `json:"id"`
-}
-
-func (q *Queries) UpdateSessionTitleAndUsage(ctx context.Context, arg UpdateSessionTitleAndUsageParams) error {
-	_, err := q.exec(ctx, q.updateSessionTitleAndUsageStmt, updateSessionTitleAndUsage,
-		arg.Title,
-		arg.PromptTokens,
-		arg.CompletionTokens,
-		arg.CacheCreationTokens,
-		arg.CacheReadTokens,
-		arg.CacheMissTokens,
-		arg.Cost,
-		arg.ID,
-	)
-	return err
 }
