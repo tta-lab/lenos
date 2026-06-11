@@ -158,15 +158,15 @@ func TestResolveSession_ContinueByID_AgentToolSession(t *testing.T) {
 func TestResolveSession_Last(t *testing.T) {
 	mock := &mockSessionService{
 		sessions: []session.Session{
-			{ID: "most-recent", Title: "Latest session"},
-			{ID: "older", Title: "Older session"},
+			{ID: "reviewer-newer", Title: "Latest review", AgentName: "reviewer"},
+			{ID: "coder-older", Title: "Older code", AgentName: "coder"},
 		},
 	}
 	app := newTestApp(mock)
 
 	sess, err := app.resolveSession(t.Context(), "", true)
 	require.NoError(t, err)
-	require.Equal(t, "most-recent", sess.ID)
+	require.Equal(t, "coder-older", sess.ID)
 	require.Empty(t, mock.created)
 }
 

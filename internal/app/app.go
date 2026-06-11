@@ -154,7 +154,7 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 		return sess, nil
 
 	case useLast:
-		sess, err := app.Sessions.GetLast(ctx)
+		sess, err := app.lastSessionForActiveAgent(ctx)
 		if err != nil {
 			return session.Session{}, fmt.Errorf("no sessions found to continue")
 		}
@@ -174,6 +174,25 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 		}
 		return app.Sessions.CreateWithMetadata(ctx, agent.DefaultSessionName, metadata)
 	}
+}
+
+func (app *App) lastSessionForActiveAgent(ctx context.Context) (session.Session, error) {
+	agentName := config.AgentCoder
+	if app.config != nil {
+		if override := app.config.Overrides().AgentName; override != "" {
+			agentName = override
+		}
+	}
+	sessions, err := app.Sessions.List(ctx)
+	if err != nil {
+		return session.Session{}, err
+	}
+	for _, sess := range sessions {
+		if sess.AgentName == agentName {
+			return sess, nil
+		}
+	}
+	return session.Session{}, sql.ErrNoRows
 }
 
 // RunNonInteractive runs the application in non-interactive mode with the

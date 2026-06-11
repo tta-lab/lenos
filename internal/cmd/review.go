@@ -48,6 +48,15 @@ lenos review -m gpt-5
 				return err
 			}
 			sessionID = sess.ID
+		} else if continueLast {
+			sess, ok, err := resolveWorkspaceContinueSession(cmd.Context(), ws)
+			if err != nil {
+				return err
+			}
+			if ok {
+				sessionID = sess.ID
+				continueLast = false
+			}
 		}
 
 		event.AppInitialized()

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tta-lab/lenos/internal/config"
+	"github.com/tta-lab/lenos/internal/session"
 
 	"github.com/stretchr/testify/require"
 )
@@ -76,6 +77,30 @@ func TestReviewCmd_ContinueFlagsDeclared(t *testing.T) {
 	continueFlag := reviewCmd.Flags().Lookup("continue")
 	require.NotNil(t, continueFlag, "--continue flag must be declared on reviewCmd")
 	require.Equal(t, "C", continueFlag.Shorthand)
+}
+
+func TestSelectResumeSessionDefaultsToCoder(t *testing.T) {
+	sessions := []session.Session{
+		{ID: "reviewer-newer", AgentName: config.AgentReviewer},
+		{ID: "coder-older", AgentName: config.AgentCoder},
+	}
+
+	got, ok := selectResumeSession(sessions, "")
+
+	require.True(t, ok)
+	require.Equal(t, "coder-older", got.ID)
+}
+
+func TestSelectResumeSessionUsesRequestedAgent(t *testing.T) {
+	sessions := []session.Session{
+		{ID: "coder-newer", AgentName: config.AgentCoder},
+		{ID: "reviewer-older", AgentName: config.AgentReviewer},
+	}
+
+	got, ok := selectResumeSession(sessions, config.AgentReviewer)
+
+	require.True(t, ok)
+	require.Equal(t, "reviewer-older", got.ID)
 }
 
 func TestRootCmd_PairWithFlagParse(t *testing.T) {

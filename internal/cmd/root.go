@@ -115,6 +115,15 @@ lenos --continue
 				return err
 			}
 			sessionID = sess.ID
+		} else if continueLast {
+			sess, ok, err := resolveWorkspaceContinueSession(cmd.Context(), ws)
+			if err != nil {
+				return err
+			}
+			if ok {
+				sessionID = sess.ID
+				continueLast = false
+			}
 		}
 
 		event.AppInitialized()
@@ -371,10 +380,11 @@ func applySessionResumeDefaultsFromFlags(ctx context.Context, cmd *cobra.Command
 		if listErr != nil {
 			return fmt.Errorf("failed to list sessions: %w", listErr)
 		}
-		if len(list) == 0 {
+		var ok bool
+		sess, ok = selectResumeSession(list, requestedAgent)
+		if !ok {
 			return nil
 		}
-		sess = list[0]
 	}
 	if err != nil {
 		return err
@@ -404,6 +414,27 @@ func applySessionResumeDefaultsFromFlags(ctx context.Context, cmd *cobra.Command
 	}
 	config.ApplySessionResumeDefaults(store, defaults)
 	return nil
+}
+
+func resolveWorkspaceContinueSession(ctx context.Context, ws workspace.Workspace) (session.Session, bool, error) {
+	sessions, err := ws.ListSessions(ctx)
+	if err != nil {
+		return session.Session{}, false, err
+	}
+	sess, ok := selectResumeSession(sessions, ws.AgentName())
+	return sess, ok, nil
+}
+
+func selectResumeSession(sessions []session.Session, agentName string) (session.Session, bool) {
+	if agentName == "" {
+		agentName = config.AgentCoder
+	}
+	for _, sess := range sessions {
+		if sess.AgentName == agentName {
+			return sess, true
+		}
+	}
+	return session.Session{}, false
 }
 
 func validateReadonlySandboxPolicy(readOnly bool, sandbox *bool, noSandbox bool) error {
