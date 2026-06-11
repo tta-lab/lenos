@@ -177,6 +177,8 @@ func (a *sessionAgent) saveSessionUsage(ctx context.Context, sessionID string, u
 		return session.Session{}, false
 	}
 	a.updateSessionUsage(pm, &s, usage, a.openrouterCost(meta))
+	s.Provider = pm.ModelCfg.Provider
+	s.Model = pm.ModelCfg.Model
 	updated, saveErr := a.sessions.Save(ctx, s)
 	if saveErr != nil {
 		slog.Warn(logMsg, "session_id", sessionID, "error", saveErr)

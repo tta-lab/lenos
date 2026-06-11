@@ -48,6 +48,9 @@ type Session struct {
 	ID                    string
 	ParentSessionID       string
 	Title                 string
+	AgentName             string
+	Provider              string
+	Model                 string
 	MessageCount          int64
 	PromptTokens          int64
 	CompletionTokens      int64
@@ -63,9 +66,16 @@ type Session struct {
 	UpdatedAt             int64
 }
 
+type Metadata struct {
+	AgentName string
+	Provider  string
+	Model     string
+}
+
 type Service interface {
 	pubsub.Subscriber[Session]
 	Create(ctx context.Context, title string) (Session, error)
+	CreateWithMetadata(ctx context.Context, title string, metadata Metadata) (Session, error)
 	CreateTitleSession(ctx context.Context, parentSessionID string) (Session, error)
 	CreateTaskSession(ctx context.Context, toolCallID, parentSessionID, title string) (Session, error)
 	Get(ctx context.Context, id string) (Session, error)
@@ -88,9 +98,16 @@ type service struct {
 }
 
 func (s *service) Create(ctx context.Context, title string) (Session, error) {
+	return s.CreateWithMetadata(ctx, title, Metadata{})
+}
+
+func (s *service) CreateWithMetadata(ctx context.Context, title string, metadata Metadata) (Session, error) {
 	dbSession, err := s.q.CreateSession(ctx, db.CreateSessionParams{
-		ID:    uuid.New().String(),
-		Title: title,
+		ID:        uuid.New().String(),
+		Title:     title,
+		AgentName: metadata.AgentName,
+		Model:     metadata.Model,
+		Provider:  metadata.Provider,
 	})
 	if err != nil {
 		return Session{}, err
@@ -106,6 +123,9 @@ func (s *service) CreateTaskSession(ctx context.Context, toolCallID, parentSessi
 		ID:              toolCallID,
 		ParentSessionID: sql.NullString{String: parentSessionID, Valid: true},
 		Title:           title,
+		AgentName:       "",
+		Model:           "",
+		Provider:        "",
 	})
 	if err != nil {
 		return Session{}, err
@@ -120,6 +140,9 @@ func (s *service) CreateTitleSession(ctx context.Context, parentSessionID string
 		ID:              "title-" + parentSessionID,
 		ParentSessionID: sql.NullString{String: parentSessionID, Valid: true},
 		Title:           "Generate a title",
+		AgentName:       "",
+		Model:           "",
+		Provider:        "",
 	})
 	if err != nil {
 		return Session{}, err
@@ -189,6 +212,9 @@ func (s *service) Save(ctx context.Context, session Session) (Session, error) {
 		TotalPromptTokens:     session.TotalPromptTokens,
 		TotalCompletionTokens: session.TotalCompletionTokens,
 		TotalReasoningTokens:  session.TotalReasoningTokens,
+		AgentName:             session.AgentName,
+		Model:                 session.Model,
+		Provider:              session.Provider,
 		SummaryMessageID: sql.NullString{
 			String: session.SummaryMessageID,
 			Valid:  session.SummaryMessageID != "",
@@ -229,6 +255,9 @@ func (s service) fromDBItem(item db.Session) Session {
 		ID:                    item.ID,
 		ParentSessionID:       item.ParentSessionID.String,
 		Title:                 item.Title,
+		AgentName:             item.AgentName,
+		Provider:              item.Provider,
+		Model:                 item.Model,
 		MessageCount:          item.MessageCount,
 		PromptTokens:          item.PromptTokens,
 		CompletionTokens:      item.CompletionTokens,

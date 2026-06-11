@@ -68,6 +68,16 @@ func TestRootCmd_ReasoningEffortFlagDeclared(t *testing.T) {
 	require.Equal(t, "", f.DefValue, "--reasoning-effort default must be empty")
 }
 
+func TestReviewCmd_ContinueFlagsDeclared(t *testing.T) {
+	sessionFlag := reviewCmd.Flags().Lookup("session")
+	require.NotNil(t, sessionFlag, "--session flag must be declared on reviewCmd")
+	require.Equal(t, "s", sessionFlag.Shorthand)
+
+	continueFlag := reviewCmd.Flags().Lookup("continue")
+	require.NotNil(t, continueFlag, "--continue flag must be declared on reviewCmd")
+	require.Equal(t, "C", continueFlag.Shorthand)
+}
+
 func TestRootCmd_PairWithFlagParse(t *testing.T) {
 	err := rootCmd.ParseFlags([]string{"--pair-with", "reviewer"})
 	require.NoError(t, err)

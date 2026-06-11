@@ -34,16 +34,26 @@ lenos review
 lenos review -m gpt-5
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		sessionID, _ := cmd.Flags().GetString("session")
+		continueLast, _ := cmd.Flags().GetBool("continue")
 		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd, config.AgentReviewer, nil, true)
 		if err != nil {
 			return err
 		}
 		defer cleanup()
 
+		if sessionID != "" {
+			sess, err := resolveWorkspaceSessionID(cmd.Context(), ws, sessionID)
+			if err != nil {
+				return err
+			}
+			sessionID = sess.ID
+		}
+
 		event.AppInitialized()
 
 		com := common.DefaultCommon(ws)
-		model := ui.New(com, "", false, reviewTriggerPrompt)
+		model := ui.New(com, sessionID, continueLast, reviewTriggerPrompt)
 
 		var env uv.Environ = os.Environ()
 		program := tea.NewProgram(
@@ -58,6 +68,13 @@ lenos review -m gpt-5
 			event.Error(err)
 			return errors.New("lenos crashed during review")
 		}
+		activeSessionID := model.ActiveSessionID()
+		if hint := formatResumeHint(activeSessionID); hint != "" {
+			cmd.Println(hint)
+		}
+		if hint := formatJournalHint(ws.WorkingDir(), activeSessionID); hint != "" {
+			cmd.Println(hint)
+		}
 		return nil
 	},
 }
@@ -66,4 +83,7 @@ func init() {
 	reviewCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
 	reviewCmd.Flags().Bool("small-model", false, "Use the small-tier model for this session")
 	reviewCmd.Flags().String("reasoning-effort", "", "Reasoning effort for this session: medium, high, or xhigh")
+	reviewCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
+	reviewCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
+	reviewCmd.MarkFlagsMutuallyExclusive("session", "continue")
 }

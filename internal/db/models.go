@@ -54,4 +54,7 @@ type Session struct {
 	TotalPromptTokens     int64          `json:"total_prompt_tokens"`
 	TotalCompletionTokens int64          `json:"total_completion_tokens"`
 	TotalReasoningTokens  int64          `json:"total_reasoning_tokens"`
+	AgentName             string         `json:"agent_name"`
+	Model                 string         `json:"model"`
+	Provider              string         `json:"provider"`
 }

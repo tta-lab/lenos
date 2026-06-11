@@ -38,7 +38,12 @@ func NewAppWorkspace(a *app.App, store *config.ConfigStore) *AppWorkspace {
 // -- Sessions --
 
 func (w *AppWorkspace) CreateSession(ctx context.Context, title string) (session.Session, error) {
-	return w.app.Sessions.Create(ctx, title)
+	model := w.app.AgentCoordinator.Model()
+	return w.app.Sessions.CreateWithMetadata(ctx, title, session.Metadata{
+		AgentName: w.AgentName(),
+		Provider:  model.ModelCfg.Provider,
+		Model:     model.ModelCfg.Model,
+	})
 }
 
 func (w *AppWorkspace) GetSession(ctx context.Context, sessionID string) (session.Session, error) {
@@ -259,7 +264,10 @@ func (w *AppWorkspace) Store() *config.ConfigStore {
 }
 
 func (w *AppWorkspace) AgentName() string {
-	return w.store.Overrides().AgentName
+	if name := w.store.Overrides().AgentName; name != "" {
+		return name
+	}
+	return config.AgentCoder
 }
 
 func (w *AppWorkspace) AgentSandboxState() string {

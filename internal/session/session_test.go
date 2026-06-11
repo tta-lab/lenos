@@ -94,6 +94,41 @@ func TestSave_NewSessionTotalFieldsDefaultToZero(t *testing.T) {
 	require.Equal(t, int64(0), reloaded.TotalReasoningTokens)
 }
 
+func TestSave_RoundTripsAgentAndLastModel(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dir := t.TempDir()
+	conn, err := db.Connect(ctx, dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+
+	svc := session.NewService(db.New(conn), conn)
+
+	sess, err := svc.CreateWithMetadata(ctx, "review session", session.Metadata{
+		AgentName: "reviewer",
+		Provider:  "openai",
+		Model:     "gpt-5",
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "reviewer", sess.AgentName)
+	require.Equal(t, "openai", sess.Provider)
+	require.Equal(t, "gpt-5", sess.Model)
+
+	sess.Provider = "anthropic"
+	sess.Model = "claude-sonnet-4"
+	saved, err := svc.Save(ctx, sess)
+	require.NoError(t, err)
+
+	reloaded, err := svc.Get(ctx, saved.ID)
+	require.NoError(t, err)
+
+	require.Equal(t, "reviewer", reloaded.AgentName)
+	require.Equal(t, "anthropic", reloaded.Provider)
+	require.Equal(t, "claude-sonnet-4", reloaded.Model)
+}
+
 func TestSave_CompactionZerosContextFieldsPreservesLifetimeTotals(t *testing.T) {
 	t.Parallel()
 

@@ -23,7 +23,17 @@ func (m *mockSessionService) Subscribe(context.Context) <-chan pubsub.Event[sess
 }
 
 func (m *mockSessionService) Create(_ context.Context, title string) (session.Session, error) {
-	s := session.Session{ID: "new-session-id", Title: title}
+	return m.CreateWithMetadata(context.Background(), title, session.Metadata{})
+}
+
+func (m *mockSessionService) CreateWithMetadata(_ context.Context, title string, metadata session.Metadata) (session.Session, error) {
+	s := session.Session{
+		ID:        "new-session-id",
+		Title:     title,
+		AgentName: metadata.AgentName,
+		Provider:  metadata.Provider,
+		Model:     metadata.Model,
+	}
 	m.created = append(m.created, s)
 	return s, nil
 }

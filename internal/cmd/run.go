@@ -108,6 +108,13 @@ lenos run --readonly --agent reviewer "review the changes in HEAD"
 		}
 
 		appWs := ws.(*workspace.AppWorkspace)
+		if sessionID != "" {
+			sess, err := resolveWorkspaceSessionID(ctx, ws, sessionID)
+			if err != nil {
+				return err
+			}
+			sessionID = sess.ID
+		}
 
 		if verbose {
 			slog.SetDefault(slog.New(log.New(os.Stderr)))

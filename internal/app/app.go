@@ -161,7 +161,18 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 		return sess, nil
 
 	default:
-		return app.Sessions.Create(ctx, agent.DefaultSessionName)
+		metadata := session.Metadata{AgentName: config.AgentCoder}
+		if app.config != nil {
+			if agentName := app.config.Overrides().AgentName; agentName != "" {
+				metadata.AgentName = agentName
+			}
+		}
+		if app.AgentCoordinator != nil {
+			model := app.AgentCoordinator.Model()
+			metadata.Provider = model.ModelCfg.Provider
+			metadata.Model = model.ModelCfg.Model
+		}
+		return app.Sessions.CreateWithMetadata(ctx, agent.DefaultSessionName, metadata)
 	}
 }
 

@@ -12,6 +12,9 @@ INSERT INTO sessions (
     total_prompt_tokens,
     total_completion_tokens,
     total_reasoning_tokens,
+    agent_name,
+    model,
+    provider,
     cost,
     summary_message_id,
     updated_at,
@@ -30,24 +33,27 @@ INSERT INTO sessions (
     ?,
     ?,
     ?,
+    ?,
+    ?,
+    ?,
     null,
     strftime('%s', 'now'),
     strftime('%s', 'now')
-) RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens;
+) RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens, agent_name, model, provider;
 
 -- name: GetSessionByID :one
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens, agent_name, model, provider
 FROM sessions
 WHERE id = ? LIMIT 1;
 
 -- name: GetLastSession :one
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens, agent_name, model, provider
 FROM sessions
 ORDER BY updated_at DESC
 LIMIT 1;
 
 -- name: ListSessions :many
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens, agent_name, model, provider
 FROM sessions
 WHERE parent_session_id is NULL
 ORDER BY updated_at DESC;
@@ -64,10 +70,13 @@ SET
     total_prompt_tokens = ?,
     total_completion_tokens = ?,
     total_reasoning_tokens = ?,
+    agent_name = ?,
+    model = ?,
+    provider = ?,
     summary_message_id = ?,
     cost = ?
 WHERE id = ?
-RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens;
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens, agent_name, model, provider;
 
 -- name: RenameSession :exec
 UPDATE sessions
