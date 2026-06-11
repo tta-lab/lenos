@@ -61,8 +61,21 @@ func CreateGoal(ctx context.Context, workingDir, sessionID, body string, status 
 	}
 
 	path := GoalPath(workingDir, sessionID)
-	if _, err := runGoalCLI(ctx, path, body, "add", "--status", string(status)); err != nil {
-		return "", fmt.Errorf("create goal with goal CLI: %w", err)
+	if _, err := os.Stat(path); err != nil {
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("stat goal file: %w", err)
+		}
+		if _, err := runGoalCLI(ctx, path, body, "add", "--status", string(status)); err != nil {
+			return "", fmt.Errorf("create goal with goal CLI: %w", err)
+		}
+		return path, nil
+	}
+
+	if _, err := runGoalCLI(ctx, path, body, "update"); err != nil {
+		return "", fmt.Errorf("update goal with goal CLI: %w", err)
+	}
+	if _, err := runGoalCLI(ctx, path, "", "status", string(status)); err != nil {
+		return "", fmt.Errorf("set goal status with goal CLI: %w", err)
 	}
 	return path, nil
 }

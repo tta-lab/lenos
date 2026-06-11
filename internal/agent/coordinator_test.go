@@ -511,6 +511,42 @@ func TestBuildCall_GoalOverrideCreatesActiveGoal(t *testing.T) {
 	assert.Equal(t, GoalActive, status)
 }
 
+func TestBuildCall_RepeatedGoalOverrideUpdatesExistingGoal(t *testing.T) {
+	tmp := t.TempDir()
+	logPath := installFakeGoalCLI(t)
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	cfg, err := config.Init(tmp, "", false)
+	require.NoError(t, err)
+	cfg.Overrides().GoalText = "# Goal\n\nFirst body."
+
+	firstCall, err := buildCall(context.Background(), "sess-goal", "hi", Model{}, config.ProviderConfig{}, cfg, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, GoalPath(tmp, "sess-goal"), firstCall.GoalPath)
+
+	cfg.Overrides().GoalText = "# Goal\n\nUpdated body."
+	secondCall, err := buildCall(context.Background(), "sess-goal", "hi again", Model{}, config.ProviderConfig{}, cfg, nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, firstCall.GoalPath, secondCall.GoalPath)
+	assert.Equal(t, secondCall.GoalPath, secondCall.Env["LENOS_GOAL"])
+	assert.True(t, secondCall.GoalStartupHint)
+
+	data, err := os.ReadFile(secondCall.GoalPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "Updated body.")
+	assert.NotContains(t, string(data), "First body.")
+
+	log := readFile(t, logPath)
+	assert.Contains(t, log, "add --status active")
+	assert.Contains(t, log, "update")
+	assert.Contains(t, log, "status active")
+	assert.NotContains(t, log, "--force")
+}
+
 func TestBuildCall_ExistingDraftGoalDoesNotBindRuntimeGoal(t *testing.T) {
 	tmp := t.TempDir()
 	installFakeGoalCLI(t)

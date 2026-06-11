@@ -59,7 +59,7 @@ func TestCreateGoal_Draft(t *testing.T) {
 
 func TestCreateGoal_Overwrites(t *testing.T) {
 	dir := t.TempDir()
-	installFakeGoalCLI(t)
+	logPath := installFakeGoalCLI(t)
 
 	_, err := CreateGoal(t.Context(), dir, "session-1", "first", GoalActive)
 	require.NoError(t, err)
@@ -75,6 +75,12 @@ func TestCreateGoal_Overwrites(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "second")
 	assert.NotContains(t, string(data), "first")
+
+	log := readFile(t, logPath)
+	assert.Contains(t, log, "add --status active")
+	assert.Contains(t, log, "update")
+	assert.Contains(t, log, "status active")
+	assert.NotContains(t, log, "--force")
 }
 
 func TestReadGoalStatus_Active(t *testing.T) {
@@ -284,6 +290,17 @@ case "$cmd" in
     new_status="$1"
     tmp="$LENOS_GOAL.tmp"
     sed "s/^status: .*/status: $new_status/" "$LENOS_GOAL" > "$tmp"
+    mv "$tmp" "$LENOS_GOAL"
+    ;;
+  update)
+    if [ ! -f "$LENOS_GOAL" ]; then
+      echo "goal file not found" >&2
+      exit 1
+    fi
+    body="$(cat)"
+    tmp="$LENOS_GOAL.tmp"
+    sed -n '1,/^---$/p' "$LENOS_GOAL" > "$tmp"
+    printf '%s' "$body" >> "$tmp"
     mv "$tmp" "$LENOS_GOAL"
     ;;
   *)
