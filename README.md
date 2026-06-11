@@ -5,7 +5,8 @@ Lenos is a terminal AI coding assistant for the
 
 It runs agents in a real shell because bash is all you need. File edits happen
 through CLIs such as `src`; web lookup happens through `web`; skills are found
-and read through `skill`; project context comes from `project`. Lenos keeps the
+and read through `skill`; project context comes from `project`; session goals
+are managed through `goal`. Lenos keeps the
 model-facing protocol small: Markdown for prose, `<run>` blocks for bash calls,
 and a built-in sandbox around execution.
 
@@ -25,7 +26,7 @@ curl -fsSL https://github.com/tta-lab/lenos/releases/latest/download/install.sh 
 
 The installer supports macOS and Linux on x86_64 and arm64. It installs Lenos
 to `~/.local/bin` and also installs the Organon CLIs that Lenos prompts use:
-`src`, `web`, `skill`, and `project`.
+`src`, `web`, `skill`, `project`, and `goal`.
 
 Linux sandboxing requires `bubblewrap` (`bwrap`). Install it with your distro
 package manager before running Lenos if it is not already present.
@@ -43,8 +44,9 @@ export PATH="$HOME/.local/bin:$PATH"
 - **Simple run protocol**: the model replies in Markdown and wraps shell work
   in `<run>` blocks. Lenos executes those blocks and feeds the real result back
   into the next turn.
-- **CLI-native tools**: code editing, web lookup, skill discovery, and project
-  lookup are regular shell commands, not hidden adapter APIs.
+- **CLI-native tools**: code editing, web lookup, skill discovery, project
+  lookup, and goal management are regular shell commands, not hidden adapter
+  APIs.
 - **High cache locality**: runtime context is injected as stable command/result
   history instead of large changing prose blocks.
 - **Agent journal**: task sessions maintain a journal the agent can read after

@@ -30,7 +30,7 @@ var (
 
 	tools = []tool{
 		{Name: "Lenos", Repo: "lenos", Binary: "lenos", ConfigKind: "json"},
-		{Name: "Organon", Repo: "organon", Binary: "organon", Binaries: []string{"src", "web", "skill", "project"}, ConfigKind: "toml"},
+		{Name: "Organon", Repo: "organon", Binary: "organon", Binaries: []string{"src", "web", "skill", "project", "goal"}, ConfigKind: "toml"},
 		{Name: "Einai", Repo: "einai", Binary: "ei", UseReleaseAPI: true},
 	}
 )

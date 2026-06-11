@@ -34,6 +34,7 @@ func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeConte
 			webRuntimeContextPromptTmpl,
 			skillRuntimeContextPromptTmpl,
 			projectRuntimeContextPromptTmpl,
+			goalRuntimeContextPromptTmpl,
 			coderRuntimeContextPromptTmpl,
 			reviewerRuntimeContextPromptTmpl,
 		)
@@ -47,6 +48,7 @@ func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeConte
 			webRuntimeContextPromptTmpl,
 			skillRuntimeContextPromptTmpl,
 			projectRuntimeContextPromptTmpl,
+			goalRuntimeContextPromptTmpl,
 			coderRuntimeContextPromptTmpl,
 			reviewerRuntimeContextPromptTmpl,
 		)

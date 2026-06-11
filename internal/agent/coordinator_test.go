@@ -477,12 +477,14 @@ func TestBuildCall_ContextAllowedPathsAreAbsoluteExistingPaths(t *testing.T) {
 	for _, allowed := range call.AllowedPaths {
 		assert.True(t, filepath.IsAbs(allowed.Path), "allowed path must be absolute: %q", allowed.Path)
 	}
-	require.GreaterOrEqual(t, len(call.ContextCommands), 5)
+	require.GreaterOrEqual(t, len(call.ContextCommands), 6)
 	assert.Contains(t, call.ContextCommands[0].Command, "src --help")
 	assert.Contains(t, call.ContextCommands[1].Command, "web --help")
 	assert.Contains(t, call.ContextCommands[2].Command, "skill list")
 	assert.Contains(t, call.ContextCommands[3].Command, "project list")
-	assert.Equal(t, lenosbash.WrapBash("Read the session journal.", "cat $LENOS_JOURNAL"), call.ContextCommands[4].Command)
+	assert.Contains(t, call.ContextCommands[4].Command, "goal --help")
+	assert.True(t, call.ContextCommands[4].Optional)
+	assert.Equal(t, lenosbash.WrapBash("Read the session journal.", "cat $LENOS_JOURNAL"), call.ContextCommands[5].Command)
 }
 
 func TestBuildCall_ReviewerContextExcludesCoderContext(t *testing.T) {
@@ -505,6 +507,7 @@ func TestBuildCall_ReviewerContextExcludesCoderContext(t *testing.T) {
 	require.NoError(t, err)
 
 	joined := strings.Join(commandTexts(call.ContextCommands), "\n")
+	assert.Contains(t, joined, "goal --help")
 	assert.Contains(t, joined, "Inspect local review state.")
 	assert.NotContains(t, joined, "Read the session journal.")
 	assert.NotContains(t, joined, "cat $LENOS_JOURNAL")
