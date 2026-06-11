@@ -72,7 +72,6 @@ type Service interface {
 	GetLast(ctx context.Context) (Session, error)
 	List(ctx context.Context) ([]Session, error)
 	Save(ctx context.Context, session Session) (Session, error)
-	UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens, cacheCreationTokens, cacheReadTokens, cacheMissTokens, totalPromptTokens, totalCompletionTokens, totalReasoningTokens int64, cost float64) error
 	Rename(ctx context.Context, id string, title string) error
 	Delete(ctx context.Context, id string) error
 
@@ -202,24 +201,6 @@ func (s *service) Save(ctx context.Context, session Session) (Session, error) {
 	session = s.fromDBItem(dbSession)
 	s.Publish(pubsub.UpdatedEvent, session)
 	return session, nil
-}
-
-// UpdateTitleAndUsage updates only the title and usage fields atomically.
-// This is safer than fetching, modifying, and saving the entire session.
-func (s *service) UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens, cacheCreationTokens, cacheReadTokens, cacheMissTokens, totalPromptTokens, totalCompletionTokens, totalReasoningTokens int64, cost float64) error {
-	return s.q.UpdateSessionTitleAndUsage(ctx, db.UpdateSessionTitleAndUsageParams{
-		ID:                    sessionID,
-		Title:                 title,
-		PromptTokens:          promptTokens,
-		CompletionTokens:      completionTokens,
-		CacheCreationTokens:   cacheCreationTokens,
-		CacheReadTokens:       cacheReadTokens,
-		CacheMissTokens:       cacheMissTokens,
-		TotalPromptTokens:     totalPromptTokens,
-		TotalCompletionTokens: totalCompletionTokens,
-		TotalReasoningTokens:  totalReasoningTokens,
-		Cost:                  cost,
-	})
 }
 
 // Rename updates only the title of a session without touching updated_at or

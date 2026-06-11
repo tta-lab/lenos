@@ -268,10 +268,7 @@ func finalMetrics(steps []atif.Step, sess *session.Session) atif.FinalMetrics {
 		final.TotalCostUSD = &cost
 		final.Extra["reasoning_tokens"] = sess.TotalReasoningTokens
 		final.Extra["cache_creation_tokens"] = sess.CacheCreationTokens
-		cacheMiss := sess.TotalPromptTokens - sess.CacheReadTokens
-		if cacheMiss >= 0 {
-			final.Extra["cache_miss_tokens"] = cacheMiss
-		}
+		final.Extra["cache_miss_tokens"] = sess.CacheMissTokens
 	}
 	if final.TotalCostUSD == nil {
 		zeroCost := 0.0

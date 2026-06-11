@@ -133,7 +133,7 @@ func (a *sessionAgent) updateSessionUsage(model Model, s *session.Session, usage
 	s.PromptTokens = usage.InputTokens + usage.CacheReadTokens
 	s.CacheCreationTokens += usage.CacheCreationTokens
 	s.CacheReadTokens += usage.CacheReadTokens
-	s.CacheMissTokens += usage.InputTokens + usage.CacheCreationTokens
+	s.CacheMissTokens += usage.InputTokens
 
 	// TotalPromptTokens = total input tokens sent to the model.
 	// OpenAI-style: InputTokens is non-cached only, CacheReadTokens is cached.

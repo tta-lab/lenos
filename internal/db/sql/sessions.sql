@@ -69,23 +69,6 @@ SET
 WHERE id = ?
 RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, cache_creation_tokens, cache_read_tokens, cache_miss_tokens, total_prompt_tokens, total_completion_tokens, total_reasoning_tokens;
 
--- name: UpdateSessionTitleAndUsage :exec
-UPDATE sessions
-SET
-    title = ?,
-    prompt_tokens = prompt_tokens + ?,
-    completion_tokens = completion_tokens + ?,
-    cache_creation_tokens = cache_creation_tokens + ?,
-    cache_read_tokens = cache_read_tokens + ?,
-    cache_miss_tokens = cache_miss_tokens + ?,
-    total_prompt_tokens = total_prompt_tokens + ?,
-    total_completion_tokens = total_completion_tokens + ?,
-    total_reasoning_tokens = total_reasoning_tokens + ?,
-    cost = cost + ?,
-    updated_at = strftime('%s', 'now')
-WHERE id = ?;
-
-
 -- name: RenameSession :exec
 UPDATE sessions
 SET

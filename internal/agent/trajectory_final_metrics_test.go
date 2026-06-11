@@ -24,7 +24,7 @@ func TestFinalMetrics_SessionTotalsExportTotalsNotLatestContext(t *testing.T) {
 		TotalReasoningTokens:  75,
 		CacheReadTokens:       200,
 		CacheCreationTokens:   50,
-		CacheMissTokens:       850, // old muddy semantics
+		CacheMissTokens:       800, // InputTokens only (no CacheCreationTokens)
 		Cost:                  cost,
 		// Context fields are latest-turn only (different from totals).
 		PromptTokens:     150,
@@ -62,7 +62,7 @@ func TestFinalMetrics_SessionTotalsExportTotalsNotLatestContext(t *testing.T) {
 	require.Equal(t, int64(50), result.Extra["cache_creation_tokens"],
 		"extra.cache_creation_tokens should be the session value")
 	require.Equal(t, int64(800), result.Extra["cache_miss_tokens"],
-		"extra.cache_miss_tokens = total_prompt_tokens - cache_read_tokens")
+		"extra.cache_miss_tokens = sess.CacheMissTokens (InputTokens only)")
 	require.Equal(t, int64(1500), result.Extra["total_tokens"],
 		"extra.total_tokens = total_prompt_tokens + total_completion_tokens")
 }
@@ -78,6 +78,7 @@ func TestFinalMetrics_CacheMissTokensCleanDerivation(t *testing.T) {
 		TotalPromptTokens:     800,
 		TotalCompletionTokens: 400,
 		CacheReadTokens:       200,
+		CacheMissTokens:       600,
 		Cost:                  0.75,
 	}
 
@@ -90,38 +91,10 @@ func TestFinalMetrics_CacheMissTokensCleanDerivation(t *testing.T) {
 	require.Equal(t, int64(800), result.TotalPromptTokens)
 	require.Equal(t, int64(200), result.TotalCachedTokens)
 	require.Equal(t, int64(600), result.Extra["cache_miss_tokens"],
-		"cache_miss_tokens = total_prompt_tokens - cache_read_tokens")
+		"extra.cache_miss_tokens = sess.CacheMissTokens (InputTokens only)")
 
 	// Verify cache_miss_tokens is what was actually non-cached input.
 	require.Equal(t, int64(800-200), result.Extra["cache_miss_tokens"])
-}
-
-func TestFinalMetrics_CacheMissTokensNonNegativeGuard(t *testing.T) {
-	t.Parallel()
-
-	// Edge case: cache_read_tokens > total_prompt_tokens (should not happen,
-	// but guard against negative values).
-	sess := &session.Session{
-		ID:                    "session-3",
-		TotalPromptTokens:     100,
-		TotalCompletionTokens: 50,
-		CacheReadTokens:       200, // more cached than total prompt
-		Cost:                  0.01,
-	}
-
-	steps := []atif.Step{
-		{StepID: 1, Source: "agent", Message: "step"},
-	}
-
-	result := finalMetrics(steps, sess)
-
-	// cache_miss_tokens should not be set when negative.
-	cacheMissVal, ok := result.Extra["cache_miss_tokens"]
-	if ok {
-		cm, _ := cacheMissVal.(int64)
-		require.GreaterOrEqual(t, cm, int64(0),
-			"cache_miss_tokens should not be negative")
-	}
 }
 
 func TestFinalMetrics_NilSessionUsesStepAccumulation(t *testing.T) {
@@ -187,6 +160,7 @@ func TestFinalMetrics_ExportedTrajectoryUsesSessionTotals(t *testing.T) {
 		TotalReasoningTokens:  25,
 		CacheReadTokens:       120,
 		CacheCreationTokens:   15,
+		CacheMissTokens:       480,
 		Cost:                  cost,
 	}
 
@@ -219,6 +193,6 @@ func TestFinalMetrics_ExportedTrajectoryUsesSessionTotals(t *testing.T) {
 	require.Equal(t, float64(25), extra["reasoning_tokens"])
 	require.Equal(t, float64(15), extra["cache_creation_tokens"])
 	require.Equal(t, float64(480), extra["cache_miss_tokens"],
-		"cache_miss_tokens = total_prompt_tokens - cache_read_tokens")
+		"extra.cache_miss_tokens = sess.CacheMissTokens (InputTokens only)")
 	require.Equal(t, float64(900), extra["total_tokens"])
 }

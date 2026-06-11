@@ -417,7 +417,7 @@ func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 	require.True(t, ok, "saveSessionUsage should succeed")
 	assert.Equal(t, int64(1200), updated.PromptTokens, "PromptTokens should reflect current prompt input including cache reads")
 	assert.Equal(t, int64(500), updated.CompletionTokens, "CompletionTokens should reflect OutputTokens")
-	assert.Equal(t, int64(1100), updated.CacheMissTokens)
+	assert.Equal(t, int64(1000), updated.CacheMissTokens)
 	assert.Equal(t, int64(100), updated.CacheCreationTokens)
 	assert.Equal(t, int64(200), updated.CacheReadTokens)
 	assert.Greater(t, updated.Cost, 0.0, "Cost should be non-zero")
@@ -430,7 +430,7 @@ func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 	require.True(t, ok, "saveSessionUsage should succeed")
 	assert.Equal(t, int64(100), updated.PromptTokens, "PromptTokens should remain current-context usage")
 	assert.Equal(t, int64(5), updated.CompletionTokens, "CompletionTokens should remain current-context usage")
-	assert.Equal(t, int64(1110), updated.CacheMissTokens)
+	assert.Equal(t, int64(1010), updated.CacheMissTokens)
 	assert.Equal(t, int64(100), updated.CacheCreationTokens)
 	assert.Equal(t, int64(290), updated.CacheReadTokens)
 
@@ -438,7 +438,7 @@ func TestSaveSessionUsage_UpdatesTokenCounts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(100), persisted.PromptTokens)
 	assert.Equal(t, int64(5), persisted.CompletionTokens)
-	assert.Equal(t, int64(1110), persisted.CacheMissTokens)
+	assert.Equal(t, int64(1010), persisted.CacheMissTokens)
 	assert.Equal(t, int64(100), persisted.CacheCreationTokens)
 	assert.Equal(t, int64(290), persisted.CacheReadTokens)
 }

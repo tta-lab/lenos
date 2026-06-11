@@ -30,7 +30,7 @@ func TestSave_RoundTripsLifetimeTotals(t *testing.T) {
 	sess.TotalReasoningTokens = 80
 	sess.CacheCreationTokens = 40
 	sess.CacheReadTokens = 200
-	sess.CacheMissTokens = 850
+	sess.CacheMissTokens = 800
 	sess.Cost = 1.25
 
 	// Save and re-read.

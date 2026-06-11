@@ -43,8 +43,8 @@ func TestUpdateSessionUsage_AccumulatesLifetimeTotals(t *testing.T) {
 		"TotalReasoningTokens should be zero when not set")
 	require.Equal(t, int64(5), s.CacheCreationTokens)
 	require.Equal(t, int64(10), s.CacheReadTokens)
-	require.Equal(t, int64(105), s.CacheMissTokens,
-		"CacheMissTokens still uses old InputTokens + CacheCreationTokens semantics")
+	require.Equal(t, int64(100), s.CacheMissTokens,
+		"CacheMissTokens = InputTokens only, not + CacheCreationTokens")
 
 	// Second call: 200 input, 80 output, 15 cache read, 20 reasoning.
 	sa.updateSessionUsage(model, s, fantasy.Usage{
@@ -65,8 +65,8 @@ func TestUpdateSessionUsage_AccumulatesLifetimeTotals(t *testing.T) {
 		"CacheCreationTokens should accumulate")
 	require.Equal(t, int64(25), s.CacheReadTokens,
 		"CacheReadTokens should accumulate")
-	require.Equal(t, int64(105+205), s.CacheMissTokens,
-		"CacheMissTokens should accumulate with old semantics")
+	require.Equal(t, int64(100+200), s.CacheMissTokens,
+		"CacheMissTokens should accumulate InputTokens only")
 }
 
 func TestUpdateSessionUsage_SkipsZeroTokenTurn(t *testing.T) {
