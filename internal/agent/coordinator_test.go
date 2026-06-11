@@ -646,6 +646,61 @@ func TestBuildCall_ReviewerContextExcludesCoderContext(t *testing.T) {
 	assert.NotContains(t, joined, "cat $LENOS_JOURNAL")
 }
 
+func TestBuildCall_CustomAgentGetsCommonContextWithoutJournal(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	cfg, err := config.Init(tmp, "", false)
+	require.NoError(t, err)
+	cfg.Overrides().AgentName = "researcher"
+
+	c := &coordinator{
+		cfg:          cfg,
+		dataDir:      cfg.WorkingDir(),
+		currentAgent: &stubAgent{modelName: "test-model"},
+	}
+	call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg, nil, nil)
+	require.NoError(t, err)
+
+	joined := strings.Join(commandTexts(call.ContextCommands), "\n")
+	assert.Contains(t, joined, "src --help")
+	assert.Contains(t, joined, "web --help")
+	assert.Contains(t, joined, "skill list")
+	assert.Contains(t, joined, "project list")
+	assert.Contains(t, joined, "goal --help")
+	assert.NotContains(t, joined, "Read the session journal.")
+	assert.Empty(t, call.JournalPath)
+	assert.NotContains(t, call.Env, "LENOS_JOURNAL")
+}
+
+func TestBuildCall_ExplicitCoderAgentKeepsJournalContext(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	cfg, err := config.Init(tmp, "", false)
+	require.NoError(t, err)
+	cfg.Overrides().AgentName = config.AgentCoder
+
+	c := &coordinator{
+		cfg:          cfg,
+		dataDir:      cfg.WorkingDir(),
+		currentAgent: &stubAgent{modelName: "test-model"},
+	}
+	call, err := buildCall(context.Background(), "sess-x", "hi", Model{}, config.ProviderConfig{}, c.cfg, nil, nil)
+	require.NoError(t, err)
+
+	joined := strings.Join(commandTexts(call.ContextCommands), "\n")
+	assert.Contains(t, joined, "Read the session journal.")
+	assert.Equal(t, JournalPath(tmp, "sess-x"), call.JournalPath)
+	assert.Equal(t, call.JournalPath, call.Env["LENOS_JOURNAL"])
+}
+
 func commandTexts(commands []RuntimeContextCommand) []string {
 	out := make([]string, 0, len(commands))
 	for _, command := range commands {

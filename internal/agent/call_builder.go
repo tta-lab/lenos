@@ -24,36 +24,29 @@ func isNativeCoderAgent(store *config.ConfigStore) bool {
 	}
 }
 
+func commonRuntimeContextTemplates() [][]byte {
+	return [][]byte{
+		srcRuntimeContextPromptTmpl,
+		webRuntimeContextPromptTmpl,
+		skillRuntimeContextPromptTmpl,
+		projectRuntimeContextPromptTmpl,
+		goalRuntimeContextPromptTmpl,
+	}
+}
+
 func buildRuntimeContextCommandsForAgent(store *config.ConfigStore, runtimeContext prompt.RuntimeContext) []RuntimeContextCommand {
+	agentName := store.Overrides().AgentName
 	if isNativeCoderAgent(store) {
-		return buildRuntimeContextCommands(
-			runtimeContext,
-			config.AgentCoder,
-			srcRuntimeContextPromptTmpl,
-			webRuntimeContextPromptTmpl,
-			skillRuntimeContextPromptTmpl,
-			projectRuntimeContextPromptTmpl,
-			goalRuntimeContextPromptTmpl,
-			coderRuntimeContextPromptTmpl,
-			reviewerRuntimeContextPromptTmpl,
-		)
+		agentName = config.AgentCoder
 	}
-	switch store.Overrides().AgentName {
+	templates := commonRuntimeContextTemplates()
+	switch agentName {
+	case config.AgentCoder:
+		templates = append(templates, coderRuntimeContextPromptTmpl)
 	case config.AgentReviewer:
-		return buildRuntimeContextCommands(
-			runtimeContext,
-			config.AgentReviewer,
-			srcRuntimeContextPromptTmpl,
-			webRuntimeContextPromptTmpl,
-			skillRuntimeContextPromptTmpl,
-			projectRuntimeContextPromptTmpl,
-			goalRuntimeContextPromptTmpl,
-			coderRuntimeContextPromptTmpl,
-			reviewerRuntimeContextPromptTmpl,
-		)
-	default:
-		return nil
+		templates = append(templates, reviewerRuntimeContextPromptTmpl)
 	}
+	return buildRuntimeContextCommands(runtimeContext, agentName, templates...)
 }
 
 // resolveSandbox returns the sandbox setting, defaulting to true if nil.

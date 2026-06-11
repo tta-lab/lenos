@@ -123,7 +123,11 @@ func resolveIdentityBody(store *config.ConfigStore) string {
 		if err != nil {
 			return embeddedIdentityFallback(store)
 		}
-		return stripYAMLFrontmatter(string(data))
+		body := stripYAMLFrontmatter(string(data))
+		if store.Overrides().AgentName == config.AgentCoder {
+			return strings.TrimSpace(embeddedIdentityFallback(store)) + "\n\n" + strings.TrimSpace(body)
+		}
+		return body
 	}
 	return embeddedIdentityFallback(store)
 }

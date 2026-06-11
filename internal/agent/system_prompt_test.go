@@ -355,6 +355,35 @@ func TestSystemPrompt_AgentMode_WrapsExternalAgentBody(t *testing.T) {
 	assert.NotEmpty(t, got)
 }
 
+func TestSystemPrompt_CoderAgentFileAppendsToEmbeddedCoder(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{}`), 0o644))
+	t.Setenv("LENOS_GLOBAL_CONFIG", configDir)
+	t.Setenv("LENOS_GLOBAL_DATA", configDir)
+	t.Setenv("LENOS_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+
+	store, err := config.Init(dataDir, "", false)
+	require.NoError(t, err)
+	store.Config().Options.Attribution = &config.Attribution{}
+	store.Config().Options.ContextPaths = nil
+	store.Overrides().AgentName = config.AgentCoder
+
+	agentFile := filepath.Join(dataDir, "coder.md")
+	require.NoError(t, os.WriteFile(agentFile, []byte("---\nname: coder\n---\n# Extra coder rules\nKeep custom coder rule."), 0o644))
+	store.Overrides().AgentContextFile = agentFile
+
+	got, err := SystemPrompt(t.Context(), dataDir, "test-provider", "test-model", store, nil)
+	require.NoError(t, err)
+
+	coderIndex := strings.Index(got, "You are Lenos, a powerful AI Assistant")
+	extraIndex := strings.Index(got, "Keep custom coder rule.")
+	require.NotEqual(t, -1, coderIndex, "embedded coder identity must remain")
+	require.NotEqual(t, -1, extraIndex, "external coder identity must be appended")
+	assert.Less(t, coderIndex, extraIndex)
+	assert.NotContains(t, got, "name: coder")
+}
+
 func TestSystemPrompt_PairWithDocumentsDefaultBashBlockTarget(t *testing.T) {
 	dataDir := t.TempDir()
 	configDir := t.TempDir()
