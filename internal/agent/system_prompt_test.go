@@ -45,6 +45,16 @@ func assertHeredocTerminatorsStartAtColumnZero(t *testing.T, text string) {
 	require.NotZero(t, count, "prompt should include heredoc examples")
 }
 
+func promptSection(t *testing.T, text, startMarker, endMarker string) string {
+	t.Helper()
+	start := strings.Index(text, startMarker)
+	require.NotEqual(t, -1, start, "prompt should contain section start %q", startMarker)
+	afterStart := text[start:]
+	end := strings.Index(afterStart, endMarker)
+	require.NotEqual(t, -1, end, "prompt section should end before %q", endMarker)
+	return afterStart[:end]
+}
+
 func TestBuildBaseSystemPrompt_EmitsCommandSection(t *testing.T) {
 	t.Parallel()
 
@@ -93,13 +103,25 @@ func TestBuildBaseSystemPrompt_RendersSkillTriggerRules(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "Use `skill list` to see all available skills.")
-	assert.Contains(t, got, "Use `skill find <keyword>` to search skills.")
-	assert.Contains(t, got, "Use `skill get <name>` to read a skill before using it.")
-	assert.Contains(t, got, "If the user names a skill, you must use that skill for this turn.")
-	assert.Contains(t, got, "If the task clearly matches a skill's description, you must use that skill for this turn.")
-	assert.Contains(t, got, "Multiple mentions mean use them all.")
-	assert.Contains(t, got, "Do not carry skills across turns unless re-mentioned.")
+	skillsSection := promptSection(t, got, "# Skills", "# Environment")
+
+	assert.Contains(t, skillsSection, "`SKILL.md`")
+	for _, command := range []string{
+		"`skill list`",
+		"`skill find <keyword>`",
+		"`skill get <name>`",
+	} {
+		assert.Contains(t, skillsSection, command)
+	}
+	for _, concept := range []string{
+		"user names a skill",
+		"matches a skill's description",
+		"for this turn",
+		"Multiple mentions",
+		"Do not carry skills across turns",
+	} {
+		assert.Contains(t, skillsSection, concept)
+	}
 }
 
 func TestSystemPrompt_DoesNotTeachLegacyNarrateOrJobPolling(t *testing.T) {
