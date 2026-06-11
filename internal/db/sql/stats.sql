@@ -56,7 +56,7 @@ WHERE parent_session_id IS NULL;
 SELECT
     date(created_at, 'unixepoch') as day,
     COUNT(*) as session_count,
-    SUM(prompt_tokens + completion_tokens) as total_tokens,
+    SUM(total_prompt_tokens + total_completion_tokens) as total_tokens,
     SUM(cost) as cost
 FROM sessions
 WHERE parent_session_id IS NULL
